@@ -113,11 +113,11 @@ function ModuleGrid() {
 }
 
 function Sidebar() {
-  const { activeModule, setActiveModule, sidebarOpen, setSidebarOpen } = useERPStore();
+  const { activeModule, activeParentModule, setActiveModule, sidebarOpen, setSidebarOpen } = useERPStore();
 
-  // Determine if we should show sub-module navigation
-  const isExpandable = EXPANDABLE_MODULES.includes(activeModule);
-  const subModules = SUB_MODULES[activeModule] || [];
+  // Show sub-module nav when the parent is an expandable module (not dashboard)
+  const isSubNav = EXPANDABLE_MODULES.includes(activeParentModule) && activeParentModule !== 'dashboard';
+  const subModules = SUB_MODULES[activeParentModule] || [];
 
   return (
     <>
@@ -133,13 +133,18 @@ function Sidebar() {
       `}>
         {/* Logo */}
         <div className="px-4 py-4 border-b border-[#252e3a] flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-[#f5a623] to-[#e8891a] rounded-lg flex items-center justify-center text-sm font-extrabold text-black" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-            VC
-          </div>
-          <div>
-            <div className="text-[15px] font-bold text-[#f5a623] tracking-wider" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>VOLTCORE</div>
-            <div className="text-[9px] text-[#5a6878] tracking-[2px] uppercase">ERP · HRMS</div>
-          </div>
+          <button
+            onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }}
+            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+          >
+            <div className="w-8 h-8 bg-gradient-to-br from-[#f5a623] to-[#e8891a] rounded-lg flex items-center justify-center text-sm font-extrabold text-black" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+              VC
+            </div>
+            <div>
+              <div className="text-[15px] font-bold text-[#f5a623] tracking-wider" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>VOLTCORE</div>
+              <div className="text-[9px] text-[#5a6878] tracking-[2px] uppercase">ERP · HRMS</div>
+            </div>
+          </button>
           <button className="ml-auto lg:hidden text-[#5a6878] hover:text-[#e2e8f0]" onClick={() => setSidebarOpen(false)}>
             <X size={18} />
           </button>
@@ -147,20 +152,20 @@ function Sidebar() {
 
         {/* Navigation */}
         <div className="flex-1 py-2">
-          {isExpandable ? (
+          {isSubNav ? (
             // Sub-module navigation mode
             <>
               <button
-                onClick={() => setActiveModule('dashboard')}
-                className="w-full flex items-center gap-2 px-4 py-2 text-[11px] font-medium text-[#5a6878] hover:text-[#8899aa] transition-colors"
+                onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-[11px] font-medium text-[#5a6878] hover:text-[#e2e8f0] transition-colors"
               >
-                <ChevronRight size={14} />
                 <ArrowLeft size={12} />
+                <ChevronRight size={14} />
                 <span>All Modules</span>
               </button>
               <div className="mx-3 my-2 border-t border-[#252e3a]" />
               <div className="text-[9px] tracking-[2px] uppercase text-[#f5a623] font-bold px-4 py-2">
-                {MODULE_CONFIG[activeModule]?.title || activeModule}
+                {MODULE_CONFIG[activeParentModule]?.title || activeParentModule}
               </div>
               {subModules.map(item => {
                 const Icon = ICON_MAP[item.icon] || Zap;

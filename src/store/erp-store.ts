@@ -120,9 +120,33 @@ export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finan
 // Main modules that have their own page (no sub-nav)
 export const PAGE_MODULES = ['dashboard', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
 
+// Reverse lookup: given a sub-module id, find its parent module
+const PARENT_MAP: Record<string, string> = {};
+(Object.keys(SUB_MODULES) as string[]).forEach((parent) => {
+  SUB_MODULES[parent].forEach((sub) => {
+    PARENT_MAP[sub.id] = parent;
+  });
+});
+
+// Expandable modules that have their own page component
+export const EXPANDABLE_WITH_PAGE = ['organization', 'projects', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
+
+function resolveParent(module: ModuleId): ModuleId {
+  if (PARENT_MAP[module]) return PARENT_MAP[module] as ModuleId;
+  if (EXPANDABLE_MODULES.includes(module)) return module;
+  return 'dashboard';
+}
+
+function resolveInitialSubModule(parent: ModuleId): ModuleId {
+  const subs = SUB_MODULES[parent];
+  if (subs && subs.length > 0) return subs[0].id;
+  return parent;
+}
+
 interface ERPStore {
   activeModule: ModuleId;
   setActiveModule: (module: ModuleId) => void;
+  activeParentModule: ModuleId;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
   triggerCreate: number;
@@ -131,7 +155,21 @@ interface ERPStore {
 
 export const useERPStore = create<ERPStore>((set) => ({
   activeModule: 'dashboard',
-  setActiveModule: (module) => set({ activeModule: module }),
+  setActiveModule: (module) => set((s) => {
+    const parent = resolveParent(module);
+    // If clicking an expandable module that has NO page and HAS sub-modules, go to first sub-module
+    const finalModule = (
+      EXPANDABLE_MODULES.includes(module) &&
+      !EXPANDABLE_WITH_PAGE.includes(module) &&
+      SUB_MODULES[module] &&
+      SUB_MODULES[module].length > 0
+    ) ? resolveInitialSubModule(module) : module;
+    return {
+      activeModule: finalModule,
+      activeParentModule: parent,
+    };
+  }),
+  activeParentModule: 'dashboard',
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   triggerCreate: 0,
