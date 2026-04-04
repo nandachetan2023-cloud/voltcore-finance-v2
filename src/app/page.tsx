@@ -78,7 +78,10 @@ const MODULE_COMPONENTS: Record<string, React.ComponentType> = {
 };
 
 // Modules that don't have a create action
-const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings'];
+const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms'];
+
+// Expandable modules that render a sub-module grid instead of a specific component
+const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'finance', 'projects', 'assets', 'system'];
 
 function ModuleGrid() {
   const { setActiveModule } = useERPStore();
@@ -108,6 +111,61 @@ function ModuleGrid() {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function SubModuleGrid({ moduleId }: { moduleId: string }) {
+  const { setActiveModule } = useERPStore();
+  const items = SUB_MODULES[moduleId] || [];
+  const config = MODULE_CONFIG[moduleId];
+  const parentInfo = MAIN_MODULE_MAP[moduleId];
+
+  return (
+    <div className="p-4">
+      {/* Section header */}
+      <div className="flex items-center gap-3 mb-5">
+        {parentInfo && (() => {
+          const PIcon = ICON_MAP[parentInfo.icon] || Zap;
+          return (
+            <div className="w-10 h-10 bg-[#f5a623]/10 rounded-xl flex items-center justify-center">
+              <PIcon size={20} className="text-[#f5a623]" />
+            </div>
+          );
+        })()}
+        <div>
+          <h2 className="text-[18px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+            {config?.title || moduleId}
+          </h2>
+          <p className="text-[11px] text-[#5a6878]">{config?.breadcrumb || ''}</p>
+        </div>
+      </div>
+
+      {/* Cards grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        {items.map((item) => {
+          const Icon = ICON_MAP[item.icon] || Zap;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveModule(item.id as any)}
+              className="group bg-[#161c24] border border-[#252e3a] rounded-xl p-5 text-center hover:border-[#f5a623]/40 transition-all duration-200 hover:shadow-lg hover:shadow-[#f5a623]/5"
+            >
+              <div className="w-12 h-12 bg-[#f5a623]/10 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-[#f5a623]/20 transition-colors">
+                <Icon size={22} className="text-[#f5a623]" />
+              </div>
+              <div className="text-[13px] font-semibold text-[#e2e8f0] group-hover:text-[#f5a623] transition-colors leading-tight">
+                {item.label}
+              </div>
+              {item.badge && (
+                <span className="inline-block mt-2 bg-[#ff3d3d] text-white text-[9px] font-bold px-2 py-[1px] rounded-full">
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -310,6 +368,7 @@ export default function ERPPage() {
   }
 
   const isDashboard = activeModule === 'dashboard';
+  const isSubGrid = SUB_GRID_MODULES.includes(activeModule);
   const ActiveComponent = MODULE_COMPONENTS[activeModule];
 
   return (
@@ -319,7 +378,7 @@ export default function ERPPage() {
         <Topbar />
         <main className="flex-1 overflow-y-auto">
           <div className="animate-in fade-in duration-200">
-            {isDashboard ? <ModuleGrid /> : ActiveComponent && <ActiveComponent />}
+            {isDashboard ? <ModuleGrid /> : isSubGrid ? <SubModuleGrid moduleId={activeModule} /> : ActiveComponent && <ActiveComponent />}
           </div>
         </main>
       </div>

@@ -128,8 +128,8 @@ const PARENT_MAP: Record<string, string> = {};
   });
 });
 
-// Expandable modules that have their own page component
-export const EXPANDABLE_WITH_PAGE = ['organization', 'projects', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
+// Expandable modules that show their own sub-module grid (instead of auto-redirecting to first child)
+export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'projects', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};
