@@ -1,60 +1,111 @@
 import { create } from 'zustand';
 
 export type ModuleId =
-  | 'dashboard' | 'projects' | 'sites' | 'employees' | 'attendance'
-  | 'leave' | 'shift' | 'training' | 'recruitment' | 'payroll'
-  | 'expenses' | 'purchases' | 'invoices' | 'permits' | 'safety'
-  | 'equipment' | 'subcontractors' | 'reports' | 'settings';
+  | 'dashboard' | 'organization' | 'hrms' | 'procurement' | 'finance'
+  | 'projects' | 'inventory' | 'assets' | 'sales' | 'crm'
+  | 'system' | 'support' | 'knowledgebase'
+  // Sub-modules
+  | 'employees' | 'attendance' | 'leave' | 'shift' | 'training' | 'recruitment'
+  | 'purchases' | 'expenses' | 'invoices'
+  | 'sites' | 'permits' | 'safety' | 'subcontractors'
+  | 'reports' | 'settings';
 
 interface NavItem {
   id: ModuleId;
   icon: string;
   label: string;
   badge?: number;
-  section: string;
+  section?: string;
 }
 
-export const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', icon: 'Zap', label: 'Dashboard', section: 'Overview' },
-  { id: 'projects', icon: 'Building2', label: 'Projects', section: 'Overview' },
-  { id: 'sites', icon: 'MapPin', label: 'Site Map', section: 'Overview' },
-  { id: 'employees', icon: 'HardHat', label: 'Employees', section: 'HR Management' },
-  { id: 'attendance', icon: 'ClipboardList', label: 'Attendance', section: 'HR Management' },
-  { id: 'leave', icon: 'CalendarDays', label: 'Leave Management', badge: 5, section: 'HR Management' },
-  { id: 'shift', icon: 'RotateCcw', label: 'Shift Roster', section: 'HR Management' },
-  { id: 'training', icon: 'GraduationCap', label: 'Training & Certs', section: 'HR Management' },
-  { id: 'recruitment', icon: 'Search', label: 'Recruitment', section: 'HR Management' },
-  { id: 'payroll', icon: 'IndianRupee', label: 'Payroll', section: 'Payroll & Finance' },
-  { id: 'expenses', icon: 'Receipt', label: 'Expenses', badge: 3, section: 'Payroll & Finance' },
-  { id: 'purchases', icon: 'Package', label: 'Purchase Orders', section: 'Payroll & Finance' },
-  { id: 'invoices', icon: 'FileText', label: 'Invoicing', section: 'Payroll & Finance' },
-  { id: 'permits', icon: 'ShieldAlert', label: 'Work Permits', badge: 2, section: 'Operations' },
-  { id: 'safety', icon: 'HardHat', label: 'Safety & HSE', section: 'Operations' },
-  { id: 'equipment', icon: 'Wrench', label: 'Equipment', section: 'Operations' },
-  { id: 'subcontractors', icon: 'Handshake', label: 'Subcontractors', section: 'Operations' },
-  { id: 'reports', icon: 'BarChart3', label: 'Reports', section: 'System' },
-  { id: 'settings', icon: 'Settings', label: 'Settings', section: 'System' },
+export const MAIN_MODULES: NavItem[] = [
+  { id: 'organization', icon: 'Building2', label: 'Organization' },
+  { id: 'hrms', icon: 'Users', label: 'HRMS' },
+  { id: 'procurement', icon: 'ShoppingCart', label: 'Procurement' },
+  { id: 'finance', icon: 'CreditCard', label: 'Finance' },
+  { id: 'projects', icon: 'FolderKanban', label: 'Projects' },
+  { id: 'inventory', icon: 'Package', label: 'Inventory' },
+  { id: 'assets', icon: 'Wrench', label: 'Assets' },
+  { id: 'sales', icon: 'TrendingUp', label: 'Sales' },
+  { id: 'crm', icon: 'Briefcase', label: 'CRM' },
+  { id: 'system', icon: 'Settings', label: 'System' },
+  { id: 'support', icon: 'MessageSquare', label: 'Support' },
+  { id: 'knowledgebase', icon: 'BookOpen', label: 'Knowledgebase' },
 ];
+
+export const SUB_MODULES: Record<string, NavItem[]> = {
+  organization: [
+    { id: 'employees', icon: 'UserCog', label: 'Departments & Roles' },
+  ],
+  hrms: [
+    { id: 'employees', icon: 'HardHat', label: 'Employees', section: 'HRMS' },
+    { id: 'attendance', icon: 'ClipboardList', label: 'Attendance', section: 'HRMS' },
+    { id: 'leave', icon: 'CalendarDays', label: 'Leave Management', badge: 5, section: 'HRMS' },
+    { id: 'shift', icon: 'RotateCcw', label: 'Shift Roster', section: 'HRMS' },
+    { id: 'training', icon: 'GraduationCap', label: 'Training & Certs', section: 'HRMS' },
+    { id: 'recruitment', icon: 'Search', label: 'Recruitment', section: 'HRMS' },
+  ],
+  procurement: [
+    { id: 'purchases', icon: 'ShoppingBag', label: 'Purchase Orders', section: 'Procurement' },
+    { id: 'expenses', icon: 'Receipt', label: 'Expenses', badge: 3, section: 'Procurement' },
+  ],
+  finance: [
+    { id: 'payroll', icon: 'IndianRupee', label: 'Payroll', section: 'Finance' },
+    { id: 'invoices', icon: 'FileText', label: 'Invoicing', section: 'Finance' },
+  ],
+  projects: [
+    { id: 'projects', icon: 'FolderKanban', label: 'All Projects', section: 'Projects' },
+    { id: 'sites', icon: 'MapPin', label: 'Site Map', section: 'Projects' },
+  ],
+  inventory: [],
+  assets: [
+    { id: 'equipment', icon: 'Wrench', label: 'Equipment', section: 'Assets' },
+    { id: 'permits', icon: 'ShieldAlert', label: 'Work Permits', badge: 2, section: 'Operations' },
+    { id: 'safety', icon: 'HardHat', label: 'Safety & HSE', section: 'Operations' },
+    { id: 'subcontractors', icon: 'Handshake', label: 'Subcontractors', section: 'Operations' },
+  ],
+  sales: [],
+  crm: [],
+  system: [
+    { id: 'reports', icon: 'BarChart3', label: 'Reports', section: 'System' },
+    { id: 'settings', icon: 'Settings', label: 'Settings', section: 'System' },
+  ],
+  support: [],
+  knowledgebase: [],
+};
 
 export interface ModuleConfig {
   title: string;
   breadcrumb: string;
 }
 
-export const MODULE_CONFIG: Record<ModuleId, ModuleConfig> = {
+export const MODULE_CONFIG: Record<string, ModuleConfig> = {
+  // Main modules (grid view)
   dashboard: { title: 'Dashboard', breadcrumb: 'VoltCore ERP › Overview' },
-  projects: { title: 'Projects', breadcrumb: 'VoltCore ERP › Project Management' },
-  sites: { title: 'Site Map', breadcrumb: 'VoltCore ERP › Sites' },
+  organization: { title: 'Organization', breadcrumb: 'VoltCore ERP › Organization' },
+  hrms: { title: 'HRMS', breadcrumb: 'VoltCore ERP › Human Resources' },
+  procurement: { title: 'Procurement', breadcrumb: 'VoltCore ERP › Procurement' },
+  finance: { title: 'Finance', breadcrumb: 'VoltCore ERP › Finance' },
+  projects: { title: 'Projects', breadcrumb: 'VoltCore ERP › Projects' },
+  inventory: { title: 'Inventory', breadcrumb: 'VoltCore ERP › Inventory' },
+  assets: { title: 'Assets', breadcrumb: 'VoltCore ERP › Assets & Operations' },
+  sales: { title: 'Sales', breadcrumb: 'VoltCore ERP › Sales' },
+  crm: { title: 'CRM', breadcrumb: 'VoltCore ERP › CRM' },
+  system: { title: 'System', breadcrumb: 'VoltCore ERP › System' },
+  support: { title: 'Support', breadcrumb: 'VoltCore ERP › Support' },
+  knowledgebase: { title: 'Knowledgebase', breadcrumb: 'VoltCore ERP › Knowledgebase' },
+  // Sub-modules
   employees: { title: 'Employees', breadcrumb: 'HRMS › Employee Directory' },
   attendance: { title: 'Attendance', breadcrumb: 'HRMS › Daily Attendance' },
   leave: { title: 'Leave Management', breadcrumb: 'HRMS › Leave Requests' },
   shift: { title: 'Shift Roster', breadcrumb: 'HRMS › Shift Planning' },
   training: { title: 'Training & Certifications', breadcrumb: 'HRMS › Competency Management' },
   recruitment: { title: 'Recruitment', breadcrumb: 'HRMS › Talent Acquisition' },
-  payroll: { title: 'Payroll', breadcrumb: 'Finance › Payroll Processing' },
-  expenses: { title: 'Expense Claims', breadcrumb: 'Finance › Expense Management' },
   purchases: { title: 'Purchase Orders', breadcrumb: 'Finance › Procurement' },
+  expenses: { title: 'Expense Claims', breadcrumb: 'Finance › Expense Management' },
+  payroll: { title: 'Payroll', breadcrumb: 'Finance › Payroll Processing' },
   invoices: { title: 'Invoicing', breadcrumb: 'Finance › Client Invoices' },
+  sites: { title: 'Site Map', breadcrumb: 'VoltCore ERP › Sites' },
   permits: { title: 'Work Permits (PTW)', breadcrumb: 'Operations › Permit to Work' },
   safety: { title: 'Safety & HSE', breadcrumb: 'Operations › HSE Management' },
   equipment: { title: 'Equipment', breadcrumb: 'Operations › Asset Management' },
@@ -62,6 +113,12 @@ export const MODULE_CONFIG: Record<ModuleId, ModuleConfig> = {
   reports: { title: 'Reports', breadcrumb: 'VoltCore ERP › Analytics' },
   settings: { title: 'Settings', breadcrumb: 'VoltCore ERP › System Settings' },
 };
+
+// Modules with sub-modules (clicking them shows sub-nav instead of a page)
+export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finance', 'projects', 'assets', 'system'];
+
+// Main modules that have their own page (no sub-nav)
+export const PAGE_MODULES = ['dashboard', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
 
 interface ERPStore {
   activeModule: ModuleId;

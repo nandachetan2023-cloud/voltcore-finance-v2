@@ -266,3 +266,143 @@ model CompanySettings {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+// ── ORGANIZATION MODULE ──
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  head        String?
+  location    String
+  employeeCount Int    @default(0)
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Designation {
+  id          String   @id @default(cuid())
+  title       String
+  department  String
+  level       String
+  minSalary   Float    @default(0)
+  maxSalary   Float    @default(0)
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── INVENTORY MODULE ──
+model InventoryItem {
+  id          String   @id @default(cuid())
+  itemCode    String   @unique
+  name        String
+  category    String
+  unit        String   @default("Nos")
+  currentStock Int     @default(0)
+  minStock    Int      @default(0)
+  maxStock    Int      @default(0)
+  unitCost    Float    @default(0)
+  warehouse   String
+  status      String   @default("In Stock")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model StockMovement {
+  id          String   @id @default(cuid())
+  itemCode    String
+  itemName    String
+  type        String
+  quantity    Int
+  fromWarehouse String?
+  toWarehouse   String?
+  reference   String?
+  date        String
+  remarks     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── SALES MODULE ──
+model Customer {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  contactPerson String
+  email       String?
+  phone       String?
+  address     String?
+  gst         String?
+  city        String?
+  state       String?
+  totalOrders Int      @default(0)
+  totalRevenue Float   @default(0)
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SalesOrder {
+  id          String   @id @default(cuid())
+  soNo        String   @unique
+  customer    String
+  project     String
+  item        String
+  quantity    Int
+  unitPrice   Float
+  amount      Float
+  orderDate   String
+  deliveryDate String?
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── CRM MODULE ──
+model CrmContact {
+  id          String   @id @default(cuid())
+  name        String
+  company     String
+  designation String?
+  email       String?
+  phone       String?
+  source      String
+  stage       String   @default("Lead")
+  value       Float    @default(0)
+  lastContact String?
+  notes       String?
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── SUPPORT MODULE ──
+model SupportTicket {
+  id          String   @id @default(cuid())
+  ticketNo    String   @unique
+  title       String
+  raisedBy    String
+  category    String
+  priority    String   @default("Medium")
+  status      String   @default("Open")
+  assignedTo  String?
+  description String?
+  resolution  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── KNOWLEDGEBASE MODULE ──
+model KBArticle {
+  id          String   @id @default(cuid())
+  title       String
+  category    String
+  content     String
+  author      String
+  tags        String   @default("")
+  views       Int      @default(0)
+  helpful     Int      @default(0)
+  status      String   @default("Published")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

@@ -30,6 +30,15 @@ async function main() {
   await db.employee.deleteMany();
   await db.site.deleteMany();
   await db.project.deleteMany();
+  await db.department.deleteMany();
+  await db.designation.deleteMany();
+  await db.inventoryItem.deleteMany();
+  await db.stockMovement.deleteMany();
+  await db.customer.deleteMany();
+  await db.salesOrder.deleteMany();
+  await db.crmContact.deleteMany();
+  await db.supportTicket.deleteMany();
+  await db.kBArticle.deleteMany();
   await db.companySettings.deleteMany();
 
   console.log("✅ All existing records deleted.");
@@ -1021,6 +1030,172 @@ async function main() {
   });
 
   console.log("✅ Training Sessions created.");
+
+  // ============================================================
+  // 20. CREATE DEPARTMENTS
+  // ============================================================
+  console.log("🏢 Creating Departments...");
+
+  await db.department.createMany({
+    data: [
+      { name: "Project Management", head: "Rajesh Kumar Singh", location: "Head Office - Mumbai", employeeCount: 8, status: "Active" },
+      { name: "Engineering - Electrical", head: "Amit Sharma", location: "Site - Singrauli", employeeCount: 22, status: "Active" },
+      { name: "Engineering - Mechanical", head: "Sunil Kumar Yadav", location: "Site - Singrauli", employeeCount: 18, status: "Active" },
+      { name: "Engineering - Civil", head: "Arun Patel", location: "Site - Mundra", employeeCount: 15, status: "Active" },
+      { name: "Safety & HSE", head: "Deepak Rawat", location: "Site - Uttarkashi", employeeCount: 6, status: "Active" },
+      { name: "Finance & Accounts", head: "Priya Nair", location: "Head Office - Mumbai", employeeCount: 5, status: "Active" },
+      { name: "Human Resources", head: "Priya Nair", location: "Head Office - Mumbai", employeeCount: 4, status: "Active" },
+      { name: "Procurement", head: "Vikram Mehta", location: "Head Office - Mumbai", employeeCount: 6, status: "Active" },
+    ],
+  });
+
+  console.log("✅ Departments created.");
+
+  // ============================================================
+  // 21. CREATE DESIGNATIONS
+  // ============================================================
+  console.log("📋 Creating Designations...");
+
+  await db.designation.createMany({
+    data: [
+      { title: "Project Manager", department: "Project Management", level: "L5", minSalary: 65000, maxSalary: 95000, status: "Active" },
+      { title: "Site Engineer", department: "Engineering - Electrical", level: "L3", minSalary: 30000, maxSalary: 45000, status: "Active" },
+      { title: "Supervisor", department: "Engineering - Mechanical", level: "L2", minSalary: 22000, maxSalary: 35000, status: "Active" },
+      { title: "Foreman", department: "Engineering - Mechanical", level: "L1", minSalary: 18000, maxSalary: 28000, status: "Active" },
+      { title: "Safety Officer", department: "Safety & HSE", level: "L3", minSalary: 35000, maxSalary: 55000, status: "Active" },
+      { title: "Technician", department: "Engineering - Electrical", level: "L1", minSalary: 15000, maxSalary: 25000, status: "Active" },
+      { title: "Welder", department: "Engineering - Mechanical", level: "L1", minSalary: 18000, maxSalary: 30000, status: "Active" },
+      { title: "HR Executive", department: "Human Resources", level: "L3", minSalary: 25000, maxSalary: 40000, status: "Active" },
+      { title: "Accountant", department: "Finance & Accounts", level: "L3", minSalary: 25000, maxSalary: 40000, status: "Active" },
+      { title: "Site Incharge", department: "Project Management", level: "L4", minSalary: 45000, maxSalary: 65000, status: "Active" },
+    ],
+  });
+
+  console.log("✅ Designations created.");
+
+  // ============================================================
+  // 22. CREATE INVENTORY ITEMS
+  // ============================================================
+  console.log("📦 Creating Inventory Items...");
+
+  await db.inventoryItem.createMany({
+    data: [
+      { itemCode: "INV-001", name: "SA 387 Gr.11 Cl.1 Steel Plate (12mm)", category: "Raw Materials", unit: "MT", currentStock: 45, minStock: 10, maxStock: 100, unitCost: 75000, warehouse: "Central Store - Mumbai", status: "In Stock" },
+      { itemCode: "INV-002", name: "E7018 Low Hydrogen Welding Electrode (3.2mm)", category: "Consumables", unit: "KG", currentStock: 2800, minStock: 500, maxStock: 5000, unitCost: 185, warehouse: "Site Store - Singrauli", status: "In Stock" },
+      { itemCode: "INV-003", name: "ISMC 200 Structural Steel Channel", category: "Raw Materials", unit: "MT", currentStock: 22, minStock: 5, maxStock: 50, unitCost: 90000, warehouse: "Central Store - Mumbai", status: "In Stock" },
+      { itemCode: "INV-004", name: "XLPE 33kV Power Cable (3cx300sqmm)", category: "Electrical", unit: "MTR", currentStock: 850, minStock: 200, maxStock: 2000, unitCost: 3200, warehouse: "Site Store - Mundra", status: "In Stock" },
+      { itemCode: "INV-005", name: "Full Body Harness (Double Lanyard)", category: "Safety", unit: "Nos", currentStock: 120, minStock: 30, maxStock: 200, unitCost: 4500, warehouse: "Site Store - Singrauli", status: "In Stock" },
+      { itemCode: "INV-006", name: "Bhel Make 6.6kV VCB Panel", category: "Electrical", unit: "Nos", currentStock: 3, minStock: 2, maxStock: 10, unitCost: 3000000, warehouse: "Central Store - Mumbai", status: "In Stock" },
+      { itemCode: "INV-007", name: "Portland Cement (OPC 53 Grade)", category: "Consumables", unit: "Bags", currentStock: 4500, minStock: 1000, maxStock: 10000, unitCost: 380, warehouse: "Site Store - Uttarkashi", status: "In Stock" },
+      { itemCode: "INV-008", name: "Fire Extinguisher CO2 (5kg)", category: "Safety", unit: "Nos", currentStock: 8, minStock: 10, maxStock: 30, unitCost: 2800, warehouse: "Site Store - Singrauli", status: "Low Stock" },
+    ],
+  });
+
+  console.log("✅ Inventory Items created.");
+
+  // ============================================================
+  // 23. CREATE STOCK MOVEMENTS
+  // ============================================================
+  console.log("🔄 Creating Stock Movements...");
+
+  await db.stockMovement.createMany({
+    data: [
+      { itemCode: "INV-001", itemName: "SA 387 Gr.11 Steel Plate", type: "Inward", quantity: 50, fromWarehouse: "Vendor - Bhel", toWarehouse: "Central Store - Mumbai", reference: "PO-2025-001", date: currentMonth + "-05", remarks: "Received against PO-2025-001" },
+      { itemCode: "INV-002", itemName: "E7018 Welding Electrode", type: "Issue", quantity: 200, fromWarehouse: "Site Store - Singrauli", toWarehouse: "Boiler Work Area", reference: "MTL-001", date: currentMonth + "-10", remarks: "Issued for boiler welding" },
+      { itemCode: "INV-005", itemName: "Full Body Harness", type: "Inward", quantity: 50, fromWarehouse: "Vendor - KRBL Safety", toWarehouse: "Site Store - Singrauli", reference: "PO-2025-004", date: currentMonth + "-08", remarks: "Safety equipment received" },
+      { itemCode: "INV-004", itemName: "33kV XLPE Cable", type: "Transfer", quantity: 500, fromWarehouse: "Central Store - Mumbai", toWarehouse: "Site Store - Mundra", reference: "TRF-001", date: currentMonth + "-12", remarks: "Inter-store transfer for TG cabling" },
+      { itemCode: "INV-007", itemName: "Portland Cement OPC 53", type: "Issue", quantity: 800, fromWarehouse: "Site Store - Uttarkashi", toWarehouse: "Penstock Works", reference: "MTL-002", date: currentMonth + "-15", remarks: "Consumed for penstock anchor block concreting" },
+    ],
+  });
+
+  console.log("✅ Stock Movements created.");
+
+  // ============================================================
+  // 24. CREATE CUSTOMERS
+  // ============================================================
+  console.log("👥 Creating Customers...");
+
+  await db.customer.createMany({
+    data: [
+      { code: "CUST-001", name: "NTPC Limited", contactPerson: "A.K. Verma", email: "procurement@ntpc.co.in", phone: "011-24360100", address: "NTPC Bhawan, Scope Complex, New Delhi - 110003", gst: "07AAACT2727Q1ZV", city: "New Delhi", state: "Delhi", totalOrders: 3, totalRevenue: 145600000, status: "Active" },
+      { code: "CUST-002", name: "Solar Energy Corporation of India", contactPerson: "R. Sundar", email: "tenders@seci.co.in", phone: "011-26890500", address: "1st Floor, August Kranti Bhawan, New Delhi - 110016", gst: "07AAACG5266Q1Z7", city: "New Delhi", state: "Delhi", totalOrders: 2, totalRevenue: 62500000, status: "Active" },
+      { code: "CUST-003", name: "Gujarat Industries Power Company Ltd.", contactPerson: "M.D. Patel", email: "projects@gipcl.guj.gov.in", phone: "02692-228100", address: "GIPCL House, Race Course Circle, Vadodara - 390007", gst: "24AAACG1065G1Z6", city: "Vadodara", state: "Gujarat", totalOrders: 1, totalRevenue: 218750000, status: "Active" },
+      { code: "CUST-004", name: "Uttarakhand Jal Vidyut Nigam Ltd.", contactPerson: "D.S. Rawat", email: "engg@ujvnl.uk.gov.in", phone: "0135-2710400", address: "UJVN Bhawan, Subhash Nagar, Dehradun - 248001", gst: "05AAACU2858H1Z5", city: "Dehradun", state: "Uttarakhand", totalOrders: 2, totalRevenue: 85000000, status: "Active" },
+      { code: "CUST-005", name: "Bihar State Electricity Board", contactPerson: "S.K. Mishra", email: "tender@bseb.bih.nic.in", phone: "0612-2212100", address: "Vidyut Bhawan, Bailey Road, Patna - 800001", gst: "10AAABB4512B1Z3", city: "Patna", state: "Bihar", totalOrders: 1, totalRevenue: 47900000, status: "Active" },
+    ],
+  });
+
+  console.log("✅ Customers created.");
+
+  // ============================================================
+  // 25. CREATE SALES ORDERS
+  // ============================================================
+  console.log("💰 Creating Sales Orders...");
+
+  await db.salesOrder.createMany({
+    data: [
+      { soNo: "SO-2025-001", customer: "NTPC Limited", project: "NTPC-SGR-EPC", item: "Boiler EPC - Unit 5", quantity: 1, unitPrice: 487500000, amount: 487500000, orderDate: "2024-03-01", deliveryDate: "2027-02-28", status: "In Progress" },
+      { soNo: "SO-2025-002", customer: "Solar Energy Corporation of India", project: "SECI-JSM-SOLAR", item: "O&M Services - 500MW Solar Park", quantity: 1, unitPrice: 62500000, amount: 62500000, orderDate: "2023-06-15", deliveryDate: "2028-06-14", status: "In Progress" },
+      { soNo: "SO-2025-003", customer: "Gujarat Industries Power Company Ltd.", project: "GIPCL-MUN-BOP", item: "BoP Package - 2x660MW", quantity: 1, unitPrice: 218750000, amount: 218750000, orderDate: "2024-01-10", deliveryDate: "2026-12-31", status: "In Progress" },
+      { soNo: "SO-2025-004", customer: "Uttarakhand Jal Vidyut Nigam Ltd.", project: "UJVNL-UKH-HYDRO", item: "EPC - 120MW Hydro", quantity: 1, unitPrice: 340000000, amount: 340000000, orderDate: "2023-09-01", deliveryDate: "2027-08-31", status: "In Progress" },
+      { soNo: "SO-2025-005", customer: "Bihar State Electricity Board", project: "BSEB-CHN-EPC", item: "TG Island EPC - Unit 3", quantity: 1, unitPrice: 47900000, amount: 47900000, orderDate: "2024-07-01", deliveryDate: "2026-06-30", status: "In Progress" },
+    ],
+  });
+
+  console.log("✅ Sales Orders created.");
+
+  // ============================================================
+  // 26. CREATE CRM CONTACTS
+  // ============================================================
+  console.log("🤝 Creating CRM Contacts...");
+
+  await db.crmContact.createMany({
+    data: [
+      { name: "Mr. A.K. Verma", company: "NTPC Limited", designation: "General Manager (Projects)", email: "ak.verma@ntpc.co.in", phone: "9810012345", source: "Existing Client", stage: "Client", value: 633000000, lastContact: currentMonth + "-01", notes: "Key decision maker for Singrauli project", status: "Active" },
+      { name: "Mr. R. Sundar", company: "Solar Energy Corporation of India", designation: "Director (Projects)", email: "r.sundar@seci.co.in", phone: "9810023456", source: "Existing Client", stage: "Client", value: 125000000, lastContact: currentMonth + "-05", notes: "Interested in expanding O&M scope to 1GW", status: "Active" },
+      { name: "Mr. Suresh Jain", company: "Adani Power Ltd.", designation: "VP - Procurement", email: "s.jain@adanipower.com", phone: "9810034567", source: "Cold Outreach", stage: "Proposal", value: 250000000, lastContact: currentMonth + "-10", notes: "Discussed EPC for Mundra expansion Phase-3", status: "Active" },
+      { name: "Ms. Kavita Reddy", company: "Tata Power Solar", designation: "Head - EPC", email: "k.reddy@tatapowersolar.com", phone: "9810045678", source: "Referral", stage: "Lead", value: 180000000, lastContact: currentMonth + "-08", notes: "Exploring partnership for solar EPC in Rajasthan", status: "Active" },
+      { name: "Mr. D.K. Sharma", company: "NHPC Limited", designation: "Executive Director", email: "dk.sharma@nhpc.nic.in", phone: "9810056789", source: "Industry Event", stage: "Qualification", value: 500000000, lastContact: currentMonth + "-12", notes: "Pre-qualification for upcoming hydro projects in Himachal", status: "Active" },
+      { name: "Mr. Ravi Kumar", company: "Power Grid Corporation", designation: "CGM (Projects)", email: "r.kumar@powergridindia.com", phone: "9810067890", source: "Existing Client", stage: "Client", value: 85000000, lastContact: currentMonth + "-03", notes: "Completed substation work, exploring transmission line package", status: "Active" },
+    ],
+  });
+
+  console.log("✅ CRM Contacts created.");
+
+  // ============================================================
+  // 27. CREATE SUPPORT TICKETS
+  // ============================================================
+  console.log("🎫 Creating Support Tickets...");
+
+  await db.supportTicket.createMany({
+    data: [
+      { ticketNo: "TKT-001", title: "Unable to submit monthly timesheet", raisedBy: "Mohammed Irfan", category: "Technical", priority: "High", status: "In Progress", assignedTo: "IT Support", description: "Timesheet submission page shows 500 error when selecting 'Night B' shift for current week", resolution: null },
+      { ticketNo: "TKT-002", title: "Payroll report shows incorrect PF deduction", raisedBy: "Amit Sharma", category: "Finance", priority: "High", status: "Open", assignedTo: "Finance Team", description: "March 2026 payroll shows PF deduction of 12% on gross instead of basic pay", resolution: null },
+      { ticketNo: "TKT-003", title: "New employee onboarding - documents not uploading", raisedBy: "Priya Nair", category: "Technical", priority: "Medium", status: "Open", assignedTo: "IT Support", description: "Document upload for new joinee EMP-015 keeps failing with timeout error", resolution: null },
+      { ticketNo: "TKT-004", title: "Request for additional safety report format", raisedBy: "Deepak Rawat", category: "Feature Request", priority: "Low", status: "Open", assignedTo: null, description: "Need HSE monthly report in DGMS format for regulatory submission", resolution: null },
+      { ticketNo: "TKT-005", title: "Leave balance not updating after approval", raisedBy: "Sunil Kumar Yadav", category: "HR", priority: "Medium", status: "Resolved", assignedTo: "HR Team", description: "After CL approval, balance showed 11 instead of 10 days", resolution: "Fixed leave balance calculation to use approved days count" },
+    ],
+  });
+
+  console.log("✅ Support Tickets created.");
+
+  // ============================================================
+  // 28. CREATE KNOWLEDGEBASE ARTICLES
+  // ============================================================
+  console.log("📚 Creating KB Articles...");
+
+  await db.kBArticle.createMany({
+    data: [
+      { title: "How to Submit a Leave Request", category: "HR & Leave", content: "Step 1: Navigate to Leave Management from sidebar.\nStep 2: Click '+ New' button.\nStep 3: Select employee, leave type (EL/SL/CL/ML), from and to dates.\nStep 4: Provide reason and submit.\n\nNote: Leave requires manager approval. Check status in the Leave Management table.", author: "Priya Nair", tags: "leave,apply,hr,request", views: 45, helpful: 12, status: "Published" },
+      { title: "Work Permit (PTW) Issue Process", category: "Safety & HSE", content: "This guide covers the complete Permit to Work process:\n\n1. Identify work type (Hot Work, LOTO, Height Work, Confined Space, Excavation)\n2. Navigate to Work Permits module\n3. Click '+ New' and fill in all required fields\n4. Ensure precautions are listed\n5. Set expiry date/time\n6. Submit for safety officer approval\n\nPermits must be closed after work completion.", author: "Deepak Rawat", tags: "permit,ptw,safety,hot work", views: 38, helpful: 8, status: "Published" },
+      { title: "Purchase Order Creation Guide", category: "Procurement", content: "To create a Purchase Order:\n\n1. Go to Purchase Orders under Payroll & Finance\n2. Click '+ New'\n3. Fill vendor name, item description, amount\n4. Select project and expected delivery date\n5. Submit for approval\n\nTrack GRN status: Awaiting → Partial → Received", author: "Vikram Mehta", tags: "purchase,order,procurement,po", views: 22, helpful: 5, status: "Published" },
+      { title: "Payroll Processing Monthly Checklist", category: "Finance", content: "Monthly payroll processing steps:\n\n1. Verify attendance records for all sites (1st-5th)\n2. Check OT hours and approvals\n3. Process PF/ESI calculations (12% PF, 0.75% ESI)\n4. Apply TDS as per income tax slab\n5. Generate payslips\n6. Submit for finance manager approval\n7. Initiate bank transfer\n\nDeadline: 28th of every month", author: "Priya Nair", tags: "payroll,salary,pf,esi,tds,monthly", views: 56, helpful: 15, status: "Published" },
+      { title: "Incident Reporting & Investigation Procedure", category: "Safety & HSE", content: "All incidents must be reported within 24 hours:\n\n1. Navigate to Safety & HSE module\n2. Click '+ New' to create incident report\n3. Classify: Near Miss, First Aid, LTI, Property Damage, Hazard ID\n4. Set severity: Low, Medium, High, Critical\n5. Describe the incident in detail\n6. List immediate corrective actions\n7. Submit for investigation\n\nCritical/High severity incidents require DGMS notification.", author: "Deepak Rawat", tags: "incident,safety,reporting,accident,hse", views: 34, helpful: 10, status: "Published" },
+      { title: "Equipment Maintenance Schedule Guidelines", category: "Operations", content: "Preventive Maintenance (PM) Schedule:\n\n- Cranes: Quarterly PM + Annual certification\n- DG Sets: Monthly run test + Quarterly service\n- Welding Sets: Monthly calibration check\n- Concrete Mixers: Weekly inspection\n- Safety Equipment: Monthly inspection\n\nTrack PM dates in Equipment module. Set alerts 30 days before due.", author: "Prakash Tiwari", tags: "equipment,maintenance,pm,schedule", views: 19, helpful: 4, status: "Published" },
+    ],
+  });
+
+  console.log("✅ KB Articles created.");
 
   // ============================================================
   // SEEDING COMPLETE

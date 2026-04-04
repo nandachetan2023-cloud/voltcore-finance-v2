@@ -399,3 +399,140 @@ Stage Summary:
 - "+ New" button now functional across all 16 modules with create dialogs
 - Button hidden on Dashboard, Reports, Settings (no create action available)
 - Zero lint errors introduced
+
+---
+## Task ID: 10 - CRM, Support, Knowledgebase Module Builder
+### Work Task
+Build 3 full-featured ERP module components (CRM, Support, Knowledgebase) replacing placeholder stubs with production-quality components featuring full CRUD dialogs, real API integration, VoltCore dark industrial theme, loading skeletons, and toast notifications.
+
+### Work Summary
+Replaced 3 placeholder stub components with fully interactive modules:
+
+1. **crm.tsx** (`/api/crm`)
+   - 4 stat cards: Total Contacts (#f5a623), Leads (#f5a623), Proposals (#b388ff), Clients (#00e676) with pipeline value display
+   - Full pipeline table: Name (with status dot), Company, Designation, Email (with Mail icon), Phone (with Phone icon), Source badge (color-coded: Existing Client=green, Referral=purple, Industry Event=cyan, Website=amber, Cold Outreach=gray), Stage badge (Lead=amber, Qualification=cyan, Proposal=purple, Negotiation=amber, Client=green), Deal Value (₹ formatted with Cr/L/K auto-scaling), Last Contact date, Status badge (Active=green, Inactive=gray, Lost=red), edit/delete actions
+   - Create Contact dialog: 10 fields in 2-column grid - name, company, designation, email, phone, source (5 options), stage (5 options), value, lastContact date, status, notes textarea
+   - Edit dialog: pre-filled from selected contact with all fields editable
+   - Delete dialog with confirmation
+   - POST/PUT/DELETE to /api/crm
+
+2. **support.tsx** (`/api/support`)
+   - 4 stat cards: Total Tickets (#f5a623), Open (#f5a623), In Progress (#00d4ff), Resolved (#00e676)
+   - Tickets table: Ticket No (amber monospace, clickable to view), Title (clickable), Raised By (with User icon), Category (color-coded text), Priority badge (Low=gray, Medium=amber, High=red, Critical=red with animate-pulse), Status badge (Open=amber, In Progress=cyan, Resolved=green, Closed=gray), Assigned To, Created date
+   - Inline status actions: "Start" button (cyan) on Open tickets → PATCH to In Progress, "Resolve" button (green) on In Progress tickets → PATCH to Resolved
+   - Create Ticket dialog: title, raisedBy, category (Technical/Finance/HR/Feature Request/General), priority (Low/Medium/High/Critical), assignedTo, description textarea
+   - Edit dialog: includes Status field (Open/In Progress/Resolved/Closed)
+   - View dialog: shows ticketNo, status/priority badges, title, raised by, category, assigned to, created date, description panel, resolution panel
+   - Delete dialog with confirmation
+   - POST/PUT/PATCH/DELETE to /api/support
+
+3. **knowledgebase.tsx** (`/api/knowledgebase`)
+   - 4 stat cards: Total Articles (#f5a623), Published (#00e676), Categories (#00d4ff), Total Views (#b388ff with K auto-format)
+   - Articles table: Title (clickable to view), Category badge (7 colors: HR & Leave=purple, Safety & HSE=red, Procurement=cyan, Finance=green, Operations=amber, Technical=warning, General=gray), Author (with User icon), Tags (small badges, max 3 shown with +N overflow), Views count, Helpful count, Status badge (Published=green, Draft=amber, Archived=gray), Created date, View button (always visible), edit/delete actions (on hover)
+   - Create Article dialog: title, category (7 options dropdown), author, tags (comma-separated), status (Published/Draft/Archived), content textarea (200px tall)
+   - Edit dialog: pre-filled from selected article
+   - View dialog: full article display with category/status badges, author, date, views/helpful counts, tag badges, content panel (scrollable), "Mark as Helpful" button (increments local counter with toast)
+   - Delete dialog with confirmation
+   - POST/PUT/DELETE to /api/knowledgebase
+
+All 3 components:
+- Use 'use client' directive
+- Import and use `useERPStore` with `triggerCreate` pattern
+- Follow VoltCore dark industrial theme: vc-panel, vc-panel-header, vc-stat-card, vc-badge, vc-btn-primary
+- Custom colors: #f5a623 amber, #00e676 green, #ff3d3d red, #00d4ff cyan, #b388ff purple
+- Use shadcn Dialog/DialogContent/DialogHeader/DialogTitle/DialogFooter
+- Use sonner toast for all success/error notifications
+- Loading skeletons during data fetch
+- Error state with retry capability
+- Sticky table headers with max-height scrolling (480px)
+- Share Tech Mono monospace font for numbers/codes
+- Zero lint errors introduced
+- API routes and Prisma models (CrmContact, SupportTicket, KBArticle) were pre-existing and verified working
+
+---
+## Task ID: 11 - Organization, Inventory, Sales Module Builder
+### Work Task
+Build 3 full-featured ERP module components (Organization, Inventory, Sales) replacing placeholder stubs with production-quality components featuring tabs, full CRUD dialogs, real API integration, VoltCore dark industrial theme, loading skeletons, and toast notifications.
+
+### Work Summary
+Replaced 3 placeholder stub components with fully interactive modules:
+
+**API Route Fixes:**
+1. **inventory/route.ts** - Fixed POST/PUT/DELETE for movements: changed from `itemId` requirement to `itemCode`/`itemName` (matching Prisma schema). Removed edit/delete for movements (audit trail). Only items can be edited/deleted.
+2. **sales/route.ts** - Fixed POST for orders: changed from `customerId` + `items` array to flat fields (`customer`, `project`, `item`, `quantity`, `unitPrice`) matching Prisma schema. Auto-calculates `amount = quantity × unitPrice`. Auto-generates SO number (SO-XXXXX). PUT also recalculates amount when quantity/unitPrice changes.
+
+**Components Built:**
+
+1. **organization.tsx** (`/api/organization`)
+   - Tab switching: Departments | Designations (custom TabButton component)
+   - 4 stat cards: Total Departments (#f5a623), Active (#00e676), Total Designations (#00d4ff), Employee Count (#a78bfa)
+   - Departments tab: full table with Name, Head, Location (with MapPin icon), Employee Count (cyan), Status badge (Active=green, Inactive=gray), edit/delete actions
+   - Designations tab: full table with Title, Department (with Building2 icon), Level, Min Salary (₹), Max Salary (₹), Status badge, edit/delete actions
+   - Create/Edit Department dialogs: name, head, location, status (Active/Inactive)
+   - Create/Edit Designation dialogs: title, department (dropdown from live data), level (L1-L6), minSalary, maxSalary, status
+   - Delete dialogs with confirmation for both types
+   - `triggerCreate` opens the correct dialog based on active tab
+   - POST/PUT/DELETE to /api/organization with type: 'department' | 'designation'
+
+2. **inventory.tsx** (`/api/inventory`)
+   - Tab switching: Items | Stock Movements
+   - 4 stat cards: Total Items (#f5a623), In Stock (#00e676), Low Stock (#ff3d3d), Total Value (#00d4ff with Cr/L auto-format)
+   - Items tab: full table with Item Code (amber monospace), Name, Category, Unit, Current Stock (red if low), Min Stock, Unit Cost (₹), Warehouse (with icon), Status badge (In Stock=green, Low Stock=red, Out of Stock=gray), edit/delete actions. Low stock rows highlighted with red background tint.
+   - Movements tab: audit trail table with Item Code (amber), Item Name, Type badge with icon (Inward=green+ArrowDown, Issue=amber+ArrowUp, Transfer=cyan+ArrowLeftRight), Quantity (cyan), From, To, Reference, Date, Remarks. No edit/delete (audit trail).
+   - Create Item dialog: 10 fields - itemCode, name, category (6 options: Raw Materials, Consumables, Electrical, Safety, Mechanical, Civil), unit (8 options), currentStock, minStock, maxStock, unitCost, warehouse, status
+   - Create Movement dialog: itemCode dropdown (from items), itemName auto-filled on change, type (Inward/Issue/Transfer), quantity, fromWarehouse, toWarehouse, reference, date, remarks
+   - Edit/Delete dialogs for items only
+   - POST/PUT/DELETE to /api/inventory with type: 'item' | 'movement'
+
+3. **sales.tsx** (`/api/sales`)
+   - Tab switching: Customers | Sales Orders
+   - Customers tab - 4 stat cards: Total Customers (#f5a623), Active (#00e676), Total Orders (#00d4ff), Total Revenue (#a78bfa with Cr/L auto-format)
+   - Customers tab table: Code (amber monospace), Name, Contact Person, Email, Phone, City, State, GST, Orders (cyan), Revenue (green with Cr/L), Status badge, edit/delete actions
+   - Orders tab - 4 stat cards: Total Orders (#f5a623), In Progress (#00d4ff), Completed (#00e676), Total Value (#a78bfa)
+   - Orders tab table: SO No (amber monospace), Customer, Project, Item, Qty (cyan), Unit Price (₹), Amount (₹), Order Date, Delivery Date, Status badge (Pending=amber, In Progress=cyan, Completed=green, Cancelled=red), edit/delete actions
+   - Create Customer dialog: 9 fields - name, contactPerson, email, phone, gst, city, state, address, status
+   - Create Order dialog: customer dropdown (active customers only), project, item, quantity, unitPrice, orderDate, deliveryDate, status
+   - Edit/Delete dialogs for both customers and orders
+   - POST/PUT/DELETE to /api/sales with type: 'customer' | 'order'
+
+All 3 components:
+- Use 'use client' directive
+- Import and use `useERPStore` with `triggerCreate` pattern
+- Follow VoltCore dark industrial theme: vc-panel, vc-panel-header, vc-stat-card, vc-badge, vc-btn-primary
+- Custom colors: #f5a623 amber, #00e676 green, #ff3d3d red, #00d4ff cyan, #a78bfa purple
+- Use shadcn Dialog/DialogContent/DialogHeader/DialogTitle/DialogFooter
+- Use sonner toast for all success/error notifications
+- Loading skeletons during data fetch
+- Error state with retry capability
+- Sticky table headers with max-height scrolling (480px)
+- Share Tech Mono monospace font for numbers/codes
+- Currency formatting with Intl.NumberFormat('en-IN') + Cr/L auto-scaling
+- Zero lint errors (0 errors, 1 pre-existing font warning)
+- Regenerated Prisma client to include Department, Designation, InventoryItem, StockMovement, Customer, SalesOrder models
+- All 3 APIs verified returning 200 with real seed data:
+  - /api/organization: 8 departments, 10 designations
+  - /api/inventory: 8 items, 5 movements
+  - /api/sales: 5 customers, 5 orders
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Add 6 new modules to VoltCore ERP matching 12-module grid layout
+
+Work Log:
+- Analyzed uploaded screenshot: 12 top-level module grid (Organization, HRMS, Procurement, Finance, Projects, Inventory, Assets, Sales, CRM, System, Support, Knowledgebase)
+- Added 10 new Prisma models: Department, Designation, InventoryItem, StockMovement, Customer, SalesOrder, CrmContact, SupportTicket, KBArticle
+- Pushed schema and seeded 53 new records across 9 tables
+- Created 6 new API routes: /api/organization, /api/inventory, /api/sales, /api/crm, /api/support, /api/knowledgebase
+- Completely restructured navigation: 12-module grid dashboard, expandable sub-module sidebar
+- Rewrote Zustand store with MAIN_MODULES, SUB_MODULES, EXPANDABLE_MODULES, PAGE_MODULES
+- Rewrote page.tsx with ModuleGrid component and dual-mode sidebar (grid mode vs sub-nav mode)
+- Built 6 new full-featured components with CRUD dialogs: organization (621 lines), inventory (629 lines), sales (691 lines), crm (432 lines), support (500 lines), knowledgebase (477 lines)
+- All 24 API routes verified returning 200
+- Zero lint errors
+
+Stage Summary:
+- VoltCore ERP now has 12 top-level modules matching the requested layout
+- 29 total database models, 24 API routes, 25 frontend module components
+- Each new module has full CRUD with dark industrial theme, stat cards, tables, dialogs
+- Seed data: 8 departments, 10 designations, 8 inventory items, 5 stock movements, 5 customers, 5 sales orders, 6 CRM contacts, 5 support tickets, 6 KB articles

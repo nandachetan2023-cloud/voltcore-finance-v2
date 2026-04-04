@@ -1,89 +1,133 @@
 'use client';
 
-import { useERPStore, NAV_ITEMS, MODULE_CONFIG } from '@/store/erp-store';
-import { useState, useEffect, useCallback } from 'react';
+import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES } from '@/store/erp-store';
+import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import {
-  Zap, Building2, MapPin, HardHat, ClipboardList, CalendarDays,
-  RotateCcw, GraduationCap, Search, IndianRupee, Receipt, Package,
-  FileText, ShieldAlert, Wrench, Handshake, BarChart3, Settings as SettingsIcon,
-  Menu, X, Bell, ChevronDown
+  Building2, Users, ShoppingCart, CreditCard, FolderKanban, Package, Wrench,
+  TrendingUp, Briefcase, Settings, MessageSquare, BookOpen, Zap,
+  UserCog, HardHat, ClipboardList, CalendarDays, RotateCcw, GraduationCap,
+  Search, IndianRupee, Receipt, FileText, MapPin, ShieldAlert, Handshake,
+  BarChart3, ShoppingBag, Menu, X, Bell, ChevronRight, ChevronDown,
+  ArrowLeft
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  Zap, Building2, MapPin, HardHat, ClipboardList, CalendarDays,
-  RotateCcw, GraduationCap, Search, IndianRupee, Receipt, Package,
-  FileText, ShieldAlert, Wrench, Handshake, BarChart3, Settings: SettingsIcon,
+  Building2, Users, ShoppingCart, CreditCard, FolderKanban, Package, Wrench,
+  TrendingUp, Briefcase, Settings: Settings, MessageSquare, BookOpen, Zap,
+  UserCog, HardHat, ClipboardList, CalendarDays, RotateCcw, GraduationCap,
+  Search, IndianRupee, Receipt, FileText, MapPin, ShieldAlert, Handshake,
+  BarChart3, ShoppingBag,
 };
 
-// Dynamic imports for all modules
+// Dynamic imports for all page-level module components
 const Dashboard = dynamic(() => import('@/components/erp/dashboard'), { ssr: false });
-const Projects = dynamic(() => import('@/components/erp/projects'), { ssr: false });
-const Sites = dynamic(() => import('@/components/erp/sites'), { ssr: false });
 const Employees = dynamic(() => import('@/components/erp/employees'), { ssr: false });
 const Attendance = dynamic(() => import('@/components/erp/attendance'), { ssr: false });
 const Leave = dynamic(() => import('@/components/erp/leave'), { ssr: false });
 const Shift = dynamic(() => import('@/components/erp/shift'), { ssr: false });
 const Training = dynamic(() => import('@/components/erp/training'), { ssr: false });
 const Recruitment = dynamic(() => import('@/components/erp/recruitment'), { ssr: false });
-const Payroll = dynamic(() => import('@/components/erp/payroll'), { ssr: false });
-const Expenses = dynamic(() => import('@/components/erp/expenses'), { ssr: false });
 const Purchases = dynamic(() => import('@/components/erp/purchases'), { ssr: false });
+const Expenses = dynamic(() => import('@/components/erp/expenses'), { ssr: false });
+const Payroll = dynamic(() => import('@/components/erp/payroll'), { ssr: false });
 const Invoices = dynamic(() => import('@/components/erp/invoices'), { ssr: false });
+const Projects = dynamic(() => import('@/components/erp/projects'), { ssr: false });
+const Sites = dynamic(() => import('@/components/erp/sites'), { ssr: false });
+const Equipment = dynamic(() => import('@/components/erp/equipment'), { ssr: false });
 const Permits = dynamic(() => import('@/components/erp/permits'), { ssr: false });
 const Safety = dynamic(() => import('@/components/erp/safety'), { ssr: false });
-const Equipment = dynamic(() => import('@/components/erp/equipment'), { ssr: false });
 const Subcontractors = dynamic(() => import('@/components/erp/subcontractors'), { ssr: false });
 const Reports = dynamic(() => import('@/components/erp/reports'), { ssr: false });
 const SettingsModule = dynamic(() => import('@/components/erp/settings'), { ssr: false });
 
+// New modules
+const Organization = dynamic(() => import('@/components/erp/organization'), { ssr: false });
+const InventoryModule = dynamic(() => import('@/components/erp/inventory'), { ssr: false });
+const SalesModule = dynamic(() => import('@/components/erp/sales'), { ssr: false });
+const CrmModule = dynamic(() => import('@/components/erp/crm'), { ssr: false });
+const SupportModule = dynamic(() => import('@/components/erp/support'), { ssr: false });
+const KnowledgebaseModule = dynamic(() => import('@/components/erp/knowledgebase'), { ssr: false });
+
 const MODULE_COMPONENTS: Record<string, React.ComponentType> = {
   dashboard: Dashboard,
-  projects: Projects,
-  sites: Sites,
   employees: Employees,
   attendance: Attendance,
   leave: Leave,
   shift: Shift,
   training: Training,
   recruitment: Recruitment,
-  payroll: Payroll,
-  expenses: Expenses,
   purchases: Purchases,
+  expenses: Expenses,
+  payroll: Payroll,
   invoices: Invoices,
+  projects: Projects,
+  sites: Sites,
+  equipment: Equipment,
   permits: Permits,
   safety: Safety,
-  equipment: Equipment,
   subcontractors: Subcontractors,
   reports: Reports,
   settings: SettingsModule,
+  organization: Organization,
+  inventory: InventoryModule,
+  sales: SalesModule,
+  crm: CrmModule,
+  support: SupportModule,
+  knowledgebase: KnowledgebaseModule,
 };
+
+// Modules that don't have a create action
+const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings'];
+
+function ModuleGrid() {
+  const { setActiveModule } = useERPStore();
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+      {MAIN_MODULES.map((mod) => {
+        const Icon = ICON_MAP[mod.icon] || Zap;
+        const hasSubModules = SUB_MODULES[mod.id] && SUB_MODULES[mod.id].length > 0;
+        return (
+          <button
+            key={mod.id}
+            onClick={() => setActiveModule(mod.id as any)}
+            className="group bg-[#161c24] border border-[#252e3a] rounded-xl p-6 text-left hover:border-[#f5a623]/40 transition-all duration-200 hover:shadow-lg hover:shadow-[#f5a623]/5"
+          >
+            <div className="w-12 h-12 bg-[#f5a623]/10 rounded-xl flex items-center justify-center mb-4 group-hover:bg-[#f5a623]/20 transition-colors">
+              <Icon size={24} className="text-[#f5a623]" />
+            </div>
+            <div className="text-[14px] font-semibold text-[#e2e8f0] group-hover:text-[#f5a623] transition-colors">
+              {mod.label}
+            </div>
+            {hasSubModules && (
+              <div className="text-[11px] text-[#5a6878] mt-1">
+                {SUB_MODULES[mod.id].length} sub-modules
+              </div>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function Sidebar() {
   const { activeModule, setActiveModule, sidebarOpen, setSidebarOpen } = useERPStore();
 
-  const sections = ['Overview', 'HR Management', 'Payroll & Finance', 'Operations', 'System'];
-  const groupedItems = sections.map(section => ({
-    section,
-    items: NAV_ITEMS.filter(item => item.section === section),
-  }));
+  // Determine if we should show sub-module navigation
+  const isExpandable = EXPANDABLE_MODULES.includes(activeModule);
+  const subModules = SUB_MODULES[activeModule] || [];
 
   return (
     <>
-      {/* Mobile overlay */}
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
-
       <aside className={`
-        fixed top-0 left-0 h-full z-50
-        w-[220px] min-w-[220px]
+        fixed top-0 left-0 h-full z-50 w-[220px] min-w-[220px]
         bg-[#161c24] border-r border-[#252e3a]
-        flex flex-col overflow-y-auto
-        transition-transform duration-200
+        flex flex-col overflow-y-auto transition-transform duration-200
         lg:translate-x-0 lg:static lg:z-auto
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
@@ -101,19 +145,29 @@ function Sidebar() {
           </button>
         </div>
 
-        {/* Nav sections */}
+        {/* Navigation */}
         <div className="flex-1 py-2">
-          {groupedItems.map(({ section, items }) => (
-            <div key={section}>
-              <div className="text-[9px] tracking-[2px] uppercase text-[#5a6878] font-bold px-4 py-2">
-                {section}
+          {isExpandable ? (
+            // Sub-module navigation mode
+            <>
+              <button
+                onClick={() => setActiveModule('dashboard')}
+                className="w-full flex items-center gap-2 px-4 py-2 text-[11px] font-medium text-[#5a6878] hover:text-[#8899aa] transition-colors"
+              >
+                <ChevronRight size={14} />
+                <ArrowLeft size={12} />
+                <span>All Modules</span>
+              </button>
+              <div className="mx-3 my-2 border-t border-[#252e3a]" />
+              <div className="text-[9px] tracking-[2px] uppercase text-[#f5a623] font-bold px-4 py-2">
+                {MODULE_CONFIG[activeModule]?.title || activeModule}
               </div>
-              {items.map(item => {
+              {subModules.map(item => {
                 const Icon = ICON_MAP[item.icon] || Zap;
                 return (
                   <button
                     key={item.id}
-                    onClick={() => { setActiveModule(item.id); setSidebarOpen(false); }}
+                    onClick={() => { setActiveModule(item.id as any); setSidebarOpen(false); }}
                     className={`
                       w-full flex items-center gap-2 px-4 py-[7px] text-left text-[12px] font-medium
                       transition-all duration-150 border-l-[3px]
@@ -126,15 +180,26 @@ function Sidebar() {
                     <Icon size={14} className="w-4 text-center shrink-0" />
                     <span className="flex-1">{item.label}</span>
                     {item.badge && (
-                      <span className="bg-[#ff3d3d] text-white text-[9px] font-bold px-[5px] py-[1px] rounded-full" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+                      <span className="bg-[#ff3d3d] text-white text-[9px] font-bold px-[5px] py-[1px] rounded-full">
                         {item.badge}
                       </span>
                     )}
                   </button>
                 );
               })}
-            </div>
-          ))}
+            </>
+          ) : (
+            // Dashboard / grid navigation mode
+            <>
+              <button
+                onClick={() => setActiveModule('dashboard')}
+                className={`w-full flex items-center gap-2 px-4 py-[7px] text-left text-[12px] font-medium transition-all duration-150 border-l-[3px] ${activeModule === 'dashboard' ? 'text-[#f5a623] border-l-[#f5a623] bg-[#f5a623]/7' : 'text-[#8899aa] border-l-transparent hover:text-[#e2e8f0] hover:bg-[#141920]'}`}
+              >
+                <Zap size={14} className="w-4 text-center shrink-0" />
+                <span>Dashboard</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* User card */}
@@ -155,9 +220,6 @@ function Sidebar() {
   );
 }
 
-// Modules that don't have a create action
-const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings'];
-
 function Topbar() {
   const { activeModule, triggerCreateDialog } = useERPStore();
   const { setSidebarOpen } = useERPStore();
@@ -173,9 +235,9 @@ function Topbar() {
       </button>
       <div>
         <h1 className="text-[19px] font-bold" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-          {config.title}
+          {config?.title || 'VoltCore ERP'}
         </h1>
-        <p className="text-[10px] text-[#5a6878]">{config.breadcrumb}</p>
+        <p className="text-[10px] text-[#5a6878]">{config?.breadcrumb || ''}</p>
       </div>
       <div className="ml-auto flex items-center gap-2">
         <div className="hidden sm:flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-[5px] w-[190px]">
@@ -204,7 +266,6 @@ export default function ERPPage() {
   const { activeModule } = useERPStore();
   const [mounted, setMounted] = useState(false);
 
-  // Use requestAnimationFrame to avoid synchronous setState in effect
   useEffect(() => {
     const id = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(id);
@@ -221,6 +282,7 @@ export default function ERPPage() {
     );
   }
 
+  const isDashboard = activeModule === 'dashboard';
   const ActiveComponent = MODULE_COMPONENTS[activeModule];
 
   return (
@@ -228,9 +290,9 @@ export default function ERPPage() {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Topbar />
-        <main className="flex-1 overflow-y-auto p-4 md:p-[18px]">
+        <main className="flex-1 overflow-y-auto">
           <div className="animate-in fade-in duration-200">
-            {ActiveComponent && <ActiveComponent />}
+            {isDashboard ? <ModuleGrid /> : ActiveComponent && <ActiveComponent />}
           </div>
         </main>
       </div>
