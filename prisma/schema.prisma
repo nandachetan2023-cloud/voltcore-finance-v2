@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  id            String   @id @default(cuid())
+  empId         String   @unique
+  name          String
+  email         String?
+  phone         String?
+  trade         String
+  role          String
+  site          String
+  type          String   @default("Staff")
+  status        String   @default("Active")
+  joiningDate   String
+  certifications String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  attendance    Attendance[]
+  leaveRequests LeaveRequest[]
+  payroll       Payroll[]
+  expenses      Expense[]
+}
+
+model Site {
+  id            String   @id @default(cuid())
+  name          String
+  state         String
+  project       String
+  manpower      Int      @default(0)
+  incharge      String
+  status        String   @default("Active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Project {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  client        String
+  type          String
+  contractValue String
+  startDate     String
+  endDate       String
+  progress      Int      @default(0)
+  people        Int      @default(0)
+  status        String   @default("On Track")
+  site          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Attendance {
+  id        String   @id @default(cuid())
+  empId     String
+  employee  Employee @relation(fields: [empId], references: [id])
+  site      String
+  date      String
+  timeIn    String?
+  timeOut   String?
+  otHours   Float    @default(0)
+  shift     String?
+  status    String   @default("Present")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LeaveRequest {
+  id          String   @id @default(cuid())
+  empId       String
+  employee    Employee @relation(fields: [empId], references: [id])
+  site        String
+  type        String
+  fromDate    String
+  toDate      String
+  days        Int
+  reason      String
+  status      String   @default("Pending")
+  appliedDate String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Payroll {
+  id        String   @id @default(cuid())
+  empId     String
+  employee  Employee @relation(fields: [empId], references: [id])
+  month     String
+  days      Int
+  basic     Float
+  hra       Float
+  ot        Float    @default(0)
+  gross     Float
+  pf        Float
+  esi       Float    @default(0)
+  tds       Float    @default(0)
+  netPay    Float
+  status    String   @default("Pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WorkPermit {
+  id            String   @id @default(cuid())
+  permitNo      String   @unique
+  type          String
+  location      String
+  issuedTo      String
+  expiry        String
+  status        String   @default("Active")
+  description   String?
+  precautions   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Incident {
+  id        String   @id @default(cuid())
+  refNo     String   @unique
+  date      String
+  site      String
+  type      String
+  severity  String
+  person    String
+  status    String   @default("Investigating")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Equipment {
+  id          String   @id @default(cuid())
+  name        String
+  eqId        String   @unique
+  site        String
+  status      String   @default("Operational")
+  lastPM      String?
+  nextPM      String?
+  issue       String?
+  downSince   String?
+  etaRepair   String?
+  assignedTo  String?
+  utilization Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  claimNo     String   @unique
+  empId       String
+  employee    Employee @relation(fields: [empId], references: [id])
+  category    String
+  amount      Float
+  project     String
+  date        String
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PurchaseOrder {
+  id        String   @id @default(cuid())
+  poNo      String   @unique
+  vendor    String
+  item      String
+  amount    Float
+  project   String
+  delivery  String
+  grn       String   @default("Awaited")
+  status    String   @default("Open")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Invoice {
+  id        String   @id @default(cuid())
+  invNo     String   @unique
+  client    String
+  project   String
+  amount    String
+  date      String
+  dueDate   String
+  status    String   @default("Under Review")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Subcontractor {
+  id           String   @id @default(cuid())
+  name         String
+  trade        String
+  workers      Int      @default(0)
+  site         String
+  pfReg        String   @default("Pending")
+  esiReg       String   @default("Pending")
+  labourLic    String   @default("Pending")
+  compliance   String   @default("Non-Compliant")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model JobOpening {
+  id           String   @id @default(cuid())
+  position     String
+  site         String
+  openings     Int
+  applications Int      @default(0)
+  priority     String
+  status       String   @default("Open")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
