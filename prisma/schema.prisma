@@ -406,3 +406,92 @@ model KBArticle {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+// ── FINANCE MODULE ──
+model LedgerAccount {
+  id          String   @id @default(cuid())
+  accountCode String   @unique
+  name        String
+  group       String
+  type        String
+  balance     Float    @default(0)
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AccountsPayable {
+  id          String   @id @default(cuid())
+  billNo      String   @unique
+  vendor      String
+  description String?
+  amount      Float
+  dueDate     String
+  paidDate    String?
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AccountsReceivable {
+  id          String   @id @default(cuid())
+  invoiceNo   String   @unique
+  client      String
+  description String?
+  amount      Float
+  dueDate     String
+  receivedDate String?
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model JournalEntry {
+  id          String   @id @default(cuid())
+  entryNo     String   @unique
+  date        String
+  account     String
+  debit       Float    @default(0)
+  credit      Float    @default(0)
+  description String?
+  reference   String?
+  status      String   @default("Posted")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BankAccount {
+  id          String   @id @default(cuid())
+  accountName String
+  bankName    String
+  accountNo   String   @unique
+  type        String   @default("Current")
+  balance     Float    @default(0)
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TaxRecord {
+  id          String   @id @default(cuid())
+  taxType     String
+  period      String
+  amount      Float
+  dueDate     String
+  paidDate    String?
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BudgetItem {
+  id          String   @id @default(cuid())
+  category    String
+  description String
+  planned     Float
+  actual      Float    @default(0)
+  period      String
+  status      String   @default("On Track")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

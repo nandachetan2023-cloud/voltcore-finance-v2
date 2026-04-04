@@ -586,7 +586,56 @@ Dashboard Features:
 
 
 ---
-Task ID: 13
+---
+## Task ID: 4-a - Finance Dashboard Developer
+### Work Task
+Build Finance Dashboard component and API route for VoltCore ERP with aggregated financial KPIs, charts, and tables. Seed finance module database records.
+
+### Work Summary
+Created 2 new files and updated 1 existing file for the Finance Dashboard module:
+
+**File 1: `/src/app/api/finance-dashboard/route.ts`**
+- API route that aggregates financial data from 9 Prisma models in parallel (Payroll, Invoice, Expense, PurchaseOrder, AccountsPayable, AccountsReceivable, BudgetItem, BankAccount, JournalEntry)
+- Calculates 20+ KPIs: Total Revenue, AR Pending/Received/Overdue, AP Pending/Paid/Overdue, Bank Balance, Expenses, Payroll, PO Value, Budget Planned/Actual/Variance
+- Returns monthly trend data (last 6 months) with revenue, expenses, payroll, cashIn, cashOut
+- Returns AP summary, AR summary, budget items, bank accounts, and 20 recent journal entries
+- Helper function `parseIndianAmount()` to parse Indian format invoice amounts (e.g., "₹12,45,00,000")
+- Uses `export const dynamic = 'force-dynamic'` pattern
+
+**File 2: `/src/components/erp/finance-dashboard.tsx` (550+ lines)**
+- **6 KPI Stat Cards**: Total Revenue (#00e676), Accounts Receivable (#f5a623), Accounts Payable (#ff3d3d), Bank Balance (#00d4ff), Monthly Expenses (#a78bfa), Budget Variance (#ffab40)
+- **Revenue vs Expenses Bar Chart**: Side-by-side grouped bars (green revenue vs red expenses) for last 6 months with Y-axis auto-formatting (Cr/L/K)
+- **AR vs AP Donut Chart**: 4-segment donut (AR Received, AR Pending, AP Paid, AP Pending) with center total label
+- **Budget Planned vs Actual Horizontal Bar Chart**: 8 budget categories with planned (cyan) vs actual (amber) bars, tooltip shows full category names
+- **Expense Distribution Donut Chart**: 8-segment donut showing expense breakdown by category
+- **Cash Flow Summary Card**: Inflow/Outflow/Net Flow mini-stats, Cash In vs Cash Out bar chart, Bank accounts list with balances
+- **Recent Journal Entries Table**: Sticky header, entry number (amber), date, account, description, debit (green) and credit (red) columns
+- **Financial Summary Strip**: 4 info cards - Total Payroll, Open POs, Budget Utilization (progress bar), Net Position
+- Indian currency formatting: formatCr() for Cr/L/K auto-scaling, formatCurrency() for full amounts
+- Loading skeleton, error state with retry button
+- Dark industrial theme: vc-stat-card, #0a0d12 bg, #161c24 panel, #252e3a border, #f5a623 accent
+
+**File 3: `prisma/seed.ts` (updated)**
+- Added finance module seed data section (Section 29) with:
+  - 18 Ledger Accounts (Cash & Bank, AR, Inventory, WIP, AP, PF/ESI/TDS/GST payables, Share Capital, Retained Earnings, Revenue, 6 expense types)
+  - 4 Bank Accounts (SBI, HDFC, PFC FD, ICICI Salary)
+  - 7 Accounts Payable records (Bhel, Godrej, KRBL, SolarEdge, Siemens, Tata Steel, Shree Krishna)
+  - 6 Accounts Receivable records (NTPC x2, SECI, UJVNL, GIPCL, BSEB)
+  - 8 Budget Items (Salaries, Materials, Subcontractors, Plant, Overheads, Admin, Safety, Contingency)
+  - 6 Tax Records (GST x2, TDS x2, Professional Tax, PF)
+  - 10 Journal Entries (cash receipts, vendor payments, material purchases, payroll disbursements, GST payment, crane hire)
+- Added deleteMany() calls for all new finance models in seed cleanup section
+- Helper function `prevMonth()` for generating month strings for budget period field
+
+**Verification:**
+- Lint: 0 errors, 1 pre-existing warning (font loading - non-blocking)
+- API: GET /api/finance-dashboard returns 200 with all data:
+  - Total Revenue: ₹8.08 Cr, AR Pending: ₹27.76 Cr, AP Pending: ₹2.22 Cr
+  - Bank Balance: ₹1.12 Cr, Budget Variance: ₹14.20 L (under budget)
+  - 6 monthly trend data points, 8 budget items, 4 bank accounts, 10 journal entries
+- Main page renders without errors
+- finance-dashboard already registered in erp-store.ts (ModuleId, SUB_MODULES, MODULE_CONFIG, NO_CREATE_MODULES in page.tsx)
+
 Agent: Main Agent
 Task: Fix Employee Analytics Dashboard - labels, payroll month bug, data handling
 
@@ -638,3 +687,239 @@ Stage Summary:
 - Label changed from "HR Dashboard" to "Employee Analytics"
 - Payroll trend chart now shows real data (month format fixed)
 - All 7 API endpoints returning 200 with real data
+
+---
+## Task ID: 4-c - Finance Components Developer (Journal, Bank)
+### Work Task
+Create Journal Entries and Bank & Cash Management components with API routes following VoltCore ERP dark industrial theme and invoice.tsx CRUD pattern.
+
+### Work Summary
+Created 4 files with full CRUD functionality for Finance module's Journal Entries and Bank & Cash sub-modules:
+
+**API Routes Created:**
+
+1. **`/api/journal-entries/route.ts`**
+   - GET: Return all entries ordered by date desc
+   - POST: Create entry with auto-generated entryNo (JE-001 format)
+   - PUT: Update by id (parses debit/credit as Float)
+   - DELETE: Delete by id
+   - Validation: requires date + account, at least one of debit/credit non-zero
+   - Error handling: 400/404/409/500 with Prisma error codes
+
+2. **`/api/bank-cash/route.ts`**
+   - GET: Return all bank accounts ordered by createdAt desc
+   - POST: Create account with accountNo unique constraint
+   - PUT: Update by id (parses balance as Float, handles P2002 duplicate)
+   - DELETE: Delete by id
+   - Validation: requires accountName + bankName + accountNo
+   - Error handling: 400/404/409/500
+
+**Components Built:**
+
+3. **`journal-entries.tsx`** (440+ lines)
+   - 4 stat cards: Total Entries, Total Debit (green), Total Credit (cyan), Balance (green/red based on sign)
+   - Running balance footer: Dr/Cr totals, "Balanced" badge when Dr=Cr, Scale icon
+   - Full table: Entry No (amber monospace), Date, Account, Debit (green), Credit (cyan), Description, Reference, Status badge, Actions
+   - Status badges: Posted (green), Draft (amber), Cancelled (red)
+   - Account dropdown with 22 pre-defined accounts (Cash, Bank-HDFC, Bank-SBI, Salary & Wages, Rent, Sales Revenue, etc.)
+   - Create/Edit dialogs: date, account (select), debit, credit (number inputs), description, reference, status
+   - Delete AlertDialog with confirmation
+   - Currency formatting: ₹ Cr/L auto-scaling, Share Tech Mono for numbers
+   - triggerCreate pattern from useERPStore
+
+4. **`bank-cash.tsx`** (380+ lines)
+   - Total Liquid Assets banner: prominent gradient panel showing total balance + active account count
+   - 4 stat cards: Total Accounts, Total Balance, Active Accounts, Highest Balance
+   - Full table: Account Name (with type icon), Bank, Account No (amber monospace), Type badge (color-coded: Current=cyan, Savings=green, Cash=amber, OD=red, FD=purple), Balance (green, right-aligned), Status badge, Actions
+   - Status badges: Active (green), Dormant (amber), Closed (red)
+   - Closed accounts shown with opacity-50
+   - Net Position footer: total balance prominently displayed
+   - Create dialog: accountName, bankName, accountNo, type (dropdown: Current/Savings/Cash/OD/FD), initial balance
+   - Edit dialog: all fields + status dropdown (Active/Dormant/Closed)
+   - Delete AlertDialog with confirmation
+   - triggerCreate pattern from useERPStore
+
+**Seed Data Updates:**
+- Updated bank accounts from 4 to 6: HDFC Current, SBI Savings, Cash in Hand, Petty Cash, ICICI OD, Axis Term Deposit
+- Updated types to match component options (Current, Savings, Cash, OD, FD)
+- Added 4 more journal entries (14 total): Insurance premium, Travel & Transport, Depreciation, Tata Steel advance
+- Added 1 Draft status entry for variety
+
+**Verification:**
+- Both API routes return 200 with correct data
+- Database seeded successfully with 14 journal entries + 6 bank accounts
+- Zero lint errors (0 errors, 1 pre-existing font warning)
+- Dev server compiling cleanly on port 3000
+- Prisma models JournalEntry and BankAccount were already defined in schema
+
+---
+## Task ID: 4-b - Finance Components Developer (Ledger, AP, AR)
+### Work Task
+Create Ledger Management, Accounts Payable, and Accounts Receivable components + API routes with full CRUD operations, dark industrial theme, and VoltCore styling.
+
+### Work Summary
+Created 6 files (3 API routes + 3 frontend components) for the Finance module:
+
+**API Routes Created:**
+1. `/api/ledger/route.ts` — Full CRUD (GET/POST/PUT/DELETE) for LedgerAccount model. Auto-generates accountCode (ACC-001 format). Validates required fields (name, group, type). Converts balance to float on PUT. Error handling with P2002 duplicate detection.
+2. `/api/accounts-payable/route.ts` — Full CRUD for AccountsPayable model. Auto-generates billNo (AP-001 format). Allows setting paidDate and status to 'Paid' on update. Converts amount to float.
+3. `/api/accounts-receivable/route.ts` — Full CRUD for AccountsReceivable model. Auto-generates invoiceNo (AR-001 format). Allows setting receivedDate and status to 'Received' on update.
+
+**Components Created:**
+
+1. **ledger.tsx** — Chart of Accounts management
+   - 4 stat cards: Total Accounts, Active Accounts, Total Debit Balance, Total Credit Balance
+   - Table with columns: Code (amber monospace), Name, Group (color-coded badge), Type (color-coded badge), Balance (₹ formatted), Status badge (Active=green, Inactive=gray, Frozen=blue)
+   - Create dialog: Account Name, Group dropdown (7 options: Current Assets, Current Liabilities, Fixed Assets, Equity, Income, Direct Costs, Overheads), Type dropdown (5 options: Asset, Liability, Equity, Revenue, Expense), Initial Balance, Status
+   - Edit dialog with all fields pre-filled
+   - Delete with AlertDialog confirmation
+   - Loading skeleton, empty state, triggerCreate pattern
+
+2. **accounts-payable.tsx** — Accounts Payable management
+   - 4 stat cards: Total Bills, Total Payable, Overdue Amount, Paid This Month (computed from data with current month filtering)
+   - Table: Bill No (amber), Vendor, Description (truncated), Amount (₹ formatted), Due Date, Paid Date, Status badge, Actions
+   - Overdue rows highlighted with red background tint
+   - Quick "Mark as Paid" action button on Pending/Approved bills (inline status change)
+   - Create dialog: Vendor, Description, Amount, Due Date
+   - Edit dialog: all fields + Status dropdown (6 options) + conditional Paid Date field
+   - Status badges: Pending=amber, Approved=cyan, Paid=green, Overdue=red, Partially Paid=purple, Cancelled=gray
+
+3. **accounts-receivable.tsx** — Accounts Receivable management
+   - 4 stat cards: Total Invoices, Total Receivable, Overdue, Collected This Month (current month filtering)
+   - Table: Invoice No (amber), Client, Description, Amount (₹ formatted), Due Date, Received Date, Status, Actions
+   - Overdue rows highlighted with red background tint
+   - Quick "Mark as Received" action button on Pending/Approved invoices
+   - Create dialog: Client, Description, Amount, Due Date
+   - Edit dialog: all fields + Status dropdown (6 options) + conditional Received Date field
+   - Status badges: Pending=amber, Approved=cyan, Received=green, Overdue=red, Partially Received=purple, Cancelled=gray
+
+**Seed Data (already existing in prisma/seed.ts):**
+- 18 Ledger Accounts across 6 groups (Current Assets, Current Liabilities, Equity, Income, Direct Costs, Overheads)
+- 7 AP records (2 Paid, 1 Overdue, 4 Pending) with realistic vendor names
+- 6 AR records (2 Received, 4 Pending) with realistic client names (NTPC, SECI, etc.)
+
+**Verification:**
+- All 3 API routes return 200 with correct data (18 accounts, 7 AP, 6 AR)
+- POST operations work: auto-generates ACC-019, AP-008, AR-007
+- Zero lint errors (0 errors, 1 pre-existing font warning)
+- Dev server compiling cleanly on port 3000
+- Components follow exact invoices.tsx pattern: loading skeleton, stat cards, table with sticky header, create/edit dialogs, delete confirmation, toast notifications
+- All components use VoltCore dark industrial theme with vc-stat-card, vc-panel, vc-badge, vc-btn-primary, vc-btn-ghost, vc-input classes
+
+---
+## Task ID: 4-d - Finance Components Developer (Taxation, Budget, Reports)
+### Work Task
+Create Taxation & Compliance, Budget & Forecasting, and Financial Reports components + API routes for VoltCore ERP. 5 files total: 2 API routes and 3 frontend components.
+
+### Work Summary
+Created all 5 files following the exact invoices.tsx CRUD pattern and VoltCore dark industrial theme:
+
+**API Routes Created:**
+
+1. **`/src/app/api/taxation/route.ts`**
+   - Full CRUD: GET (all tax records, orderBy createdAt desc), POST (validate required fields: taxType, period, amount, dueDate), PUT (update by id, validate existence), DELETE (delete by id)
+   - Response format: `{ success: true, data: [...] }` with error handling (400, 404, 500)
+   - `export const dynamic = 'force-dynamic'`
+   - Uses `import { db } from '@/lib/db'` with Prisma TaxRecord model
+
+2. **`/src/app/api/budget/route.ts`**
+   - Full CRUD: GET (all budget items, orderBy createdAt desc), POST (validate required fields: category, description, planned, period), PUT (update by id with float parsing for planned/actual), DELETE (delete by id)
+   - Same consistent pattern as taxation route
+   - Uses Prisma BudgetItem model
+
+**Components Created:**
+
+3. **`/src/components/erp/taxation.tsx`** (~430 lines)
+   - 4 stat cards: Total Tax Liability, Paid YTD, Pending Amount, Overdue (all computed from data)
+   - Full table: Tax Type, Period, Amount (₹ formatted with Cr/L), Due Date, Paid Date, Status, Actions
+   - Status badges with icons: Paid (green + CheckCircle2), Pending (amber + Clock), Overdue (red + AlertTriangle), Filed (cyan + FileWarning)
+   - Overdue rows highlighted with red background tint
+   - "X days left" labels on pending items due within 7 days
+   - Create dialog: taxType dropdown (GST/TDS/PF/ESI/Prof Tax/Income Tax/CST/VAT), period, amount, dueDate, status select
+   - Edit dialog: pre-filled from selected record with all fields editable
+   - Delete dialog: AlertDialog with confirmation showing tax type and period
+   - Calendar-style upcoming due dates sidebar panel:
+     - Sorted by due date (soonest first)
+     - Cards with days-remaining badges (red for overdue, amber for ≤7 days, cyan for normal)
+     - Tax type, period, amount, and due date per card
+   - Compliance summary: 2×2 grid showing Paid/Filed/Pending/Overdue counts
+   - Tax type breakdown: list of GST/TDS/PF/ESI/Prof Tax/Income Tax with totals
+   - Auto-seeds 13 records on first empty load (GST quarterly, TDS quarterly, PF, ESI, Prof Tax, Income Tax)
+   - triggerCreate integration from Zustand store
+
+4. **`/src/components/erp/budget.tsx`** (~380 lines)
+   - 4 stat cards: Total Budget, Total Spent, Remaining, Variance % (color changes: green <80%, amber 80-100%, red >100%)
+   - Overall Budget Utilization bar: full-width progress bar with percentage label and color coding
+   - Legend showing Under 80% / 80-100% / Over 100% thresholds
+   - Full table: Category, Description, Planned (₹), Actual (₹, green if under, red if over), Variance (±₹), % Used (with progress bar), Period, Status, Actions
+   - Visual progress bar per row: BudgetBar component (green <80%, amber 80-100%, red >100%)
+   - Status badges: On Track (green), Over Budget (red), Under Budget (cyan), Completed (gray)
+   - Over-budget rows highlighted with red background tint
+   - Category summary cards: grid of 5 top categories with planned, actual, and % used bars
+   - Create dialog: category dropdown (10 options), description, planned amount, period, status
+   - Edit dialog: includes actual amount field (separate from create), all fields editable
+   - Delete dialog: AlertDialog with confirmation
+   - Auto-seeds 12 budget items on first empty load across 8 categories with FY 2024-25 period
+   - triggerCreate integration from Zustand store
+
+5. **`/src/components/erp/financial-reports.tsx`** (~460 lines)
+   - READ-ONLY analytics/reporting component (no CRUD, no API route)
+   - Fetches data from 8 endpoints in parallel: /api/budget, /api/taxation, /api/dashboard, /api/ledger, /api/accounts-payable, /api/accounts-receivable, /api/journal-entries, /api/bank-cash
+   - Gracefully handles missing/unavailable APIs (silently skips, shows "No data" fallbacks)
+   - 4 top summary stat cards: Total Budget, Accounts Receivable, Accounts Payable, Tax Liability
+   - Refresh button with loading spinner
+   - 8 report sections in vc-panel with vc-panel-header:
+
+     1. **Balance Sheet Summary**: 3 cards (Total Assets green, Total Liabilities red, Equity cyan) + Net Worth progress bar
+     2. **Income Statement**: Horizontal BarChart (recharts) — Planned vs Actual by budget category
+     3. **Cash Flow Trend**: LineChart (recharts) — Inflow vs Outflow by month (12 months)
+     4. **Budget Performance**: Horizontal BarChart — Planned vs Actual by category (top 8)
+     5. **Receivables & Payables Aging**: Donut PieChart with 4 aging buckets (0-30d, 31-60d, 61-90d, 90+ days) + total outstanding
+     6. **Tax Compliance Overview**: Donut PieChart with 4 status buckets + paid/pending summary cards + overdue alert
+     7. **Budget Utilization by Category**: Progress bars per category with planned/actual/pct
+     8. **Tax Summary by Type**: Table with Total/Paid/Pending/Compliance % per tax type + totals row
+
+   - Custom Recharts tooltip (CustomTooltip) with dark theme styling
+   - Indian currency formatting (₹ Lakhs/Crores auto-scaling)
+   - Loading skeleton for initial load
+   - "No data" fallback messages when APIs return empty arrays
+   - Uses recharts: PieChart, BarChart, LineChart, Bar, Line, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+
+**All 5 files:**
+- Use 'use client' directive
+- Follow VoltCore dark industrial theme (bg-[#0a0d12], bg-[#161c24], border-[#252e3a], text-[#e2e8f0], accent #f5a623)
+- Use vc-stat-card, vc-panel, vc-panel-header, vc-badge, vc-btn-primary, vc-btn-ghost, vc-input CSS classes
+- Barlow Condensed font for headings, Share Tech Mono for numbers
+- shadcn Dialog/AlertDialog for CRUD operations
+- sonner toast for success/error notifications
+- Skeleton loading states
+- Lucide React icons throughout
+- Zero lint errors (0 errors, 1 pre-existing font warning in layout.tsx)
+- Dev server running cleanly on port 3000
+
+**Verification:**
+- /api/taxation returns 200 with 6 existing records
+- /api/budget returns 200 with 8 existing records
+- All 5 new files pass ESLint with zero errors
+
+---
+Task ID: 4-e
+Agent: Main Agent
+Task: Add Finance sub-modules from uploaded image (Dashboard, Ledger, AP, AR, Journal, Bank, Taxation, Budget, Financial Reports)
+
+Work Log:
+- Analyzed uploaded image using VLM: identified 9 Finance modules (Dashboard, Ledger Management, Accounts Payable, Accounts Receivable, Journal Entries, Bank & Cash, Taxation & Compliance, Budget & Forecasting, Financial Reports)
+- Updated erp-store.ts: Added 9 new ModuleId types, replaced old Finance sub-modules with new ones, added MODULE_CONFIG entries, added 'finance' to EXPANDABLE_WITH_PAGE
+- Updated page.tsx: Added new lucide-react icons (ArrowDownCircle, ArrowUpCircle, FileEdit, Landmark, Scale, Target, PieChart, etc.), added 9 dynamic imports, added MODULE_COMPONENTS mappings, updated NO_CREATE_MODULES
+- Added 7 new Prisma models: LedgerAccount, AccountsPayable, AccountsReceivable, JournalEntry, BankAccount, TaxRecord, BudgetItem
+- Pushed schema to SQLite database, regenerated Prisma client
+- Created 9 new component files: finance-dashboard, ledger, accounts-payable, accounts-receivable, journal-entries, bank-cash, taxation, budget, financial-reports
+- Created 8 new API routes: finance-dashboard (aggregation), ledger, accounts-payable, accounts-receivable, journal-entries, bank-cash, taxation, budget
+- All APIs seeded with realistic Indian construction/industrial data
+- Zero lint errors, all APIs verified returning 200
+
+Stage Summary:
+- Finance module now has 9 sub-modules matching the user's uploaded image
+- Finance Dashboard has 6 KPI cards, Revenue vs Expenses chart, AR/AP donut, Budget chart, Cash Flow summary, Recent Transactions table
+- All CRUD modules follow VoltCore dark industrial theme with consistent patterns
+- 36 total API routes, 34 frontend components across entire ERP

@@ -12,7 +12,10 @@ export type ModuleId =
   // Analytics pages
   | 'employee-analytics'
   // Timesheet
-  | 'timesheet';
+  | 'timesheet'
+  // Finance sub-modules
+  | 'finance-dashboard' | 'ledger' | 'accounts-payable' | 'accounts-receivable'
+  | 'journal-entries' | 'bank-cash' | 'taxation' | 'budget' | 'financial-reports';
 
 interface NavItem {
   id: ModuleId;
@@ -57,8 +60,15 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'expenses', icon: 'Receipt', label: 'Expenses', badge: 3, section: 'Procurement' },
   ],
   finance: [
-    { id: 'payroll', icon: 'IndianRupee', label: 'Payroll', section: 'Finance' },
-    { id: 'invoices', icon: 'FileText', label: 'Invoicing', section: 'Finance' },
+    { id: 'finance-dashboard', icon: 'BarChart3', label: 'Dashboard', section: 'Finance' },
+    { id: 'ledger', icon: 'BookOpen', label: 'Ledger Management', section: 'Finance' },
+    { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Accounts Payable', section: 'Finance' },
+    { id: 'accounts-receivable', icon: 'ArrowUpCircle', label: 'Accounts Receivable', section: 'Finance' },
+    { id: 'journal-entries', icon: 'FileEdit', label: 'Journal Entries', section: 'Finance' },
+    { id: 'bank-cash', icon: 'Landmark', label: 'Bank & Cash', section: 'Finance' },
+    { id: 'taxation', icon: 'Scale', label: 'Taxation & Compliance', section: 'Finance' },
+    { id: 'budget', icon: 'Target', label: 'Budget & Forecasting', section: 'Finance' },
+    { id: 'financial-reports', icon: 'PieChart', label: 'Financial Reports', section: 'Finance' },
   ],
   projects: [
     { id: 'projects', icon: 'FolderKanban', label: 'All Projects', section: 'Projects' },
@@ -113,7 +123,16 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   purchases: { title: 'Purchase Orders', breadcrumb: 'Finance › Procurement' },
   expenses: { title: 'Expense Claims', breadcrumb: 'Finance › Expense Management' },
   payroll: { title: 'Payroll', breadcrumb: 'HRMS › Payroll Processing' },
-  invoices: { title: 'Invoicing', breadcrumb: 'Finance › Client Invoices' },
+  // Finance sub-modules
+  'finance-dashboard': { title: 'Finance Dashboard', breadcrumb: 'Finance › Overview' },
+  ledger: { title: 'Ledger Management', breadcrumb: 'Finance › General Ledger' },
+  'accounts-payable': { title: 'Accounts Payable', breadcrumb: 'Finance › AP Management' },
+  'accounts-receivable': { title: 'Accounts Receivable', breadcrumb: 'Finance › AR Management' },
+  'journal-entries': { title: 'Journal Entries', breadcrumb: 'Finance › Journal' },
+  'bank-cash': { title: 'Bank & Cash Management', breadcrumb: 'Finance › Banking' },
+  taxation: { title: 'Taxation & Compliance', breadcrumb: 'Finance › Tax' },
+  budget: { title: 'Budget & Forecasting', breadcrumb: 'Finance › Budget' },
+  'financial-reports': { title: 'Financial Reports', breadcrumb: 'Finance › Reports' },
   sites: { title: 'Site Map', breadcrumb: 'VoltCore ERP › Sites' },
   permits: { title: 'Work Permits (PTW)', breadcrumb: 'Operations › Permit to Work' },
   safety: { title: 'Safety & HSE', breadcrumb: 'Operations › HSE Management' },
@@ -138,7 +157,7 @@ const PARENT_MAP: Record<string, string> = {};
 });
 
 // Expandable modules that show their own sub-module grid (instead of auto-redirecting to first child)
-export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'projects', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
+export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'projects', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};

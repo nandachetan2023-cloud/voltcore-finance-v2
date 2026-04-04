@@ -9,7 +9,9 @@ import {
   UserCog, HardHat, ClipboardList, CalendarDays, RotateCcw, GraduationCap,
   Search, IndianRupee, Receipt, FileText, MapPin, ShieldAlert, Handshake,
   BarChart3, ShoppingBag, TimerReset, Menu, X, Bell, ChevronRight, ChevronDown,
-  ArrowLeft
+  ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileEdit, Landmark, Scale, Target, PieChart,
+  Wallet, FileSpreadsheet, ReceiptIndianRupee, BadgeIndianRupee, CircleDollarSign, Undo2,
+  ArrowRightLeft, HandCoins
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -17,7 +19,9 @@ const ICON_MAP: Record<string, React.ElementType> = {
   TrendingUp, Briefcase, Settings: Settings, MessageSquare, BookOpen, Zap,
   UserCog, HardHat, ClipboardList, CalendarDays, RotateCcw, GraduationCap,
   Search, IndianRupee, Receipt, FileText, MapPin, ShieldAlert, Handshake,
-  BarChart3, ShoppingBag, TimerReset,
+  BarChart3, ShoppingBag, TimerReset, ArrowDownCircle, ArrowUpCircle, FileEdit,
+  Landmark, Scale, Target, PieChart, Wallet, FileSpreadsheet, ReceiptIndianRupee,
+  BadgeIndianRupee, CircleDollarSign, Undo2, ArrowRightLeft, HandCoins,
 };
 
 // Dynamic imports for all page-level module components
@@ -51,6 +55,17 @@ const KnowledgebaseModule = dynamic(() => import('@/components/erp/knowledgebase
 const EmployeeAnalytics = dynamic(() => import('@/components/erp/employee-analytics'), { ssr: false });
 const TimesheetModule = dynamic(() => import('@/components/erp/timesheet'), { ssr: false });
 
+// Finance sub-modules
+const FinanceDashboard = dynamic(() => import('@/components/erp/finance-dashboard'), { ssr: false });
+const Ledger = dynamic(() => import('@/components/erp/ledger'), { ssr: false });
+const AccountsPayable = dynamic(() => import('@/components/erp/accounts-payable'), { ssr: false });
+const AccountsReceivable = dynamic(() => import('@/components/erp/accounts-receivable'), { ssr: false });
+const JournalEntries = dynamic(() => import('@/components/erp/journal-entries'), { ssr: false });
+const BankCash = dynamic(() => import('@/components/erp/bank-cash'), { ssr: false });
+const Taxation = dynamic(() => import('@/components/erp/taxation'), { ssr: false });
+const Budget = dynamic(() => import('@/components/erp/budget'), { ssr: false });
+const FinancialReports = dynamic(() => import('@/components/erp/financial-reports'), { ssr: false });
+
 const MODULE_COMPONENTS: Record<string, React.ComponentType> = {
   dashboard: Dashboard,
   employees: Employees,
@@ -79,10 +94,20 @@ const MODULE_COMPONENTS: Record<string, React.ComponentType> = {
   knowledgebase: KnowledgebaseModule,
   'employee-analytics': EmployeeAnalytics,
   timesheet: TimesheetModule,
+  // Finance sub-modules
+  'finance-dashboard': FinanceDashboard,
+  ledger: Ledger,
+  'accounts-payable': AccountsPayable,
+  'accounts-receivable': AccountsReceivable,
+  'journal-entries': JournalEntries,
+  'bank-cash': BankCash,
+  taxation: Taxation,
+  budget: Budget,
+  'financial-reports': FinancialReports,
 };
 
 // Modules that don't have a create action
-const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet'];
+const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'financial-reports'];
 
 // Expandable modules that render a sub-module grid instead of a specific component
 const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'finance', 'projects', 'assets', 'system'];

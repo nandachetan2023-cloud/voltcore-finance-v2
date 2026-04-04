@@ -40,6 +40,13 @@ async function main() {
   await db.supportTicket.deleteMany();
   await db.kBArticle.deleteMany();
   await db.companySettings.deleteMany();
+  await db.journalEntry.deleteMany();
+  await db.taxRecord.deleteMany();
+  await db.budgetItem.deleteMany();
+  await db.bankAccount.deleteMany();
+  await db.accountsReceivable.deleteMany();
+  await db.accountsPayable.deleteMany();
+  await db.ledgerAccount.deleteMany();
 
   console.log("✅ All existing records deleted.");
 
@@ -1196,6 +1203,127 @@ async function main() {
   });
 
   console.log("✅ KB Articles created.");
+
+  // ============================================================
+  // 29. CREATE FINANCE MODULE DATA
+  // ============================================================
+  console.log("💰 Creating Finance Module Data...");
+
+  // Helper for prev months
+  const prevMonth = (offset: number) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+  const m1 = prevMonth(5), m2 = prevMonth(4), m3 = prevMonth(3), m4 = prevMonth(2), m5 = prevMonth(1), m6 = currentMonth;
+
+  // --- Ledger Accounts ---
+  await db.ledgerAccount.createMany({
+    data: [
+      { accountCode: "1001", name: "Cash & Bank", group: "Current Assets", type: "Asset", balance: 4850000, status: "Active" },
+      { accountCode: "1002", name: "Accounts Receivable", group: "Current Assets", type: "Asset", balance: 30000000, status: "Active" },
+      { accountCode: "1003", name: "Inventory - Materials", group: "Current Assets", type: "Asset", balance: 12500000, status: "Active" },
+      { accountCode: "1004", name: "Work in Progress", group: "Current Assets", type: "Asset", balance: 8500000, status: "Active" },
+      { accountCode: "2001", name: "Accounts Payable", group: "Current Liabilities", type: "Liability", balance: 22000000, status: "Active" },
+      { accountCode: "2002", name: "PF Payable", group: "Current Liabilities", type: "Liability", balance: 29040, status: "Active" },
+      { accountCode: "2003", name: "ESI Payable", group: "Current Liabilities", type: "Liability", balance: 480, status: "Active" },
+      { accountCode: "2004", name: "TDS Payable", group: "Current Liabilities", type: "Liability", balance: 26700, status: "Active" },
+      { accountCode: "2005", name: "GST Payable", group: "Current Liabilities", type: "Liability", balance: 4500000, status: "Active" },
+      { accountCode: "3001", name: "Share Capital", group: "Equity", type: "Equity", balance: 50000000, status: "Active" },
+      { accountCode: "3002", name: "Retained Earnings", group: "Equity", type: "Equity", balance: 18500000, status: "Active" },
+      { accountCode: "4001", name: "Project Revenue", group: "Income", type: "Revenue", balance: 0, status: "Active" },
+      { accountCode: "5001", name: "Salaries & Wages", group: "Direct Costs", type: "Expense", balance: 0, status: "Active" },
+      { accountCode: "5002", name: "Materials & Consumables", group: "Direct Costs", type: "Expense", balance: 0, status: "Active" },
+      { accountCode: "5003", name: "Subcontractor Costs", group: "Direct Costs", type: "Expense", balance: 0, status: "Active" },
+      { accountCode: "5004", name: "Plant & Machinery", group: "Overheads", type: "Expense", balance: 0, status: "Active" },
+      { accountCode: "5005", name: "Site Overheads", group: "Overheads", type: "Expense", balance: 0, status: "Active" },
+      { accountCode: "5006", name: "Administration", group: "Overheads", type: "Expense", balance: 0, status: "Active" },
+    ],
+  });
+
+  // --- Bank Accounts ---
+  await db.bankAccount.createMany({
+    data: [
+      { accountName: "HDFC Current Account", bankName: "HDFC Bank Ltd.", accountNo: "HDFC-2025-1048273615", type: "Current", balance: 3250000, status: "Active" },
+      { accountName: "SBI Savings Account", bankName: "State Bank of India", accountNo: "SBIN-2025-3847261935", type: "Savings", balance: 1875000, status: "Active" },
+      { accountName: "Cash in Hand", bankName: "On-site Cash", accountNo: "CASH-HO-001", type: "Cash", balance: 250000, status: "Active" },
+      { accountName: "Petty Cash", bankName: "Office Petty Cash", accountNo: "PETTY-001", type: "Cash", balance: 50000, status: "Active" },
+      { accountName: "ICICI Overdraft Facility", bankName: "ICICI Bank Ltd.", accountNo: "ICICI-OD-2025-7482910", type: "OD", balance: 750000, status: "Active" },
+      { accountName: "Axis Term Deposit", bankName: "Axis Bank Ltd.", accountNo: "AXIS-TD-2025-927365", type: "FD", balance: 5000000, status: "Active" },
+    ],
+  });
+
+  // --- Accounts Payable ---
+  await db.accountsPayable.createMany({
+    data: [
+      { billNo: "AP-2025-001", vendor: "Bhel Industrial Supplies, Bhopal", description: "Steel plates - 3rd lot delivery", amount: 3750000, dueDate: `${currentYear}-08-15`, paidDate: `${currentYear}-07-10`, status: "Paid" },
+      { billNo: "AP-2025-002", vendor: "Godrej & Boyce Mfg Co., Mumbai", description: "Structural steel ISMC 200 - partial delivery", amount: 5400000, dueDate: `${currentYear}-09-30`, paidDate: null, status: "Pending" },
+      { billNo: "AP-2025-003", vendor: "KRBL Safety Equipments, Delhi", description: "PPE items - batch delivery", amount: 750000, dueDate: `${currentYear}-07-25`, paidDate: null, status: "Overdue" },
+      { billNo: "AP-2025-004", vendor: "SolarEdge Technologies India, Gurugram", description: "String inverters - advance payment", amount: 4375000, dueDate: `${currentYear}-10-01`, paidDate: null, status: "Pending" },
+      { billNo: "AP-2025-005", vendor: "Siemens Limited India, Chennai", description: "VCB panels - milestone 1", amount: 12000000, dueDate: `${currentYear}-11-15`, paidDate: null, status: "Pending" },
+      { billNo: "AP-2025-006", vendor: "Tata Steel Ltd., Jamshedpur", description: "Hot rolled steel coils", amount: 2800000, dueDate: `${currentYear}-07-05`, paidDate: `${currentYear}-07-01`, status: "Paid" },
+      { billNo: "AP-2025-007", vendor: "Shree Krishna Scaffolding Works", description: "Scaffolding rental - July", amount: 385000, dueDate: `${currentYear}-07-31`, paidDate: null, status: "Pending" },
+    ],
+  });
+
+  // --- Accounts Receivable ---
+  await db.accountsReceivable.createMany({
+    data: [
+      { invoiceNo: "AR-2025-001", client: "NTPC Limited", description: "Singrauli Unit-5 boiler work - Milestone 3", amount: 124500000, dueDate: `${currentYear}-07-31`, receivedDate: null, status: "Pending" },
+      { invoiceNo: "AR-2025-002", client: "Solar Energy Corporation of India", description: "Jaisalmer O&M - quarterly billing", amount: 32000000, dueDate: `${currentYear}-07-25`, receivedDate: `${currentYear}-07-20`, status: "Received" },
+      { invoiceNo: "AR-2025-003", client: "Uttarakhand Jal Vidyut Nigam Ltd.", description: "Uttarkashi hydro - tunnel excavation", amount: 87500000, dueDate: `${currentYear}-08-05`, receivedDate: null, status: "Pending" },
+      { invoiceNo: "AR-2025-004", client: "Gujarat Industries Power Company Ltd.", description: "Mundra BoP - civil works milestone", amount: 56000000, dueDate: `${currentYear}-08-10`, receivedDate: null, status: "Pending" },
+      { invoiceNo: "AR-2025-005", client: "NTPC Limited", description: "Singrauli Unit-5 - advance recovery", amount: 48750000, dueDate: `${currentYear}-06-30`, receivedDate: `${currentYear}-06-28`, status: "Received" },
+      { invoiceNo: "AR-2025-006", client: "Bihar State Electricity Board", description: "Chennai TG Island - mobilization advance", amount: 9560000, dueDate: `${currentYear}-08-30`, receivedDate: null, status: "Pending" },
+    ],
+  });
+
+  // --- Budget Items ---
+  await db.budgetItem.createMany({
+    data: [
+      { category: "Salaries & Wages", description: "Monthly payroll for all staff and contract employees", planned: 4200000, actual: 3890000, period: m6, status: "On Track" },
+      { category: "Materials & Consumables", description: "Steel, welding consumables, electrical items", planned: 6500000, actual: 7200000, period: m6, status: "Over Budget" },
+      { category: "Subcontractor Costs", description: "Scaffolding, civil, welding subcontractors", planned: 2800000, actual: 2650000, period: m6, status: "On Track" },
+      { category: "Plant & Machinery", description: "Crane hire, equipment maintenance, fuel", planned: 1800000, actual: 1750000, period: m6, status: "On Track" },
+      { category: "Site Overheads", description: "Power, water, camp maintenance, transport", planned: 950000, actual: 890000, period: m6, status: "On Track" },
+      { category: "Administration", description: "Office rent, IT, travel, communication", planned: 450000, actual: 420000, period: m6, status: "On Track" },
+      { category: "Safety & Training", description: "PPE, safety training, certifications", planned: 350000, actual: 380000, period: m6, status: "Over Budget" },
+      { category: "Contingency", description: "10% project contingency reserve", planned: 1750000, actual: 200000, period: m6, status: "On Track" },
+    ],
+  });
+
+  // --- Tax Records ---
+  await db.taxRecord.createMany({
+    data: [
+      { taxType: "GST (CGST + SGST)", period: m6, amount: 2250000, dueDate: `${currentYear}-07-20`, paidDate: `${currentYear}-07-18`, status: "Paid" },
+      { taxType: "GST (CGST + SGST)", period: m5, amount: 1980000, dueDate: `${currentYear}-06-20`, paidDate: `${currentYear}-06-19`, status: "Paid" },
+      { taxType: "TDS - Salaries", period: m6, amount: 26700, dueDate: `${currentYear}-07-31`, paidDate: null, status: "Pending" },
+      { taxType: "TDS - Contractors", period: m6, amount: 54000, dueDate: `${currentYear}-07-31`, paidDate: null, status: "Pending" },
+      { taxType: "Professional Tax", period: m6, amount: 9750, dueDate: `${currentYear}-07-31`, paidDate: null, status: "Pending" },
+      { taxType: "PF Contribution", period: m6, amount: 29040, dueDate: `${currentYear}-07-15`, paidDate: `${currentYear}-07-14`, status: "Paid" },
+    ],
+  });
+
+  // --- Journal Entries (recent transactions for table display) ---
+  await db.journalEntry.createMany({
+    data: [
+      { entryNo: "JE-2025-001", date: `${currentYear}-07-15`, account: "Cash & Bank", debit: 32000000, credit: 0, description: "AR received - SECI Jaisalmer O&M billing", reference: "AR-2025-002", status: "Posted" },
+      { entryNo: "JE-2025-002", date: `${currentYear}-07-14`, account: "Cash & Bank", debit: 0, credit: 3750000, description: "Payment to Bhel Industrial - steel plates", reference: "AP-2025-001", status: "Posted" },
+      { entryNo: "JE-2025-003", date: `${currentYear}-07-12`, account: "Materials & Consumables", debit: 2800000, credit: 0, description: "Purchase of hot rolled steel coils from Tata Steel", reference: "PO-2025-006", status: "Posted" },
+      { entryNo: "JE-2025-004", date: `${currentYear}-07-10`, account: "Salaries & Wages", debit: 266180, credit: 0, description: "Monthly payroll processing - net pay disbursement", reference: `PAY-${m6}`, status: "Posted" },
+      { entryNo: "JE-2025-005", date: `${currentYear}-07-08`, account: "Cash & Bank", debit: 0, credit: 890000, description: "Site overheads - power, water, transport for all sites", reference: "SOH-JUL", status: "Posted" },
+      { entryNo: "JE-2025-006", date: `${currentYear}-07-05`, account: "PF Payable", debit: 29040, credit: 0, description: "PF contribution payment for current month", reference: "PF-JUL", status: "Posted" },
+      { entryNo: "JE-2025-007", date: `${currentYear}-07-03`, account: "Subcontractor Costs", debit: 385000, credit: 0, description: "Scaffolding rental payment - Shree Krishna Works", reference: "AP-2025-007", status: "Posted" },
+      { entryNo: "JE-2025-008", date: `${currentYear}-07-01`, account: "Cash & Bank", debit: 0, credit: 2250000, description: "GST payment - CGST + SGST for June", reference: "GST-JUN", status: "Posted" },
+      { entryNo: "JE-2025-009", date: `${currentYear}-06-28`, account: "Cash & Bank", debit: 48750000, credit: 0, description: "AR received - NTPC Singrauli advance recovery", reference: "AR-2025-005", status: "Posted" },
+      { entryNo: "JE-2025-010", date: `${currentYear}-06-25`, account: "Plant & Machinery", debit: 450000, credit: 0, description: "DG set monthly service - Cummins service contract", reference: "EQ-SVC-JUN", status: "Posted" },
+      { entryNo: "JE-2025-011", date: `${currentYear}-06-20`, account: "Insurance", debit: 185000, credit: 0, description: "Workmen compensation insurance premium renewal", reference: "INS-2025-WC", status: "Posted" },
+      { entryNo: "JE-2025-012", date: `${currentYear}-06-15`, account: "Travel & Transport", debit: 67500, credit: 0, description: "Site mobilisation transport - equipment shifting to Chennai", reference: "TRP-CHN-001", status: "Draft" },
+      { entryNo: "JE-2025-013", date: `${currentYear}-06-10`, account: "Depreciation", debit: 0, credit: 95000, description: "Monthly depreciation - Tower crane, cranes, welding sets", reference: "DEPR-JUN", status: "Posted" },
+      { entryNo: "JE-2025-014", date: `${currentYear}-06-05`, account: "Cash & Bank", debit: 0, credit: 154000, description: "Tata Steel partial advance payment for HR coils", reference: "AP-2025-006-ADV", status: "Posted" },
+    ],
+  });
+
+  console.log("✅ Finance Module Data created.");
 
   // ============================================================
   // SEEDING COMPLETE
