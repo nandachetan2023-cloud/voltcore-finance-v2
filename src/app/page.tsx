@@ -48,6 +48,7 @@ const SalesModule = dynamic(() => import('@/components/erp/sales'), { ssr: false
 const CrmModule = dynamic(() => import('@/components/erp/crm'), { ssr: false });
 const SupportModule = dynamic(() => import('@/components/erp/support'), { ssr: false });
 const KnowledgebaseModule = dynamic(() => import('@/components/erp/knowledgebase'), { ssr: false });
+const EmployeeAnalytics = dynamic(() => import('@/components/erp/employee-analytics'), { ssr: false });
 
 const MODULE_COMPONENTS: Record<string, React.ComponentType> = {
   dashboard: Dashboard,
@@ -75,10 +76,11 @@ const MODULE_COMPONENTS: Record<string, React.ComponentType> = {
   crm: CrmModule,
   support: SupportModule,
   knowledgebase: KnowledgebaseModule,
+  'employee-analytics': EmployeeAnalytics,
 };
 
 // Modules that don't have a create action
-const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms'];
+const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics'];
 
 // Expandable modules that render a sub-module grid instead of a specific component
 const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'finance', 'projects', 'assets', 'system'];

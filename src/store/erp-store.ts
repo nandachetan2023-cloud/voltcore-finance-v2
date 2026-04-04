@@ -8,7 +8,9 @@ export type ModuleId =
   | 'employees' | 'attendance' | 'leave' | 'shift' | 'training' | 'recruitment'
   | 'purchases' | 'expenses' | 'invoices'
   | 'sites' | 'permits' | 'safety' | 'subcontractors'
-  | 'reports' | 'settings';
+  | 'reports' | 'settings'
+  // Analytics pages
+  | 'employee-analytics';
 
 interface NavItem {
   id: ModuleId;
@@ -38,6 +40,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'employees', icon: 'UserCog', label: 'Departments & Roles' },
   ],
   hrms: [
+    { id: 'employee-analytics', icon: 'BarChart3', label: 'HR Dashboard', section: 'HRMS' },
     { id: 'employees', icon: 'HardHat', label: 'Employees', section: 'HRMS' },
     { id: 'attendance', icon: 'ClipboardList', label: 'Attendance', section: 'HRMS' },
     { id: 'leave', icon: 'CalendarDays', label: 'Leave Management', badge: 5, section: 'HRMS' },
@@ -95,6 +98,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   support: { title: 'Support', breadcrumb: 'VoltCore ERP › Support' },
   knowledgebase: { title: 'Knowledgebase', breadcrumb: 'VoltCore ERP › Knowledgebase' },
   // Sub-modules
+  'employee-analytics': { title: 'HR Dashboard', breadcrumb: 'HRMS › Employee Analytics' },
   employees: { title: 'Employees', breadcrumb: 'HRMS › Employee Directory' },
   attendance: { title: 'Attendance', breadcrumb: 'HRMS › Daily Attendance' },
   leave: { title: 'Leave Management', breadcrumb: 'HRMS › Leave Requests' },

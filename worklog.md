@@ -556,3 +556,31 @@ Stage Summary:
 - Left sidebar now properly shows context for all 5 standalone page modules
 - Navigation flow: Dashboard grid → Inventory → sidebar shows "← All Modules" + "INVENTORY" header + "📦 Inventory (Active)"
 - Same pattern works for Sales, CRM, Support, Knowledgebase
+---
+Task ID: 12
+Agent: Main Agent
+Task: Add Employee Analytics Dashboard with charts
+
+Work Log:
+- Analyzed screenshot: HR dashboard with 6 KPI cards, donut/pie charts, bar charts, attendance table
+- Verified recharts library is available in project
+- Created /src/components/erp/employee-analytics.tsx (full analytics dashboard)
+- Added 'employee-analytics' to ModuleId type in erp-store.ts
+- Added HR Dashboard as first item in HRMS sub-modules list (BarChart3 icon)
+- Added MODULE_CONFIG entry: { title: 'HR Dashboard', breadcrumb: 'HRMS › Employee Analytics' }
+- Added dynamic import in page.tsx + MODULE_COMPONENTS mapping
+- Added to NO_CREATE_MODULES list
+
+Dashboard Features:
+- 6 KPI cards: All Employees, Total Payroll, Leave Requests, Open Tickets, Pending Claims, Projects
+- 2 Donut charts: Employees by Role, Employees by Trade
+- 2 Horizontal bar charts: Today's Attendance, Project Status
+- 2 Donut charts: Employees by Site, Employees by Type
+- 1 Vertical bar chart: Monthly Payroll Trend
+- 1 Donut chart: Leave by Type
+- Recent Attendance table with sticky header and scroll
+- All data fetched from 7 real API endpoints in parallel
+- Loading skeleton, error state
+- VoltCore dark theme with consistent styling
+- Zero lint errors
+
