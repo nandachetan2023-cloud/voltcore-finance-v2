@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useERPStore, useERPStore as _useStore } from '@/store/erp-store';
 import {
   Users, Wallet, Award, CalendarOff, Ticket, Plane,
   TrendingUp, TrendingDown, BarChart3, PieChart as PieIcon
@@ -258,7 +257,6 @@ function Skeleton() {
 
 // ── Main Component ──
 export default function EmployeeAnalytics() {
-  const { triggerCreate } = _useStore();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
@@ -290,7 +288,9 @@ export default function EmployeeAnalytics() {
         setLeaveRequests(leaveData.data || []);
         setPayroll(payData.data || []);
         setProjects(projData.data || []);
-        setTickets(ticketData.data || []);
+        // Support API returns { data: { tickets: [...] } }
+        const ticketArr = Array.isArray(ticketData.data) ? ticketData.data : (ticketData.data?.tickets || []);
+        setTickets(ticketArr);
         setExpenses(expData.data || []);
       } catch (e: any) {
         setError(e.message || 'Failed to load analytics');
