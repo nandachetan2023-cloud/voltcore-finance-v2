@@ -164,7 +164,7 @@ export default function SupportModule() {
     try {
       const res = await fetch('/api/support');
       const json = await res.json();
-      if (json.success) setTickets(json.data.tickets);
+      if (json.success) setTickets(json.data || []);
       else setError(json.error || 'Failed to load support tickets');
     } catch { setError('Network error fetching support tickets'); }
     finally { setLoading(false); }

@@ -7,12 +7,11 @@ import {
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
-  Tooltip, ResponsiveContainer, Legend
+  Tooltip, ResponsiveContainer
 } from 'recharts';
 
 // ── Color palette (VoltCore dark theme) ──
 const COLORS = ['#f5a623', '#00e676', '#00d4ff', '#ff3d3d', '#a78bfa', '#ffab40', '#22d3ee', '#f472b6'];
-const BG_COLORS = ['#f5a623/15', '#00e676/15', '#00d4ff/15', '#ff3d3d/15', '#a78bfa/15', '#ffab40/15'];
 
 interface Employee {
   id: string;
@@ -267,31 +266,37 @@ export default function EmployeeAnalytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Safe fetch helper
+  async function safeFetch(url: string): Promise<any> {
+    try {
+      const res = await fetch(url);
+      return await res.json();
+    } catch {
+      return { data: null };
+    }
+  }
+
   useEffect(() => {
     async function fetchData() {
       try {
-        const [empRes, attRes, leaveRes, payRes, projRes, ticketRes, expRes] = await Promise.all([
-          fetch('/api/employees'),
-          fetch('/api/attendance'),
-          fetch('/api/leave'),
-          fetch('/api/payroll'),
-          fetch('/api/projects'),
-          fetch('/api/support'),
-          fetch('/api/expenses'),
-        ]);
+        // Fetch all APIs in parallel, but each is individually safe
         const [empData, attData, leaveData, payData, projData, ticketData, expData] = await Promise.all([
-          empRes.json(), attRes.json(), leaveRes.json(), payRes.json(),
-          projRes.json(), ticketRes.json(), expRes.json(),
+          safeFetch('/api/employees'),
+          safeFetch('/api/attendance'),
+          safeFetch('/api/leave'),
+          safeFetch('/api/payroll'),
+          safeFetch('/api/projects'),
+          safeFetch('/api/support'),
+          safeFetch('/api/expenses'),
         ]);
-        setEmployees(empData.data || []);
-        setAttendance(attData.data || []);
-        setLeaveRequests(leaveData.data || []);
-        setPayroll(payData.data || []);
-        setProjects(projData.data || []);
-        // Support API returns { data: { tickets: [...] } }
-        const ticketArr = Array.isArray(ticketData.data) ? ticketData.data : (ticketData.data?.tickets || []);
-        setTickets(ticketArr);
-        setExpenses(expData.data || []);
+
+        setEmployees(Array.isArray(empData?.data) ? empData.data : []);
+        setAttendance(Array.isArray(attData?.data) ? attData.data : []);
+        setLeaveRequests(Array.isArray(leaveData?.data) ? leaveData.data : []);
+        setPayroll(Array.isArray(payData?.data) ? payData.data : []);
+        setProjects(Array.isArray(projData?.data) ? projData.data : []);
+        setTickets(Array.isArray(ticketData?.data) ? ticketData.data : []);
+        setExpenses(Array.isArray(expData?.data) ? expData.data : []);
       } catch (e: any) {
         setError(e.message || 'Failed to load analytics');
       } finally {

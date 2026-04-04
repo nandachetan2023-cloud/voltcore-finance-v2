@@ -10,7 +10,7 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ success: true, data: { tickets } })
+    return NextResponse.json({ success: true, data: tickets })
   } catch (error) {
     console.error('Error fetching support tickets:', error)
     return NextResponse.json(
