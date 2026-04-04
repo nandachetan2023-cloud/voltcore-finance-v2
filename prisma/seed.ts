@@ -1,1342 +1,839 @@
-import { db } from "../src/lib/db";
+import { PrismaClient } from '@prisma/client'
 
-async function main() {
-  console.log("🌱 Seeding database with Indian power plant contractor data...");
+const prisma = new PrismaClient()
 
-  const today = new Date().toISOString().split("T")[0];
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const currentYear = now.getFullYear();
+// Clear all data before seeding (order matters for foreign keys)
+async function clearAll() {
+  console.log('🗑️  Clearing existing data...')
+  const tablenames = [
+    'Expense', 'Payroll', 'LeaveRequest', 'Attendance', 'ShiftSchedule', 'Certification',
+    'Employee',
+    'JournalEntry', 'TaxRecord', 'BudgetItem', 'AccountsReceivable', 'AccountsPayable',
+    'BankAccount', 'LedgerAccount',
+    'StockMovement', 'InventoryItem',
+    'SalesOrder', 'Customer', 'CrmContact',
+    'SupportTicket', 'KBArticle',
+    'JobOpening', 'TrainingSession',
+    'WorkPermit', 'Incident', 'Equipment', 'Subcontractor',
+    'PurchaseOrder', 'Invoice', 'Site', 'Project',
+    'CompanySettings', 'Department', 'Designation',
+  ]
+  for (const t of tablenames) {
+    try {
+      await (prisma as any)[t.charAt(0).toLowerCase() + t.slice(1)].deleteMany()
+    } catch (e) { /* table may not exist */ }
+  }
+  console.log('  ✅ All tables cleared')
+}
 
-  // ============================================================
-  // 1. DELETE ALL RECORDS IN DEPENDENCY ORDER (reverse creation)
-  // ============================================================
-  console.log("🗑️  Deleting existing records...");
+// ──────────────────────────────────────────────────
+//  VoltCore ERP — Comprehensive Seed Data
+//  Indian Construction & Engineering Company
+// ──────────────────────────────────────────────────
 
-  await db.attendance.deleteMany();
-  await db.leaveRequest.deleteMany();
-  await db.payroll.deleteMany();
-  await db.expense.deleteMany();
-  await db.shiftSchedule.deleteMany();
-  await db.certification.deleteMany();
-  await db.trainingSession.deleteMany();
-  await db.jobOpening.deleteMany();
-  await db.subcontractor.deleteMany();
-  await db.invoice.deleteMany();
-  await db.purchaseOrder.deleteMany();
-  await db.equipment.deleteMany();
-  await db.incident.deleteMany();
-  await db.workPermit.deleteMany();
-  await db.employee.deleteMany();
-  await db.site.deleteMany();
-  await db.project.deleteMany();
-  await db.department.deleteMany();
-  await db.designation.deleteMany();
-  await db.inventoryItem.deleteMany();
-  await db.stockMovement.deleteMany();
-  await db.customer.deleteMany();
-  await db.salesOrder.deleteMany();
-  await db.crmContact.deleteMany();
-  await db.supportTicket.deleteMany();
-  await db.kBArticle.deleteMany();
-  await db.companySettings.deleteMany();
-  await db.journalEntry.deleteMany();
-  await db.taxRecord.deleteMany();
-  await db.budgetItem.deleteMany();
-  await db.bankAccount.deleteMany();
-  await db.accountsReceivable.deleteMany();
-  await db.accountsPayable.deleteMany();
-  await db.ledgerAccount.deleteMany();
+const SITES = [
+  { name: 'Mumbai Metro Line 7', state: 'Maharashtra', project: 'PRJ-001', manpower: 45, incharge: 'Rajesh Kumar', status: 'Active' },
+  { name: 'Delhi Smart City Township', state: 'Delhi NCR', project: 'PRJ-002', manpower: 62, incharge: 'Amit Sharma', status: 'Active' },
+  { name: 'Bangalore IT Park Phase 3', state: 'Karnataka', project: 'PRJ-003', manpower: 38, incharge: 'Priya Nair', status: 'Active' },
+  { name: 'Hyderabad Expressway', state: 'Telangana', project: 'PRJ-004', manpower: 55, incharge: 'Suresh Reddy', status: 'Active' },
+  { name: 'Chennai Port Expansion', state: 'Tamil Nadu', project: 'PRJ-005', manpower: 30, incharge: 'Karthik Rajan', status: 'Active' },
+  { name: 'Pune Industrial Complex', state: 'Maharashtra', project: 'PRJ-006', manpower: 28, incharge: 'Vikram Patil', status: 'On Hold' },
+  { name: 'Kolkata Bridge Repair', state: 'West Bengal', project: 'PRJ-007', manpower: 22, incharge: 'Arjun Das', status: 'Active' },
+  { name: 'Ahmedabad Solar Farm', state: 'Gujarat', project: 'PRJ-008', manpower: 18, incharge: 'Meera Patel', status: 'Completed' },
+]
 
-  console.log("✅ All existing records deleted.");
+const EMPLOYEES = [
+  // Staff
+  { empId: 'VC-001', name: 'Rajesh Kumar', email: 'rajesh@voltcore.in', phone: '9876543210', trade: 'Project Management', role: 'Project Manager', site: 'Mumbai Metro Line 7', type: 'Staff', status: 'Active', joiningDate: '2021-03-15', certifications: 'PMP, LEED AP' },
+  { empId: 'VC-002', name: 'Amit Sharma', email: 'amit@voltcore.in', phone: '9876543211', trade: 'Project Management', role: 'Senior Engineer', site: 'Delhi Smart City Township', type: 'Staff', status: 'Active', joiningDate: '2021-06-01', certifications: 'B.E. Civil, Safety Officer' },
+  { empId: 'VC-003', name: 'Priya Nair', email: 'priya@voltcore.in', phone: '9876543212', trade: 'Project Management', role: 'Site Engineer', site: 'Bangalore IT Park Phase 3', type: 'Staff', status: 'Active', joiningDate: '2022-01-10', certifications: 'M.Tech Structural' },
+  { empId: 'VC-004', name: 'Suresh Reddy', email: 'suresh@voltcore.in', phone: '9876543213', trade: 'Project Management', role: 'Project Manager', site: 'Hyderabad Expressway', type: 'Staff', status: 'Active', joiningDate: '2020-09-20', certifications: 'PMP' },
+  { empId: 'VC-005', name: 'Karthik Rajan', email: 'karthik@voltcore.in', phone: '9876543214', trade: 'Quality Control', role: 'QA/QC Manager', site: 'Chennai Port Expansion', type: 'Staff', status: 'Active', joiningDate: '2022-04-15', certifications: 'ISO 9001 Lead Auditor' },
+  { empId: 'VC-006', name: 'Vikram Patil', email: 'vikram@voltcore.in', phone: '9876543215', trade: 'Site Operations', role: 'Site Supervisor', site: 'Pune Industrial Complex', type: 'Staff', status: 'Active', joiningDate: '2023-02-01', certifications: 'Safety Certificate' },
+  { empId: 'VC-007', name: 'Arjun Das', email: 'arjun@voltcore.in', phone: '9876543216', trade: 'Structural', role: 'Structural Engineer', site: 'Kolkata Bridge Repair', type: 'Staff', status: 'Active', joiningDate: '2022-07-10', certifications: 'M.Tech Structures' },
+  { empId: 'VC-008', name: 'Meera Patel', email: 'meera@voltcore.in', phone: '9876543217', trade: 'Electrical', role: 'Electrical Engineer', site: 'Ahmedabad Solar Farm', type: 'Staff', status: 'Active', joiningDate: '2023-01-20', certifications: 'B.E. Electrical' },
+  { empId: 'VC-009', name: 'Deepa Menon', email: 'deepa@voltcore.in', phone: '9876543218', trade: 'HR', role: 'HR Manager', site: 'Mumbai Metro Line 7', type: 'Staff', status: 'Active', joiningDate: '2020-05-10', certifications: 'MBA HR' },
+  { empId: 'VC-010', name: 'Sanjay Gupta', email: 'sanjay@voltcore.in', phone: '9876543219', trade: 'Finance', role: 'Accounts Manager', site: 'Mumbai Metro Line 7', type: 'Staff', status: 'Active', joiningDate: '2020-08-01', certifications: 'CA, CPA' },
+  { empId: 'VC-011', name: 'Ritu Singh', email: 'ritu@voltcore.in', phone: '9876543220', trade: 'Procurement', role: 'Purchase Manager', site: 'Delhi Smart City Township', type: 'Staff', status: 'Active', joiningDate: '2021-11-15', certifications: 'MBA Supply Chain' },
+  { empId: 'VC-012', name: 'Manish Tiwari', email: 'manish@voltcore.in', phone: '9876543221', trade: 'Safety', role: 'HSE Officer', site: 'Hyderabad Expressway', type: 'Staff', status: 'Active', joiningDate: '2022-03-01', certifications: 'NEBOSH IGC' },
+  { empId: 'VC-013', name: 'Anjali Deshmukh', email: 'anjali@voltcore.in', phone: '9876543222', trade: 'Admin', role: 'Admin Executive', site: 'Mumbai Metro Line 7', type: 'Staff', status: 'Active', joiningDate: '2023-05-10', certifications: '' },
+  { empId: 'VC-014', name: 'Rahul Verma', email: 'rahul@voltcore.in', phone: '9876543223', trade: 'IT', role: 'IT Administrator', site: 'Mumbai Metro Line 7', type: 'Staff', status: 'Active', joiningDate: '2022-09-01', certifications: 'CCNA, MCSA' },
+  // Workers
+  { empId: 'VC-015', name: 'Mohan Lal', email: '', phone: '8876543210', trade: 'Electrician', role: 'Foreman', site: 'Mumbai Metro Line 7', type: 'Worker', status: 'Active', joiningDate: '2022-01-05', certifications: 'ITI Electrician' },
+  { empId: 'VC-016', name: 'Suresh Yadav', email: '', phone: '8876543211', trade: 'Welder', role: 'Skilled Worker', site: 'Mumbai Metro Line 7', type: 'Worker', status: 'Active', joiningDate: '2022-03-10', certifications: 'ITI Welder' },
+  { empId: 'VC-017', name: 'Ramu Naik', email: '', phone: '8876543212', trade: 'Mason', role: 'Skilled Worker', site: 'Delhi Smart City Township', type: 'Worker', status: 'Active', joiningDate: '2021-08-15', certifications: '' },
+  { empId: 'VC-018', name: 'Ganesh Patil', email: '', phone: '8876543213', trade: 'Plumber', role: 'Skilled Worker', site: 'Delhi Smart City Township', type: 'Worker', status: 'Active', joiningDate: '2022-06-20', certifications: '' },
+  { empId: 'VC-019', name: 'Krishna Murthy', email: '', phone: '8876543214', trade: 'Bar Bender', role: 'Skilled Worker', site: 'Bangalore IT Park Phase 3', type: 'Worker', status: 'Active', joiningDate: '2023-01-10', certifications: '' },
+  { empId: 'VC-020', name: 'Dinesh Kumar', email: '', phone: '8876543215', trade: 'Painter', role: 'Skilled Worker', site: 'Bangalore IT Park Phase 3', type: 'Worker', status: 'Active', joiningDate: '2022-11-01', certifications: '' },
+  { empId: 'VC-021', name: 'Thangavelu', email: '', phone: '8876543216', trade: 'Carpenter', role: 'Skilled Worker', site: 'Chennai Port Expansion', type: 'Worker', status: 'Active', joiningDate: '2022-09-15', certifications: '' },
+  { empId: 'VC-022', name: 'Ravi Shankar', email: '', phone: '8876543217', trade: 'Operator', role: 'Crane Operator', site: 'Hyderabad Expressway', type: 'Worker', status: 'Active', joiningDate: '2021-12-01', certifications: 'Heavy License' },
+  { empId: 'VC-023', name: 'Pradeep Yadav', email: '', phone: '8876543218', trade: 'Operator', role: 'Excavator Operator', site: 'Hyderabad Expressway', type: 'Worker', status: 'Active', joiningDate: '2022-04-10', certifications: 'Heavy License' },
+  { empId: 'VC-024', name: 'Lakshmanan', email: '', phone: '8876543219', trade: 'Fitter', role: 'Skilled Worker', site: 'Chennai Port Expansion', type: 'Worker', status: 'On Leave', joiningDate: '2022-02-01', certifications: '' },
+  { empId: 'VC-025', name: 'Ashok Mehta', email: '', phone: '8876543220', trade: 'Electrician', role: 'Foreman', site: 'Pune Industrial Complex', type: 'Worker', status: 'Active', joiningDate: '2023-03-15', certifications: 'ITI Electrician' },
+  { empId: 'VC-026', name: 'Biplab Das', email: '', phone: '8876543221', trade: 'Steel Fixer', role: 'Skilled Worker', site: 'Kolkata Bridge Repair', type: 'Worker', status: 'Active', joiningDate: '2022-08-01', certifications: '' },
+  { empId: 'VC-027', name: 'Naveen Reddy', email: '', phone: '8876543222', trade: 'Scaffolder', role: 'Skilled Worker', site: 'Hyderabad Expressway', type: 'Worker', status: 'Active', joiningDate: '2023-02-20', certifications: '' },
+  { empId: 'VC-028', name: 'Firoz Khan', email: '', phone: '8876543223', trade: 'Painter', role: 'Skilled Worker', site: 'Delhi Smart City Township', type: 'Worker', status: 'Active', joiningDate: '2023-04-01', certifications: '' },
+  { empId: 'VC-029', name: 'Kumar Swamy', email: '', phone: '8876543224', trade: 'Helper', role: 'Unskilled Worker', site: 'Mumbai Metro Line 7', type: 'Worker', status: 'Active', joiningDate: '2024-01-10', certifications: '' },
+  { empId: 'VC-030', name: 'Manoj Kumar', email: '', phone: '8876543225', trade: 'Helper', role: 'Unskilled Worker', site: 'Delhi Smart City Township', type: 'Worker', status: 'Inactive', joiningDate: '2022-05-15', certifications: '' },
+]
 
-  // ============================================================
-  // 2. CREATE COMPANY SETTINGS (8 entries)
-  // ============================================================
-  console.log("⚙️  Creating CompanySettings...");
+async function seedCompanySettings() {
+  console.log('🌱 Seeding CompanySettings...')
+  const data = [
+    { key: 'company_name', value: 'VoltCore Engineering Pvt. Ltd.', label: 'Company Name' },
+    { key: 'company_gst', value: '27AADCV1234F1ZP', label: 'GST Number' },
+    { key: 'company_pan', value: 'AADCV1234F', label: 'PAN Number' },
+    { key: 'company_address', value: 'VoltCore Tower, BKC, Mumbai 400051', label: 'Registered Address' },
+    { key: 'company_phone', value: '+91-22-4567-8900', label: 'Office Phone' },
+    { key: 'company_email', value: 'info@voltcore.in', label: 'Official Email' },
+    { key: 'pf_esi_rate', value: '12,1.75', label: 'PF & ESI Rate (%)' },
+    { key: 'financial_year', value: '2025-26', label: 'Current Financial Year' },
+  ]
+  await prisma.companySettings.createMany({ data })
+  console.log(`  ✅ ${data.length} settings created`)
+}
 
-  await db.companySettings.createMany({
-    data: [
-      { key: "company_name", value: "Shakti Engineering & Construction Pvt. Ltd.", label: "Company Name" },
-      { key: "pan", value: "AAECS5678K", label: "PAN Number" },
-      { key: "gst", value: "27AAECS5678K1Z5", label: "GST Registration Number" },
-      { key: "pf_reg", value: "PFBOM0012345000", label: "PF Registration Number" },
-      { key: "esi_reg", value: "31000123456789", label: "ESI Registration Number" },
-      { key: "address", value: "Plot No. 42, MIDC Industrial Area, Andheri East, Mumbai - 400093, Maharashtra", label: "Registered Office Address" },
-      { key: "el_balance", value: "15", label: "Earned Leave Balance (days)" },
-      { key: "sl_balance", value: "7", label: "Sick Leave Balance (days)" },
-      { key: "cl_balance", value: "12", label: "Casual Leave Balance (days)" },
-      { key: "ml_balance", value: "180", label: "Maternity Leave Balance (days)" },
-    ],
-  });
+async function seedDepartments() {
+  console.log('🌱 Seeding Departments...')
+  const data = [
+    { name: 'Engineering', head: 'Amit Sharma', location: 'Mumbai HQ', employeeCount: 8, status: 'Active' },
+    { name: 'Human Resources', head: 'Deepa Menon', location: 'Mumbai HQ', employeeCount: 4, status: 'Active' },
+    { name: 'Finance & Accounts', head: 'Sanjay Gupta', location: 'Mumbai HQ', employeeCount: 5, status: 'Active' },
+    { name: 'Procurement', head: 'Ritu Singh', location: 'Delhi Office', employeeCount: 3, status: 'Active' },
+    { name: 'Site Operations', head: 'Rajesh Kumar', location: 'Multiple Sites', employeeCount: 15, status: 'Active' },
+    { name: 'QA/QC', head: 'Karthik Rajan', location: 'Chennai Office', employeeCount: 4, status: 'Active' },
+    { name: 'HSE', head: 'Manish Tiwari', location: 'Hyderabad Office', employeeCount: 3, status: 'Active' },
+    { name: 'IT', head: 'Rahul Verma', location: 'Mumbai HQ', employeeCount: 2, status: 'Active' },
+    { name: 'Admin', head: 'Anjali Deshmukh', location: 'Mumbai HQ', employeeCount: 3, status: 'Active' },
+    { name: 'Contracts & Legal', head: 'Vikram Patil', location: 'Pune Office', employeeCount: 2, status: 'Active' },
+  ]
+  await prisma.department.createMany({ data })
+  console.log(`  ✅ ${data.length} departments created`)
+}
 
-  console.log("✅ CompanySettings created.");
+async function seedDesignations() {
+  console.log('🌱 Seeding Designations...')
+  const data = [
+    { title: 'Managing Director', department: 'Engineering', level: 'L1', minSalary: 250000, maxSalary: 350000, status: 'Active' },
+    { title: 'Project Manager', department: 'Engineering', level: 'L2', minSalary: 120000, maxSalary: 180000, status: 'Active' },
+    { title: 'Senior Engineer', department: 'Engineering', level: 'L3', minSalary: 80000, maxSalary: 120000, status: 'Active' },
+    { title: 'Site Engineer', department: 'Engineering', level: 'L4', minSalary: 45000, maxSalary: 70000, status: 'Active' },
+    { title: 'HR Manager', department: 'Human Resources', level: 'L2', minSalary: 80000, maxSalary: 120000, status: 'Active' },
+    { title: 'HR Executive', department: 'Human Resources', level: 'L4', minSalary: 30000, maxSalary: 45000, status: 'Active' },
+    { title: 'Accounts Manager', department: 'Finance & Accounts', level: 'L2', minSalary: 70000, maxSalary: 100000, status: 'Active' },
+    { title: 'Purchase Manager', department: 'Procurement', level: 'L2', minSalary: 65000, maxSalary: 95000, status: 'Active' },
+    { title: 'QA/QC Manager', department: 'QA/QC', level: 'L2', minSalary: 75000, maxSalary: 110000, status: 'Active' },
+    { title: 'HSE Officer', department: 'HSE', level: 'L3', minSalary: 50000, maxSalary: 80000, status: 'Active' },
+    { title: 'Site Supervisor', department: 'Site Operations', level: 'L3', minSalary: 40000, maxSalary: 60000, status: 'Active' },
+    { title: 'Foreman', department: 'Site Operations', level: 'L4', minSalary: 25000, maxSalary: 35000, status: 'Active' },
+    { title: 'Skilled Worker', department: 'Site Operations', level: 'L5', minSalary: 18000, maxSalary: 28000, status: 'Active' },
+    { title: 'Unskilled Worker', department: 'Site Operations', level: 'L6', minSalary: 12000, maxSalary: 18000, status: 'Active' },
+    { title: 'IT Administrator', department: 'IT', level: 'L3', minSalary: 50000, maxSalary: 80000, status: 'Active' },
+  ]
+  await prisma.designation.createMany({ data })
+  console.log(`  ✅ ${data.length} designations created`)
+}
 
-  // ============================================================
-  // 3. CREATE 6 SITES (Indian power plant locations)
-  // ============================================================
-  console.log("🏗️  Creating Sites...");
+async function seedSites() {
+  console.log('🌱 Seeding Sites...')
+  await prisma.site.createMany({ data: SITES })
+  console.log(`  ✅ ${SITES.length} sites created`)
+}
 
-  const sites = await db.site.createMany({
-    data: [
-      { name: "Singrauli Super Thermal Power Plant", state: "Madhya Pradesh", project: "NTPC-SGR-EPC", manpower: 145, incharge: "Rajesh Kumar Singh", status: "Active" },
-      { name: "Jaisalmer Solar Park", state: "Rajasthan", project: "SECI-JSM-SOLAR", manpower: 78, incharge: "Vikram Mehta", status: "Active" },
-      { name: "Mundra Ultra Mega Power Plant", state: "Gujarat", project: "GIPCL-MUN-BOP", manpower: 210, incharge: "Arun Patel", status: "Active" },
-      { name: "Uttarkashi Hydro Electric Project", state: "Uttarakhand", project: "UJVNL-UKH-HYDRO", manpower: 92, incharge: "Deepak Rawat", status: "Active" },
-      { name: "Dadri Gas Power Station", state: "Uttar Pradesh", project: "NTPC-DDR-GAS", manpower: 168, incharge: "Suresh Yadav", status: "Active" },
-      { name: "Chennai Thermal Power Station", state: "Tamil Nadu", project: "BSEB-CHN-EPC", manpower: 55, incharge: "Karthik Rajan", status: "Active" },
-    ],
-  });
+async function seedProjects() {
+  console.log('🌱 Seeding Projects...')
+  const data = [
+    { code: 'PRJ-001', name: 'Mumbai Metro Line 7 Extension', client: 'MMRDA', type: 'Infrastructure', contractValue: '₹2,450,00,00,000', startDate: '2024-01-15', endDate: '2027-06-30', progress: 42, people: 45, status: 'On Track', site: 'Mumbai Metro Line 7' },
+    { code: 'PRJ-002', name: 'Delhi Smart City Township', client: 'DLF Ltd', type: 'Residential', contractValue: '₹890,00,00,000', startDate: '2023-06-01', endDate: '2026-12-31', progress: 58, people: 62, status: 'On Track', site: 'Delhi Smart City Township' },
+    { code: 'PRJ-003', name: 'Bangalore IT Park Phase 3', client: 'Infosys Ltd', type: 'Commercial', contractValue: '₹560,00,00,000', startDate: '2024-03-01', endDate: '2026-09-30', progress: 31, people: 38, status: 'On Track', site: 'Bangalore IT Park Phase 3' },
+    { code: 'PRJ-004', name: 'Hyderabad ORR Expressway', client: 'NHAI', type: 'Infrastructure', contractValue: '₹1,200,00,00,000', startDate: '2023-09-15', endDate: '2027-03-31', progress: 45, people: 55, status: 'Slight Delay', site: 'Hyderabad Expressway' },
+    { code: 'PRJ-005', name: 'Chennai Port Terminal 4', client: 'Chennai Port Trust', type: 'Industrial', contractValue: '₹780,00,00,000', startDate: '2024-06-01', endDate: '2027-05-30', progress: 22, people: 30, status: 'On Track', site: 'Chennai Port Expansion' },
+    { code: 'PRJ-006', name: 'Pune MIDC Industrial Complex', client: 'MIDC', type: 'Industrial', contractValue: '₹340,00,00,000', startDate: '2024-04-01', endDate: '2026-10-31', progress: 18, people: 28, status: 'On Hold', site: 'Pune Industrial Complex' },
+    { code: 'PRJ-007', name: 'Kolkata Howrah Bridge Retrofit', client: 'Kolkata Port Trust', type: 'Infrastructure', contractValue: '₹220,00,00,000', startDate: '2024-08-01', endDate: '2026-08-31', progress: 15, people: 22, status: 'On Track', site: 'Kolkata Bridge Repair' },
+    { code: 'PRJ-008', name: 'Ahmedabad Solar Farm 50MW', client: 'Gujarat Energy', type: 'Energy', contractValue: '₹185,00,00,000', startDate: '2023-11-01', endDate: '2025-06-30', progress: 92, people: 18, status: 'Completed', site: 'Ahmedabad Solar Farm' },
+  ]
+  await prisma.project.createMany({ data })
+  console.log(`  ✅ ${data.length} projects created`)
+}
 
-  console.log("✅ Sites created.");
+async function seedEmployees(): Promise<Map<string, string>> {
+  console.log('🌱 Seeding Employees...')
+  const empIdMap = new Map<string, string>()
+  for (const emp of EMPLOYEES) {
+    const created = await prisma.employee.create({ data: emp })
+    empIdMap.set(emp.empId, created.id)
+  }
+  console.log(`  ✅ ${EMPLOYEES.length} employees created`)
+  return empIdMap
+}
 
-  // ============================================================
-  // 4. CREATE 5 PROJECTS
-  // ============================================================
-  console.log("📋 Creating Projects...");
+async function seedAttendance(empIdMap: Map<string, string>) {
+  console.log('🌱 Seeding Attendance...')
+  const records = []
+  const months = [
+    { m: '05', year: '2025' }, { m: '06', year: '2025' },
+  ]
+  const shifts = ['Day', 'Night']
+  const statuses = ['Present', 'Present', 'Present', 'Present', 'Present', 'Present', 'Present', 'Half Day', 'Absent', 'Present']
+  let count = 0
 
-  await db.project.createMany({
-    data: [
-      {
-        code: "NTPC-SGR-EPC",
-        name: "NTPC Singrauli Unit-5 Boiler EPC",
-        client: "NTPC Limited",
-        type: "EPC",
-        contractValue: "₹487,50,00,000",
-        startDate: "2024-03-01",
-        endDate: "2027-02-28",
-        progress: 34,
-        people: 145,
-        status: "On Track",
-        site: "Singrauli Super Thermal Power Plant",
-      },
-      {
-        code: "SECI-JSM-SOLAR",
-        name: "SECI Jaisalmer 500MW Solar Park O&M",
-        client: "Solar Energy Corporation of India",
-        type: "O&M",
-        contractValue: "₹125,00,00,000",
-        startDate: "2023-06-15",
-        endDate: "2028-06-14",
-        progress: 52,
-        people: 78,
-        status: "On Track",
-        site: "Jaisalmer Solar Park",
-      },
-      {
-        code: "GIPCL-MUN-BOP",
-        name: "GIPCL Mundra 2x660MW BoP Package",
-        client: "Gujarat Industries Power Company Ltd.",
-        type: "BoP",
-        contractValue: "₹218,75,00,000",
-        startDate: "2024-01-10",
-        endDate: "2026-12-31",
-        progress: 18,
-        people: 210,
-        status: "Delayed",
-        site: "Mundra Ultra Mega Power Plant",
-      },
-      {
-        code: "UJVNL-UKH-HYDRO",
-        name: "UJVNL Uttarkashi 120MW Hydro EPC",
-        client: "Uttarakhand Jal Vidyut Nigam Ltd.",
-        type: "EPC",
-        contractValue: "₹340,00,00,000",
-        startDate: "2023-09-01",
-        endDate: "2027-08-31",
-        progress: 41,
-        people: 92,
-        status: "On Track",
-        site: "Uttarkashi Hydro Electric Project",
-      },
-      {
-        code: "BSEB-CHN-EPC",
-        name: "BSEB Chennai Unit-3 TG Island EPC",
-        client: "Bihar State Electricity Board",
-        type: "EPC",
-        contractValue: "₹95,60,00,000",
-        startDate: "2024-07-01",
-        endDate: "2026-06-30",
-        progress: 8,
-        people: 55,
-        status: "On Track",
-        site: "Chennai Thermal Power Station",
-      },
-    ],
-  });
-
-  console.log("✅ Projects created.");
-
-  // ============================================================
-  // 5. CREATE 15 EMPLOYEES
-  // ============================================================
-  console.log("👷 Creating Employees...");
-
-  const employeeData = [
-    { empId: "EMP-001", name: "Rajesh Kumar Singh", email: "rajesh.singh@shaktiengg.in", phone: "9425012345", trade: "Administration", role: "Project Manager", site: "Singrauli Super Thermal Power Plant", type: "Staff", status: "Active", joiningDate: "2021-03-15", certifications: "PMP, NEBOSH IG" },
-    { empId: "EMP-002", name: "Amit Sharma", email: "amit.sharma@shaktiengg.in", phone: "9425012346", trade: "Electrical", role: "Site Engineer", site: "Singrauli Super Thermal Power Plant", type: "Staff", status: "Active", joiningDate: "2022-07-01", certifications: "CPRI Certified" },
-    { empId: "EMP-003", name: "Sunil Kumar Yadav", email: "sunil.yadav@shaktiengg.in", phone: "9425012347", trade: "Mechanical", role: "Supervisor", site: "Singrauli Super Thermal Power Plant", type: "Staff", status: "Active", joiningDate: "2020-11-20", certifications: "CSWIP 3.1" },
-    { empId: "EMP-004", name: "Mohammed Irfan", email: "irfan.m@shaktiengg.in", phone: "9425012348", trade: "Welding", role: "Foreman", site: "Singrauli Super Thermal Power Plant", type: "Contract", status: "Active", joiningDate: "2023-01-10", certifications: "ASME IX, CSWIP 3.2" },
-    { empId: "EMP-005", name: "Vikram Mehta", email: "vikram.mehta@shaktiengg.in", phone: "9414012345", trade: "Electrical", role: "Project Manager", site: "Jaisalmer Solar Park", type: "Staff", status: "Active", joiningDate: "2020-06-01", certifications: "PMP, CPRI" },
-    { empId: "EMP-006", name: "Ramesh Chandra", email: "ramesh.c@shaktiengg.in", phone: "9414012346", trade: "Instrumentation", role: "Technician", site: "Jaisalmer Solar Park", type: "Contract", status: "Active", joiningDate: "2023-04-15", certifications: "DCS Certified" },
-    { empId: "EMP-007", name: "Arun Patel", email: "arun.patel@shaktiengg.in", phone: "9427312345", trade: "Civil", role: "Site Engineer", site: "Mundra Ultra Mega Power Plant", type: "Staff", status: "Active", joiningDate: "2022-01-20", certifications: "NEBOSH IG" },
-    { empId: "EMP-008", name: "Deepak Rawat", email: "deepak.rawat@shaktiengg.in", phone: "9410112345", trade: "Safety", role: "Safety Officer", site: "Uttarkashi Hydro Electric Project", type: "Staff", status: "Active", joiningDate: "2021-09-01", certifications: "NEBOSH IGC, OSHA 30" },
-    { empId: "EMP-009", name: "Prakash Tiwari", email: "prakash.tiwari@shaktiengg.in", phone: "9837012345", trade: "Mechanical", role: "Supervisor", site: "Dadri Gas Power Station", type: "Staff", status: "Active", joiningDate: "2022-05-10", certifications: "CSWIP 3.1, ASME IX" },
-    { empId: "EMP-010", name: "Suresh Verma", email: "suresh.verma@shaktiengg.in", phone: "9837012346", trade: "Rigging", role: "Foreman", site: "Dadri Gas Power Station", type: "Contract", status: "Active", joiningDate: "2023-02-28", certifications: "Crane Operator License" },
-    { empId: "EMP-011", name: "Karthik Rajan", email: "karthik.rajan@shaktiengg.in", phone: "9789012345", trade: "Administration", role: "Site Incharge", site: "Chennai Thermal Power Station", type: "Staff", status: "Active", joiningDate: "2021-01-15", certifications: "PMP" },
-    { empId: "EMP-012", name: "Manoj Kumar Gupta", email: "manoj.gupta@shaktiengg.in", phone: "9425012350", trade: "Welding", role: "Welder", site: "Mundra Ultra Mega Power Plant", type: "Contract", status: "Active", joiningDate: "2023-06-01", certifications: "ASME IX" },
-    { empId: "EMP-013", name: "Santosh Kumar Mishra", email: "santosh.m@shaktiengg.in", phone: "9425012351", trade: "Mechanical", role: "Fitter", site: "Singrauli Super Thermal Power Plant", type: "Contract", status: "On Leave", joiningDate: "2022-08-15", certifications: "" },
-    { empId: "EMP-014", name: "Anil Kumar Pandey", email: "anil.pandey@shaktiengg.in", phone: "9425012352", trade: "Civil", role: "Mason", site: "Uttarkashi Hydro Electric Project", type: "Contract", status: "Terminated", joiningDate: "2023-03-10", certifications: "" },
-    { empId: "EMP-015", name: "Priya Nair", email: "priya.nair@shaktiengg.in", phone: "9789012346", trade: "Administration", role: "HR Executive", site: "Chennai Thermal Power Station", type: "Staff", status: "Active", joiningDate: "2022-11-01", certifications: "" },
-  ];
-
-  const employees = await db.employee.createMany({ data: employeeData });
-  console.log("✅ Employees created.");
-
-  // Fetch created employees for FK references
-  const allEmployees = await db.employee.findMany();
-  const empMap: Record<string, string> = {};
-  allEmployees.forEach((e) => {
-    empMap[e.empId] = e.id;
-  });
-
-  const activeEmployees = allEmployees.filter(
-    (e) => e.status === "Active"
-  );
-  const onLeaveEmployees = allEmployees.filter(
-    (e) => e.status === "On Leave"
-  );
-
-  // ============================================================
-  // 6. CREATE ATTENDANCE FOR TODAY (active + on leave employees)
-  // ============================================================
-  console.log("📝 Creating Attendance records for today...");
-
-  const attendanceData: Array<{
-    empId: string;
-    site: string;
-    date: string;
-    timeIn: string | null;
-    timeOut: string | null;
-    otHours: number;
-    shift: string | null;
-    status: string;
-  }> = [];
-
-  // Active employees - mix of Present and Late
-  const presentStatuses = ["Present", "Present", "Present", "Present", "Present", "Present", "Present", "Present", "Late", "Late"];
-  activeEmployees.forEach((emp, idx) => {
-    const status = presentStatuses[idx % presentStatuses.length];
-    if (status === "Late") {
-      attendanceData.push({
-        empId: emp.id,
-        site: emp.site,
-        date: today,
-        timeIn: "09:45",
-        timeOut: null,
-        otHours: 0,
-        shift: "Day A",
-        status: "Late",
-      });
-    } else {
-      attendanceData.push({
-        empId: emp.id,
-        site: emp.site,
-        date: today,
-        timeIn: "08:00",
-        timeOut: null,
-        otHours: 0,
-        shift: "Day A",
-        status: "Present",
-      });
+  for (const emp of EMPLOYEES) {
+    if (emp.status === 'Inactive') continue
+    const empDbId = empIdMap.get(emp.empId)!
+    for (const { m, year } of months) {
+      const daysInMonth = new Date(parseInt(year), parseInt(m), 0).getDate()
+      const daysToGen = m === '06' ? Math.min(new Date().getDate(), daysInMonth) : daysInMonth
+      for (let d = 1; d <= daysToGen; d++) {
+        const dayOfWeek = new Date(parseInt(year), parseInt(m) - 1, d).getDay()
+        if (dayOfWeek === 0) continue // Skip Sundays
+        const date = `${year}-${m}-${String(d).padStart(2, '0')}`
+        const status = statuses[Math.floor(Math.random() * statuses.length)]
+        const shift = shifts[Math.floor(Math.random() * shifts.length)]
+        records.push({
+          empId: empDbId,
+          site: emp.site,
+          date,
+          timeIn: status === 'Absent' ? null : `${6 + Math.floor(Math.random() * 2)}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
+          timeOut: status === 'Absent' ? null : `${17 + Math.floor(Math.random() * 2)}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
+          otHours: status === 'Present' ? Math.round(Math.random() * 3 * 10) / 10 : 0,
+          shift,
+          status,
+        })
+        count++
+      }
     }
-  });
+  }
 
-  // On Leave employees
-  onLeaveEmployees.forEach((emp) => {
-    attendanceData.push({
-      empId: emp.id,
+  // Insert in batches to avoid SQLite limits
+  const batchSize = 200
+  for (let i = 0; i < records.length; i += batchSize) {
+    await prisma.attendance.createMany({ data: records.slice(i, i + batchSize) })
+  }
+  console.log(`  ✅ ${count} attendance records created`)
+}
+
+async function seedLeaveRequests(empIdMap: Map<string, string>) {
+  console.log('🌱 Seeding LeaveRequests...')
+  const types = ['Casual Leave', 'Sick Leave', 'Earned Leave', 'Compensatory Off', 'Maternity Leave']
+  const statuses = ['Pending', 'Pending', 'Approved', 'Approved', 'Rejected', 'Approved']
+  const reasons = ['Family function', 'Medical appointment', 'Personal work', 'Fever', 'Travel', 'Marriage ceremony']
+  const data = []
+
+  const empSubset = EMPLOYEES.filter(e => e.type === 'Staff' && e.status === 'Active').slice(0, 15)
+  for (let i = 0; i < 20; i++) {
+    const emp = empSubset[i % empSubset.length]
+    const month = String(3 + Math.floor(Math.random() * 4)).padStart(2, '0')
+    const day = String(1 + Math.floor(Math.random() * 25)).padStart(2, '0')
+    const fromDay = parseInt(day)
+    const days = 1 + Math.floor(Math.random() * 4)
+    const status = statuses[Math.floor(Math.random() * statuses.length)]
+    data.push({
+      empId: empIdMap.get(emp.empId)!,
       site: emp.site,
-      date: today,
-      timeIn: null,
-      timeOut: null,
-      otHours: 0,
-      shift: null,
-      status: "On Leave",
-    });
-  });
-
-  await db.attendance.createMany({ data: attendanceData });
-  console.log("✅ Attendance records created.");
-
-  // ============================================================
-  // 7. CREATE 6 LEAVE REQUESTS
-  // ============================================================
-  console.log("📨 Creating Leave Requests...");
-
-  await db.leaveRequest.createMany({
-    data: [
-      {
-        empId: empMap["EMP-001"],
-        site: "Singrauli Super Thermal Power Plant",
-        type: "CL",
-        fromDate: `${currentYear}-07-10`,
-        toDate: `${currentYear}-07-11`,
-        days: 2,
-        reason: "Personal work - daughter's school admission",
-        status: "Approved",
-        appliedDate: `${currentYear}-07-01`,
-      },
-      {
-        empId: empMap["EMP-005"],
-        site: "Jaisalmer Solar Park",
-        type: "EL",
-        fromDate: `${currentYear}-08-05`,
-        toDate: `${currentYear}-08-12`,
-        days: 6,
-        reason: "Family vacation to Goa",
-        status: "Pending",
-        appliedDate: `${currentYear}-07-20`,
-      },
-      {
-        empId: empMap["EMP-008"],
-        site: "Uttarkashi Hydro Electric Project",
-        type: "SL",
-        fromDate: today,
-        toDate: today,
-        days: 1,
-        reason: "Fever and body ache",
-        status: "Approved",
-        appliedDate: `${currentYear}-07-15`,
-      },
-      {
-        empId: empMap["EMP-003"],
-        site: "Singrauli Super Thermal Power Plant",
-        type: "CL",
-        fromDate: `${currentYear}-07-22`,
-        toDate: `${currentYear}-07-23`,
-        days: 2,
-        reason: "Attend cousin's wedding in Lucknow",
-        status: "Pending",
-        appliedDate: `${currentYear}-07-10`,
-      },
-      {
-        empId: empMap["EMP-011"],
-        site: "Chennai Thermal Power Station",
-        type: "ML",
-        fromDate: `${currentYear}-06-01`,
-        toDate: `${currentYear}-11-27`,
-        days: 180,
-        reason: "Maternity leave as per Maternity Benefit Act 1961",
-        status: "Approved",
-        appliedDate: `${currentYear}-05-01`,
-      },
-      {
-        empId: empMap["EMP-007"],
-        site: "Mundra Ultra Mega Power Plant",
-        type: "EL",
-        fromDate: `${currentYear}-07-28`,
-        toDate: `${currentYear}-07-30`,
-        days: 3,
-        reason: "House warming ceremony in Ahmedabad",
-        status: "Rejected",
-        appliedDate: `${currentYear}-07-18`,
-      },
-    ],
-  });
-
-  console.log("✅ Leave Requests created.");
-
-  // ============================================================
-  // 8. CREATE 5 PAYROLL RECORDS (current month)
-  // ============================================================
-  console.log("💰 Creating Payroll records...");
-
-  await db.payroll.createMany({
-    data: [
-      {
-        empId: empMap["EMP-001"],
-        month: currentMonth,
-        days: 26,
-        basic: 65000,
-        hra: 19500,
-        ot: 0,
-        gross: 84500,
-        pf: 7800,
-        esi: 0,
-        tds: 8500,
-        netPay: 68200,
-        status: "Processed",
-      },
-      {
-        empId: empMap["EMP-002"],
-        month: currentMonth,
-        days: 26,
-        basic: 38000,
-        hra: 11400,
-        ot: 2400,
-        gross: 51800,
-        pf: 4560,
-        esi: 0,
-        tds: 3200,
-        netPay: 44040,
-        status: "Processed",
-      },
-      {
-        empId: empMap["EMP-004"],
-        month: currentMonth,
-        days: 25,
-        basic: 22000,
-        hra: 6600,
-        ot: 3600,
-        gross: 32200,
-        pf: 2640,
-        esi: 480,
-        tds: 0,
-        netPay: 29080,
-        status: "Pending",
-      },
-      {
-        empId: empMap["EMP-005"],
-        month: currentMonth,
-        days: 26,
-        basic: 72000,
-        hra: 21600,
-        ot: 0,
-        gross: 93600,
-        pf: 8640,
-        esi: 0,
-        tds: 10200,
-        netPay: 74760,
-        status: "Processed",
-      },
-      {
-        empId: empMap["EMP-008"],
-        month: currentMonth,
-        days: 24,
-        basic: 45000,
-        hra: 13500,
-        ot: 1800,
-        gross: 60300,
-        pf: 5400,
-        esi: 0,
-        tds: 4800,
-        netPay: 50100,
-        status: "Pending",
-      },
-    ],
-  });
-
-  console.log("✅ Payroll records created.");
-
-  // ============================================================
-  // 9. CREATE 5 WORK PERMITS
-  // ============================================================
-  console.log("📋 Creating Work Permits...");
-
-  await db.workPermit.createMany({
-    data: [
-      {
-        permitNo: "WP-2025-001",
-        type: "Hot Work",
-        location: "Singrauli - Boiler Elev. +42m",
-        issuedTo: "Mohammed Irfan",
-        expiry: `${currentYear}-07-20`,
-        status: "Active",
-        description: "Welding of HP steam line support brackets inside boiler casing",
-        precautions: "Fire blanket, 2x CO2 extinguishers, fire watcher posted, gas testing done, area barricaded",
-      },
-      {
-        permitNo: "WP-2025-002",
-        type: "LOTO",
-        location: "Mundra - TG Hall Cable Tray Zone",
-        issuedTo: "Prakash Tiwari",
-        expiry: `${currentYear}-07-18`,
-        status: "Active",
-        description: "Isolation and lockout of 6.6kV cable tray for cable pulling activity near live bus duct",
-        precautions: "Electrical isolation verified with VT, danger tags, try-out procedure completed, authorised person signed off",
-      },
-      {
-        permitNo: "WP-2025-003",
-        type: "Height Work",
-        location: "Uttarkashi - Penstock Anchor Block-3",
-        issuedTo: "Deepak Rawat",
-        expiry: `${currentYear}-07-25`,
-        status: "Active",
-        description: "Concrete inspection and chipping at penstock anchor block elevation +65m above ground",
-        precautions: "Full body harness with double lanyard, safety net below, helmet with chin strap, tool lanyards mandatory",
-      },
-      {
-        permitNo: "WP-2025-004",
-        type: "Confined Space",
-        location: "Dadri - Condenser Water Box",
-        issuedTo: "Amit Sharma",
-        expiry: `${currentYear}-07-17`,
-        status: "Expired",
-        description: "Tube inspection and plug insertion inside condenser water box during planned outage",
-        precautions: "Gas testing (O2, H2S, LEL) every 2 hours, rescue tripod with winch deployed, standby rescue man, BA set available",
-      },
-      {
-        permitNo: "WP-2025-005",
-        type: "Excavation",
-        location: "Jaisalmer - Inverter Station Trench",
-        issuedTo: "Vikram Mehta",
-        expiry: `${currentYear}-07-22`,
-        status: "Active",
-        description: "Cable trench excavation for 33kV cable laying from inverter station to pooling substation",
-        precautions: "Shoring provided for depth >1.5m, barricading with warning tape, locate existing UG cables before dig, competent supervisor present",
-      },
-    ],
-  });
-
-  console.log("✅ Work Permits created.");
-
-  // ============================================================
-  // 10. CREATE 5 INCIDENTS
-  // ============================================================
-  console.log("⚠️  Creating Incidents...");
-
-  await db.incident.createMany({
-    data: [
-      {
-        refNo: "INC-2025-001",
-        date: `${currentYear}-07-05`,
-        site: "Singrauli Super Thermal Power Plant",
-        type: "Near Miss",
-        severity: "Low",
-        person: "Santosh Kumar Mishra",
-        status: "Closed",
-        description: "Scaffolding platform nearly collapsed when an unsecured pipe fell from +28m elevation missing workers by 2 feet",
-        action: "Toolbox talk conducted, scaffolding inspection schedule enhanced to daily, secured loose materials at height",
-      },
-      {
-        refNo: "INC-2025-002",
-        date: `${currentYear}-07-08`,
-        site: "Mundra Ultra Mega Power Plant",
-        type: "First Aid",
-        severity: "Low",
-        person: "Manoj Kumar Gupta",
-        status: "Closed",
-        description: "Minor burn on left forearm during GTAW welding due to hot slag splatter",
-        action: "First aid given at site medical room, burnol applied and bandaged, PPE compliance checked",
-      },
-      {
-        refNo: "INC-2025-003",
-        date: `${currentYear}-07-10`,
-        site: "Dadri Gas Power Station",
-        type: "Property Damage",
-        severity: "Medium",
-        person: "Suresh Verma",
-        status: "Under Investigation",
-        description: "50MT mobile crane boom made contact with overhead 220kV transmission line causing flashover and damage to crane electronics",
-        action: "Crane grounded, area cordoned, Electrical Inspector intimated, DGMS report being prepared",
-      },
-      {
-        refNo: "INC-2025-004",
-        date: `${currentYear}-07-12`,
-        site: "Uttarkashi Hydro Electric Project",
-        type: "LTI",
-        severity: "High",
-        person: "Anil Kumar Pandey",
-        status: "Under Investigation",
-        description: "Labourer slipped from wet formwork at tunnel portal and sustained fracture in right leg tibia",
-        action: "Victim hospitalised at District Hospital Uttarkashi, work stopped at tunnel portal, root cause analysis initiated, anti-skid measures ordered",
-      },
-      {
-        refNo: "INC-2025-005",
-        date: today,
-        site: "Chennai Thermal Power Station",
-        type: "Hazard ID",
-        severity: "Medium",
-        person: "Priya Nair",
-        status: "Investigating",
-        description: "Cracks identified in structural steel of temporary stores building near coal handling plant, risk of collapse during monsoon",
-        action: "Area evacuated, temporary barricading done, structural consultant called for assessment, alternative storage arranged",
-      },
-    ],
-  });
-
-  console.log("✅ Incidents created.");
-
-  // ============================================================
-  // 11. CREATE 6 EQUIPMENT ITEMS
-  // ============================================================
-  console.log("🔧 Creating Equipment...");
-
-  await db.equipment.createMany({
-    data: [
-      {
-        name: "Liebherr Crawler Crane 100T",
-        eqId: "EQ-CR-001",
-        site: "Singrauli Super Thermal Power Plant",
-        status: "Operational",
-        lastPM: `${currentYear}-06-15`,
-        nextPM: `${currentYear}-09-15`,
-        issue: null,
-        downSince: null,
-        etaRepair: null,
-        assignedTo: "Rajesh Kumar Singh",
-        utilization: 78,
-      },
-      {
-        name: "Cummins DG Set 500 KVA",
-        eqId: "EQ-DG-001",
-        site: "Jaisalmer Solar Park",
-        status: "Operational",
-        lastPM: `${currentYear}-06-20`,
-        nextPM: `${currentYear}-08-20`,
-        issue: null,
-        downSince: null,
-        etaRepair: null,
-        assignedTo: "Vikram Mehta",
-        utilization: 45,
-      },
-      {
-        name: "Lincoln V350 Pro Welding Set",
-        eqId: "EQ-WD-001",
-        site: "Mundra Ultra Mega Power Plant",
-        status: "Under Maintenance",
-        lastPM: `${currentYear}-07-01`,
-        nextPM: `${currentYear}-10-01`,
-        issue: "Wire feeder jamming intermittently, torch cable worn out",
-        downSince: `${currentYear}-07-14`,
-        etaRepair: `${currentYear}-07-19`,
-        assignedTo: "Mohammed Irfan",
-        utilization: 92,
-      },
-      {
-        name: "Potain Tower Crane MCT 205",
-        eqId: "EQ-TC-001",
-        site: "Uttarkashi Hydro Electric Project",
-        status: "Operational",
-        lastPM: `${currentYear}-07-05`,
-        nextPM: `${currentYear}-10-05`,
-        issue: null,
-        downSince: null,
-        etaRepair: null,
-        assignedTo: "Deepak Rawat",
-        utilization: 65,
-      },
-      {
-        name: "Astromix Concrete Mixer 10/7 CFT",
-        eqId: "EQ-CM-001",
-        site: "Dadri Gas Power Station",
-        status: "Operational",
-        lastPM: `${currentYear}-06-10`,
-        nextPM: `${currentYear}-09-10`,
-        issue: null,
-        downSince: null,
-        etaRepair: null,
-        assignedTo: "Prakash Tiwari",
-        utilization: 55,
-      },
-      {
-        name: "JCB 3DX Backhoe Loader",
-        eqId: "EQ-EM-001",
-        site: "Chennai Thermal Power Station",
-        status: "Operational",
-        lastPM: `${currentYear}-07-01`,
-        nextPM: `${currentYear}-10-01`,
-        issue: "Hydraulic hose minor leak at boom joint",
-        downSince: null,
-        etaRepair: null,
-        assignedTo: "Karthik Rajan",
-        utilization: 72,
-      },
-    ],
-  });
-
-  console.log("✅ Equipment created.");
-
-  // ============================================================
-  // 12. CREATE 5 EXPENSES
-  // ============================================================
-  console.log("🧾 Creating Expenses...");
-
-  await db.expense.createMany({
-    data: [
-      {
-        claimNo: "EXP-2025-001",
-        empId: empMap["EMP-001"],
-        category: "Travel",
-        amount: 18500,
-        project: "NTPC-SGR-EPC",
-        date: `${currentYear}-07-02`,
-        status: "Approved",
-      },
-      {
-        claimNo: "EXP-2025-002",
-        empId: empMap["EMP-004"],
-        category: "Tools",
-        amount: 4250,
-        project: "NTPC-SGR-EPC",
-        date: `${currentYear}-07-06`,
-        status: "Pending",
-      },
-      {
-        claimNo: "EXP-2025-003",
-        empId: empMap["EMP-008"],
-        category: "Medical",
-        amount: 3200,
-        project: "UJVNL-UKH-HYDRO",
-        date: `${currentYear}-07-09`,
-        status: "Approved",
-      },
-      {
-        claimNo: "EXP-2025-004",
-        empId: empMap["EMP-005"],
-        category: "Communication",
-        amount: 2500,
-        project: "SECI-JSM-SOLAR",
-        date: `${currentYear}-07-11`,
-        status: "Pending",
-      },
-      {
-        claimNo: "EXP-2025-005",
-        empId: empMap["EMP-011"],
-        category: "Transport",
-        amount: 8700,
-        project: "BSEB-CHN-EPC",
-        date: `${currentYear}-07-08`,
-        status: "Rejected",
-      },
-    ],
-  });
-
-  console.log("✅ Expenses created.");
-
-  // ============================================================
-  // 13. CREATE 5 PURCHASE ORDERS
-  // ============================================================
-  console.log("📦 Creating Purchase Orders...");
-
-  await db.purchaseOrder.createMany({
-    data: [
-      {
-        poNo: "PO-2025-001",
-        vendor: "Bhel Industrial Supplies, Bhopal",
-        item: "SA 387 Gr.11 Cl.1 Plates - 50MT",
-        amount: 3750000,
-        project: "NTPC-SGR-EPC",
-        delivery: `${currentYear}-08-15`,
-        grn: "Received",
-        status: "Closed",
-      },
-      {
-        poNo: "PO-2025-002",
-        vendor: "SolarEdge Technologies India, Gurugram",
-        item: "String Inverters 110kW - 25 Nos",
-        amount: 8750000,
-        project: "SECI-JSM-SOLAR",
-        delivery: `${currentYear}-09-01`,
-        grn: "Awaited",
-        status: "Open",
-      },
-      {
-        poNo: "PO-2025-003",
-        vendor: "Godrej & Boyce Mfg Co., Mumbai",
-        item: "Structural Steel ISMC 200 - 120MT",
-        amount: 10800000,
-        project: "GIPCL-MUN-BOP",
-        delivery: `${currentYear}-08-30`,
-        grn: "Partial",
-        status: "Open",
-      },
-      {
-        poNo: "PO-2025-004",
-        vendor: "KRBL Safety Equipments, Delhi",
-        item: "Full Body Harness, Helmets, Safety Shoes - 500 Sets",
-        amount: 750000,
-        project: "UJVNL-UKH-HYDRO",
-        delivery: `${currentYear}-07-25`,
-        grn: "Awaited",
-        status: "Open",
-      },
-      {
-        poNo: "PO-2025-005",
-        vendor: "Siemens Limited India, Chennai",
-        item: "33kV VCB Panel - 8 Nos",
-        amount: 24000000,
-        project: "BSEB-CHN-EPC",
-        delivery: `${currentYear}-10-15`,
-        grn: "Awaited",
-        status: "Open",
-      },
-    ],
-  });
-
-  console.log("✅ Purchase Orders created.");
-
-  // ============================================================
-  // 14. CREATE 4 INVOICES
-  // ============================================================
-  console.log("📄 Creating Invoices...");
-
-  await db.invoice.createMany({
-    data: [
-      {
-        invNo: "INV-2025-001",
-        client: "NTPC Limited",
-        project: "NTPC-SGR-EPC",
-        amount: "₹12,45,00,000",
-        date: `${currentYear}-07-01`,
-        dueDate: `${currentYear}-07-31`,
-        status: "Under Review",
-      },
-      {
-        invNo: "INV-2025-002",
-        client: "Solar Energy Corporation of India",
-        project: "SECI-JSM-SOLAR",
-        amount: "₹3,20,00,000",
-        date: `${currentYear}-06-25`,
-        dueDate: `${currentYear}-07-25`,
-        status: "Approved",
-      },
-      {
-        invNo: "INV-2025-003",
-        client: "Uttarakhand Jal Vidyut Nigam Ltd.",
-        project: "UJVNL-UKH-HYDRO",
-        amount: "₹8,75,00,000",
-        date: `${currentYear}-07-05`,
-        dueDate: `${currentYear}-08-05`,
-        status: "Under Review",
-      },
-      {
-        invNo: "INV-2025-004",
-        client: "Gujarat Industries Power Company Ltd.",
-        project: "GIPCL-MUN-BOP",
-        amount: "₹5,60,00,000",
-        date: `${currentYear}-07-10`,
-        dueDate: `${currentYear}-08-10`,
-        status: "Pending",
-      },
-    ],
-  });
-
-  console.log("✅ Invoices created.");
-
-  // ============================================================
-  // 15. CREATE 4 SUBCONTRACTORS
-  // ============================================================
-  console.log("🤝 Creating Subcontractors...");
-
-  await db.subcontractor.createMany({
-    data: [
-      {
-        name: "Shree Krishna Scaffolding Works",
-        trade: "Scaffolding & Rigging",
-        workers: 35,
-        site: "Singrauli Super Thermal Power Plant",
-        pfReg: "Registered",
-        esiReg: "Registered",
-        labourLic: "Valid",
-        compliance: "Compliant",
-      },
-      {
-        name: "Patel & Sons Electrical Contractors",
-        trade: "Cable Laying & Termination",
-        workers: 22,
-        site: "Mundra Ultra Mega Power Plant",
-        pfReg: "Registered",
-        esiReg: "Pending",
-        labourLic: "Valid",
-        compliance: "Partially Compliant",
-      },
-      {
-        name: "Ganga Earthworks Pvt. Ltd.",
-        trade: "Civil & Excavation",
-        workers: 48,
-        site: "Uttarkashi Hydro Electric Project",
-        pfReg: "Registered",
-        esiReg: "Registered",
-        labourLic: "Valid",
-        compliance: "Compliant",
-      },
-      {
-        name: "Jai Ambey Welding Services",
-        trade: "Welding & NDT",
-        workers: 18,
-        site: "Dadri Gas Power Station",
-        pfReg: "Pending",
-        esiReg: "Pending",
-        labourLic: "Expired",
-        compliance: "Non-Compliant",
-      },
-    ],
-  });
-
-  console.log("✅ Subcontractors created.");
-
-  // ============================================================
-  // 16. CREATE 5 JOB OPENINGS
-  // ============================================================
-  console.log("🔎 Creating Job Openings...");
-
-  await db.jobOpening.createMany({
-    data: [
-      {
-        position: "QA/QC Engineer - Welding",
-        site: "Singrauli Super Thermal Power Plant",
-        openings: 2,
-        applications: 8,
-        priority: "High",
-        status: "Open",
-      },
-      {
-        position: "Safety Supervisor",
-        site: "Mundra Ultra Mega Power Plant",
-        openings: 1,
-        applications: 12,
-        priority: "High",
-        status: "Open",
-      },
-      {
-        position: "Instrumentation Technician",
-        site: "Jaisalmer Solar Park",
-        openings: 3,
-        applications: 5,
-        priority: "Medium",
-        status: "Open",
-      },
-      {
-        position: "Civil Site Engineer",
-        site: "Uttarkashi Hydro Electric Project",
-        openings: 1,
-        applications: 15,
-        priority: "High",
-        status: "Interviewing",
-      },
-      {
-        position: "Crane Operator (50T+)",
-        site: "Dadri Gas Power Station",
-        openings: 2,
-        applications: 3,
-        priority: "Low",
-        status: "Open",
-      },
-    ],
-  });
-
-  console.log("✅ Job Openings created.");
-
-  // ============================================================
-  // 17. CREATE 12 SHIFT SCHEDULES
-  // ============================================================
-  console.log("🕐 Creating Shift Schedules...");
-
-  // Calculate week start (Monday of current week)
-  const dayOfWeek = now.getDay();
-  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() + mondayOffset);
-  const weekStartStr = weekStart.toISOString().split("T")[0];
-
-  await db.shiftSchedule.createMany({
-    data: [
-      { empId: empMap["EMP-001"], employeeName: "Rajesh Kumar Singh", site: "Singrauli Super Thermal Power Plant", shift: "Day A", weekStart: weekStartStr },
-      { empId: empMap["EMP-002"], employeeName: "Amit Sharma", site: "Singrauli Super Thermal Power Plant", shift: "Day A", weekStart: weekStartStr },
-      { empId: empMap["EMP-003"], employeeName: "Sunil Kumar Yadav", site: "Singrauli Super Thermal Power Plant", shift: "Day B", weekStart: weekStartStr },
-      { empId: empMap["EMP-004"], employeeName: "Mohammed Irfan", site: "Singrauli Super Thermal Power Plant", shift: "Day B", weekStart: weekStartStr },
-      { empId: empMap["EMP-005"], employeeName: "Vikram Mehta", site: "Jaisalmer Solar Park", shift: "General", weekStart: weekStartStr },
-      { empId: empMap["EMP-006"], employeeName: "Ramesh Chandra", site: "Jaisalmer Solar Park", shift: "Day A", weekStart: weekStartStr },
-      { empId: empMap["EMP-007"], employeeName: "Arun Patel", site: "Mundra Ultra Mega Power Plant", shift: "Day A", weekStart: weekStartStr },
-      { empId: empMap["EMP-008"], employeeName: "Deepak Rawat", site: "Uttarkashi Hydro Electric Project", shift: "Night B", weekStart: weekStartStr },
-      { empId: empMap["EMP-009"], employeeName: "Prakash Tiwari", site: "Dadri Gas Power Station", shift: "Day A", weekStart: weekStartStr },
-      { empId: empMap["EMP-010"], employeeName: "Suresh Verma", site: "Dadri Gas Power Station", shift: "Day B", weekStart: weekStartStr },
-      { empId: empMap["EMP-011"], employeeName: "Karthik Rajan", site: "Chennai Thermal Power Station", shift: "General", weekStart: weekStartStr },
-      { empId: empMap["EMP-012"], employeeName: "Manoj Kumar Gupta", site: "Mundra Ultra Mega Power Plant", shift: "OFF", weekStart: weekStartStr },
-    ],
-  });
-
-  console.log("✅ Shift Schedules created.");
-
-  // ============================================================
-  // 18. CREATE 10 CERTIFICATIONS
-  // ============================================================
-  console.log("🎓 Creating Certifications...");
-
-  await db.certification.createMany({
-    data: [
-      { empId: empMap["EMP-002"], employeeName: "Amit Sharma", name: "CPRI Certified Electrical Supervisor", issuedBy: "Central Power Research Institute, Bangalore", issueDate: "2024-01-15", expiryDate: "2027-01-14", status: "Valid" },
-      { empId: empMap["EMP-004"], employeeName: "Mohammed Irfan", name: "CSWIP 3.2 Welding Inspector", issuedBy: "TWI (India), Chennai", issueDate: "2023-06-10", expiryDate: "2026-06-09", status: "Valid" },
-      { empId: empMap["EMP-012"], employeeName: "Manoj Kumar Gupta", name: "ASME IX Welder Qualification", issuedBy: "Lloyd's Register India, Mumbai", issueDate: "2024-03-20", expiryDate: "2027-03-19", status: "Valid" },
-      { empId: empMap["EMP-008"], employeeName: "Deepak Rawat", name: "NEBOSH International General Certificate", issuedBy: "NEBOSH, UK", issueDate: "2022-09-05", expiryDate: "2025-09-04", status: "Valid" },
-      { empId: empMap["EMP-008"], employeeName: "Deepak Rawat", name: "OSHA 30-Hour Construction Safety", issuedBy: "OSHA, USA", issueDate: "2023-02-18", expiryDate: "2028-02-17", status: "Valid" },
-      { empId: empMap["EMP-003"], employeeName: "Sunil Kumar Yadav", name: "CSWIP 3.1 Welding Inspector", issuedBy: "TWI (India), Chennai", issueDate: "2022-11-12", expiryDate: "2025-11-11", status: "Valid" },
-      { empId: empMap["EMP-010"], employeeName: "Suresh Verma", name: "Crane Operator License (50T+)", issuedBy: "Directorate General Factory Advice Service & Labour Institutes, Mumbai", issueDate: "2023-08-01", expiryDate: "2026-07-31", status: "Valid" },
-      { empId: empMap["EMP-001"], employeeName: "Rajesh Kumar Singh", name: "PMP Certified Project Manager", issuedBy: "Project Management Institute, USA", issueDate: "2021-04-22", expiryDate: "2027-04-21", status: "Valid" },
-      { empId: empMap["EMP-007"], employeeName: "Arun Patel", name: "NEBOSH International General Certificate", issuedBy: "NEBOSH, UK", issueDate: "2023-05-10", expiryDate: "2026-05-09", status: "Valid" },
-      { empId: empMap["EMP-009"], employeeName: "Prakash Tiwari", name: "ASME IX Welding Procedure Qualification", issuedBy: "TUV India Pvt. Ltd., Pune", issueDate: "2024-01-08", expiryDate: "2027-01-07", status: "Valid" },
-    ],
-  });
-
-  console.log("✅ Certifications created.");
-
-  // ============================================================
-  // 19. CREATE 6 TRAINING SESSIONS
-  // ============================================================
-  console.log("📚 Creating Training Sessions...");
-
-  await db.trainingSession.createMany({
-    data: [
-      {
-        title: "Fire Safety & Emergency Evacuation Drill",
-        site: "Singrauli Super Thermal Power Plant",
-        trainer: "Rajeev Sharma (Fire Safety Officer)",
-        date: `${currentYear}-07-20`,
-        duration: "3 hours",
-        attendees: 85,
-        status: "Scheduled",
-      },
-      {
-        title: "Working at Heights - Fall Protection",
-        site: "Uttarkashi Hydro Electric Project",
-        trainer: "Deepak Rawat (Safety Officer)",
-        date: `${currentYear}-07-15`,
-        duration: "4 hours",
-        attendees: 42,
-        status: "Completed",
-      },
-      {
-        title: "LOTO Procedure Refresher Training",
-        site: "Dadri Gas Power Station",
-        trainer: "Sanjay Verma (Electrical Consultant)",
-        date: `${currentYear}-07-18`,
-        duration: "2 hours",
-        attendees: 38,
-        status: "Completed",
-      },
-      {
-        title: "First Aid & CPR Training",
-        site: "Mundra Ultra Mega Power Plant",
-        trainer: "Red Cross Society, Ahmedabad",
-        date: `${currentYear}-07-25`,
-        duration: "6 hours",
-        attendees: 60,
-        status: "Scheduled",
-      },
-      {
-        title: "Confined Space Entry & Rescue",
-        site: "Chennai Thermal Power Station",
-        trainer: "National Safety Council, Chennai",
-        date: `${currentYear}-07-22`,
-        duration: "5 hours",
-        attendees: 30,
-        status: "Scheduled",
-      },
-      {
-        title: "Solar Panel Cleaning & Maintenance",
-        site: "Jaisalmer Solar Park",
-        trainer: "Adani Solar Technical Team",
-        date: `${currentYear}-07-12`,
-        duration: "2 hours",
-        attendees: 25,
-        status: "Completed",
-      },
-    ],
-  });
-
-  console.log("✅ Training Sessions created.");
-
-  // ============================================================
-  // 20. CREATE DEPARTMENTS
-  // ============================================================
-  console.log("🏢 Creating Departments...");
-
-  await db.department.createMany({
-    data: [
-      { name: "Project Management", head: "Rajesh Kumar Singh", location: "Head Office - Mumbai", employeeCount: 8, status: "Active" },
-      { name: "Engineering - Electrical", head: "Amit Sharma", location: "Site - Singrauli", employeeCount: 22, status: "Active" },
-      { name: "Engineering - Mechanical", head: "Sunil Kumar Yadav", location: "Site - Singrauli", employeeCount: 18, status: "Active" },
-      { name: "Engineering - Civil", head: "Arun Patel", location: "Site - Mundra", employeeCount: 15, status: "Active" },
-      { name: "Safety & HSE", head: "Deepak Rawat", location: "Site - Uttarkashi", employeeCount: 6, status: "Active" },
-      { name: "Finance & Accounts", head: "Priya Nair", location: "Head Office - Mumbai", employeeCount: 5, status: "Active" },
-      { name: "Human Resources", head: "Priya Nair", location: "Head Office - Mumbai", employeeCount: 4, status: "Active" },
-      { name: "Procurement", head: "Vikram Mehta", location: "Head Office - Mumbai", employeeCount: 6, status: "Active" },
-    ],
-  });
-
-  console.log("✅ Departments created.");
-
-  // ============================================================
-  // 21. CREATE DESIGNATIONS
-  // ============================================================
-  console.log("📋 Creating Designations...");
-
-  await db.designation.createMany({
-    data: [
-      { title: "Project Manager", department: "Project Management", level: "L5", minSalary: 65000, maxSalary: 95000, status: "Active" },
-      { title: "Site Engineer", department: "Engineering - Electrical", level: "L3", minSalary: 30000, maxSalary: 45000, status: "Active" },
-      { title: "Supervisor", department: "Engineering - Mechanical", level: "L2", minSalary: 22000, maxSalary: 35000, status: "Active" },
-      { title: "Foreman", department: "Engineering - Mechanical", level: "L1", minSalary: 18000, maxSalary: 28000, status: "Active" },
-      { title: "Safety Officer", department: "Safety & HSE", level: "L3", minSalary: 35000, maxSalary: 55000, status: "Active" },
-      { title: "Technician", department: "Engineering - Electrical", level: "L1", minSalary: 15000, maxSalary: 25000, status: "Active" },
-      { title: "Welder", department: "Engineering - Mechanical", level: "L1", minSalary: 18000, maxSalary: 30000, status: "Active" },
-      { title: "HR Executive", department: "Human Resources", level: "L3", minSalary: 25000, maxSalary: 40000, status: "Active" },
-      { title: "Accountant", department: "Finance & Accounts", level: "L3", minSalary: 25000, maxSalary: 40000, status: "Active" },
-      { title: "Site Incharge", department: "Project Management", level: "L4", minSalary: 45000, maxSalary: 65000, status: "Active" },
-    ],
-  });
-
-  console.log("✅ Designations created.");
-
-  // ============================================================
-  // 22. CREATE INVENTORY ITEMS
-  // ============================================================
-  console.log("📦 Creating Inventory Items...");
-
-  await db.inventoryItem.createMany({
-    data: [
-      { itemCode: "INV-001", name: "SA 387 Gr.11 Cl.1 Steel Plate (12mm)", category: "Raw Materials", unit: "MT", currentStock: 45, minStock: 10, maxStock: 100, unitCost: 75000, warehouse: "Central Store - Mumbai", status: "In Stock" },
-      { itemCode: "INV-002", name: "E7018 Low Hydrogen Welding Electrode (3.2mm)", category: "Consumables", unit: "KG", currentStock: 2800, minStock: 500, maxStock: 5000, unitCost: 185, warehouse: "Site Store - Singrauli", status: "In Stock" },
-      { itemCode: "INV-003", name: "ISMC 200 Structural Steel Channel", category: "Raw Materials", unit: "MT", currentStock: 22, minStock: 5, maxStock: 50, unitCost: 90000, warehouse: "Central Store - Mumbai", status: "In Stock" },
-      { itemCode: "INV-004", name: "XLPE 33kV Power Cable (3cx300sqmm)", category: "Electrical", unit: "MTR", currentStock: 850, minStock: 200, maxStock: 2000, unitCost: 3200, warehouse: "Site Store - Mundra", status: "In Stock" },
-      { itemCode: "INV-005", name: "Full Body Harness (Double Lanyard)", category: "Safety", unit: "Nos", currentStock: 120, minStock: 30, maxStock: 200, unitCost: 4500, warehouse: "Site Store - Singrauli", status: "In Stock" },
-      { itemCode: "INV-006", name: "Bhel Make 6.6kV VCB Panel", category: "Electrical", unit: "Nos", currentStock: 3, minStock: 2, maxStock: 10, unitCost: 3000000, warehouse: "Central Store - Mumbai", status: "In Stock" },
-      { itemCode: "INV-007", name: "Portland Cement (OPC 53 Grade)", category: "Consumables", unit: "Bags", currentStock: 4500, minStock: 1000, maxStock: 10000, unitCost: 380, warehouse: "Site Store - Uttarkashi", status: "In Stock" },
-      { itemCode: "INV-008", name: "Fire Extinguisher CO2 (5kg)", category: "Safety", unit: "Nos", currentStock: 8, minStock: 10, maxStock: 30, unitCost: 2800, warehouse: "Site Store - Singrauli", status: "Low Stock" },
-    ],
-  });
-
-  console.log("✅ Inventory Items created.");
-
-  // ============================================================
-  // 23. CREATE STOCK MOVEMENTS
-  // ============================================================
-  console.log("🔄 Creating Stock Movements...");
-
-  await db.stockMovement.createMany({
-    data: [
-      { itemCode: "INV-001", itemName: "SA 387 Gr.11 Steel Plate", type: "Inward", quantity: 50, fromWarehouse: "Vendor - Bhel", toWarehouse: "Central Store - Mumbai", reference: "PO-2025-001", date: currentMonth + "-05", remarks: "Received against PO-2025-001" },
-      { itemCode: "INV-002", itemName: "E7018 Welding Electrode", type: "Issue", quantity: 200, fromWarehouse: "Site Store - Singrauli", toWarehouse: "Boiler Work Area", reference: "MTL-001", date: currentMonth + "-10", remarks: "Issued for boiler welding" },
-      { itemCode: "INV-005", itemName: "Full Body Harness", type: "Inward", quantity: 50, fromWarehouse: "Vendor - KRBL Safety", toWarehouse: "Site Store - Singrauli", reference: "PO-2025-004", date: currentMonth + "-08", remarks: "Safety equipment received" },
-      { itemCode: "INV-004", itemName: "33kV XLPE Cable", type: "Transfer", quantity: 500, fromWarehouse: "Central Store - Mumbai", toWarehouse: "Site Store - Mundra", reference: "TRF-001", date: currentMonth + "-12", remarks: "Inter-store transfer for TG cabling" },
-      { itemCode: "INV-007", itemName: "Portland Cement OPC 53", type: "Issue", quantity: 800, fromWarehouse: "Site Store - Uttarkashi", toWarehouse: "Penstock Works", reference: "MTL-002", date: currentMonth + "-15", remarks: "Consumed for penstock anchor block concreting" },
-    ],
-  });
-
-  console.log("✅ Stock Movements created.");
-
-  // ============================================================
-  // 24. CREATE CUSTOMERS
-  // ============================================================
-  console.log("👥 Creating Customers...");
-
-  await db.customer.createMany({
-    data: [
-      { code: "CUST-001", name: "NTPC Limited", contactPerson: "A.K. Verma", email: "procurement@ntpc.co.in", phone: "011-24360100", address: "NTPC Bhawan, Scope Complex, New Delhi - 110003", gst: "07AAACT2727Q1ZV", city: "New Delhi", state: "Delhi", totalOrders: 3, totalRevenue: 145600000, status: "Active" },
-      { code: "CUST-002", name: "Solar Energy Corporation of India", contactPerson: "R. Sundar", email: "tenders@seci.co.in", phone: "011-26890500", address: "1st Floor, August Kranti Bhawan, New Delhi - 110016", gst: "07AAACG5266Q1Z7", city: "New Delhi", state: "Delhi", totalOrders: 2, totalRevenue: 62500000, status: "Active" },
-      { code: "CUST-003", name: "Gujarat Industries Power Company Ltd.", contactPerson: "M.D. Patel", email: "projects@gipcl.guj.gov.in", phone: "02692-228100", address: "GIPCL House, Race Course Circle, Vadodara - 390007", gst: "24AAACG1065G1Z6", city: "Vadodara", state: "Gujarat", totalOrders: 1, totalRevenue: 218750000, status: "Active" },
-      { code: "CUST-004", name: "Uttarakhand Jal Vidyut Nigam Ltd.", contactPerson: "D.S. Rawat", email: "engg@ujvnl.uk.gov.in", phone: "0135-2710400", address: "UJVN Bhawan, Subhash Nagar, Dehradun - 248001", gst: "05AAACU2858H1Z5", city: "Dehradun", state: "Uttarakhand", totalOrders: 2, totalRevenue: 85000000, status: "Active" },
-      { code: "CUST-005", name: "Bihar State Electricity Board", contactPerson: "S.K. Mishra", email: "tender@bseb.bih.nic.in", phone: "0612-2212100", address: "Vidyut Bhawan, Bailey Road, Patna - 800001", gst: "10AAABB4512B1Z3", city: "Patna", state: "Bihar", totalOrders: 1, totalRevenue: 47900000, status: "Active" },
-    ],
-  });
-
-  console.log("✅ Customers created.");
-
-  // ============================================================
-  // 25. CREATE SALES ORDERS
-  // ============================================================
-  console.log("💰 Creating Sales Orders...");
-
-  await db.salesOrder.createMany({
-    data: [
-      { soNo: "SO-2025-001", customer: "NTPC Limited", project: "NTPC-SGR-EPC", item: "Boiler EPC - Unit 5", quantity: 1, unitPrice: 487500000, amount: 487500000, orderDate: "2024-03-01", deliveryDate: "2027-02-28", status: "In Progress" },
-      { soNo: "SO-2025-002", customer: "Solar Energy Corporation of India", project: "SECI-JSM-SOLAR", item: "O&M Services - 500MW Solar Park", quantity: 1, unitPrice: 62500000, amount: 62500000, orderDate: "2023-06-15", deliveryDate: "2028-06-14", status: "In Progress" },
-      { soNo: "SO-2025-003", customer: "Gujarat Industries Power Company Ltd.", project: "GIPCL-MUN-BOP", item: "BoP Package - 2x660MW", quantity: 1, unitPrice: 218750000, amount: 218750000, orderDate: "2024-01-10", deliveryDate: "2026-12-31", status: "In Progress" },
-      { soNo: "SO-2025-004", customer: "Uttarakhand Jal Vidyut Nigam Ltd.", project: "UJVNL-UKH-HYDRO", item: "EPC - 120MW Hydro", quantity: 1, unitPrice: 340000000, amount: 340000000, orderDate: "2023-09-01", deliveryDate: "2027-08-31", status: "In Progress" },
-      { soNo: "SO-2025-005", customer: "Bihar State Electricity Board", project: "BSEB-CHN-EPC", item: "TG Island EPC - Unit 3", quantity: 1, unitPrice: 47900000, amount: 47900000, orderDate: "2024-07-01", deliveryDate: "2026-06-30", status: "In Progress" },
-    ],
-  });
-
-  console.log("✅ Sales Orders created.");
-
-  // ============================================================
-  // 26. CREATE CRM CONTACTS
-  // ============================================================
-  console.log("🤝 Creating CRM Contacts...");
-
-  await db.crmContact.createMany({
-    data: [
-      { name: "Mr. A.K. Verma", company: "NTPC Limited", designation: "General Manager (Projects)", email: "ak.verma@ntpc.co.in", phone: "9810012345", source: "Existing Client", stage: "Client", value: 633000000, lastContact: currentMonth + "-01", notes: "Key decision maker for Singrauli project", status: "Active" },
-      { name: "Mr. R. Sundar", company: "Solar Energy Corporation of India", designation: "Director (Projects)", email: "r.sundar@seci.co.in", phone: "9810023456", source: "Existing Client", stage: "Client", value: 125000000, lastContact: currentMonth + "-05", notes: "Interested in expanding O&M scope to 1GW", status: "Active" },
-      { name: "Mr. Suresh Jain", company: "Adani Power Ltd.", designation: "VP - Procurement", email: "s.jain@adanipower.com", phone: "9810034567", source: "Cold Outreach", stage: "Proposal", value: 250000000, lastContact: currentMonth + "-10", notes: "Discussed EPC for Mundra expansion Phase-3", status: "Active" },
-      { name: "Ms. Kavita Reddy", company: "Tata Power Solar", designation: "Head - EPC", email: "k.reddy@tatapowersolar.com", phone: "9810045678", source: "Referral", stage: "Lead", value: 180000000, lastContact: currentMonth + "-08", notes: "Exploring partnership for solar EPC in Rajasthan", status: "Active" },
-      { name: "Mr. D.K. Sharma", company: "NHPC Limited", designation: "Executive Director", email: "dk.sharma@nhpc.nic.in", phone: "9810056789", source: "Industry Event", stage: "Qualification", value: 500000000, lastContact: currentMonth + "-12", notes: "Pre-qualification for upcoming hydro projects in Himachal", status: "Active" },
-      { name: "Mr. Ravi Kumar", company: "Power Grid Corporation", designation: "CGM (Projects)", email: "r.kumar@powergridindia.com", phone: "9810067890", source: "Existing Client", stage: "Client", value: 85000000, lastContact: currentMonth + "-03", notes: "Completed substation work, exploring transmission line package", status: "Active" },
-    ],
-  });
-
-  console.log("✅ CRM Contacts created.");
-
-  // ============================================================
-  // 27. CREATE SUPPORT TICKETS
-  // ============================================================
-  console.log("🎫 Creating Support Tickets...");
-
-  await db.supportTicket.createMany({
-    data: [
-      { ticketNo: "TKT-001", title: "Unable to submit monthly timesheet", raisedBy: "Mohammed Irfan", category: "Technical", priority: "High", status: "In Progress", assignedTo: "IT Support", description: "Timesheet submission page shows 500 error when selecting 'Night B' shift for current week", resolution: null },
-      { ticketNo: "TKT-002", title: "Payroll report shows incorrect PF deduction", raisedBy: "Amit Sharma", category: "Finance", priority: "High", status: "Open", assignedTo: "Finance Team", description: "March 2026 payroll shows PF deduction of 12% on gross instead of basic pay", resolution: null },
-      { ticketNo: "TKT-003", title: "New employee onboarding - documents not uploading", raisedBy: "Priya Nair", category: "Technical", priority: "Medium", status: "Open", assignedTo: "IT Support", description: "Document upload for new joinee EMP-015 keeps failing with timeout error", resolution: null },
-      { ticketNo: "TKT-004", title: "Request for additional safety report format", raisedBy: "Deepak Rawat", category: "Feature Request", priority: "Low", status: "Open", assignedTo: null, description: "Need HSE monthly report in DGMS format for regulatory submission", resolution: null },
-      { ticketNo: "TKT-005", title: "Leave balance not updating after approval", raisedBy: "Sunil Kumar Yadav", category: "HR", priority: "Medium", status: "Resolved", assignedTo: "HR Team", description: "After CL approval, balance showed 11 instead of 10 days", resolution: "Fixed leave balance calculation to use approved days count" },
-    ],
-  });
-
-  console.log("✅ Support Tickets created.");
-
-  // ============================================================
-  // 28. CREATE KNOWLEDGEBASE ARTICLES
-  // ============================================================
-  console.log("📚 Creating KB Articles...");
-
-  await db.kBArticle.createMany({
-    data: [
-      { title: "How to Submit a Leave Request", category: "HR & Leave", content: "Step 1: Navigate to Leave Management from sidebar.\nStep 2: Click '+ New' button.\nStep 3: Select employee, leave type (EL/SL/CL/ML), from and to dates.\nStep 4: Provide reason and submit.\n\nNote: Leave requires manager approval. Check status in the Leave Management table.", author: "Priya Nair", tags: "leave,apply,hr,request", views: 45, helpful: 12, status: "Published" },
-      { title: "Work Permit (PTW) Issue Process", category: "Safety & HSE", content: "This guide covers the complete Permit to Work process:\n\n1. Identify work type (Hot Work, LOTO, Height Work, Confined Space, Excavation)\n2. Navigate to Work Permits module\n3. Click '+ New' and fill in all required fields\n4. Ensure precautions are listed\n5. Set expiry date/time\n6. Submit for safety officer approval\n\nPermits must be closed after work completion.", author: "Deepak Rawat", tags: "permit,ptw,safety,hot work", views: 38, helpful: 8, status: "Published" },
-      { title: "Purchase Order Creation Guide", category: "Procurement", content: "To create a Purchase Order:\n\n1. Go to Purchase Orders under Payroll & Finance\n2. Click '+ New'\n3. Fill vendor name, item description, amount\n4. Select project and expected delivery date\n5. Submit for approval\n\nTrack GRN status: Awaiting → Partial → Received", author: "Vikram Mehta", tags: "purchase,order,procurement,po", views: 22, helpful: 5, status: "Published" },
-      { title: "Payroll Processing Monthly Checklist", category: "Finance", content: "Monthly payroll processing steps:\n\n1. Verify attendance records for all sites (1st-5th)\n2. Check OT hours and approvals\n3. Process PF/ESI calculations (12% PF, 0.75% ESI)\n4. Apply TDS as per income tax slab\n5. Generate payslips\n6. Submit for finance manager approval\n7. Initiate bank transfer\n\nDeadline: 28th of every month", author: "Priya Nair", tags: "payroll,salary,pf,esi,tds,monthly", views: 56, helpful: 15, status: "Published" },
-      { title: "Incident Reporting & Investigation Procedure", category: "Safety & HSE", content: "All incidents must be reported within 24 hours:\n\n1. Navigate to Safety & HSE module\n2. Click '+ New' to create incident report\n3. Classify: Near Miss, First Aid, LTI, Property Damage, Hazard ID\n4. Set severity: Low, Medium, High, Critical\n5. Describe the incident in detail\n6. List immediate corrective actions\n7. Submit for investigation\n\nCritical/High severity incidents require DGMS notification.", author: "Deepak Rawat", tags: "incident,safety,reporting,accident,hse", views: 34, helpful: 10, status: "Published" },
-      { title: "Equipment Maintenance Schedule Guidelines", category: "Operations", content: "Preventive Maintenance (PM) Schedule:\n\n- Cranes: Quarterly PM + Annual certification\n- DG Sets: Monthly run test + Quarterly service\n- Welding Sets: Monthly calibration check\n- Concrete Mixers: Weekly inspection\n- Safety Equipment: Monthly inspection\n\nTrack PM dates in Equipment module. Set alerts 30 days before due.", author: "Prakash Tiwari", tags: "equipment,maintenance,pm,schedule", views: 19, helpful: 4, status: "Published" },
-    ],
-  });
-
-  console.log("✅ KB Articles created.");
-
-  // ============================================================
-  // 29. CREATE FINANCE MODULE DATA
-  // ============================================================
-  console.log("💰 Creating Finance Module Data...");
-
-  // Helper for prev months
-  const prevMonth = (offset: number) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  };
-  const m1 = prevMonth(5), m2 = prevMonth(4), m3 = prevMonth(3), m4 = prevMonth(2), m5 = prevMonth(1), m6 = currentMonth;
-
-  // --- Ledger Accounts ---
-  await db.ledgerAccount.createMany({
-    data: [
-      { accountCode: "1001", name: "Cash & Bank", group: "Current Assets", type: "Asset", balance: 4850000, status: "Active" },
-      { accountCode: "1002", name: "Accounts Receivable", group: "Current Assets", type: "Asset", balance: 30000000, status: "Active" },
-      { accountCode: "1003", name: "Inventory - Materials", group: "Current Assets", type: "Asset", balance: 12500000, status: "Active" },
-      { accountCode: "1004", name: "Work in Progress", group: "Current Assets", type: "Asset", balance: 8500000, status: "Active" },
-      { accountCode: "2001", name: "Accounts Payable", group: "Current Liabilities", type: "Liability", balance: 22000000, status: "Active" },
-      { accountCode: "2002", name: "PF Payable", group: "Current Liabilities", type: "Liability", balance: 29040, status: "Active" },
-      { accountCode: "2003", name: "ESI Payable", group: "Current Liabilities", type: "Liability", balance: 480, status: "Active" },
-      { accountCode: "2004", name: "TDS Payable", group: "Current Liabilities", type: "Liability", balance: 26700, status: "Active" },
-      { accountCode: "2005", name: "GST Payable", group: "Current Liabilities", type: "Liability", balance: 4500000, status: "Active" },
-      { accountCode: "3001", name: "Share Capital", group: "Equity", type: "Equity", balance: 50000000, status: "Active" },
-      { accountCode: "3002", name: "Retained Earnings", group: "Equity", type: "Equity", balance: 18500000, status: "Active" },
-      { accountCode: "4001", name: "Project Revenue", group: "Income", type: "Revenue", balance: 0, status: "Active" },
-      { accountCode: "5001", name: "Salaries & Wages", group: "Direct Costs", type: "Expense", balance: 0, status: "Active" },
-      { accountCode: "5002", name: "Materials & Consumables", group: "Direct Costs", type: "Expense", balance: 0, status: "Active" },
-      { accountCode: "5003", name: "Subcontractor Costs", group: "Direct Costs", type: "Expense", balance: 0, status: "Active" },
-      { accountCode: "5004", name: "Plant & Machinery", group: "Overheads", type: "Expense", balance: 0, status: "Active" },
-      { accountCode: "5005", name: "Site Overheads", group: "Overheads", type: "Expense", balance: 0, status: "Active" },
-      { accountCode: "5006", name: "Administration", group: "Overheads", type: "Expense", balance: 0, status: "Active" },
-    ],
-  });
-
-  // --- Bank Accounts ---
-  await db.bankAccount.createMany({
-    data: [
-      { accountName: "HDFC Current Account", bankName: "HDFC Bank Ltd.", accountNo: "HDFC-2025-1048273615", type: "Current", balance: 3250000, status: "Active" },
-      { accountName: "SBI Savings Account", bankName: "State Bank of India", accountNo: "SBIN-2025-3847261935", type: "Savings", balance: 1875000, status: "Active" },
-      { accountName: "Cash in Hand", bankName: "On-site Cash", accountNo: "CASH-HO-001", type: "Cash", balance: 250000, status: "Active" },
-      { accountName: "Petty Cash", bankName: "Office Petty Cash", accountNo: "PETTY-001", type: "Cash", balance: 50000, status: "Active" },
-      { accountName: "ICICI Overdraft Facility", bankName: "ICICI Bank Ltd.", accountNo: "ICICI-OD-2025-7482910", type: "OD", balance: 750000, status: "Active" },
-      { accountName: "Axis Term Deposit", bankName: "Axis Bank Ltd.", accountNo: "AXIS-TD-2025-927365", type: "FD", balance: 5000000, status: "Active" },
-    ],
-  });
-
-  // --- Accounts Payable ---
-  await db.accountsPayable.createMany({
-    data: [
-      { billNo: "AP-2025-001", vendor: "Bhel Industrial Supplies, Bhopal", description: "Steel plates - 3rd lot delivery", amount: 3750000, dueDate: `${currentYear}-08-15`, paidDate: `${currentYear}-07-10`, status: "Paid" },
-      { billNo: "AP-2025-002", vendor: "Godrej & Boyce Mfg Co., Mumbai", description: "Structural steel ISMC 200 - partial delivery", amount: 5400000, dueDate: `${currentYear}-09-30`, paidDate: null, status: "Pending" },
-      { billNo: "AP-2025-003", vendor: "KRBL Safety Equipments, Delhi", description: "PPE items - batch delivery", amount: 750000, dueDate: `${currentYear}-07-25`, paidDate: null, status: "Overdue" },
-      { billNo: "AP-2025-004", vendor: "SolarEdge Technologies India, Gurugram", description: "String inverters - advance payment", amount: 4375000, dueDate: `${currentYear}-10-01`, paidDate: null, status: "Pending" },
-      { billNo: "AP-2025-005", vendor: "Siemens Limited India, Chennai", description: "VCB panels - milestone 1", amount: 12000000, dueDate: `${currentYear}-11-15`, paidDate: null, status: "Pending" },
-      { billNo: "AP-2025-006", vendor: "Tata Steel Ltd., Jamshedpur", description: "Hot rolled steel coils", amount: 2800000, dueDate: `${currentYear}-07-05`, paidDate: `${currentYear}-07-01`, status: "Paid" },
-      { billNo: "AP-2025-007", vendor: "Shree Krishna Scaffolding Works", description: "Scaffolding rental - July", amount: 385000, dueDate: `${currentYear}-07-31`, paidDate: null, status: "Pending" },
-    ],
-  });
-
-  // --- Accounts Receivable ---
-  await db.accountsReceivable.createMany({
-    data: [
-      { invoiceNo: "AR-2025-001", client: "NTPC Limited", description: "Singrauli Unit-5 boiler work - Milestone 3", amount: 124500000, dueDate: `${currentYear}-07-31`, receivedDate: null, status: "Pending" },
-      { invoiceNo: "AR-2025-002", client: "Solar Energy Corporation of India", description: "Jaisalmer O&M - quarterly billing", amount: 32000000, dueDate: `${currentYear}-07-25`, receivedDate: `${currentYear}-07-20`, status: "Received" },
-      { invoiceNo: "AR-2025-003", client: "Uttarakhand Jal Vidyut Nigam Ltd.", description: "Uttarkashi hydro - tunnel excavation", amount: 87500000, dueDate: `${currentYear}-08-05`, receivedDate: null, status: "Pending" },
-      { invoiceNo: "AR-2025-004", client: "Gujarat Industries Power Company Ltd.", description: "Mundra BoP - civil works milestone", amount: 56000000, dueDate: `${currentYear}-08-10`, receivedDate: null, status: "Pending" },
-      { invoiceNo: "AR-2025-005", client: "NTPC Limited", description: "Singrauli Unit-5 - advance recovery", amount: 48750000, dueDate: `${currentYear}-06-30`, receivedDate: `${currentYear}-06-28`, status: "Received" },
-      { invoiceNo: "AR-2025-006", client: "Bihar State Electricity Board", description: "Chennai TG Island - mobilization advance", amount: 9560000, dueDate: `${currentYear}-08-30`, receivedDate: null, status: "Pending" },
-    ],
-  });
-
-  // --- Budget Items ---
-  await db.budgetItem.createMany({
-    data: [
-      { category: "Salaries & Wages", description: "Monthly payroll for all staff and contract employees", planned: 4200000, actual: 3890000, period: m6, status: "On Track" },
-      { category: "Materials & Consumables", description: "Steel, welding consumables, electrical items", planned: 6500000, actual: 7200000, period: m6, status: "Over Budget" },
-      { category: "Subcontractor Costs", description: "Scaffolding, civil, welding subcontractors", planned: 2800000, actual: 2650000, period: m6, status: "On Track" },
-      { category: "Plant & Machinery", description: "Crane hire, equipment maintenance, fuel", planned: 1800000, actual: 1750000, period: m6, status: "On Track" },
-      { category: "Site Overheads", description: "Power, water, camp maintenance, transport", planned: 950000, actual: 890000, period: m6, status: "On Track" },
-      { category: "Administration", description: "Office rent, IT, travel, communication", planned: 450000, actual: 420000, period: m6, status: "On Track" },
-      { category: "Safety & Training", description: "PPE, safety training, certifications", planned: 350000, actual: 380000, period: m6, status: "Over Budget" },
-      { category: "Contingency", description: "10% project contingency reserve", planned: 1750000, actual: 200000, period: m6, status: "On Track" },
-    ],
-  });
-
-  // --- Tax Records ---
-  await db.taxRecord.createMany({
-    data: [
-      { taxType: "GST (CGST + SGST)", period: m6, amount: 2250000, dueDate: `${currentYear}-07-20`, paidDate: `${currentYear}-07-18`, status: "Paid" },
-      { taxType: "GST (CGST + SGST)", period: m5, amount: 1980000, dueDate: `${currentYear}-06-20`, paidDate: `${currentYear}-06-19`, status: "Paid" },
-      { taxType: "TDS - Salaries", period: m6, amount: 26700, dueDate: `${currentYear}-07-31`, paidDate: null, status: "Pending" },
-      { taxType: "TDS - Contractors", period: m6, amount: 54000, dueDate: `${currentYear}-07-31`, paidDate: null, status: "Pending" },
-      { taxType: "Professional Tax", period: m6, amount: 9750, dueDate: `${currentYear}-07-31`, paidDate: null, status: "Pending" },
-      { taxType: "PF Contribution", period: m6, amount: 29040, dueDate: `${currentYear}-07-15`, paidDate: `${currentYear}-07-14`, status: "Paid" },
-    ],
-  });
-
-  // --- Journal Entries (recent transactions for table display) ---
-  await db.journalEntry.createMany({
-    data: [
-      { entryNo: "JE-2025-001", date: `${currentYear}-07-15`, account: "Cash & Bank", debit: 32000000, credit: 0, description: "AR received - SECI Jaisalmer O&M billing", reference: "AR-2025-002", status: "Posted" },
-      { entryNo: "JE-2025-002", date: `${currentYear}-07-14`, account: "Cash & Bank", debit: 0, credit: 3750000, description: "Payment to Bhel Industrial - steel plates", reference: "AP-2025-001", status: "Posted" },
-      { entryNo: "JE-2025-003", date: `${currentYear}-07-12`, account: "Materials & Consumables", debit: 2800000, credit: 0, description: "Purchase of hot rolled steel coils from Tata Steel", reference: "PO-2025-006", status: "Posted" },
-      { entryNo: "JE-2025-004", date: `${currentYear}-07-10`, account: "Salaries & Wages", debit: 266180, credit: 0, description: "Monthly payroll processing - net pay disbursement", reference: `PAY-${m6}`, status: "Posted" },
-      { entryNo: "JE-2025-005", date: `${currentYear}-07-08`, account: "Cash & Bank", debit: 0, credit: 890000, description: "Site overheads - power, water, transport for all sites", reference: "SOH-JUL", status: "Posted" },
-      { entryNo: "JE-2025-006", date: `${currentYear}-07-05`, account: "PF Payable", debit: 29040, credit: 0, description: "PF contribution payment for current month", reference: "PF-JUL", status: "Posted" },
-      { entryNo: "JE-2025-007", date: `${currentYear}-07-03`, account: "Subcontractor Costs", debit: 385000, credit: 0, description: "Scaffolding rental payment - Shree Krishna Works", reference: "AP-2025-007", status: "Posted" },
-      { entryNo: "JE-2025-008", date: `${currentYear}-07-01`, account: "Cash & Bank", debit: 0, credit: 2250000, description: "GST payment - CGST + SGST for June", reference: "GST-JUN", status: "Posted" },
-      { entryNo: "JE-2025-009", date: `${currentYear}-06-28`, account: "Cash & Bank", debit: 48750000, credit: 0, description: "AR received - NTPC Singrauli advance recovery", reference: "AR-2025-005", status: "Posted" },
-      { entryNo: "JE-2025-010", date: `${currentYear}-06-25`, account: "Plant & Machinery", debit: 450000, credit: 0, description: "DG set monthly service - Cummins service contract", reference: "EQ-SVC-JUN", status: "Posted" },
-      { entryNo: "JE-2025-011", date: `${currentYear}-06-20`, account: "Insurance", debit: 185000, credit: 0, description: "Workmen compensation insurance premium renewal", reference: "INS-2025-WC", status: "Posted" },
-      { entryNo: "JE-2025-012", date: `${currentYear}-06-15`, account: "Travel & Transport", debit: 67500, credit: 0, description: "Site mobilisation transport - equipment shifting to Chennai", reference: "TRP-CHN-001", status: "Draft" },
-      { entryNo: "JE-2025-013", date: `${currentYear}-06-10`, account: "Depreciation", debit: 0, credit: 95000, description: "Monthly depreciation - Tower crane, cranes, welding sets", reference: "DEPR-JUN", status: "Posted" },
-      { entryNo: "JE-2025-014", date: `${currentYear}-06-05`, account: "Cash & Bank", debit: 0, credit: 154000, description: "Tata Steel partial advance payment for HR coils", reference: "AP-2025-006-ADV", status: "Posted" },
-    ],
-  });
-
-  console.log("✅ Finance Module Data created.");
-
-  // ============================================================
-  // SEEDING COMPLETE
-  // ============================================================
-  console.log("🎉 Seed completed successfully!");
+      type: types[Math.floor(Math.random() * types.length)],
+      fromDate: `2025-${month}-${day}`,
+      toDate: `2025-${month}-${String(Math.min(fromDay + days, 28)).padStart(2, '0')}`,
+      days,
+      reason: reasons[Math.floor(Math.random() * reasons.length)],
+      status,
+      appliedDate: `2025-${month}-${String(Math.max(1, fromDay - 3)).padStart(2, '0')}`,
+    })
+  }
+  await prisma.leaveRequest.createMany({ data })
+  console.log(`  ✅ ${data.length} leave requests created`)
+}
+
+async function seedShiftSchedules(empIdMap: Map<string, string>) {
+  console.log('🌱 Seeding ShiftSchedules...')
+  const data = []
+  const shifts = ['Day 6AM-2PM', 'Day 2PM-10PM', 'Night 10PM-6AM']
+  const weeks = ['2025-06-16', '2025-06-23']
+
+  for (const emp of EMPLOYEES.filter(e => e.type === 'Worker' && e.status === 'Active').slice(0, 15)) {
+    for (const weekStart of weeks) {
+      data.push({
+        empId: empIdMap.get(emp.empId)!,
+        employeeName: emp.name,
+        site: emp.site,
+        shift: shifts[Math.floor(Math.random() * shifts.length)],
+        weekStart,
+      })
+    }
+  }
+  await prisma.shiftSchedule.createMany({ data })
+  console.log(`  ✅ ${data.length} shift schedules created`)
+}
+
+async function seedPayroll(empIdMap: Map<string, string>) {
+  console.log('🌱 Seeding Payroll...')
+  const data = []
+  const months = ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06']
+
+  for (const emp of EMPLOYEES) {
+    if (emp.status === 'Inactive') continue
+    const isStaff = emp.type === 'Staff'
+    const basic = isStaff ? (30000 + Math.floor(Math.random() * 70000)) : (12000 + Math.floor(Math.random() * 16000))
+    const hra = Math.round(basic * 0.4)
+    const isLastMonth = months.indexOf('2025-06') >= 0
+    const days = isLastMonth ? Math.min(new Date().getDate(), 30) : (25 + Math.floor(Math.random() * 5))
+
+    for (const month of months) {
+      const ot = isStaff ? 0 : Math.round(Math.random() * 5000)
+      const gross = basic + hra + ot
+      const pf = Math.round(gross * 0.12)
+      const esi = isStaff ? 0 : Math.round(gross * 0.0175)
+      const tds = gross > 50000 ? Math.round(gross * 0.1) : 0
+      const netPay = gross - pf - esi - tds
+      const status = month === '2025-06' ? 'Pending' : 'Processed'
+
+      data.push({ empId: empIdMap.get(emp.empId)!, month, days, basic, hra, ot, gross, pf, esi, tds, netPay, status })
+    }
+  }
+
+  const batchSize = 100
+  for (let i = 0; i < data.length; i += batchSize) {
+    await prisma.payroll.createMany({ data: data.slice(i, i + batchSize) })
+  }
+  console.log(`  ✅ ${data.length} payroll records created`)
+}
+
+async function seedExpenses(empIdMap: Map<string, string>) {
+  console.log('🌱 Seeding Expenses...')
+  const categories = ['Travel', 'Food & Accommodation', 'Material Purchase', 'Equipment Rental', 'Vehicle Fuel', 'Communication', 'Site Maintenance', 'Safety Equipment', 'Office Supplies', 'Client Entertainment']
+  const statuses = ['Pending', 'Approved', 'Approved', 'Rejected', 'Pending']
+  const data = []
+
+  const staffEmps = EMPLOYEES.filter(e => e.type === 'Staff')
+  const siteNames = SITES.map(s => s.name)
+
+  for (let i = 0; i < 25; i++) {
+    const emp = staffEmps[i % staffEmps.length]
+    const month = String(1 + Math.floor(Math.random() * 6)).padStart(2, '0')
+    const day = String(1 + Math.floor(Math.random() * 28)).padStart(2, '0')
+    data.push({
+      claimNo: `EXP-2025-${String(i + 1).padStart(4, '0')}`,
+      empId: empIdMap.get(emp.empId)!,
+      category: categories[Math.floor(Math.random() * categories.length)],
+      amount: 500 + Math.floor(Math.random() * 45000),
+      project: siteNames[Math.floor(Math.random() * siteNames.length)],
+      date: `2025-${month}-${day}`,
+      status: statuses[Math.floor(Math.random() * statuses.length)],
+    })
+  }
+  await prisma.expense.createMany({ data })
+  console.log(`  ✅ ${data.length} expenses created`)
+}
+
+async function seedPurchaseOrders() {
+  console.log('🌱 Seeding PurchaseOrders...')
+  const vendors = ['Tata Steel', 'UltraTech Cement', 'KEI Industries', 'Havells India', 'L&T Equipments', 'JCB India', 'Godrej Locks', 'Asian Paints', 'Finolex Cables', 'KEC International']
+  const items = ['TMT Bars Fe500 (500 MT)', 'OPC 53 Grade Cement (1000 Bags)', 'HT XLPE Cables (3x240mm)', 'LED Panel Lights (200 Nos)', 'Tower Crane TC-5610', 'Backhoe Loader 3DX', 'Fire Rated Doors (50 Nos)', 'Exterior Emulsion (500 Ltrs)', 'LT Cables (4-core)', 'Transformer 630KVA']
+  const statuses = ['Open', 'Open', 'Delivered', 'Delivered', 'Partial', 'Open', 'Cancelled']
+  const data = []
+
+  const siteNames = SITES.map(s => s.name)
+  for (let i = 0; i < 15; i++) {
+    const month = String(1 + Math.floor(Math.random() * 6)).padStart(2, '0')
+    data.push({
+      poNo: `PO-2025-${String(i + 1).padStart(4, '0')}`,
+      vendor: vendors[i % vendors.length],
+      item: items[i % items.length],
+      amount: 50000 + Math.floor(Math.random() * 2500000),
+      project: siteNames[Math.floor(Math.random() * siteNames.length)],
+      delivery: `2025-${String(Math.min(parseInt(month) + 1, 12)).padStart(2, '0')}-15`,
+      grn: statuses[i % statuses.length] === 'Delivered' ? 'Received' : statuses[i % statuses.length] === 'Partial' ? 'Partial' : 'Awaited',
+      status: statuses[i % statuses.length],
+    })
+  }
+  await prisma.purchaseOrder.createMany({ data })
+  console.log(`  ✅ ${data.length} purchase orders created`)
+}
+
+async function seedInvoices() {
+  console.log('🌱 Seeding Invoices...')
+  const clients = ['MMRDA', 'DLF Ltd', 'Infosys Ltd', 'NHAI', 'Chennai Port Trust', 'MIDC', 'Kolkata Port Trust', 'Gujarat Energy']
+  const statuses = ['Under Review', 'Approved', 'Approved', 'Paid', 'Overdue', 'Paid']
+  const amounts = ['₹12,45,00,000', '₹8,90,00,000', '₹4,56,00,000', '₹15,20,00,000', '₹2,34,00,000', '₹6,78,00,000', '₹3,45,00,000', '₹1,89,00,000', '₹5,67,00,000', '₹9,12,00,000', '₹7,23,00,000', '₹11,56,00,000', '₹3,89,00,000', '₹6,45,00,000', '₹8,34,00,000']
+  const data = []
+
+  const siteNames = SITES.map(s => s.name)
+  for (let i = 0; i < 15; i++) {
+    const month = String(1 + Math.floor(Math.random() * 5)).padStart(2, '0')
+    const day = String(1 + Math.floor(Math.random() * 25)).padStart(2, '0')
+    data.push({
+      invNo: `INV-2025-${String(i + 1).padStart(4, '0')}`,
+      client: clients[i % clients.length],
+      project: siteNames[i % siteNames.length],
+      amount: amounts[i],
+      date: `2025-${month}-${day}`,
+      dueDate: `2025-${String(Math.min(parseInt(month) + 1, 12)).padStart(2, '0')}-28`,
+      status: statuses[i % statuses.length],
+    })
+  }
+  await prisma.invoice.createMany({ data })
+  console.log(`  ✅ ${data.length} invoices created`)
+}
+
+async function seedWorkPermits() {
+  console.log('🌱 Seeding WorkPermits...')
+  const data = [
+    { permitNo: 'PTW-2025-001', type: 'Hot Work', location: 'Mumbai Metro Line 7', issuedTo: 'Mohan Lal', expiry: '2025-07-15', status: 'Active', description: 'Welding at pier 12', precautions: 'Fire extinguisher, fire watcher, gas testing' },
+    { permitNo: 'PTW-2025-002', type: 'Confined Space', location: 'Delhi Smart City Township', issuedTo: 'Ramu Naik', expiry: '2025-07-10', status: 'Active', description: 'Manhole entry for drainage work', precautions: 'Gas monitor, rescue team standby, ventilation' },
+    { permitNo: 'PTW-2025-003', type: 'Height Work', location: 'Bangalore IT Park Phase 3', issuedTo: 'Krishna Murthy', expiry: '2025-06-30', status: 'Expired', description: 'Rebar fixing at Level 8', precautions: 'Safety harness, toe board, safety net' },
+    { permitNo: 'PTW-2025-004', type: 'Electrical', location: 'Chennai Port Expansion', issuedTo: 'Lakshmanan', expiry: '2025-07-20', status: 'Active', description: 'Cable termination at panel board', precautions: 'LOTO, insulated tools, PPE' },
+    { permitNo: 'PTW-2025-005', type: 'Excavation', location: 'Hyderabad Expressway', issuedTo: 'Naveen Reddy', expiry: '2025-07-25', status: 'Active', description: 'Trench excavation for cable laying', precautions: 'Shoring, barricading, competent person' },
+    { permitNo: 'PTW-2025-006', type: 'Crane Lift', location: 'Mumbai Metro Line 7', issuedTo: 'Ravi Shankar', expiry: '2025-07-18', status: 'Active', description: 'Steel girder placement', precautions: 'Rigger, signalman, exclusion zone' },
+    { permitNo: 'PTW-2025-007', type: 'Demolition', location: 'Kolkata Bridge Repair', issuedTo: 'Biplab Das', expiry: '2025-08-05', status: 'Active', description: 'Partial demolition of expansion joint', precautions: 'Dust control, debris net, PPE' },
+    { permitNo: 'PTW-2025-008', type: 'Hot Work', location: 'Pune Industrial Complex', issuedTo: 'Ashok Mehta', expiry: '2025-06-20', status: 'Expired', description: 'Gas cutting for structural modification', precautions: 'Fire extinguisher, clear area, fire blanket' },
+  ]
+  await prisma.workPermit.createMany({ data })
+  console.log(`  ✅ ${data.length} work permits created`)
+}
+
+async function seedIncidents() {
+  console.log('🌱 Seeding Incidents...')
+  const data = [
+    { refNo: 'INC-2025-001', date: '2025-03-15', site: 'Mumbai Metro Line 7', type: 'Near Miss', severity: 'Low', person: 'Mohan Lal', status: 'Closed', description: 'Tool fell from scaffolding, no injury', action: 'Tool lanyard rule enforced, toolbox talk conducted' },
+    { refNo: 'INC-2025-002', date: '2025-04-22', site: 'Delhi Smart City Township', type: 'First Aid', severity: 'Low', person: 'Ramu Naik', status: 'Closed', description: 'Minor cut on hand while handling rebar', action: 'First aid provided, gloves distributed' },
+    { refNo: 'INC-2025-003', date: '2025-05-10', site: 'Hyderabad Expressway', type: 'Lost Time Injury', severity: 'Medium', person: 'Pradeep Yadav', status: 'Investigating', description: 'Back injury while lifting heavy material', action: 'Medical leave granted, ergonomic assessment pending' },
+    { refNo: 'INC-2025-004', date: '2025-05-28', site: 'Chennai Port Expansion', type: 'Property Damage', severity: 'Medium', person: 'Thangavelu', status: 'Investigating', description: 'Concrete batcher malfunction causing material wastage', action: 'Equipment inspection scheduled, vendor notified' },
+    { refNo: 'INC-2025-005', date: '2025-06-05', site: 'Bangalore IT Park Phase 3', type: 'Near Miss', severity: 'Low', person: 'Dinesh Kumar', status: 'Closed', description: 'Scaffolding swayed during high winds', action: 'Scaffolding anchored, wind speed monitoring added' },
+    { refNo: 'INC-2025-006', date: '2025-06-12', site: 'Kolkata Bridge Repair', type: 'Environmental', severity: 'Medium', person: 'Biplab Das', status: 'Open', description: 'Cement spillage into drainage channel', action: 'Cleanup in progress, containment barriers installed' },
+  ]
+  await prisma.incident.createMany({ data })
+  console.log(`  ✅ ${data.length} incidents created`)
+}
+
+async function seedEquipment() {
+  console.log('🌱 Seeding Equipment...')
+  const data = [
+    { name: 'Tower Crane TC-5610', eqId: 'EQ-001', site: 'Mumbai Metro Line 7', status: 'Operational', lastPM: '2025-05-15', nextPM: '2025-08-15', utilization: 82, assignedTo: 'Ravi Shankar' },
+    { name: 'Excavator 320D', eqId: 'EQ-002', site: 'Hyderabad Expressway', status: 'Operational', lastPM: '2025-05-20', nextPM: '2025-08-20', utilization: 78, assignedTo: 'Pradeep Yadav' },
+    { name: 'Bar Bending Machine', eqId: 'EQ-003', site: 'Delhi Smart City Township', status: 'Operational', lastPM: '2025-06-01', nextPM: '2025-09-01', utilization: 65, assignedTo: 'Ramu Naik' },
+    { name: 'Concrete Mixer 10/7', eqId: 'EQ-004', site: 'Bangalore IT Park Phase 3', status: 'Under Repair', lastPM: '2025-04-10', nextPM: '2025-07-10', issue: 'Drum bearing worn out', downSince: '2025-06-18', etaRepair: '2025-07-05', utilization: 45 },
+    { name: 'Generator 500KVA', eqId: 'EQ-005', site: 'Chennai Port Expansion', status: 'Operational', lastPM: '2025-05-25', nextPM: '2025-08-25', utilization: 90, assignedTo: 'Lakshmanan' },
+    { name: 'JCB 3DX Backhoe', eqId: 'EQ-006', site: 'Kolkata Bridge Repair', status: 'Operational', lastPM: '2025-06-01', nextPM: '2025-09-01', utilization: 72, assignedTo: 'Biplab Das' },
+    { name: 'Tower Crane QTZ80', eqId: 'EQ-007', site: 'Delhi Smart City Township', status: 'Operational', lastPM: '2025-05-10', nextPM: '2025-08-10', utilization: 88, assignedTo: 'Ravi Shankar' },
+    { name: 'Welding Machine 400A', eqId: 'EQ-008', site: 'Mumbai Metro Line 7', status: 'Operational', lastPM: '2025-06-05', nextPM: '2025-09-05', utilization: 70, assignedTo: 'Suresh Yadav' },
+    { name: 'Vibratory Roller 10T', eqId: 'EQ-009', site: 'Hyderabad Expressway', status: 'Operational', lastPM: '2025-04-20', nextPM: '2025-07-20', utilization: 60 },
+    { name: 'Transit Mixer 6m3', eqId: 'EQ-010', site: 'Pune Industrial Complex', status: 'Idle', lastPM: '2025-05-30', nextPM: '2025-08-30', utilization: 15 },
+    { name: 'Scaffolding Set (100 units)', eqId: 'EQ-011', site: 'Bangalore IT Park Phase 3', status: 'Operational', lastPM: '2025-06-10', nextPM: '2025-09-10', utilization: 95 },
+    { name: 'Dewatering Pump 5HP', eqId: 'EQ-012', site: 'Kolkata Bridge Repair', status: 'Under Repair', lastPM: '2025-05-15', nextPM: '2025-08-15', issue: 'Seal leakage', downSince: '2025-06-20', etaRepair: '2025-06-28', utilization: 55 },
+  ]
+  await prisma.equipment.createMany({ data })
+  console.log(`  ✅ ${data.length} equipment created`)
+}
+
+async function seedSubcontractors() {
+  console.log('🌱 Seeding Subcontractors...')
+  const data = [
+    { name: 'Shree Ram Constructions', trade: 'Civil Works', workers: 35, site: 'Mumbai Metro Line 7', pfReg: 'Registered', esiReg: 'Registered', labourLic: 'Valid', compliance: 'Compliant' },
+    { name: 'Krishna Electricals', trade: 'Electrical', workers: 12, site: 'Delhi Smart City Township', pfReg: 'Registered', esiReg: 'Pending', labourLic: 'Valid', compliance: 'Partially Compliant' },
+    { name: 'Singh & Sons Plumbing', trade: 'Plumbing & MEP', workers: 18, site: 'Bangalore IT Park Phase 3', pfReg: 'Registered', esiReg: 'Registered', labourLic: 'Valid', compliance: 'Compliant' },
+    { name: 'Reddy Steel Fabricators', trade: 'Structural Steel', workers: 25, site: 'Hyderabad Expressway', pfReg: 'Pending', esiReg: 'Pending', labourLic: 'Expired', compliance: 'Non-Compliant' },
+    { name: 'Patel Painting Works', trade: 'Painting & Finishing', workers: 15, site: 'Chennai Port Expansion', pfReg: 'Registered', esiReg: 'Registered', labourLic: 'Valid', compliance: 'Compliant' },
+    { name: 'Das Earthmovers', trade: 'Earthwork', workers: 8, site: 'Kolkata Bridge Repair', pfReg: 'Registered', esiReg: 'Pending', labourLic: 'Valid', compliance: 'Partially Compliant' },
+    { name: 'Khan Welding Services', trade: 'Welding & Cutting', workers: 10, site: 'Mumbai Metro Line 7', pfReg: 'Pending', esiReg: 'Pending', labourLic: 'Pending', compliance: 'Non-Compliant' },
+    { name: 'Nair Interiors', trade: 'False Ceiling & Partitions', workers: 20, site: 'Pune Industrial Complex', pfReg: 'Registered', esiReg: 'Registered', labourLic: 'Valid', compliance: 'Compliant' },
+  ]
+  await prisma.subcontractor.createMany({ data })
+  console.log(`  ✅ ${data.length} subcontractors created`)
+}
+
+async function seedJobOpenings() {
+  console.log('🌱 Seeding JobOpenings...')
+  const data = [
+    { position: 'Site Engineer - Civil', site: 'Mumbai Metro Line 7', openings: 2, applications: 8, priority: 'High', status: 'Open' },
+    { position: 'QA/QC Inspector', site: 'Chennai Port Expansion', openings: 1, applications: 5, priority: 'Medium', status: 'Open' },
+    { position: 'Safety Officer', site: 'Hyderabad Expressway', openings: 1, applications: 3, priority: 'High', status: 'Open' },
+    { position: 'Electrician (Skilled)', site: 'Delhi Smart City Township', openings: 5, applications: 12, priority: 'Medium', status: 'Open' },
+    { position: 'Crane Operator', site: 'Bangalore IT Park Phase 3', openings: 2, applications: 4, priority: 'High', status: 'Open' },
+    { position: 'Surveyor', site: 'Hyderabad Expressway', openings: 1, applications: 6, priority: 'Medium', status: 'Closed' },
+    { position: 'Accountant', site: 'Mumbai Metro Line 7', openings: 1, applications: 10, priority: 'Low', status: 'Open' },
+  ]
+  await prisma.jobOpening.createMany({ data })
+  console.log(`  ✅ ${data.length} job openings created`)
+}
+
+async function seedCertifications(empIdMap: Map<string, string>) {
+  console.log('🌱 Seeding Certifications...')
+  const data = [
+    { empId: empIdMap.get('VC-001')!, employeeName: 'Rajesh Kumar', name: 'PMP Certification', issuedBy: 'PMI', issueDate: '2022-03-10', expiryDate: '2025-03-10', status: 'Valid' },
+    { empId: empIdMap.get('VC-005')!, employeeName: 'Karthik Rajan', name: 'ISO 9001 Lead Auditor', issuedBy: 'Bureau Veritas', issueDate: '2023-06-15', expiryDate: '2026-06-15', status: 'Valid' },
+    { empId: empIdMap.get('VC-012')!, employeeName: 'Manish Tiwari', name: 'NEBOSH IGC', issuedBy: 'NEBOSH UK', issueDate: '2023-01-20', expiryDate: '2026-01-20', status: 'Valid' },
+    { empId: empIdMap.get('VC-015')!, employeeName: 'Mohan Lal', name: 'ITI Electrician', issuedBy: 'NCVT', issueDate: '2019-05-10', expiryDate: '2029-05-10', status: 'Valid' },
+    { empId: empIdMap.get('VC-016')!, employeeName: 'Suresh Yadav', name: 'ITI Welder', issuedBy: 'NCVT', issueDate: '2020-08-15', expiryDate: '2030-08-15', status: 'Valid' },
+    { empId: empIdMap.get('VC-022')!, employeeName: 'Ravi Shankar', name: 'Heavy Vehicle License', issuedBy: 'RTO Mumbai', issueDate: '2021-03-01', expiryDate: '2026-03-01', status: 'Valid' },
+    { empId: empIdMap.get('VC-023')!, employeeName: 'Pradeep Yadav', name: 'Heavy Vehicle License', issuedBy: 'RTO Hyderabad', issueDate: '2022-06-10', expiryDate: '2027-06-10', status: 'Valid' },
+    { empId: empIdMap.get('VC-003')!, employeeName: 'Priya Nair', name: 'M.Tech Structural Engg', issuedBy: 'VTU Belgaum', issueDate: '2021-07-30', expiryDate: '2031-07-30', status: 'Valid' },
+    { empId: empIdMap.get('VC-010')!, employeeName: 'Sanjay Gupta', name: 'Chartered Accountant', issuedBy: 'ICAI', issueDate: '2018-11-15', expiryDate: '2025-11-15', status: 'Valid' },
+    { empId: empIdMap.get('VC-001')!, employeeName: 'Rajesh Kumar', name: 'LEED AP', issuedBy: 'USGBC', issueDate: '2023-09-01', expiryDate: '2026-09-01', status: 'Valid' },
+  ]
+  await prisma.certification.createMany({ data })
+  console.log(`  ✅ ${data.length} certifications created`)
+}
+
+async function seedTrainingSessions() {
+  console.log('🌱 Seeding TrainingSessions...')
+  const data = [
+    { title: 'Fire Safety & Evacuation Drill', site: 'Mumbai Metro Line 7', trainer: 'Manish Tiwari', date: '2025-06-10', duration: '2 hours', attendees: 45, status: 'Completed' },
+    { title: 'Working at Heights - Safety', site: 'Bangalore IT Park Phase 3', trainer: 'Manish Tiwari', date: '2025-06-15', duration: '3 hours', attendees: 32, status: 'Completed' },
+    { title: 'First Aid Training', site: 'Delhi Smart City Township', trainer: 'Red Cross India', date: '2025-06-20', duration: '4 hours', attendees: 55, status: 'Scheduled' },
+    { title: 'Concrete Quality Control', site: 'Hyderabad Expressway', trainer: 'Karthik Rajan', date: '2025-06-25', duration: '2 hours', attendees: 28, status: 'Scheduled' },
+    { title: 'Electrical Safety - LOTO', site: 'Chennai Port Expansion', trainer: 'Meera Patel', date: '2025-05-28', duration: '2 hours', attendees: 22, status: 'Completed' },
+    { title: 'Scaffold Safety Awareness', site: 'Mumbai Metro Line 7', trainer: 'Manish Tiwari', date: '2025-07-02', duration: '2 hours', attendees: 40, status: 'Scheduled' },
+    { title: 'ERP System Training', site: 'Mumbai Metro Line 7', trainer: 'Rahul Verma', date: '2025-06-05', duration: '3 hours', attendees: 14, status: 'Completed' },
+    { title: 'New Machine Operation - Batching Plant', site: 'Delhi Smart City Township', trainer: 'Equipment Vendor', date: '2025-07-08', duration: '4 hours', attendees: 15, status: 'Scheduled' },
+  ]
+  await prisma.trainingSession.createMany({ data })
+  console.log(`  ✅ ${data.length} training sessions created`)
+}
+
+async function seedInventory() {
+  console.log('🌱 Seeding Inventory...')
+  const data = [
+    { itemCode: 'MAT-001', name: 'OPC 53 Grade Cement', category: 'Cement', unit: 'Bags', currentStock: 2500, minStock: 500, maxStock: 5000, unitCost: 380, warehouse: 'Central Store Mumbai', status: 'In Stock' },
+    { itemCode: 'MAT-002', name: 'TMT Fe500D 12mm Rebar', category: 'Steel', unit: 'MT', currentStock: 85, minStock: 20, maxStock: 200, unitCost: 52000, warehouse: 'Steel Yard Mumbai', status: 'In Stock' },
+    { itemCode: 'MAT-003', name: 'TMT Fe500D 16mm Rebar', category: 'Steel', unit: 'MT', currentStock: 120, minStock: 30, maxStock: 250, unitCost: 53500, warehouse: 'Steel Yard Mumbai', status: 'In Stock' },
+    { itemCode: 'MAT-004', name: 'TMT Fe500D 20mm Rebar', category: 'Steel', unit: 'MT', currentStock: 45, minStock: 15, maxStock: 150, unitCost: 55000, warehouse: 'Steel Yard Delhi', status: 'In Stock' },
+    { itemCode: 'MAT-005', name: 'M Sand (River Sand)', category: 'Aggregates', unit: 'Cu.M', currentStock: 320, minStock: 100, maxStock: 600, unitCost: 1200, warehouse: 'Site Store Delhi', status: 'In Stock' },
+    { itemCode: 'MAT-006', name: '20mm Aggregate', category: 'Aggregates', unit: 'Cu.M', currentStock: 180, minStock: 80, maxStock: 400, unitCost: 950, warehouse: 'Site Store Delhi', status: 'In Stock' },
+    { itemCode: 'MAT-007', name: 'HT XLPE Cable 3x240mm', category: 'Electrical', unit: 'Meters', currentStock: 450, minStock: 200, maxStock: 1000, unitCost: 1800, warehouse: 'Electrical Store Chennai', status: 'In Stock' },
+    { itemCode: 'MAT-008', name: 'PVC Conduit 32mm', category: 'Electrical', unit: 'Nos', currentStock: 25, minStock: 50, maxStock: 500, unitCost: 45, warehouse: 'Electrical Store Chennai', status: 'Low Stock' },
+    { itemCode: 'MAT-009', name: 'CPVC Pipe 25mm', category: 'Plumbing', unit: 'Nos', currentStock: 12, minStock: 100, maxStock: 500, unitCost: 85, warehouse: 'Site Store Bangalore', status: 'Low Stock' },
+    { itemCode: 'MAT-010', name: 'Plywood 12mm BWR', category: 'Formwork', unit: 'Sheets', currentStock: 340, minStock: 100, maxStock: 800, unitCost: 650, warehouse: 'Central Store Mumbai', status: 'In Stock' },
+    { itemCode: 'MAT-011', name: 'Mild Steel Plate 6mm', category: 'Steel', unit: 'KG', currentStock: 2200, minStock: 500, maxStock: 5000, unitCost: 62, warehouse: 'Steel Yard Mumbai', status: 'In Stock' },
+    { itemCode: 'MAT-012', name: 'Welding Rod E6013 3.2mm', category: 'Welding', unit: 'KG', currentStock: 180, minStock: 50, maxStock: 500, unitCost: 95, warehouse: 'Site Store Mumbai', status: 'In Stock' },
+    { itemCode: 'MAT-013', name: 'Safety Helmet', category: 'Safety', unit: 'Nos', currentStock: 85, minStock: 30, maxStock: 200, unitCost: 220, warehouse: 'Safety Store Mumbai', status: 'In Stock' },
+    { itemCode: 'MAT-014', name: 'Safety Harness', category: 'Safety', unit: 'Nos', currentStock: 8, minStock: 20, maxStock: 100, unitCost: 2800, warehouse: 'Safety Store Mumbai', status: 'Low Stock' },
+    { itemCode: 'MAT-015', name: 'LED Panel Light 2x2', category: 'Electrical', unit: 'Nos', currentStock: 120, minStock: 50, maxStock: 300, unitCost: 850, warehouse: 'Electrical Store Mumbai', status: 'In Stock' },
+    { itemCode: 'MAT-016', name: ' Bearing NU 312', category: 'Mechanical', unit: 'Nos', currentStock: 4, minStock: 5, maxStock: 20, unitCost: 4500, warehouse: 'Mechanical Store Delhi', status: 'Low Stock' },
+    { itemCode: 'MAT-017', name: 'Hydraulic Oil 68', category: 'Mechanical', unit: 'Litres', currentStock: 200, minStock: 50, maxStock: 500, unitCost: 280, warehouse: 'Mechanical Store Delhi', status: 'In Stock' },
+    { itemCode: 'MAT-018', name: 'Fire Extinguisher ABC 9KG', category: 'Safety', unit: 'Nos', currentStock: 32, minStock: 10, maxStock: 50, unitCost: 1800, warehouse: 'Safety Store Mumbai', status: 'In Stock' },
+    { itemCode: 'MAT-019', name: 'Gypsum Board 12mm', category: 'Finishing', unit: 'Sheets', currentStock: 0, minStock: 100, maxStock: 500, unitCost: 520, warehouse: 'Site Store Pune', status: 'Out of Stock' },
+    { itemCode: 'MAT-020', name: 'Primer 20 Litres', category: 'Painting', unit: 'Litres', currentStock: 320, minStock: 100, maxStock: 500, unitCost: 210, warehouse: 'Site Store Chennai', status: 'In Stock' },
+  ]
+  await prisma.inventoryItem.createMany({ data })
+  console.log(`  ✅ ${data.length} inventory items created`)
+}
+
+async function seedStockMovements() {
+  console.log('🌱 Seeding StockMovements...')
+  const types = ['Inward', 'Inward', 'Inward', 'Outward', 'Outward', 'Transfer']
+  const data = []
+  const warehouses = ['Central Store Mumbai', 'Steel Yard Mumbai', 'Site Store Delhi', 'Electrical Store Chennai', 'Site Store Bangalore']
+  const items = [
+    { itemCode: 'MAT-001', itemName: 'OPC 53 Grade Cement' },
+    { itemCode: 'MAT-002', itemName: 'TMT Fe500D 12mm Rebar' },
+    { itemCode: 'MAT-003', itemName: 'TMT Fe500D 16mm Rebar' },
+    { itemCode: 'MAT-005', itemName: 'M Sand (River Sand)' },
+    { itemCode: 'MAT-007', itemName: 'HT XLPE Cable 3x240mm' },
+    { itemCode: 'MAT-010', itemName: 'Plywood 12mm BWR' },
+    { itemCode: 'MAT-012', itemName: 'Welding Rod E6013 3.2mm' },
+    { itemCode: 'MAT-013', itemName: 'Safety Helmet' },
+  ]
+
+  for (let i = 0; i < 35; i++) {
+    const month = String(1 + Math.floor(Math.random() * 6)).padStart(2, '0')
+    const day = String(1 + Math.floor(Math.random() * 28)).padStart(2, '0')
+    const type = types[Math.floor(Math.random() * types.length)]
+    const item = items[i % items.length]
+    data.push({
+      itemCode: item.itemCode,
+      itemName: item.itemName,
+      type,
+      quantity: 5 + Math.floor(Math.random() * 200),
+      fromWarehouse: type === 'Outward' || type === 'Transfer' ? warehouses[Math.floor(Math.random() * warehouses.length)] : undefined,
+      toWarehouse: type === 'Inward' || type === 'Transfer' ? warehouses[Math.floor(Math.random() * warehouses.length)] : undefined,
+      reference: `MR-${2025}${month}${String(Math.floor(Math.random() * 999)).padStart(3, '0')}`,
+      date: `2025-${month}-${day}`,
+      remarks: type === 'Transfer' ? 'Site transfer' : type === 'Inward' ? 'PO receipt' : 'Site consumption',
+    })
+  }
+  await prisma.stockMovement.createMany({ data })
+  console.log(`  ✅ ${data.length} stock movements created`)
+}
+
+async function seedCustomers() {
+  console.log('🌱 Seeding Customers...')
+  const data = [
+    { code: 'CUS-001', name: 'MMRDA', contactPerson: 'Sunil Joshi', email: 'sunil.j@mmrda.gov.in', phone: '022-26591000', address: 'MMRDA Building, Bandra Kurla Complex', gst: '27AADCM1234F1ZP', city: 'Mumbai', state: 'Maharashtra', totalOrders: 8, totalRevenue: 245000000, status: 'Active' },
+    { code: 'CUS-002', name: 'DLF Ltd', contactPerson: 'Anand Sharma', email: 'anand.s@dlf.in', phone: '011-26621000', address: 'DLF Centre, Shivaji Marg', gst: '07AADCD5678G1Z3', city: 'New Delhi', state: 'Delhi', totalOrders: 5, totalRevenue: 890000000, status: 'Active' },
+    { code: 'CUS-003', name: 'Infosys Ltd', contactPerson: 'Krishna Prasad', email: 'krishna.p@infosys.com', phone: '080-28521000', address: 'Electronics City', gst: '29AABCI1234F1ZP', city: 'Bangalore', state: 'Karnataka', totalOrders: 3, totalRevenue: 560000000, status: 'Active' },
+    { code: 'CUS-004', name: 'NHAI', contactPerson: 'R.K. Singh', email: 'rk.singh@nhai.gov.in', phone: '011-23781000', address: 'NHAI HQ, New Delhi', gst: '07AAAGH5678F1Z3', city: 'New Delhi', state: 'Delhi', totalOrders: 2, totalRevenue: 1200000000, status: 'Active' },
+    { code: 'CUS-005', name: 'Chennai Port Trust', contactPerson: 'Murugan', email: 'murugan@chennaiport.gov.in', phone: '044-25361000', address: 'Rajaji Salai, Chennai', gst: '33AAACH1234F1ZP', city: 'Chennai', state: 'Tamil Nadu', totalOrders: 2, totalRevenue: 780000000, status: 'Active' },
+    { code: 'CUS-006', name: 'Gujarat Energy Ltd', contactPerson: 'Rakesh Patel', email: 'rakesh.p@gujaratenergy.in', phone: '079-26581000', address: 'Energy House, Gandhinagar', gst: '24AABCG5678F1Z3', city: 'Ahmedabad', state: 'Gujarat', totalOrders: 1, totalRevenue: 185000000, status: 'Active' },
+    { code: 'CUS-007', name: 'MIDC', contactPerson: 'Suresh Kulkarni', email: 'suresh.k@midc.gov.in', phone: '020-26121000', address: 'MIDC Bhavan, Pune', gst: '27AABCM1234F1ZP', city: 'Pune', state: 'Maharashtra', totalOrders: 1, totalRevenue: 340000000, status: 'Active' },
+    { code: 'CUS-008', name: 'L&T Construction', contactPerson: 'Venkatesh', email: 'venkatesh@lntecc.com', phone: '044-23751000', address: 'L&T Campus, Chennai', gst: '33AABCL1234F1ZP', city: 'Chennai', state: 'Tamil Nadu', totalOrders: 4, totalRevenue: 650000000, status: 'Active' },
+  ]
+  await prisma.customer.createMany({ data })
+  console.log(`  ✅ ${data.length} customers created`)
+}
+
+async function seedSalesOrders() {
+  console.log('🌱 Seeding SalesOrders...')
+  const data = [
+    { soNo: 'SO-2025-001', customer: 'L&T Construction', project: 'Chennai Metro', item: 'Pre-cast Girders', quantity: 50, unitPrice: 450000, amount: 22500000, orderDate: '2025-01-15', deliveryDate: '2025-04-15', status: 'Delivered' },
+    { soNo: 'SO-2025-002', customer: 'MMRDA', project: 'Mumbai Metro', item: 'Steel Bridge Sections', quantity: 20, unitPrice: 850000, amount: 17000000, orderDate: '2025-02-10', deliveryDate: '2025-05-20', status: 'Delivered' },
+    { soNo: 'SO-2025-003', customer: 'DLF Ltd', project: 'Smart City', item: 'Pile Foundation Work', quantity: 100, unitPrice: 120000, amount: 12000000, orderDate: '2025-03-05', deliveryDate: '2025-07-30', status: 'In Progress' },
+    { soNo: 'SO-2025-004', customer: 'NHAI', project: 'Hyderabad ORR', item: 'Crash Barriers', quantity: 500, unitPrice: 18000, amount: 9000000, orderDate: '2025-03-20', deliveryDate: '2025-06-25', status: 'Shipped' },
+    { soNo: 'SO-2025-005', customer: 'Infosys Ltd', project: 'IT Park', item: 'Structural Steel Fabrication', quantity: 200, unitPrice: 75000, amount: 15000000, orderDate: '2025-04-12', deliveryDate: '2025-08-15', status: 'In Progress' },
+    { soNo: 'SO-2025-006', customer: 'L&T Construction', project: 'Mumbai Trans Harbour', item: 'Concrete Blocks', quantity: 10000, unitPrice: 45, amount: 450000, orderDate: '2025-04-25', deliveryDate: '2025-05-20', status: 'Delivered' },
+    { soNo: 'SO-2025-007', customer: 'Gujarat Energy', project: 'Solar Farm', item: 'Solar Panel Mounting Structure', quantity: 5000, unitPrice: 3500, amount: 17500000, orderDate: '2025-05-08', deliveryDate: '2025-07-08', status: 'In Progress' },
+    { soNo: 'SO-2025-008', customer: 'MIDC', project: 'Industrial Complex', item: 'Pre-engineered Building', quantity: 3, unitPrice: 5500000, amount: 16500000, orderDate: '2025-05-15', deliveryDate: '2025-10-15', status: 'Pending' },
+    { soNo: 'SO-2025-009', customer: 'NHAI', project: 'Delhi-Agra Expressway', item: 'Noise Barriers', quantity: 300, unitPrice: 25000, amount: 7500000, orderDate: '2025-06-01', deliveryDate: '2025-09-01', status: 'Pending' },
+    { soNo: 'SO-2025-010', customer: 'Chennai Port Trust', project: 'Port Expansion', item: 'Dolphins & Fenders', quantity: 15, unitPrice: 950000, amount: 14250000, orderDate: '2025-06-10', deliveryDate: '2025-09-30', status: 'Pending' },
+  ]
+  await prisma.salesOrder.createMany({ data })
+  console.log(`  ✅ ${data.length} sales orders created`)
+}
+
+async function seedCrmContacts() {
+  console.log('🌱 Seeding CRM Contacts...')
+  const data = [
+    { name: 'Sunil Joshi', company: 'MMRDA', designation: 'Chief Engineer', email: 'sunil.j@mmrda.gov.in', phone: '9898980001', source: 'Referral', stage: 'Client', value: 245000000, lastContact: '2025-06-18', notes: 'Key decision maker for Metro projects', status: 'Active' },
+    { name: 'Anand Sharma', company: 'DLF Ltd', designation: 'VP Construction', email: 'anand.s@dlf.in', phone: '9898980002', source: 'Cold Call', stage: 'Client', value: 890000000, lastContact: '2025-06-15', notes: 'Interested in township expansion phase 2', status: 'Active' },
+    { name: 'Priya Kapoor', company: 'Adani Realty', designation: 'Project Director', email: 'priya.k@adani.com', phone: '9898980003', source: 'LinkedIn', stage: 'Proposal', value: 150000000, lastContact: '2025-06-20', notes: 'Awaiting RFP for Ahmedabad township', status: 'Active' },
+    { name: 'Vikram Iyer', company: 'TCS', designation: 'Facilities Head', email: 'vikram.i@tcs.com', phone: '9898980004', source: 'Website', stage: 'Lead', value: 50000000, lastContact: '2025-06-10', notes: 'Datacenter construction inquiry', status: 'Active' },
+    { name: 'Deepak Joshi', company: 'Shapoorji Pallonji', designation: 'GM Procurement', email: 'deepak.j@spgroup.com', phone: '9898980005', source: 'Trade Show', stage: 'Negotiation', value: 320000000, lastContact: '2025-06-22', notes: 'Negotiating steel supply terms', status: 'Active' },
+    { name: 'Neha Gupta', company: 'Godrej Properties', designation: 'Construction Manager', email: 'neha.g@godrej.com', phone: '9898980006', source: 'Referral', stage: 'Proposal', value: 95000000, lastContact: '2025-06-12', notes: 'Submitted proposal for Mumbai residential', status: 'Active' },
+    { name: 'Rajiv Mehta', company: 'Reliance Industries', designation: 'VP Engineering', email: 'rajiv.m@ril.com', phone: '9898980007', source: 'Direct', stage: 'Lead', value: 500000000, lastContact: '2025-05-28', notes: 'Large refinery expansion project', status: 'Active' },
+    { name: 'Arun Kumar', company: 'IRCON International', designation: 'Project Director', email: 'arun.k@ircon.org', phone: '9898980008', source: 'Govt Portal', stage: 'Lead', value: 280000000, lastContact: '2025-06-05', notes: 'Railway bridge project in Kerala', status: 'Active' },
+    { name: 'Suman Das', company: 'WBHIDCO', designation: 'CEO', email: 'suman.d@wbhidco.gov.in', phone: '9898980009', source: 'Referral', stage: 'Qualified', value: 180000000, lastContact: '2025-06-08', notes: 'Smart city project in Kolkata', status: 'Active' },
+    { name: 'Kavitha Reddy', company: 'My Home Group', designation: 'Director', email: 'kavitha.r@myhomegroup.com', phone: '9898980010', source: 'LinkedIn', stage: 'Lead', value: 75000000, lastContact: '2025-05-30', notes: 'Hyderabad residential project', status: 'Active' },
+  ]
+  await prisma.crmContact.createMany({ data })
+  console.log(`  ✅ ${data.length} CRM contacts created`)
+}
+
+async function seedSupportTickets() {
+  console.log('🌱 Seeding SupportTickets...')
+  const data = [
+    { ticketNo: 'TKT-2025-001', title: 'ERP login issue for new employee', raisedBy: 'Deepa Menon', category: 'IT Support', priority: 'High', status: 'Resolved', assignedTo: 'Rahul Verma', description: 'New joinee VC-029 unable to login to ERP portal', resolution: 'Account created and credentials shared' },
+    { ticketNo: 'TKT-2025-002', title: 'Printer not working at Delhi site office', raisedBy: 'Amit Sharma', category: 'IT Support', priority: 'Low', status: 'Open', assignedTo: 'Rahul Verma', description: 'HP LaserJet at Delhi site office showing paper jam error' },
+    { ticketNo: 'TKT-2025-003', title: 'Salary slip download issue', raisedBy: 'Mohan Lal', category: 'HR', priority: 'Medium', status: 'Resolved', assignedTo: 'Deepa Menon', description: 'Unable to download March 2025 salary slip from portal', resolution: 'Payroll data re-synced, issue resolved' },
+    { ticketNo: 'TKT-2025-004', title: 'Vendor payment delayed', raisedBy: 'Ritu Singh', category: 'Finance', priority: 'High', status: 'In Progress', assignedTo: 'Sanjay Gupta', description: 'Tata Steel payment pending for 45 days, vendor following up' },
+    { ticketNo: 'TKT-2025-005', title: 'Site vehicle tyre replacement', raisedBy: 'Vikram Patil', category: 'Admin', priority: 'Medium', status: 'Open', description: 'Bolero at Pune site needs all 4 tyres replaced' },
+    { ticketNo: 'TKT-2025-006', title: 'Safety equipment shortage at Hyderabad site', raisedBy: 'Manish Tiwari', category: 'Procurement', priority: 'High', status: 'In Progress', assignedTo: 'Ritu Singh', description: 'Running low on safety harnesses, need urgent procurement' },
+    { ticketNo: 'TKT-2025-007', title: 'Attendance biometric device malfunction', raisedBy: 'Priya Nair', category: 'IT Support', priority: 'Medium', status: 'Resolved', assignedTo: 'Rahul Verma', description: 'Biometric device at Bangalore site showing error code E-404', resolution: 'Firmware updated, device recalibrated' },
+    { ticketNo: 'TKT-2025-008', title: 'Insurance renewal due for equipment', raisedBy: 'Sanjay Gupta', category: 'Finance', priority: 'Medium', status: 'Open', description: 'Equipment insurance for EQ-001 to EQ-006 expiring on 2025-07-15' },
+  ]
+  await prisma.supportTicket.createMany({ data })
+  console.log(`  ✅ ${data.length} support tickets created`)
+}
+
+async function seedKBArticles() {
+  console.log('🌱 Seeding KBArticles...')
+  const data = [
+    { title: 'How to Apply for Leave in ERP', category: 'HR', content: 'Step 1: Login to VoltCore ERP portal. Step 2: Navigate to HRMS > Leave Management. Step 3: Click "Apply Leave". Step 4: Select leave type, dates, and reason. Step 5: Submit for approval. Your manager will be notified automatically.', author: 'Deepa Menon', tags: 'leave,hrms,application', views: 156, helpful: 89, status: 'Published' },
+    { title: 'Expense Claim Submission Guide', category: 'Finance', content: 'All expense claims must be submitted within 7 days of the expense date. Attach original bills/receipts. Claims above ₹10,000 require manager approval. Claims above ₹50,000 require director approval. Processing time is 5-7 working days.', author: 'Sanjay Gupta', tags: 'expense,claim,reimbursement', views: 203, helpful: 112, status: 'Published' },
+    { title: 'Safety Helmet Usage Policy', category: 'Safety', content: 'Safety helmets must be worn at all times on construction sites. Replace helmet every 3 years or after any impact. Color coding: White=Visitors, Yellow=Workers, Blue=Supervisors, Red=Safety Officers. Report any damage immediately.', author: 'Manish Tiwari', tags: 'safety,helmet,ppe', views: 287, helpful: 145, status: 'Published' },
+    { title: 'Purchase Order Creation Process', category: 'Procurement', content: '1. Raise material requisition from site. 2. Get approval from Site Engineer. 3. Procurement team obtains 3 quotes. 4. Comparative statement prepared. 5. PO approved by Purchase Manager. 6. PO issued to selected vendor. 7. Follow up for delivery and GRN.', author: 'Ritu Singh', tags: 'purchase,order,procurement', views: 178, helpful: 95, status: 'Published' },
+    { title: 'Work Permit (PTW) Requirements', category: 'Safety', content: 'Work permits required for: Hot Work, Height Work (>3m), Confined Space, Electrical, Excavation, Crane Operations. Permit valid for single shift only. Must be signed by HSE officer and Area Incharge. Emergency contact details must be updated on permit board.', author: 'Manish Tiwari', tags: 'safety,permit,ptw', views: 312, helpful: 167, status: 'Published' },
+    { title: 'Payroll Processing Timeline', category: 'Finance', content: 'Salary processed on 25th of every month. Cut-off date for attendance: 22nd. Overtime claims: Submit by 20th. Salary credits by 28th. Payslips available on portal by 30th. For queries, contact accounts@voltcore.in.', author: 'Sanjay Gupta', tags: 'payroll,salary,dates', views: 245, helpful: 134, status: 'Published' },
+    { title: 'Incident Reporting Procedure', category: 'Safety', content: '1. Provide immediate first aid. 2. Secure the area. 3. Report to HSE Officer within 15 minutes. 4. HSE Officer fills Incident Report Form. 5. Root cause analysis within 24 hours. 6. Corrective actions implemented. 7. Report to management within 48 hours.', author: 'Manish Tiwari', tags: 'incident,safety,reporting', views: 198, helpful: 121, status: 'Published' },
+    { title: 'Inventory Material Request Guide', category: 'Operations', content: '1. Check current stock in ERP > Inventory. 2. Create material requisition with required quantity. 3. Site Engineer approval required. 4. Central store issues material. 5. Site confirms receipt. 6. Stock updated automatically. Minimum order quantity: Check with store keeper.', author: 'Anjali Deshmukh', tags: 'inventory,material,request', views: 134, helpful: 78, status: 'Published' },
+  ]
+  await prisma.kBArticle.createMany({ data })
+  console.log(`  ✅ ${data.length} KB articles created`)
+}
+
+async function seedFinance() {
+  console.log('🌱 Seeding Finance Module...')
+
+  // Ledger Accounts
+  const ledgerData = [
+    { accountCode: '1001', name: 'Cash in Hand', group: 'Current Assets', type: 'Asset', balance: 250000, status: 'Active' },
+    { accountCode: '1002', name: 'SBI Current Account', group: 'Current Assets', type: 'Asset', balance: 18500000, status: 'Active' },
+    { accountCode: '1003', name: 'HDFC Current Account', group: 'Current Assets', type: 'Asset', balance: 12300000, status: 'Active' },
+    { accountCode: '1004', name: 'Accounts Receivable', group: 'Current Assets', type: 'Asset', balance: 45000000, status: 'Active' },
+    { accountCode: '1005', name: 'Inventory - Cement', group: 'Current Assets', type: 'Asset', balance: 950000, status: 'Active' },
+    { accountCode: '1006', name: 'Inventory - Steel', group: 'Current Assets', type: 'Asset', balance: 14200000, status: 'Active' },
+    { accountCode: '1007', name: 'Fixed Assets - Equipment', group: 'Fixed Assets', type: 'Asset', balance: 85000000, status: 'Active' },
+    { accountCode: '1008', name: 'Fixed Assets - Vehicles', group: 'Fixed Assets', type: 'Asset', balance: 22000000, status: 'Active' },
+    { accountCode: '2001', name: 'Accounts Payable', group: 'Current Liabilities', type: 'Liability', balance: 28000000, status: 'Active' },
+    { accountCode: '2002', name: 'GST Payable', group: 'Current Liabilities', type: 'Liability', balance: 4500000, status: 'Active' },
+    { accountCode: '2003', name: 'TDS Payable', group: 'Current Liabilities', type: 'Liability', balance: 1800000, status: 'Active' },
+    { accountCode: '2004', name: 'PF Payable', group: 'Current Liabilities', type: 'Liability', balance: 3200000, status: 'Active' },
+    { accountCode: '2005', name: 'Bank Loan - SBI', group: 'Long Term Liabilities', type: 'Liability', balance: 120000000, status: 'Active' },
+    { accountCode: '3001', name: 'Share Capital', group: 'Equity', type: 'Equity', balance: 500000000, status: 'Active' },
+    { accountCode: '3002', name: 'Retained Earnings', group: 'Equity', type: 'Equity', balance: 85000000, status: 'Active' },
+    { accountCode: '4001', name: 'Project Revenue', group: 'Income', type: 'Income', balance: 320000000, status: 'Active' },
+    { accountCode: '4002', name: 'Sales Revenue', group: 'Income', type: 'Income', balance: 85000000, status: 'Active' },
+    { accountCode: '5001', name: 'Employee Cost', group: 'Direct Expenses', type: 'Expense', balance: 65000000, status: 'Active' },
+    { accountCode: '5002', name: 'Material Cost', group: 'Direct Expenses', type: 'Expense', balance: 120000000, status: 'Active' },
+    { accountCode: '5003', name: 'Equipment Cost', group: 'Direct Expenses', type: 'Expense', balance: 15000000, status: 'Active' },
+    { accountCode: '5004', name: 'Subcontractor Cost', group: 'Direct Expenses', type: 'Expense', balance: 45000000, status: 'Active' },
+    { accountCode: '5005', name: 'Admin Expenses', group: 'Indirect Expenses', type: 'Expense', balance: 8500000, status: 'Active' },
+  ]
+  await prisma.ledgerAccount.createMany({ data: ledgerData })
+  console.log(`  ✅ ${ledgerData.length} ledger accounts created`)
+
+  // Bank Accounts
+  const bankData = [
+    { accountName: 'VoltCore Operations', bankName: 'State Bank of India', accountNo: '3826451234', type: 'Current', balance: 18500000, status: 'Active' },
+    { accountName: 'VoltCore Salaries', bankName: 'HDFC Bank', accountNo: '501001234567', type: 'Current', balance: 12300000, status: 'Active' },
+    { accountName: 'VoltCore Term Deposit', bankName: 'ICICI Bank', accountNo: '021501234567', type: 'Fixed Deposit', balance: 50000000, status: 'Active' },
+    { accountName: 'VoltCore Project Fund', bankName: 'Bank of Baroda', accountNo: '412101234567', type: 'Current', balance: 32000000, status: 'Active' },
+  ]
+  await prisma.bankAccount.createMany({ data: bankData })
+  console.log(`  ✅ ${bankData.length} bank accounts created`)
+
+  // Accounts Payable
+  const apData = [
+    { billNo: 'AP-2025-001', vendor: 'Tata Steel', description: 'TMT Bars supply - May 2025', amount: 4500000, dueDate: '2025-05-30', paidDate: '2025-05-28', status: 'Paid' },
+    { billNo: 'AP-2025-002', vendor: 'UltraTech Cement', description: 'Cement supply - May 2025', amount: 2850000, dueDate: '2025-06-10', paidDate: '2025-06-09', status: 'Paid' },
+    { billNo: 'AP-2025-003', vendor: 'KEI Industries', description: 'HT Cables for Chennai site', amount: 6200000, dueDate: '2025-06-25', paidDate: null, status: 'Pending' },
+    { billNo: 'AP-2025-004', vendor: 'L&T Equipments', description: 'Crane rental - Apr-May 2025', amount: 3800000, dueDate: '2025-06-15', paidDate: null, status: 'Overdue' },
+    { billNo: 'AP-2025-005', vendor: 'Havells India', description: 'LED lights for Bangalore site', amount: 1850000, dueDate: '2025-07-05', paidDate: null, status: 'Pending' },
+    { billNo: 'AP-2025-006', vendor: 'JCB India', description: 'Excavator maintenance and parts', amount: 750000, dueDate: '2025-06-30', paidDate: null, status: 'Pending' },
+    { billNo: 'AP-2025-007', vendor: 'Asian Paints', description: 'Exterior paint for Mumbai site', amount: 2100000, dueDate: '2025-07-10', paidDate: null, status: 'Pending' },
+    { billNo: 'AP-2025-008', vendor: 'Finolex Cables', description: 'LT cables for Delhi site', amount: 3400000, dueDate: '2025-05-20', paidDate: null, status: 'Overdue' },
+    { billNo: 'AP-2025-009', vendor: 'KEC International', description: 'Transformer supply', amount: 8500000, dueDate: '2025-07-20', paidDate: null, status: 'Pending' },
+    { billNo: 'AP-2025-010', vendor: 'Godrej Locks', description: 'Fire rated doors - batch 2', amount: 950000, dueDate: '2025-06-20', paidDate: '2025-06-19', status: 'Paid' },
+    { billNo: 'AP-2025-011', vendor: 'Reddy Steel Fabricators', description: 'Steel fabrication for ORR project', amount: 5200000, dueDate: '2025-06-28', paidDate: null, status: 'Pending' },
+    { billNo: 'AP-2025-012', vendor: 'Shree Ram Constructions', description: 'Subcontractor work - Mumbai Metro', amount: 15000000, dueDate: '2025-07-15', paidDate: null, status: 'Pending' },
+  ]
+  await prisma.accountsPayable.createMany({ data: apData })
+  console.log(`  ✅ ${apData.length} accounts payable created`)
+
+  // Accounts Receivable
+  const arData = [
+    { invoiceNo: 'AR-2025-001', client: 'MMRDA', description: 'Running bill RAB-15 - Metro work', amount: 8500000, dueDate: '2025-04-30', receivedDate: '2025-04-25', status: 'Received' },
+    { invoiceNo: 'AR-2025-002', client: 'DLF Ltd', description: 'Running bill RAB-22 - Township', amount: 12000000, dueDate: '2025-05-15', receivedDate: '2025-05-12', status: 'Received' },
+    { invoiceNo: 'AR-2025-003', client: 'Infosys Ltd', description: 'Running bill RAB-08 - IT Park', amount: 6800000, dueDate: '2025-06-20', receivedDate: null, status: 'Pending' },
+    { invoiceNo: 'AR-2025-004', client: 'NHAI', description: 'Running bill RAB-30 - Expressway', amount: 15000000, dueDate: '2025-06-30', receivedDate: null, status: 'Pending' },
+    { invoiceNo: 'AR-2025-005', client: 'Chennai Port Trust', description: 'Running bill RAB-12 - Port expansion', amount: 9200000, dueDate: '2025-07-15', receivedDate: null, status: 'Pending' },
+    { invoiceNo: 'AR-2025-006', client: 'Gujarat Energy', description: 'Final bill - Solar Farm', amount: 4500000, dueDate: '2025-05-30', receivedDate: '2025-05-30', status: 'Received' },
+    { invoiceNo: 'AR-2025-007', client: 'L&T Construction', description: 'Supply bill SO-2025-002', amount: 17000000, dueDate: '2025-06-10', receivedDate: '2025-06-08', status: 'Received' },
+    { invoiceNo: 'AR-2025-008', client: 'MIDC', description: 'Advance payment - Industrial Complex', amount: 5000000, dueDate: '2025-07-30', receivedDate: null, status: 'Pending' },
+    { invoiceNo: 'AR-2025-009', client: 'MMRDA', description: 'Running bill RAB-16 - Metro work', amount: 9800000, dueDate: '2025-05-31', receivedDate: null, status: 'Pending' },
+    { invoiceNo: 'AR-2025-010', client: 'DLF Ltd', description: 'Running bill RAB-23 - Township', amount: 13500000, dueDate: '2025-07-10', receivedDate: null, status: 'Pending' },
+    { invoiceNo: 'AR-2025-011', client: 'NHAI', description: 'Running bill RAB-31 - Expressway', amount: 11000000, dueDate: '2025-05-15', receivedDate: null, status: 'Pending' },
+    { invoiceNo: 'AR-2025-012', client: 'L&T Construction', description: 'Supply bill SO-2025-004', amount: 7500000, dueDate: '2025-07-25', receivedDate: null, status: 'Pending' },
+  ]
+  await prisma.accountsReceivable.createMany({ data: arData })
+  console.log(`  ✅ ${arData.length} accounts receivable created`)
+
+  // Journal Entries
+  const jeData = [
+    { entryNo: 'JE-2025-001', date: '2025-01-31', account: 'Employee Cost', debit: 10800000, credit: 0, description: 'Monthly payroll provision', reference: 'PAY-2025-01' },
+    { entryNo: 'JE-2025-002', date: '2025-01-31', account: 'SBI Current Account', debit: 0, credit: 10800000, description: 'Salary disbursement', reference: 'PAY-2025-01' },
+    { entryNo: 'JE-2025-003', date: '2025-02-10', account: 'Inventory - Steel', debit: 4500000, credit: 0, description: 'TMT Steel purchase', reference: 'PO-2025-0015' },
+    { entryNo: 'JE-2025-004', date: '2025-02-10', account: 'Accounts Payable', debit: 0, credit: 4500000, description: 'Tata Steel creditor', reference: 'AP-2025-001' },
+    { entryNo: 'JE-2025-005', date: '2025-02-28', account: 'Accounts Receivable', debit: 8500000, credit: 0, description: 'MMRDA running bill', reference: 'AR-2025-001' },
+    { entryNo: 'JE-2025-006', date: '2025-02-28', account: 'Project Revenue', debit: 0, credit: 8500000, description: 'Metro project revenue recognition', reference: 'INV-2025-0015' },
+    { entryNo: 'JE-2025-007', date: '2025-03-15', account: 'Material Cost', debit: 12000000, credit: 0, description: 'Cement & aggregate consumption', reference: 'CM-2025-03' },
+    { entryNo: 'JE-2025-008', date: '2025-03-15', account: 'Inventory - Cement', debit: 0, credit: 4800000, description: 'Cement issued to sites', reference: 'CM-2025-03' },
+    { entryNo: 'JE-2025-009', date: '2025-03-15', account: 'Inventory - Steel', debit: 0, credit: 7200000, description: 'Steel issued to sites', reference: 'CM-2025-03' },
+    { entryNo: 'JE-2025-010', date: '2025-03-31', account: 'Equipment Cost', debit: 2500000, credit: 0, description: 'Crane rental expense', reference: 'PO-2025-0018' },
+    { entryNo: 'JE-2025-011', date: '2025-03-31', account: 'Accounts Payable', debit: 0, credit: 2500000, description: 'L&T Equipment creditor', reference: 'AP-2025-004' },
+    { entryNo: 'JE-2025-012', date: '2025-04-10', account: 'GST Payable', debit: 1500000, credit: 0, description: 'GST payment to government', reference: 'GST-2025-Q1' },
+    { entryNo: 'JE-2025-013', date: '2025-04-10', account: 'SBI Current Account', debit: 0, credit: 1500000, description: 'GST payment via bank', reference: 'GST-2025-Q1' },
+    { entryNo: 'JE-2025-014', date: '2025-04-30', account: 'Accounts Receivable', debit: 12000000, credit: 0, description: 'DLF running bill', reference: 'AR-2025-002' },
+    { entryNo: 'JE-2025-015', date: '2025-04-30', account: 'Project Revenue', debit: 0, credit: 12000000, description: 'Township revenue recognition', reference: 'INV-2025-0002' },
+    { entryNo: 'JE-2025-016', date: '2025-05-15', account: 'Subcontractor Cost', debit: 5000000, credit: 0, description: 'Shree Ram Constructions work', reference: 'SO-2025-003' },
+    { entryNo: 'JE-2025-017', date: '2025-05-15', account: 'Accounts Payable', debit: 0, credit: 5000000, description: 'Subcontractor payable', reference: 'AP-2025-012' },
+    { entryNo: 'JE-2025-018', date: '2025-05-20', account: 'TDS Payable', debit: 850000, credit: 0, description: 'TDS deducted on vendor payments', reference: 'TDS-2025-05' },
+    { entryNo: 'JE-2025-019', date: '2025-05-20', account: 'Accounts Payable', debit: 0, credit: 850000, description: 'TDS liability offset', reference: 'TDS-2025-05' },
+    { entryNo: 'JE-2025-020', date: '2025-05-31', account: 'Admin Expenses', debit: 1200000, credit: 0, description: 'Office rent and utilities', reference: 'ADM-2025-05' },
+    { entryNo: 'JE-2025-021', date: '2025-05-31', account: 'SBI Current Account', debit: 0, credit: 1200000, description: 'Office expenses paid', reference: 'ADM-2025-05' },
+    { entryNo: 'JE-2025-022', date: '2025-06-05', account: 'Inventory - Cement', debit: 2850000, credit: 0, description: 'Cement purchase from UltraTech', reference: 'PO-2025-0002' },
+    { entryNo: 'JE-2025-023', date: '2025-06-05', account: 'Accounts Payable', debit: 0, credit: 2850000, description: 'UltraTech creditor', reference: 'AP-2025-002' },
+    { entryNo: 'JE-2025-024', date: '2025-06-15', account: 'Sales Revenue', debit: 0, credit: 22500000, description: 'L&T pre-cast girders delivery', reference: 'SO-2025-001' },
+    { entryNo: 'JE-2025-025', date: '2025-06-15', account: 'Accounts Receivable', debit: 22500000, credit: 0, description: 'L&T receivable for girders', reference: 'AR-2025-007' },
+  ]
+  await prisma.journalEntry.createMany({ data: jeData })
+  console.log(`  ✅ ${jeData.length} journal entries created`)
+
+  // Tax Records
+  const taxData = [
+    { taxType: 'GST (CGST+SGST)', period: '2025-Q1 (Jan-Mar)', amount: 4500000, dueDate: '2025-04-20', paidDate: '2025-04-18', status: 'Paid' },
+    { taxType: 'GST (CGST+SGST)', period: '2025-Q2 (Apr-Jun)', amount: 5200000, dueDate: '2025-07-20', paidDate: null, status: 'Pending' },
+    { taxType: 'TDS - Salaries', period: '2025-Apr', amount: 850000, dueDate: '2025-05-07', paidDate: '2025-05-06', status: 'Paid' },
+    { taxType: 'TDS - Salaries', period: '2025-May', amount: 920000, dueDate: '2025-06-07', paidDate: '2025-06-05', status: 'Paid' },
+    { taxType: 'TDS - Contractors', period: '2025-May', amount: 540000, dueDate: '2025-06-07', paidDate: null, status: 'Pending' },
+    { taxType: 'TDS - Contractors', period: '2025-Jun', amount: 480000, dueDate: '2025-07-07', paidDate: null, status: 'Pending' },
+    { taxType: 'Provident Fund', period: '2025-May', amount: 3200000, dueDate: '2025-06-15', paidDate: '2025-06-14', status: 'Paid' },
+    { taxType: 'Provident Fund', period: '2025-Jun', amount: 3350000, dueDate: '2025-07-15', paidDate: null, status: 'Pending' },
+    { taxType: 'Professional Tax', period: '2025-Jun', amount: 45000, dueDate: '2025-07-31', paidDate: null, status: 'Pending' },
+    { taxType: 'ESI Contribution', period: '2025-May', amount: 280000, dueDate: '2025-06-15', paidDate: '2025-06-14', status: 'Paid' },
+  ]
+  await prisma.taxRecord.createMany({ data: taxData })
+  console.log(`  ✅ ${taxData.length} tax records created`)
+
+  // Budget Items
+  const budgetData = [
+    { category: 'Employee Cost', description: 'Salaries, wages, benefits across all sites', planned: 78000000, actual: 65000000, period: '2025-26', status: 'On Track' },
+    { category: 'Material - Cement', description: 'Cement procurement for all projects', planned: 35000000, actual: 28500000, period: '2025-26', status: 'On Track' },
+    { category: 'Material - Steel', description: 'TMT bars, structural steel, fabrication', planned: 130000000, actual: 120000000, period: '2025-26', status: 'On Track' },
+    { category: 'Equipment & Machinery', description: 'Rental, maintenance, fuel for equipment', planned: 18000000, actual: 15000000, period: '2025-26', status: 'On Track' },
+    { category: 'Subcontractors', description: 'Outsourced works - civil, electrical, plumbing', planned: 55000000, actual: 45000000, period: '2025-26', status: 'On Track' },
+    { category: 'Site Overheads', description: 'Power, water, temporary structures, security', planned: 12000000, actual: 14000000, period: '2025-26', status: 'Over Budget' },
+    { category: 'Travel & Transport', description: 'Site travel, vehicle maintenance, freight', planned: 5000000, actual: 6200000, period: '2025-26', status: 'Over Budget' },
+    { category: 'Admin & Office', description: 'Office rent, utilities, IT, supplies', planned: 10000000, actual: 8500000, period: '2025-26', status: 'On Track' },
+    { category: 'Safety & Training', description: 'PPE, training programs, compliance', planned: 3000000, actual: 2200000, period: '2025-26', status: 'On Track' },
+    { category: 'Insurance & Legal', description: 'Equipment insurance, professional indemnity', planned: 4500000, actual: 3800000, period: '2025-26', status: 'On Track' },
+    { category: 'Quality Control', description: 'Testing labs, third-party inspections', planned: 2500000, actual: 1800000, period: '2025-26', status: 'On Track' },
+    { category: 'Contingency', description: 'Unforeseen expenses buffer', planned: 8000000, actual: 4500000, period: '2025-26', status: 'On Track' },
+  ]
+  await prisma.budgetItem.createMany({ data: budgetData })
+  console.log(`  ✅ ${budgetData.length} budget items created`)
+}
+
+// ── MAIN ──
+async function main() {
+  console.log('\n🏗️  VoltCore ERP — Database Seeding')
+  console.log('===================================\n')
+
+  // 0. Clear all existing data
+  await clearAll()
+
+  // 1. No-dependency tables first
+  await seedCompanySettings()
+  await seedDepartments()
+  await seedDesignations()
+  await seedSites()
+  await seedProjects()
+
+  // 2. Employees (needed for related tables)
+  const empIdMap = await seedEmployees()
+
+  // 3. Dependent on employees
+  await seedAttendance(empIdMap)
+  await seedLeaveRequests(empIdMap)
+  await seedShiftSchedules(empIdMap)
+  await seedPayroll(empIdMap)
+  await seedExpenses(empIdMap)
+  await seedCertifications(empIdMap)
+
+  // 4. Independent modules
+  await seedWorkPermits()
+  await seedIncidents()
+  await seedEquipment()
+  await seedSubcontractors()
+  await seedJobOpenings()
+  await seedTrainingSessions()
+  await seedPurchaseOrders()
+  await seedInvoices()
+  await seedInventory()
+  await seedStockMovements()
+  await seedCustomers()
+  await seedSalesOrders()
+  await seedCrmContacts()
+  await seedSupportTickets()
+  await seedKBArticles()
+
+  // 5. Finance module (large)
+  await seedFinance()
+
+  console.log('\n✅ All seed data inserted successfully!')
+  console.log('===================================\n')
 }
 
 main()
-  .then(async () => {
-    await db.$disconnect();
+  .catch((e) => {
+    console.error('❌ Seeding failed:', e)
+    process.exit(1)
   })
-  .catch(async (e) => {
-    console.error("❌ Seed failed:", e);
-    await db.$disconnect();
-    process.exit(1);
-  });
+  .finally(() => prisma.$disconnect())

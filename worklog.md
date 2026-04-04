@@ -985,3 +985,66 @@ Stage Summary:
 - Finance Dashboard now renders correctly with proper AR/AP donut chart data
 - Dev server stable on port 3000
 - All 9 Finance sub-modules accessible: Dashboard, Ledger, AP, AR, Journal Entries, Bank & Cash, Taxation, Budget, Financial Reports
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Create comprehensive database with seed data for all VoltCore ERP modules
+
+Work Log:
+- Analyzed existing Prisma schema (34 models across all ERP modules)
+- Verified DATABASE_URL points to SQLite at db/custom.db
+- Confirmed db client already configured at src/lib/db.ts
+- Pushed schema to ensure database in sync
+- Created prisma/seed.ts with comprehensive seed data for Indian construction company
+- Fixed Prisma client model name: kbArticle → kBArticle for KBArticle model
+- Removed skipDuplicates option (not supported in SQLite with this Prisma version)
+- Added clearAll() function to wipe existing data before seeding
+- Added "db:seed" script to package.json
+- Successfully seeded all tables
+
+Seed Data Summary:
+- CompanySettings: 8 records (company name, GST, PAN, address, etc.)
+- Departments: 10 records (Engineering, HR, Finance, Procurement, etc.)
+- Designations: 15 records (MD to Unskilled Worker, L1-L6 levels)
+- Sites: 8 records (Mumbai, Delhi, Bangalore, Hyderabad, Chennai, Pune, Kolkata, Ahmedabad)
+- Projects: 8 records (Metro, Smart City, IT Park, Expressway, Port, Industrial, Bridge, Solar)
+- Employees: 30 records (14 Staff + 16 Workers, VC-001 to VC-030)
+- Attendance: 870 records (2 months, all active employees, realistic patterns)
+- Leave Requests: 20 records (various types and statuses)
+- Shift Schedules: 28 records (2 weeks, 15 workers)
+- Payroll: 174 records (30 employees × 6 months, realistic Indian salary structures)
+- Expenses: 25 records (various categories and amounts)
+- Certifications: 10 records (PMP, NEBOSH, ITI, CA, etc.)
+- Work Permits: 8 records (Hot Work, Confined Space, Height, Electrical, etc.)
+- Incidents: 6 records (Near Miss, First Aid, LTI, Property Damage, Environmental)
+- Equipment: 12 records (Cranes, Excavators, Mixers, Generators, etc.)
+- Subcontractors: 8 records (various trades with compliance status)
+- Job Openings: 7 records (various positions and priorities)
+- Training Sessions: 8 records (safety, quality, ERP, equipment training)
+- Purchase Orders: 15 records (various vendors and items)
+- Invoices: 15 records (Indian format amounts: ₹12,45,00,000)
+- Inventory Items: 20 records (cement, steel, cables, safety equipment, etc.)
+- Stock Movements: 35 records (inward, outward, transfers)
+- Customers: 8 records (MMRDA, DLF, Infosys, NHAI, etc.)
+- Sales Orders: 10 records (various projects and items)
+- CRM Contacts: 10 records (various stages from Lead to Client)
+- Support Tickets: 8 records (various categories and priorities)
+- KB Articles: 8 records (HR, Finance, Safety, Procurement guides)
+- Ledger Accounts: 22 records (Assets, Liabilities, Equity, Income, Expenses)
+- Bank Accounts: 4 records (SBI, HDFC, ICICI, Bank of Baroda)
+- Accounts Payable: 12 records (₹3.96Cr pending, ₹46.8L overdue)
+- Accounts Receivable: 12 records (₹7.78Cr pending, ₹4.2Cr received)
+- Journal Entries: 25 records (3 months of double-entry transactions)
+- Tax Records: 10 records (GST, TDS, PF, ESI, Professional Tax)
+- Budget Items: 12 records (₹42Cr planned, ₹32.3Cr actual with variances)
+
+Total: ~1,500+ records across 34 database tables
+
+Stage Summary:
+- Comprehensive database created with realistic Indian construction company data
+- All 34 tables populated with production-quality seed data
+- All API routes verified returning real data from database
+- Finance Dashboard API returning aggregated KPIs from 9 tables
+- Employee Analytics API returning data from 7 tables
+- "db:seed" command available for re-seeding: bun run db:seed
