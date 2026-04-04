@@ -1,259 +1,401 @@
-'use client'
+'use client';
 
-import { useState, useEffect, useCallback } from 'react'
-import { Receipt, CheckCircle, Plane, XCircle, Plus, RefreshCw } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Receipt, CheckCircle2, XCircle, Plus, Trash2, Loader2,
+  AlertTriangle, IndianRupee, RefreshCw, Plane,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 
-interface Expense {
-  id: string
-  claimNo: string
-  empId: string
-  employee: {
-    id: string
-    empId: string
-    name: string
-    role: string
-    site: string
-  }
-  category: string
-  amount: number
-  project: string
-  date: string
-  status: string
-  createdAt: string
+/* ── Types ────────────────────────────────────────── */
+interface Employee {
+  id: string;
+  empId: string;
+  name: string;
+  role: string;
+  site: string;
 }
 
-function getStatusBadge(status: string) {
-  const map: Record<string, string> = {
+interface Expense {
+  id: string;
+  claimNo: string;
+  empId: string;
+  employee: { id: string; empId: string; name: string; role: string; site: string };
+  category: string;
+  amount: number;
+  project: string;
+  date: string;
+  status: string;
+  createdAt: string;
+}
+
+interface ExpenseFormData {
+  empId: string;
+  category: string;
+  amount: number;
+  project: string;
+  date: string;
+}
+
+const EMPTY_FORM: ExpenseFormData = {
+  empId: '', category: 'Travel & Accommodation', amount: 0, project: '', date: '',
+};
+
+const CATEGORIES = [
+  'Travel & Accommodation',
+  'Tools & Consumables',
+  'Medical',
+  'Communication',
+  'Transport',
+  'Misc',
+];
+
+/* ── Helpers ──────────────────────────────────────── */
+function statusBadge(s: string) {
+  const m: Record<string, string> = {
     Pending: 'bg-[#ffab40]/15 text-[#ffab40]',
     Approved: 'bg-[#00e676]/15 text-[#00e676]',
     Rejected: 'bg-[#ff3d3d]/15 text-[#ff3d3d]',
-  }
-  return map[status] || map['Pending']
+  };
+  return m[s] || 'bg-[#5a6878]/15 text-[#5a6878]';
 }
 
-function getCategoryIcon(category: string) {
-  if (category.toLowerCase().includes('travel') || category.toLowerCase().includes('stay'))
-    return <Plane size={12} className="text-[#00d4ff]" />
-  return <Receipt size={12} className="text-[#8899aa]" />
+function categoryIcon(cat: string) {
+  if (cat.toLowerCase().includes('travel')) return <Plane size={12} className="text-[#00d4ff]" />;
+  return <Receipt size={12} className="text-[#8899aa]" />;
 }
 
+/* ── Loading Skeleton ─────────────────────────────── */
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="vc-stat-card">
+            <Skeleton className="h-3 w-24 mb-2 bg-[#1e2630]" />
+            <Skeleton className="h-7 w-14 bg-[#1e2630]" />
+          </div>
+        ))}
+      </div>
+      <div className="vc-panel">
+        <Skeleton className="h-10 w-full bg-[#1e2630]" />
+        <div className="p-3 space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full bg-[#1e2630]" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Stat Card ────────────────────────────────────── */
+function StatCard({ icon: Icon, label, value, color }: {
+  icon: React.ElementType; label: string; value: number | string; color: string;
+}) {
+  return (
+    <div className="vc-stat-card">
+      <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: color }} />
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">{label}</div>
+          <div className="text-[22px] font-bold leading-none" style={{ fontFamily: "'Barlow Condensed', sans-serif", color }}>{value}</div>
+        </div>
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}15` }}>
+          <Icon size={18} style={{ color }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ════════════════════════════════════════════════════════ */
 export default function Expenses() {
-  const [expenses, setExpenses] = useState<Expense[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const fetchExpenses = useCallback(async () => {
+  // Dialogs
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
+  const [form, setForm] = useState<ExpenseFormData>(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
+
+  /* ── Fetch ── */
+  const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/expenses')
-      if (!res.ok) throw new Error('Failed to fetch')
-      const json = await res.json()
-      if (json.success) setExpenses(json.data)
-      else throw new Error(json.error || 'Unknown error')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error loading data')
+      setLoading(true);
+      const [expRes, empRes] = await Promise.all([
+        fetch('/api/expenses'),
+        fetch('/api/employees'),
+      ]);
+      const expJson = await expRes.json();
+      const empJson = await empRes.json();
+      if (expJson.success) setExpenses(expJson.data);
+      if (empJson.success) setEmployees(empJson.data);
+    } catch {
+      toast.error('Failed to fetch expense data');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [])
+  }, []);
 
-  useEffect(() => {
-    fetchExpenses()
-  }, [fetchExpenses])
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleAction = async (id: string, status: 'Approved' | 'Rejected') => {
-    setActionLoading(id)
+  /* ── Stats ── */
+  const pendingCount = expenses.filter(e => e.status === 'Pending').length;
+  const approvedMTD = expenses.filter(e => e.status === 'Approved').reduce((s, e) => s + e.amount, 0);
+  const totalAmount = expenses.reduce((s, e) => s + e.amount, 0);
+  const rejectedCount = expenses.filter(e => e.status === 'Rejected').length;
+
+  /* ── Form helpers ── */
+  const updateForm = (field: keyof ExpenseFormData, value: string | number) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleCreate = async () => {
+    if (!form.empId || !form.amount || !form.project || !form.date) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
     try {
+      setSubmitting(true);
+      const res = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('Expense claim created');
+        setCreateOpen(false);
+        setForm(EMPTY_FORM);
+        await fetchData();
+      } else {
+        toast.error(json.error || 'Failed to create expense');
+      }
+    } catch {
+      toast.error('Network error creating expense');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /* ── Approve / Reject ── */
+  const handleStatus = async (id: string, status: 'Approved' | 'Rejected') => {
+    try {
+      setActionLoading(id);
       const res = await fetch('/api/expenses', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status }),
-      })
-      if (!res.ok) throw new Error('Action failed')
-      await fetchExpenses()
-    } catch (err) {
-      console.error('Failed to update expense:', err)
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success(`Expense ${status.toLowerCase()}`);
+        await fetchData();
+      } else {
+        toast.error(json.error || 'Action failed');
+      }
+    } catch {
+      toast.error('Network error updating status');
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
-  }
+  };
 
-  const pendingCount = expenses.filter(e => e.status === 'Pending').length
-  const approvedTotal = expenses.filter(e => e.status === 'Approved').reduce((s, e) => s + e.amount, 0)
-  const travelTotal = expenses.filter(e => e.category.toLowerCase().includes('travel') || e.category.toLowerCase().includes('stay')).reduce((s, e) => s + e.amount, 0)
-  const rejectedCount = expenses.filter(e => e.status === 'Rejected').length
+  /* ── Delete ── */
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      const res = await fetch('/api/expenses', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deleteTarget.id }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('Expense deleted');
+        setDeleteOpen(false);
+        setDeleteTarget(null);
+        await fetchData();
+      } else {
+        toast.error(json.error || 'Delete failed');
+      }
+    } catch {
+      toast.error('Network error deleting expense');
+    }
+  };
 
-  if (loading) {
-    return (
-      <div className="space-y-4 animate-pulse">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="vc-stat-card">
-              <div className="h-4 bg-[#252e3a] rounded w-24 mb-2" />
-              <div className="h-6 bg-[#252e3a] rounded w-16" />
-            </div>
-          ))}
-        </div>
-        <div className="h-64 bg-[#161c24] border border-[#252e3a] rounded-lg" />
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="vc-panel p-6 text-center">
-        <p className="text-[#ff3d3d] text-sm">{error}</p>
-        <button onClick={fetchExpenses} className="vc-btn-ghost mt-3 flex items-center gap-1.5 mx-auto">
-          <RefreshCw size={12} /> Retry
-        </button>
-      </div>
-    )
-  }
+  if (loading) return <LoadingSkeleton />;
 
   return (
     <div className="space-y-4">
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="vc-stat-card">
-          <style>{`.vc-stat-card:nth-child(1)::before{background:#ffab40}`}</style>
-          <div className="flex items-center gap-2 mb-1">
-            <Receipt size={14} className="text-[#ffab40]" />
-            <span className="text-[10px] text-[#8899aa] uppercase tracking-wider">Pending Claims</span>
-          </div>
-          <div className="text-2xl font-bold text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-            {pendingCount}
-          </div>
-        </div>
-        <div className="vc-stat-card">
-          <style>{`.vc-stat-card:nth-child(2)::before{background:#00e676}`}</style>
-          <div className="flex items-center gap-2 mb-1">
-            <CheckCircle size={14} className="text-[#00e676]" />
-            <span className="text-[10px] text-[#8899aa] uppercase tracking-wider">Approved MTD</span>
-          </div>
-          <div className="text-2xl font-bold text-[#00e676]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-            ₹{(approvedTotal / 100000).toFixed(1)}L
-          </div>
-        </div>
-        <div className="vc-stat-card">
-          <style>{`.vc-stat-card:nth-child(3)::before{background:#00d4ff}`}</style>
-          <div className="flex items-center gap-2 mb-1">
-            <Plane size={14} className="text-[#00d4ff]" />
-            <span className="text-[10px] text-[#8899aa] uppercase tracking-wider">Travel & Stay</span>
-          </div>
-          <div className="text-2xl font-bold text-[#00d4ff]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-            ₹{(travelTotal / 100000).toFixed(1)}L
-          </div>
-        </div>
-        <div className="vc-stat-card">
-          <style>{`.vc-stat-card:nth-child(4)::before{background:#ff3d3d}`}</style>
-          <div className="flex items-center gap-2 mb-1">
-            <XCircle size={14} className="text-[#ff3d3d]" />
-            <span className="text-[10px] text-[#8899aa] uppercase tracking-wider">Rejected</span>
-          </div>
-          <div className="text-2xl font-bold text-[#ff3d3d]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-            {rejectedCount}
-          </div>
-        </div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard icon={Receipt} label="Pending Claims" value={pendingCount} color="#ffab40" />
+        <StatCard icon={CheckCircle2} label="Approved MTD" value={`₹${(approvedMTD / 100000).toFixed(1)}L`} color="#00e676" />
+        <StatCard icon={IndianRupee} label="Total Amount" value={`₹${(totalAmount / 100000).toFixed(1)}L`} color="#00d4ff" />
+        <StatCard icon={XCircle} label="Rejected" value={rejectedCount} color="#ff3d3d" />
       </div>
 
-      {/* Expense Claims Table */}
+      {/* Table */}
       <div className="vc-panel">
         <div className="vc-panel-header">
           <Receipt size={15} className="text-[#f5a623]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Expense Claims</span>
           <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{expenses.length} Total</span>
+          <button onClick={() => { setForm(EMPTY_FORM); setCreateOpen(true); }}
+            className="vc-btn-primary flex items-center gap-1.5 ml-2">
+            <Plus size={13} /> New Claim
+          </button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="border-b border-[#252e3a]">
-                <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Claim No.</th>
-                <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Employee</th>
-                <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Category</th>
-                <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Amount</th>
-                <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Project</th>
-                <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Date</th>
-                <th className="text-center py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Status</th>
-                <th className="text-center py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="max-h-96 overflow-y-auto">
-              {expenses.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="text-center py-8 text-[#5a6878] text-[11px]">
-                    No expense claims found
-                  </td>
+          <div className="max-h-[480px] overflow-y-auto">
+            <table className="w-full text-[11px]">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-[#0f1318]">
+                  {['Claim No.', 'Employee', 'Category', 'Amount', 'Project', 'Date', 'Status', 'Actions'].map(h => (
+                    <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>
+                  ))}
                 </tr>
-              ) : (
-                expenses.map((exp) => (
-                  <tr key={exp.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors">
-                    <td className="py-2.5 px-3 text-[#e2e8f0] font-medium" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                      {exp.claimNo}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#f5a623] to-[#e8891a] flex items-center justify-center text-[9px] font-bold text-black shrink-0">
-                          {exp.employee?.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '??'}
-                        </div>
-                        <div>
-                          <div className="text-[#e2e8f0] font-medium">{exp.employee?.name || 'Unknown'}</div>
-                          <div className="text-[#5a6878] text-[9px]">{exp.employee?.role || ''}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-1.5 text-[#8899aa]">
-                        {getCategoryIcon(exp.category)}
-                        {exp.category}
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-3 text-right text-[#e2e8f0] font-medium" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                      ₹{exp.amount.toLocaleString('en-IN')}
-                    </td>
-                    <td className="py-2.5 px-3 text-[#8899aa]">{exp.project}</td>
-                    <td className="py-2.5 px-3 text-[#5a6878]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                      {exp.date}
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className={`vc-badge ${getStatusBadge(exp.status)}`}>{exp.status}</span>
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      {exp.status === 'Pending' ? (
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => handleAction(exp.id, 'Approved')}
-                            disabled={actionLoading === exp.id}
-                            className="px-2 py-1 rounded text-[9px] font-semibold bg-[#00e676]/15 text-[#00e676] hover:bg-[#00e676]/25 transition-colors disabled:opacity-50"
-                          >
-                            {actionLoading === exp.id ? <RefreshCw size={10} className="animate-spin" /> : 'Approve'}
-                          </button>
-                          <button
-                            onClick={() => handleAction(exp.id, 'Rejected')}
-                            disabled={actionLoading === exp.id}
-                            className="px-2 py-1 rounded text-[9px] font-semibold bg-[#ff3d3d]/15 text-[#ff3d3d] hover:bg-[#ff3d3d]/25 transition-colors disabled:opacity-50"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-[#5a6878] text-[9px]">—</span>
-                      )}
+              </thead>
+              <tbody className="divide-y divide-[#1a2028]">
+                {expenses.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-10 text-center">
+                      <Receipt className="mx-auto text-[#5a6878] mb-2" size={24} />
+                      <div className="text-[11px] text-[#5a6878]">No expense claims found</div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  expenses.map(exp => (
+                    <tr key={exp.id} className="hover:bg-[#141920] transition-colors">
+                      <td className="py-2.5 px-3 text-[#f5a623] font-medium">{exp.claimNo}</td>
+                      <td className="py-2.5 px-3">
+                        <div className="text-[#e2e8f0] font-medium">{exp.employee?.name || 'Unknown'}</div>
+                        <div className="text-[#5a6878] text-[9px]">{exp.employee?.role || ''}</div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5 text-[#8899aa]">
+                          {categoryIcon(exp.category)} {exp.category}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-[#e2e8f0] font-medium">₹{exp.amount.toLocaleString('en-IN')}</td>
+                      <td className="py-2.5 px-3 text-[#8899aa]">{exp.project}</td>
+                      <td className="py-2.5 px-3 text-[#5a6878]">{exp.date}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={`vc-badge ${statusBadge(exp.status)}`}>{exp.status}</span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1">
+                          {exp.status === 'Pending' && (
+                            <>
+                              <button onClick={() => handleStatus(exp.id, 'Approved')} disabled={actionLoading === exp.id}
+                                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold bg-[#00e676]/10 text-[#00e676] hover:bg-[#00e676]/20 border border-[#00e676]/20 disabled:opacity-50">
+                                {actionLoading === exp.id ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle2 size={10} />}
+                                Approve
+                              </button>
+                              <button onClick={() => handleStatus(exp.id, 'Rejected')} disabled={actionLoading === exp.id}
+                                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold bg-[#ff3d3d]/10 text-[#ff3d3d] hover:bg-[#ff3d3d]/20 border border-[#ff3d3d]/20 disabled:opacity-50">
+                                Reject
+                              </button>
+                            </>
+                          )}
+                          <button onClick={() => { setDeleteTarget(exp); setDeleteOpen(true); }}
+                            className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-all" title="Delete">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      {/* New Claim Button */}
-      <div className="flex justify-end">
-        <button className="vc-btn-primary flex items-center gap-1.5 py-2 px-4">
-          <Plus size={14} />
-          New Claim
-        </button>
-      </div>
+      {/* Create Expense Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#f5a623] flex items-center gap-2">
+              <Plus size={16} /> New Expense Claim
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Employee *</label>
+              <select value={form.empId} onChange={e => updateForm('empId', e.target.value)} className="vc-input appearance-none">
+                <option value="">Select employee...</option>
+                {employees.map(emp => (
+                  <option key={emp.id} value={emp.id}>{emp.empId} - {emp.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Category *</label>
+              <select value={form.category} onChange={e => updateForm('category', e.target.value)} className="vc-input appearance-none">
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Amount (₹) *</label>
+              <input type="number" value={form.amount || ''} onChange={e => updateForm('amount', Number(e.target.value))}
+                placeholder="0" className="vc-input" min="0" step="0.01" />
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Project *</label>
+              <input type="text" value={form.project} onChange={e => updateForm('project', e.target.value)}
+                placeholder="Project name" className="vc-input" />
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Date *</label>
+              <input type="date" value={form.date} onChange={e => updateForm('date', e.target.value)} className="vc-input" />
+            </div>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setCreateOpen(false)} className="vc-btn-ghost">Cancel</button>
+            <button onClick={handleCreate} disabled={submitting}
+              className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">
+              {submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+              Submit Claim
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#ff3d3d] flex items-center gap-2">
+              <AlertTriangle size={16} /> Delete Expense Claim
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[#8899aa]">
+              Are you sure you want to delete claim <strong className="text-[#f5a623]">{deleteTarget?.claimNo}</strong> for <strong className="text-[#e2e8f0]">{deleteTarget?.employee?.name}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="vc-btn-ghost">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-[#ff3d3d] hover:bg-[#cc2020] text-white rounded-lg">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
-  )
+  );
 }

@@ -3,12 +3,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Users, Building2, UserCheck, ShieldAlert, AlertTriangle,
-  Clock, ArrowUpRight, ArrowDownRight, IndianRupee, TrendingUp,
+  Clock, ArrowUpRight, IndianRupee, TrendingUp,
   CircleDot, ChevronRight, Activity, FileWarning, CalendarDays,
   Receipt, Search
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useERPStore, MODULE_CONFIG } from '@/store/erp-store';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -55,6 +55,31 @@ interface Project {
   people: number;
   status: string;
   site: string;
+}
+
+interface WorkPermit {
+  id: string;
+  permitNo: string;
+  type: string;
+  location: string;
+  issuedTo: string;
+  expiry: string;
+  status: string;
+  description?: string | null;
+  precautions?: string | null;
+}
+
+interface Incident {
+  id: string;
+  refNo: string;
+  date: string;
+  site: string;
+  type: string;
+  severity: string;
+  person: string;
+  status: string;
+  description?: string | null;
+  action?: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -125,6 +150,15 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function isExpiringSoon(expiry: string, hoursThreshold: number = 48): boolean {
+  if (!expiry) return false;
+  const expiryDate = new Date(expiry);
+  const now = new Date();
+  const diffMs = expiryDate.getTime() - now.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+  return diffMs > 0 && diffHours <= hoursThreshold;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Stat Card                                                          */
 /* ------------------------------------------------------------------ */
@@ -163,8 +197,8 @@ function StatCard({
               trend === 'up' ? 'text-[#00e676]' : 'text-[#ff3d3d]'
             }`}
           >
-            {trend === 'up' ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-            {trend === 'up' ? '+' : '-'}2.4%
+            {trend === 'up' ? <ArrowUpRight size={12} /> : <></>}
+            Active
           </span>
         )}
       </div>
@@ -205,21 +239,36 @@ function ProgressBar({ pct, color, height = 6 }: { pct: number; color?: string; 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [permits, setPermits] = useState<WorkPermit[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { setActiveModule } = useERPStore();
 
   useEffect(() => {
     async function fetchAll() {
       try {
-        const [dashRes, projRes] = await Promise.all([
+        const [dashRes, projRes, permitsRes, incidentsRes] = await Promise.all([
           fetch('/api/dashboard'),
           fetch('/api/projects'),
+          fetch('/api/permits'),
+          fetch('/api/incidents'),
         ]);
         if (!dashRes.ok || !projRes.ok) throw new Error('Failed to fetch');
         const dashJson = await dashRes.json();
         const projJson = await projRes.json();
         if (dashJson.success) setData(dashJson.data);
         if (projJson.success) setProjects(projJson.data);
+
+        // Permits and incidents are optional
+        if (permitsRes.ok) {
+          const permitsJson = await permitsRes.json();
+          if (permitsJson.success) setPermits(permitsJson.data || []);
+        }
+        if (incidentsRes.ok) {
+          const incidentsJson = await incidentsRes.json();
+          if (incidentsJson.success) setIncidents(incidentsJson.data || []);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Something went wrong');
       } finally {
@@ -235,7 +284,7 @@ export default function Dashboard() {
     return ((data.attendance.present / data.employees.total) * 100).toFixed(1);
   }, [data]);
 
-  /* Workforce by trade (derived from attendance records) */
+  /* Workforce by trade */
   const tradeBreakdown = useMemo(() => {
     if (!data) return [];
     const map = new Map<string, number>();
@@ -249,20 +298,33 @@ export default function Dashboard() {
       .slice(0, 6);
   }, [data]);
 
+  /* Expiring permits (dynamic) */
+  const expiringPermits = useMemo(() => {
+    return permits.filter(p => {
+      if (p.status === 'Expiring') return true;
+      if (p.status === 'Active' && isExpiringSoon(p.expiry, 48)) return true;
+      return false;
+    });
+  }, [permits]);
+
+  /* Recent open incidents for safety alerts */
+  const recentIncidents = useMemo(() => {
+    return incidents
+      .filter(i => i.status === 'Investigating' || i.status === 'Open')
+      .slice(0, 3);
+  }, [incidents]);
+
   /* Loading state */
   if (loading) {
     return (
       <div className="space-y-4">
-        {/* Alert skeleton */}
         <Skeleton className="h-10 w-full rounded-lg bg-[#1e252e]" />
-        {/* Stats row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCardSkeleton />
           <StatCardSkeleton />
           <StatCardSkeleton />
           <StatCardSkeleton />
         </div>
-        {/* Two-column */}
         <div className="grid grid-cols-1 lg:grid-cols-[65%_1fr] gap-4">
           <PanelSkeleton />
           <div className="space-y-4">
@@ -270,7 +332,6 @@ export default function Dashboard() {
             <PanelSkeleton />
           </div>
         </div>
-        {/* Three-column */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <PanelSkeleton />
           <PanelSkeleton />
@@ -295,16 +356,43 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
-      {/* ===== 1. Alert Strip ===== */}
-      <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[#ffab40]/10 border border-[#ffab40]/20">
-        <FileWarning size={16} className="text-[#ffab40] shrink-0" />
-        <span className="text-[12px] text-[#ffab40] font-medium">
-          <span className="font-bold">3 work permits</span> expiring within 48 hours — WP-2024-017, WP-2024-022, WP-2024-031 require immediate renewal.
-        </span>
-        <button className="ml-auto text-[#ffab40] text-[11px] font-semibold hover:underline whitespace-nowrap hidden sm:block">
-          Review Permits <ChevronRight size={12} className="inline" />
-        </button>
-      </div>
+      {/* ===== 1. Alert Strip (Dynamic - permits) ===== */}
+      {(expiringPermits.length > 0 || recentIncidents.length > 0) && (
+        <div className="space-y-2">
+          {expiringPermits.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[#ffab40]/10 border border-[#ffab40]/20">
+              <FileWarning size={16} className="text-[#ffab40] shrink-0" />
+              <span className="text-[12px] text-[#ffab40] font-medium">
+                <span className="font-bold">{expiringPermits.length} work permit{expiringPermits.length > 1 ? 's' : ''}</span> expiring within 48 hours —{' '}
+                {expiringPermits.slice(0, 3).map(p => p.permitNo).join(', ')}
+                {expiringPermits.length > 3 ? ` +${expiringPermits.length - 3} more` : ''}
+                {' '}require immediate renewal.
+              </span>
+              <button
+                onClick={() => setActiveModule('permits')}
+                className="ml-auto text-[#ffab40] text-[11px] font-semibold hover:underline whitespace-nowrap hidden sm:block"
+              >
+                Review Permits <ChevronRight size={12} className="inline" />
+              </button>
+            </div>
+          )}
+          {recentIncidents.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[#ff3d3d]/10 border border-[#ff3d3d]/20">
+              <ShieldAlert size={16} className="text-[#ff3d3d] shrink-0" />
+              <span className="text-[12px] text-[#ff3d3d] font-medium">
+                <span className="font-bold">{recentIncidents.length} safety incident{recentIncidents.length > 1 ? 's' : ''}</span> under investigation —{' '}
+                {recentIncidents.map(i => i.refNo).join(', ')}
+              </span>
+              <button
+                onClick={() => setActiveModule('safety')}
+                className="ml-auto text-[#ff3d3d] text-[11px] font-semibold hover:underline whitespace-nowrap hidden sm:block"
+              >
+                View Safety <ChevronRight size={12} className="inline" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ===== 2. Stats Row (4 cards) ===== */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -352,7 +440,6 @@ export default function Dashboard() {
           </div>
           <div className="vc-panel-body p-0">
             <div className="max-h-[340px] overflow-y-auto">
-              {/* Header row */}
               <div className="grid grid-cols-[1fr_100px_140px_60px_80px] gap-2 px-4 py-2 text-[9px] font-bold uppercase tracking-wider text-[#5a6878] border-b border-[#252e3a] sticky top-0 bg-[#161c24] z-10">
                 <span>Project</span>
                 <span className="hidden sm:block">Site</span>
@@ -438,7 +525,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Pending Actions */}
+          {/* Pending Actions - Clickable */}
           <div className="vc-panel">
             <div className="vc-panel-header">
               <Clock size={14} className="text-[#a78bfa]" />
@@ -447,7 +534,10 @@ export default function Dashboard() {
               </span>
             </div>
             <div className="vc-panel-body space-y-2.5">
-              <button className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors group">
+              <button
+                onClick={() => setActiveModule('leave')}
+                className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors"
+              >
                 <div className="w-8 h-8 rounded-lg bg-[#a78bfa]/10 flex items-center justify-center shrink-0">
                   <CalendarDays size={14} className="text-[#a78bfa]" />
                 </div>
@@ -462,7 +552,10 @@ export default function Dashboard() {
                   {data.leaves.pending}
                 </span>
               </button>
-              <button className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors group">
+              <button
+                onClick={() => setActiveModule('expenses')}
+                className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors"
+              >
                 <div className="w-8 h-8 rounded-lg bg-[#f5a623]/10 flex items-center justify-center shrink-0">
                   <Receipt size={14} className="text-[#f5a623]" />
                 </div>
@@ -477,7 +570,10 @@ export default function Dashboard() {
                   {data.expenses.pending}
                 </span>
               </button>
-              <button className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors group">
+              <button
+                onClick={() => setActiveModule('safety')}
+                className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors"
+              >
                 <div className="w-8 h-8 rounded-lg bg-[#ff3d3d]/10 flex items-center justify-center shrink-0">
                   <ShieldAlert size={14} className="text-[#ff3d3d]" />
                 </div>
@@ -492,7 +588,10 @@ export default function Dashboard() {
                   {data.incidents.open}
                 </span>
               </button>
-              <button className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors group">
+              <button
+                onClick={() => setActiveModule('recruitment')}
+                className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors"
+              >
                 <div className="w-8 h-8 rounded-lg bg-[#00d4ff]/10 flex items-center justify-center shrink-0">
                   <Search size={14} className="text-[#00d4ff]" />
                 </div>
@@ -524,7 +623,6 @@ export default function Dashboard() {
             <span className="ml-auto text-[10px] text-[#5a6878]">{data.attendance.date}</span>
           </div>
           <div className="vc-panel-body">
-            {/* Present / Absent boxes */}
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="rounded-lg p-3 bg-[#00e676]/5 border border-[#00e676]/15 text-center">
                 <div className="text-[22px] font-bold text-[#00e676]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
@@ -539,7 +637,6 @@ export default function Dashboard() {
                 <div className="text-[10px] text-[#8899aa] font-medium mt-0.5">Absent</div>
               </div>
             </div>
-            {/* Metrics */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -569,7 +666,6 @@ export default function Dashboard() {
                 </span>
               </div>
             </div>
-            {/* Attendance bar */}
             <div className="mt-4 pt-3 border-t border-[#252e3a]">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] text-[#5a6878]">ATTENDANCE RATE</span>
@@ -596,7 +692,6 @@ export default function Dashboard() {
                 <div className="text-center text-[#5a6878] text-xs py-6">No recent activity</div>
               ) : (
                 <div className="relative">
-                  {/* Timeline line */}
                   <div className="absolute left-[7px] top-2 bottom-2 w-px bg-[#252e3a]" />
                   <div className="space-y-4">
                     {data.recentAttendance.map((item) => (
@@ -662,7 +757,6 @@ export default function Dashboard() {
             <span className="ml-auto text-[10px] text-[#5a6878]">This month</span>
           </div>
           <div className="vc-panel-body space-y-3">
-            {/* Gross */}
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141920]">
               <div className="flex items-center gap-2">
                 <TrendingUp size={13} className="text-[#00d4ff]" />
@@ -672,7 +766,6 @@ export default function Dashboard() {
                 {formatCurrency(data.payroll.totalGross)}
               </span>
             </div>
-            {/* Deductions */}
             <div className="space-y-2 pl-1">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-[#5a6878]">PF Contribution</span>
@@ -693,16 +786,13 @@ export default function Dashboard() {
                 </span>
               </div>
             </div>
-            {/* Divider */}
             <div className="border-t border-dashed border-[#252e3a]" />
-            {/* Net */}
             <div className="flex items-center justify-between p-3 rounded-lg bg-[#f5a623]/5 border border-[#f5a623]/15">
               <span className="text-[12px] text-[#f5a623] font-semibold">Net Disbursed</span>
               <span className="text-[18px] font-bold text-[#f5a623]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
                 {formatCurrency(data.payroll.totalDisbursed)}
               </span>
             </div>
-            {/* Paid count */}
             <div className="flex items-center justify-center gap-1.5 text-[10px] text-[#5a6878]">
               <CircleDot size={10} />
               <span>{data.payroll.paid} employees paid this cycle</span>
@@ -713,5 +803,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-

@@ -131,6 +131,8 @@ model Incident {
   severity  String
   person    String
   status    String   @default("Investigating")
+  description String?
+  action    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -217,4 +219,50 @@ model JobOpening {
   status       String   @default("Open")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model ShiftSchedule {
+  id          String   @id @default(cuid())
+  empId       String
+  employeeName String
+  site        String
+  shift       String
+  weekStart   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Certification {
+  id            String   @id @default(cuid())
+  empId         String
+  employeeName  String
+  name          String
+  issuedBy      String
+  issueDate     String
+  expiryDate    String
+  status        String   @default("Valid")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model TrainingSession {
+  id          String   @id @default(cuid())
+  title       String
+  site        String
+  trainer     String
+  date        String
+  duration    String
+  attendees   Int      @default(0)
+  status      String   @default("Scheduled")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CompanySettings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  label       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

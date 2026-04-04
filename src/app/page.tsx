@@ -197,8 +197,10 @@ export default function ERPPage() {
   const { activeModule } = useERPStore();
   const [mounted, setMounted] = useState(false);
 
+  // Use requestAnimationFrame to avoid synchronous setState in effect
   useEffect(() => {
-    setMounted(true);
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
   }, []);
 
   if (!mounted) {

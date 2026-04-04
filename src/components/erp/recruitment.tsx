@@ -1,180 +1,323 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { Briefcase, Users, Send, UserCheck, Plus, ChevronRight } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Briefcase, Users, Send, UserCheck, Plus, Pencil,
+  Trash2, Loader2, AlertTriangle, Zap, CheckCircle2,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 
+/* ── Types ────────────────────────────────────────── */
 interface JobOpening {
-  id: string
-  position: string
-  site: string
-  openings: number
-  applications: number
-  priority: string
-  status: string
-  createdAt: string
+  id: string;
+  position: string;
+  site: string;
+  openings: number;
+  applications: number;
+  priority: string;
+  status: string;
+  createdAt: string;
 }
 
-const PIPELINE_STAGES = [
-  { label: 'Applied', count: 87, color: 'text-[#e2e8f0]' },
-  { label: 'Screening', count: 34, color: 'text-[#f5a623]' },
-  { label: 'Interview', count: 18, color: 'text-[#00d4ff]' },
-  { label: 'Technical Test', count: 12, color: 'text-[#a78bfa]' },
-  { label: 'Offer Stage', count: 6, color: 'text-[#00e676]' },
-  { label: 'Joined', count: 4, color: 'text-[#00e676]' },
-]
+interface JobFormData {
+  position: string;
+  site: string;
+  openings: number;
+  priority: string;
+  status: string;
+}
 
-function getPriorityBadge(priority: string) {
-  const map: Record<string, string> = {
-    High: 'bg-[#ff3d3d]/15 text-[#ff3d3d]',
+const EMPTY_FORM: JobFormData = {
+  position: '', site: '', openings: 1, priority: 'Medium', status: 'Open',
+};
+
+const PRIORITY_OPTIONS = ['Urgent', 'High', 'Medium', 'Low'];
+const STATUS_OPTIONS = ['Open', 'Shortlisting', 'Closed', 'Filled'];
+
+/* ── Helpers ──────────────────────────────────────── */
+function priorityBadge(p: string) {
+  const m: Record<string, string> = {
+    Urgent: 'bg-[#ff3d3d]/15 text-[#ff3d3d]',
+    High: 'bg-[#ffab40]/15 text-[#ffab40]',
     Medium: 'bg-[#f5a623]/15 text-[#f5a623]',
     Low: 'bg-[#5a6878]/15 text-[#5a6878]',
-  }
-  return map[priority] || map['Medium']
+  };
+  return m[p] || 'bg-[#5a6878]/15 text-[#5a6878]';
 }
 
-function getStatusBadge(status: string) {
-  const map: Record<string, string> = {
+function statusBadge(s: string) {
+  const m: Record<string, string> = {
     Open: 'bg-[#00e676]/15 text-[#00e676]',
+    Shortlisting: 'bg-[#00d4ff]/15 text-[#00d4ff]',
     Closed: 'bg-[#5a6878]/15 text-[#5a6878]',
+    Filled: 'bg-[#a78bfa]/15 text-[#a78bfa]',
     'On Hold': 'bg-[#ffab40]/15 text-[#ffab40]',
-    Filled: 'bg-[#00d4ff]/15 text-[#00d4ff]',
-  }
-  return map[status] || map['Open']
+  };
+  return m[s] || 'bg-[#5a6878]/15 text-[#5a6878]';
 }
 
-export default function Recruitment() {
-  const [openings, setOpenings] = useState<JobOpening[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+function priorityIcon(p: string) {
+  if (p === 'Urgent') return <Zap size={10} className="text-[#ff3d3d]" />;
+  return null;
+}
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const res = await fetch('/api/recruitment')
-        if (!res.ok) throw new Error('Failed to fetch')
-        const json = await res.json()
-        if (json.success) setOpenings(json.data)
-        else throw new Error(json.error || 'Unknown error')
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error loading data')
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchData()
-  }, [])
-
-  if (loading) {
-    return (
-      <div className="space-y-4 animate-pulse">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="vc-stat-card">
-              <div className="h-4 bg-[#252e3a] rounded w-20 mb-2" />
-              <div className="h-6 bg-[#252e3a] rounded w-12" />
-            </div>
+/* ── Loading Skeleton ─────────────────────────────── */
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="vc-stat-card">
+            <Skeleton className="h-3 w-24 mb-2 bg-[#1e2630]" />
+            <Skeleton className="h-7 w-12 bg-[#1e2630]" />
+          </div>
+        ))}
+      </div>
+      <div className="vc-panel">
+        <Skeleton className="h-10 w-full bg-[#1e2630]" />
+        <div className="p-3 space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full bg-[#1e2630]" />
           ))}
         </div>
-        <div className="h-64 bg-[#161c24] border border-[#252e3a] rounded-lg" />
       </div>
-    )
-  }
+    </div>
+  );
+}
 
-  if (error) {
-    return (
-      <div className="vc-panel p-6 text-center">
-        <p className="text-[#ff3d3d] text-sm">{error}</p>
+/* ── Stat Card ────────────────────────────────────── */
+function StatCard({ icon: Icon, label, value, color }: {
+  icon: React.ElementType; label: string; value: number | string; color: string;
+}) {
+  return (
+    <div className="vc-stat-card">
+      <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: color }} />
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">{label}</div>
+          <div className="text-[22px] font-bold leading-none" style={{ fontFamily: "'Barlow Condensed', sans-serif", color }}>{value}</div>
+        </div>
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}15` }}>
+          <Icon size={18} style={{ color }} />
+        </div>
       </div>
-    )
-  }
+    </div>
+  );
+}
 
-  const totalApplications = openings.reduce((sum, o) => sum + o.applications, 0)
+/* ════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ════════════════════════════════════════════════════════ */
+export default function Recruitment() {
+  const [openings, setOpenings] = useState<JobOpening[]>([]);
+  const [sites, setSites] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Dialogs
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<JobOpening | null>(null);
+  const [editTarget, setEditTarget] = useState<JobOpening | null>(null);
+  const [form, setForm] = useState<JobFormData>(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
+
+  /* ── Fetch ── */
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [jobRes, siteRes] = await Promise.all([
+        fetch('/api/recruitment'),
+        fetch('/api/sites'),
+      ]);
+      const jobJson = await jobRes.json();
+      const siteJson = await siteRes.json();
+      if (jobJson.success) setOpenings(jobJson.data);
+      if (siteJson.success) {
+        const uniqueSites = [...new Set(siteJson.data.map((s: any) => s.name))] as string[];
+        setSites(uniqueSites);
+      }
+    } catch {
+      toast.error('Failed to fetch recruitment data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  /* ── Stats ── */
+  const openPositions = openings.filter(o => o.status === 'Open' || o.status === 'Shortlisting').length;
+  const totalApplications = openings.reduce((s, o) => s + o.applications, 0);
+  const offersSent = openings.filter(o => o.status === 'Filled').length;
+  const hired = openings.filter(o => o.status === 'Filled').reduce((s, o) => s + o.openings, 0);
+
+  /* ── Form helpers ── */
+  const updateForm = (field: keyof JobFormData, value: string | number) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleCreate = async () => {
+    if (!form.position || !form.site || !form.openings || !form.priority) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const res = await fetch('/api/recruitment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('Job opening created');
+        setCreateOpen(false);
+        setForm(EMPTY_FORM);
+        await fetchData();
+      } else {
+        toast.error(json.error || 'Failed to create job opening');
+      }
+    } catch {
+      toast.error('Network error creating job opening');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!editTarget || !form.position || !form.site) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const res = await fetch('/api/recruitment', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editTarget.id, ...form }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('Job opening updated');
+        setEditOpen(false);
+        setEditTarget(null);
+        setForm(EMPTY_FORM);
+        await fetchData();
+      } else {
+        toast.error(json.error || 'Failed to update job opening');
+      }
+    } catch {
+      toast.error('Network error updating job opening');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      const res = await fetch('/api/recruitment', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deleteTarget.id }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('Job opening deleted');
+        setDeleteOpen(false);
+        setDeleteTarget(null);
+        await fetchData();
+      } else {
+        toast.error(json.error || 'Delete failed');
+      }
+    } catch {
+      toast.error('Network error deleting job opening');
+    }
+  };
+
+  const openEditDialog = (job: JobOpening) => {
+    setEditTarget(job);
+    setForm({
+      position: job.position, site: job.site, openings: job.openings,
+      priority: job.priority, status: job.status,
+    });
+    setEditOpen(true);
+  };
+
+  if (loading) return <LoadingSkeleton />;
 
   return (
     <div className="space-y-4">
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="vc-stat-card">
-          <div className="flex items-center gap-2 mb-1">
-            <Briefcase size={14} className="text-[#f5a623]" />
-            <span className="text-[10px] text-[#8899aa] uppercase tracking-wider">Open Positions</span>
-          </div>
-          <div className="text-2xl font-bold text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-            {openings.length || 14}
-          </div>
-        </div>
-        <div className="vc-stat-card" style={{ '--stat-color': '#00d4ff' } as React.CSSProperties}>
-          <style>{`.vc-stat-card:nth-child(2)::before{background:#00d4ff}`}</style>
-          <div className="flex items-center gap-2 mb-1">
-            <Users size={14} className="text-[#00d4ff]" />
-            <span className="text-[10px] text-[#8899aa] uppercase tracking-wider">Active Applicants</span>
-          </div>
-          <div className="text-2xl font-bold text-[#00d4ff]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-            {totalApplications || 87}
-          </div>
-        </div>
-        <div className="vc-stat-card">
-          <style>{`.vc-stat-card:nth-child(3)::before{background:#00e676}`}</style>
-          <div className="flex items-center gap-2 mb-1">
-            <Send size={14} className="text-[#00e676]" />
-            <span className="text-[10px] text-[#8899aa] uppercase tracking-wider">Offers Sent</span>
-          </div>
-          <div className="text-2xl font-bold text-[#00e676]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-            6
-          </div>
-        </div>
-        <div className="vc-stat-card">
-          <style>{`.vc-stat-card:nth-child(4)::before{background:#f5a623}`}</style>
-          <div className="flex items-center gap-2 mb-1">
-            <UserCheck size={14} className="text-[#f5a623]" />
-            <span className="text-[10px] text-[#8899aa] uppercase tracking-wider">Hired This Month</span>
-          </div>
-          <div className="text-2xl font-bold text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-            12
-          </div>
-        </div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard icon={Briefcase} label="Open Positions" value={openPositions} color="#f5a623" />
+        <StatCard icon={Users} label="Total Applications" value={totalApplications} color="#00d4ff" />
+        <StatCard icon={Send} label="Offers Sent" value={offersSent} color="#00e676" />
+        <StatCard icon={UserCheck} label="Hired" value={hired} color="#a78bfa" />
       </div>
 
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left: Job Openings Table */}
-        <div className="lg:col-span-2 vc-panel">
-          <div className="vc-panel-header">
-            <Briefcase size={15} className="text-[#f5a623]" />
-            <span className="text-[12px] font-semibold text-[#e2e8f0]">Job Openings</span>
-            <span className="vc-badge bg-[#f5a623]/15 text-[#f5a623] ml-auto">{openings.length} Open</span>
-          </div>
-          <div className="overflow-x-auto">
+      {/* Table */}
+      <div className="vc-panel">
+        <div className="vc-panel-header">
+          <Briefcase size={15} className="text-[#f5a623]" />
+          <span className="text-[12px] font-semibold text-[#e2e8f0]">Job Openings</span>
+          <span className="vc-badge bg-[#f5a623]/15 text-[#f5a623] ml-auto">{openPositions} Open</span>
+          <button onClick={() => { setForm(EMPTY_FORM); setCreateOpen(true); }}
+            className="vc-btn-primary flex items-center gap-1.5 ml-2">
+            <Plus size={13} /> Post Job
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <div className="max-h-[480px] overflow-y-auto">
             <table className="w-full text-[11px]">
-              <thead>
-                <tr className="border-b border-[#252e3a]">
-                  <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Position</th>
-                  <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Site</th>
-                  <th className="text-center py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Openings</th>
-                  <th className="text-center py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Apps</th>
-                  <th className="text-center py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Priority</th>
-                  <th className="text-center py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Status</th>
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-[#0f1318]">
+                  {['Position', 'Site', 'Openings', 'Applications', 'Priority', 'Status', 'Actions'].map(h => (
+                    <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="max-h-96 overflow-y-auto">
+              <tbody className="divide-y divide-[#1a2028]">
                 {openings.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-[#5a6878] text-[11px]">
-                      No job openings found
+                    <td colSpan={7} className="py-10 text-center">
+                      <Briefcase className="mx-auto text-[#5a6878] mb-2" size={24} />
+                      <div className="text-[11px] text-[#5a6878]">No job openings found</div>
                     </td>
                   </tr>
                 ) : (
-                  openings.slice(0, 10).map((job) => (
-                    <tr key={job.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors">
+                  openings.map(job => (
+                    <tr key={job.id} className="hover:bg-[#141920] transition-colors">
                       <td className="py-2.5 px-3 text-[#e2e8f0] font-medium">{job.position}</td>
                       <td className="py-2.5 px-3 text-[#8899aa]">{job.site}</td>
-                      <td className="py-2.5 px-3 text-center text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{job.openings}</td>
-                      <td className="py-2.5 px-3 text-center text-[#00d4ff]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{job.applications}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`vc-badge ${getPriorityBadge(job.priority)}`}>{job.priority}</span>
+                      <td className="py-2.5 px-3 text-[#e2e8f0] font-medium">{job.openings}</td>
+                      <td className="py-2.5 px-3 text-[#00d4ff] font-medium">{job.applications}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={`vc-badge ${priorityBadge(job.priority)} flex items-center gap-1 w-fit`}>
+                          {priorityIcon(job.priority)} {job.priority}
+                        </span>
                       </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`vc-badge ${getStatusBadge(job.status)}`}>{job.status}</span>
+                      <td className="py-2.5 px-3">
+                        <span className={`vc-badge ${statusBadge(job.status)}`}>{job.status}</span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => openEditDialog(job)}
+                            className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10 transition-all" title="Edit">
+                            <Pencil size={13} />
+                          </button>
+                          <button onClick={() => { setDeleteTarget(job); setDeleteOpen(true); }}
+                            className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-all" title="Delete">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -183,41 +326,126 @@ export default function Recruitment() {
             </table>
           </div>
         </div>
+      </div>
 
-        {/* Right: Recruitment Pipeline */}
-        <div className="vc-panel">
-          <div className="vc-panel-header">
-            <Users size={15} className="text-[#00d4ff]" />
-            <span className="text-[12px] font-semibold text-[#e2e8f0]">Recruitment Pipeline</span>
-          </div>
-          <div className="vc-panel-body space-y-2">
-            {PIPELINE_STAGES.map((stage, idx) => (
-              <div key={stage.label} className="flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-[#141920] transition-colors group">
-                <div className="w-7 h-7 rounded-md bg-[#141920] border border-[#2e3a48] flex items-center justify-center text-[10px] font-bold text-[#5a6878]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                  {idx + 1}
-                </div>
-                <div className="flex-1">
-                  <div className="text-[11px] font-medium text-[#e2e8f0]">{stage.label}</div>
-                </div>
-                <div className={`text-[14px] font-bold ${stage.color}`} style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                  {stage.count}
-                </div>
-                {idx < PIPELINE_STAGES.length - 1 && (
-                  <ChevronRight size={12} className="text-[#2e3a48]" />
-                )}
+      {/* Create Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#f5a623] flex items-center gap-2">
+              <Plus size={16} /> Post New Job
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Position *</label>
+              <input type="text" value={form.position} onChange={e => updateForm('position', e.target.value)} placeholder="e.g. Site Engineer" className="vc-input" />
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
+              <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none">
+                <option value="">Select site...</option>
+                {sites.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Openings *</label>
+                <input type="number" value={form.openings} onChange={e => updateForm('openings', Number(e.target.value))} className="vc-input" min="1" />
               </div>
-            ))}
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Priority *</label>
+                <select value={form.priority} onChange={e => updateForm('priority', e.target.value)} className="vc-input appearance-none">
+                  {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label>
+              <select value={form.status} onChange={e => updateForm('status', e.target.value)} className="vc-input appearance-none">
+                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
           </div>
-        </div>
-      </div>
+          <DialogFooter>
+            <button onClick={() => setCreateOpen(false)} className="vc-btn-ghost">Cancel</button>
+            <button onClick={handleCreate} disabled={submitting}
+              className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">
+              {submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+              Post Job
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* Post Job Button (floating) */}
-      <div className="flex justify-end">
-        <button className="vc-btn-primary flex items-center gap-1.5 py-2 px-4">
-          <Plus size={14} />
-          Post Job
-        </button>
-      </div>
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#00d4ff] flex items-center gap-2">
+              <Pencil size={16} /> Edit Job — {editTarget?.position}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Position *</label>
+              <input type="text" value={form.position} onChange={e => updateForm('position', e.target.value)} className="vc-input" />
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
+              <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none">
+                {sites.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Openings</label>
+                <input type="number" value={form.openings} onChange={e => updateForm('openings', Number(e.target.value))} className="vc-input" min="1" />
+              </div>
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Priority</label>
+                <select value={form.priority} onChange={e => updateForm('priority', e.target.value)} className="vc-input appearance-none">
+                  {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label>
+              <select value={form.status} onChange={e => updateForm('status', e.target.value)} className="vc-input appearance-none">
+                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setEditOpen(false)} className="vc-btn-ghost">Cancel</button>
+            <button onClick={handleEdit} disabled={submitting}
+              className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">
+              {submitting ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+              Update Job
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#ff3d3d] flex items-center gap-2">
+              <AlertTriangle size={16} /> Delete Job Opening
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[#8899aa]">
+              Are you sure you want to delete the job opening for <strong className="text-[#e2e8f0]">{deleteTarget?.position}</strong> at <strong className="text-[#8899aa]">{deleteTarget?.site}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="vc-btn-ghost">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-[#ff3d3d] hover:bg-[#cc2020] text-white rounded-lg">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
-  )
+  );
 }

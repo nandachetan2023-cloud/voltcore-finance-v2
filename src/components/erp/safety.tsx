@@ -1,13 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  ShieldAlert, AlertTriangle, CheckCircle2, MessageSquare,
-  Plus, FileText, ChevronRight, Clock, MapPin, User
+  ShieldAlert, AlertTriangle, CheckCircle2, Plus, Pencil,
+  Trash2, Loader2, FileText, MapPin, User,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// ── Types ──────────────────────────────────────────────
+/* ── Types ────────────────────────────────────────── */
 interface Incident {
   id: string;
   refNo: string;
@@ -17,76 +23,93 @@ interface Incident {
   severity: string;
   person: string;
   status: string;
+  description: string | null;
+  action: string | null;
+  createdAt: string;
 }
 
-// ── Helpers ────────────────────────────────────────────
+interface IncidentFormData {
+  date: string;
+  site: string;
+  type: string;
+  severity: string;
+  person: string;
+  status: string;
+  description: string;
+  action: string;
+}
+
+const EMPTY_FORM: IncidentFormData = {
+  date: '', site: '', type: 'Near Miss', severity: 'Low', person: '', status: 'Investigating', description: '', action: '',
+};
+
+const INCIDENT_TYPES = ['Near Miss', 'First Aid', 'Property Damage', 'LTI', 'Fatality', 'Hazard ID'];
+const SEVERITY_OPTIONS = ['Low', 'Medium', 'High', 'Critical'];
+const STATUS_OPTIONS = ['Investigating', 'Open', 'Closed'];
+
+/* ── Helpers ──────────────────────────────────────── */
 function severityColor(s: string) {
-  switch (s?.toLowerCase()) {
-    case 'critical':
-    case 'fatal': return 'bg-[#ff3d3d]/20 text-[#ff3d3d] border-[#ff3d3d]/40';
-    case 'major':
-    case 'high': return 'bg-[#ffab40]/20 text-[#ffab40] border-[#ffab40]/40';
-    case 'moderate':
-    case 'medium': return 'bg-[#f5a623]/20 text-[#f5a623] border-[#f5a623]/40';
-    case 'minor':
-    case 'low': return 'bg-[#00d4ff]/20 text-[#00d4ff] border-[#00d4ff]/40';
-    default: return 'bg-[#5a6878]/20 text-[#8899aa] border-[#5a6878]/40';
-  }
+  const m: Record<string, string> = {
+    Critical: 'bg-[#ff3d3d]/15 text-[#ff3d3d]',
+    High: 'bg-[#ffab40]/15 text-[#ffab40]',
+    Medium: 'bg-[#f5a623]/15 text-[#f5a623]',
+    Low: 'bg-[#00d4ff]/15 text-[#00d4ff]',
+  };
+  return m[s] || 'bg-[#5a6878]/15 text-[#5a6878]';
 }
 
-function statusColor(s: string) {
-  switch (s?.toLowerCase()) {
-    case 'open':
-    case 'investigating': return 'bg-[#ffab40]/20 text-[#ffab40] border-[#ffab40]/40';
-    case 'closed':
-    case 'resolved': return 'bg-[#00e676]/20 text-[#00e676] border-[#00e676]/40';
-    case 'pending review': return 'bg-[#a78bfa]/20 text-[#a78bfa] border-[#a78bfa]/40';
-    default: return 'bg-[#5a6878]/20 text-[#8899aa] border-[#5a6878]/40';
-  }
+function incidentStatusColor(s: string) {
+  const m: Record<string, string> = {
+    Investigating: 'bg-[#ffab40]/15 text-[#ffab40]',
+    Open: 'bg-[#00d4ff]/15 text-[#00d4ff]',
+    Closed: 'bg-[#00e676]/15 text-[#00e676]',
+  };
+  return m[s] || 'bg-[#5a6878]/15 text-[#5a6878]';
 }
 
-function formatDate(d: string) {
+function fmtDate(d: string) {
   if (!d) return '—';
-  const dt = new Date(d);
-  if (isNaN(dt.getTime())) return d;
-  return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; }
 }
 
-// ── Stat Card ──────────────────────────────────────────
-function StatCard({
-  icon: Icon, label, value, color, sub
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string | number;
-  color: string;
-  sub?: string;
+/* ── Loading Skeleton ─────────────────────────────── */
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="vc-stat-card">
+            <Skeleton className="h-3 w-24 mb-2 bg-[#1e2630]" />
+            <Skeleton className="h-7 w-12 bg-[#1e2630]" />
+          </div>
+        ))}
+      </div>
+      <div className="vc-panel">
+        <Skeleton className="h-10 w-full bg-[#1e2630]" />
+        <div className="p-3 space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full bg-[#1e2630]" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Stat Card ────────────────────────────────────── */
+function StatCard({ icon: Icon, label, value, color, sub }: {
+  icon: React.ElementType; label: string; value: number | string; color: string; sub?: string;
 }) {
   return (
     <div className="vc-stat-card">
-      <div
-        className="absolute top-0 left-0 right-0 h-[3px]"
-        style={{ background: color }}
-      />
+      <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: color }} />
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-[10px] text-[#5a6878] font-semibold uppercase tracking-wider mb-1">
-            {label}
-          </div>
-          <div
-            className="text-[28px] font-bold leading-none"
-            style={{ fontFamily: "'Share Tech Mono', monospace", color }}
-          >
-            {value}
-          </div>
-          {sub && (
-            <div className="text-[10px] text-[#5a6878] mt-1">{sub}</div>
-          )}
+          <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">{label}</div>
+          <div className="text-[22px] font-bold leading-none" style={{ fontFamily: "'Barlow Condensed', sans-serif", color }}>{value}</div>
+          {sub && <div className="text-[9px] text-[#5a6878] mt-1">{sub}</div>}
         </div>
-        <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center"
-          style={{ background: `${color}15` }}
-        >
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}15` }}>
           <Icon size={18} style={{ color }} />
         </div>
       </div>
@@ -94,291 +117,375 @@ function StatCard({
   );
 }
 
-// ── KPI Row ────────────────────────────────────────────
-function KPIRow({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div className="flex items-center justify-between py-[9px] border-b border-[#252e3a] last:border-0">
-      <span className="text-[11px] text-[#8899aa]">{label}</span>
-      <span
-        className="text-[14px] font-bold"
-        style={{ fontFamily: "'Share Tech Mono', monospace", color }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-// ── Audit Card ─────────────────────────────────────────
-function AuditCard({
-  title, due, type, icon: Icon
-}: {
-  title: string; due: string; type: string; icon: React.ElementType;
-}) {
-  const isOverdue = type === 'overdue';
-  return (
-    <div className={`p-3 rounded-lg border transition-colors ${
-      isOverdue
-        ? 'bg-[#ff3d3d]/5 border-[#ff3d3d]/30 hover:border-[#ff3d3d]/50'
-        : 'bg-[#141920] border-[#252e3a] hover:border-[#2e3a48]'
-    }`}>
-      <div className="flex items-center gap-2 mb-2">
-        <Icon size={14} className={isOverdue ? 'text-[#ff3d3d]' : 'text-[#f5a623]'} />
-        <span className="text-[11px] font-semibold text-[#e2e8f0]">{title}</span>
-      </div>
-      <div className="flex items-center gap-1">
-        <Clock size={11} className={isOverdue ? 'text-[#ff3d3d]' : 'text-[#5a6878]'} />
-        <span className={`text-[10px] ${isOverdue ? 'text-[#ff3d3d]' : 'text-[#5a6878]'}`}>
-          {due}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// ── Loading Skeleton ───────────────────────────────────
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-4 animate-pulse">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[1,2,3,4].map(i => (
-          <div key={i} className="vc-stat-card">
-            <Skeleton className="h-3 w-24 mb-2 bg-[#1e2630]" />
-            <Skeleton className="h-8 w-16 bg-[#1e2630]" />
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
-        <div className="vc-panel">
-          <Skeleton className="h-10 w-full bg-[#1e2630]" />
-          <div className="p-3 space-y-2">
-            {[1,2,3,4,5].map(i => (
-              <Skeleton key={i} className="h-9 w-full bg-[#1e2630]" />
-            ))}
-          </div>
-        </div>
-        <div className="space-y-4">
-          <div className="vc-panel">
-            <Skeleton className="h-10 w-full bg-[#1e2630]" />
-            <Skeleton className="h-32 w-full bg-[#1e2630]" />
-          </div>
-          <div className="vc-panel">
-            <Skeleton className="h-10 w-full bg-[#1e2630]" />
-            <Skeleton className="h-24 w-full bg-[#1e2630]" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Component ─────────────────────────────────────
+/* ════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ════════════════════════════════════════════════════════ */
 export default function SafetyModule() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [sites, setSites] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const res = await fetch('/api/incidents');
-        const json = await res.json();
-        if (json.success) {
-          setIncidents(json.data);
-        } else {
-          setError(json.error || 'Failed to load incidents');
-        }
-      } catch {
-        setError('Network error fetching incidents');
-      } finally {
-        setLoading(false);
+  // Dialogs
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Incident | null>(null);
+  const [editTarget, setEditTarget] = useState<Incident | null>(null);
+  const [form, setForm] = useState<IncidentFormData>(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
+
+  /* ── Fetch ── */
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [incRes, siteRes] = await Promise.all([
+        fetch('/api/incidents'),
+        fetch('/api/sites'),
+      ]);
+      const incJson = await incRes.json();
+      const siteJson = await siteRes.json();
+      if (incJson.success) setIncidents(incJson.data);
+      if (siteJson.success) {
+        const uniqueSites = [...new Set(siteJson.data.map((s: any) => s.name))] as string[];
+        setSites(uniqueSites);
       }
+    } catch {
+      toast.error('Failed to fetch incident data');
+    } finally {
+      setLoading(false);
     }
-    fetchData();
   }, []);
 
-  // ── Compute stats from incidents ──
-  const ltiCount = incidents.filter(i =>
-    i.type?.toLowerCase().includes('lti') || i.severity?.toLowerCase() === 'fatal'
-  ).length;
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const nearMissCount = incidents.filter(i =>
-    i.type?.toLowerCase().includes('near miss') || i.type?.toLowerCase().includes('near-miss')
-  ).length;
+  /* ── Stats ── */
+  const totalCount = incidents.length;
+  const openCount = incidents.filter(i => i.status === 'Investigating' || i.status === 'Open').length;
+  const closedCount = incidents.filter(i => i.status === 'Closed').length;
+  const ltiCount = incidents.filter(i => i.type === 'LTI' || i.type === 'Fatality').length;
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3">
-        <ShieldAlert size={40} className="text-[#ff3d3d]" />
-        <p className="text-[#8899aa] text-sm">{error}</p>
-        <button
-          className="vc-btn-primary"
-          onClick={() => window.location.reload()}
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
+  /* ── Form helpers ── */
+  const updateForm = (field: keyof IncidentFormData, value: string) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleCreate = async () => {
+    if (!form.date || !form.site || !form.type || !form.severity || !form.person) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const res = await fetch('/api/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, description: form.description || null, action: form.action || null }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('Incident reported successfully');
+        setCreateOpen(false);
+        setForm(EMPTY_FORM);
+        await fetchData();
+      } else {
+        toast.error(json.error || 'Failed to report incident');
+      }
+    } catch {
+      toast.error('Network error reporting incident');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!editTarget || !form.date || !form.site || !form.type) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const res = await fetch('/api/incidents', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editTarget.id, ...form, description: form.description || null, action: form.action || null }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('Incident updated');
+        setEditOpen(false);
+        setEditTarget(null);
+        setForm(EMPTY_FORM);
+        await fetchData();
+      } else {
+        toast.error(json.error || 'Failed to update incident');
+      }
+    } catch {
+      toast.error('Network error updating incident');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      const res = await fetch('/api/incidents', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deleteTarget.id }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('Incident deleted');
+        setDeleteOpen(false);
+        setDeleteTarget(null);
+        await fetchData();
+      } else {
+        toast.error(json.error || 'Delete failed');
+      }
+    } catch {
+      toast.error('Network error deleting incident');
+    }
+  };
+
+  const openEditDialog = (inc: Incident) => {
+    setEditTarget(inc);
+    setForm({
+      date: inc.date, site: inc.site, type: inc.type, severity: inc.severity,
+      person: inc.person, status: inc.status,
+      description: inc.description || '', action: inc.action || '',
+    });
+    setEditOpen(true);
+  };
 
   if (loading) return <LoadingSkeleton />;
 
   return (
     <div className="space-y-4">
-      {/* ── Stats Row ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          icon={AlertTriangle}
-          label="LTI YTD"
-          value={ltiCount}
-          color="#ff3d3d"
-          sub="Lost Time Incidents"
-        />
-        <StatCard
-          icon={ShieldAlert}
-          label="Near Miss MTD"
-          value={nearMissCount}
-          color="#ffab40"
-          sub="This Month"
-        />
-        <StatCard
-          icon={CheckCircle2}
-          label="Safe Man-Days"
-          value="41,220"
-          color="#00e676"
-          sub="Since Last LTI"
-        />
-        <StatCard
-          icon={MessageSquare}
-          label="Toolbox Talks MTD"
-          value="186"
-          color="#00d4ff"
-          sub="Avg Attendance: 94%"
-        />
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard icon={AlertTriangle} label="Total Incidents" value={totalCount} color="#f5a623" />
+        <StatCard icon={ShieldAlert} label="Open" value={openCount} color="#ffab40" />
+        <StatCard icon={CheckCircle2} label="Closed" value={closedCount} color="#00e676" />
+        <StatCard icon={ShieldAlert} label="LTI Count" value={ltiCount} color="#ff3d3d" sub="Lost Time Incidents" />
       </div>
 
-      {/* ── Main Content: 2-column layout (65/35) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
-        {/* ── Left: Incident Register ── */}
-        <div className="vc-panel">
-          <div className="vc-panel-header">
-            <FileText size={15} className="text-[#f5a623]" />
-            <span className="text-[12px] font-bold text-[#e2e8f0]">Incident Register</span>
-            <span className="ml-auto text-[10px] text-[#5a6878]">{incidents.length} records</span>
-            <button className="vc-btn-primary ml-2 flex items-center gap-1">
-              <Plus size={13} />
-              Report Incident
-            </button>
-          </div>
-
-          {incidents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-[#5a6878]">
-              <ShieldAlert size={36} className="mb-2 opacity-40" />
-              <p className="text-[12px]">No incidents recorded</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-[11px]">
-                <thead>
-                  <tr className="border-b border-[#252e3a] bg-[#141920]/50">
-                    {['Ref No.', 'Date', 'Site', 'Type', 'Severity', 'Person', 'Status'].map(h => (
-                      <th
-                        key={h}
-                        className="text-left px-3 py-[9px] text-[9px] font-bold uppercase tracking-wider text-[#5a6878] whitespace-nowrap"
-                      >
-                        {h}
-                      </th>
-                    ))}
+      {/* Table */}
+      <div className="vc-panel">
+        <div className="vc-panel-header">
+          <FileText size={15} className="text-[#f5a623]" />
+          <span className="text-[12px] font-semibold text-[#e2e8f0]">Incident Register</span>
+          <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{incidents.length} Records</span>
+          <button onClick={() => { setForm(EMPTY_FORM); setCreateOpen(true); }}
+            className="vc-btn-primary flex items-center gap-1.5 ml-2">
+            <Plus size={13} /> Report Incident
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <div className="max-h-[480px] overflow-y-auto">
+            <table className="w-full text-[11px]">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-[#0f1318]">
+                  {['Ref No.', 'Date', 'Site', 'Type', 'Severity', 'Person', 'Status', 'Actions'].map(h => (
+                    <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1a2028]">
+                {incidents.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-10 text-center">
+                      <ShieldAlert className="mx-auto text-[#5a6878] mb-2" size={24} />
+                      <div className="text-[11px] text-[#5a6878]">No incidents recorded</div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="max-h-[360px] overflow-y-auto block">
-                  {incidents.map((inc, idx) => (
-                    <tr
-                      key={inc.id}
-                      className={`border-b border-[#252e3a]/60 hover:bg-[#141920] transition-colors ${
-                        idx === 0 ? '' : ''
-                      }`}
-                    >
-                      <td className="px-3 py-[9px] font-semibold text-[#f5a623] whitespace-nowrap"
-                        style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                        {inc.refNo}
-                      </td>
-                      <td className="px-3 py-[9px] text-[#8899aa] whitespace-nowrap">
-                        {formatDate(inc.date)}
-                      </td>
-                      <td className="px-3 py-[9px] text-[#e2e8f0] whitespace-nowrap">
-                        <div className="flex items-center gap-1">
-                          <MapPin size={10} className="text-[#5a6878]" />
-                          {inc.site}
+                ) : (
+                  incidents.map(inc => (
+                    <tr key={inc.id} className="hover:bg-[#141920] transition-colors">
+                      <td className="py-2.5 px-3 text-[#f5a623] font-medium">{inc.refNo}</td>
+                      <td className="py-2.5 px-3 text-[#8899aa]">{fmtDate(inc.date)}</td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1 text-[#8899aa]">
+                          <MapPin size={10} className="text-[#5a6878] shrink-0" /> {inc.site}
                         </div>
                       </td>
-                      <td className="px-3 py-[9px] text-[#e2e8f0] whitespace-nowrap">
-                        {inc.type}
+                      <td className="py-2.5 px-3 text-[#e2e8f0]">{inc.type}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={`vc-badge ${severityColor(inc.severity)}`}>{inc.severity}</span>
                       </td>
-                      <td className="px-3 py-[9px] whitespace-nowrap">
-                        <span className={`vc-badge border ${severityColor(inc.severity)}`}>
-                          {inc.severity}
-                        </span>
-                      </td>
-                      <td className="px-3 py-[9px] text-[#e2e8f0] whitespace-nowrap">
-                        <div className="flex items-center gap-1">
-                          <User size={10} className="text-[#5a6878]" />
-                          {inc.person}
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1 text-[#e2e8f0]">
+                          <User size={10} className="text-[#5a6878] shrink-0" /> {inc.person}
                         </div>
                       </td>
-                      <td className="px-3 py-[9px] whitespace-nowrap">
-                        <span className={`vc-badge border ${statusColor(inc.status)}`}>
-                          {inc.status}
-                        </span>
+                      <td className="py-2.5 px-3">
+                        <span className={`vc-badge ${incidentStatusColor(inc.status)}`}>{inc.status}</span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => openEditDialog(inc)}
+                            className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10 transition-all" title="Edit">
+                            <Pencil size={13} />
+                          </button>
+                          <button onClick={() => { setDeleteTarget(inc); setDeleteOpen(true); }}
+                            className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-all" title="Delete">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* ── Right Column ── */}
-        <div className="space-y-4">
-          {/* HSE KPIs */}
-          <div className="vc-panel">
-            <div className="vc-panel-header">
-              <ShieldAlert size={15} className="text-[#f5a623]" />
-              <span className="text-[12px] font-bold text-[#e2e8f0]">HSE KPIs</span>
-            </div>
-            <div className="vc-panel-body">
-              <KPIRow label="TRIR" value="0.42" color="#f5a623" />
-              <KPIRow label="LTIR" value="0.00" color="#00e676" />
-              <KPIRow label="First Aid Rate" value="2.1" color="#00d4ff" />
-              <KPIRow label="PPE Compliance" value="96.8%" color="#00e676" />
-              <KPIRow label="TBT Attendance" value="94.2%" color="#00d4ff" />
-            </div>
-          </div>
-
-          {/* Upcoming Audits */}
-          <div className="vc-panel">
-            <div className="vc-panel-header">
-              <ChevronRight size={15} className="text-[#f5a623]" />
-              <span className="text-[12px] font-bold text-[#e2e8f0]">Upcoming Audits</span>
-            </div>
-            <div className="vc-panel-body space-y-3">
-              <AuditCard
-                title="ISO 45001 Internal Audit"
-                due="Due: 15 Feb 2025"
-                type="upcoming"
-                icon={ShieldAlert}
-              />
-              <AuditCard
-                title="Client HSE Inspection"
-                due="Due: 22 Feb 2025"
-                type="upcoming"
-                icon={ShieldAlert}
-              />
-            </div>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
+
+      {/* Create Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#f5a623] flex items-center gap-2">
+              <Plus size={16} /> Report Incident
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Date *</label>
+                <input type="date" value={form.date} onChange={e => updateForm('date', e.target.value)} className="vc-input" />
+              </div>
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
+                <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none">
+                  <option value="">Select site...</option>
+                  {sites.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Type *</label>
+                <select value={form.type} onChange={e => updateForm('type', e.target.value)} className="vc-input appearance-none">
+                  {INCIDENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Severity *</label>
+                <select value={form.severity} onChange={e => updateForm('severity', e.target.value)} className="vc-input appearance-none">
+                  {SEVERITY_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Person Involved *</label>
+              <input type="text" value={form.person} onChange={e => updateForm('person', e.target.value)} placeholder="Name of person" className="vc-input" />
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Description</label>
+              <textarea value={form.description} onChange={e => updateForm('description', e.target.value)} rows={3} placeholder="Describe the incident..." className="vc-input resize-none" />
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Action Taken</label>
+              <textarea value={form.action} onChange={e => updateForm('action', e.target.value)} rows={2} placeholder="Immediate actions taken..." className="vc-input resize-none" />
+            </div>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setCreateOpen(false)} className="vc-btn-ghost">Cancel</button>
+            <button onClick={handleCreate} disabled={submitting}
+              className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">
+              {submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+              Report Incident
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#00d4ff] flex items-center gap-2">
+              <Pencil size={16} /> Edit Incident — {editTarget?.refNo}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Date *</label>
+                <input type="date" value={form.date} onChange={e => updateForm('date', e.target.value)} className="vc-input" />
+              </div>
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
+                <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none">
+                  {sites.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Type *</label>
+                <select value={form.type} onChange={e => updateForm('type', e.target.value)} className="vc-input appearance-none">
+                  {INCIDENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Severity *</label>
+                <select value={form.severity} onChange={e => updateForm('severity', e.target.value)} className="vc-input appearance-none">
+                  {SEVERITY_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Person Involved *</label>
+              <input type="text" value={form.person} onChange={e => updateForm('person', e.target.value)} className="vc-input" />
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label>
+              <select value={form.status} onChange={e => updateForm('status', e.target.value)} className="vc-input appearance-none">
+                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Description</label>
+              <textarea value={form.description} onChange={e => updateForm('description', e.target.value)} rows={3} className="vc-input resize-none" />
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Action Taken</label>
+              <textarea value={form.action} onChange={e => updateForm('action', e.target.value)} rows={2} className="vc-input resize-none" />
+            </div>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setEditOpen(false)} className="vc-btn-ghost">Cancel</button>
+            <button onClick={handleEdit} disabled={submitting}
+              className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">
+              {submitting ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+              Update Incident
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#ff3d3d] flex items-center gap-2">
+              <AlertTriangle size={16} /> Delete Incident
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[#8899aa]">
+              Are you sure you want to delete incident <strong className="text-[#f5a623]">{deleteTarget?.refNo}</strong> ({deleteTarget?.type}) at <strong className="text-[#e2e8f0]">{deleteTarget?.site}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="vc-btn-ghost">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-[#ff3d3d] hover:bg-[#cc2020] text-white rounded-lg">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
