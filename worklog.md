@@ -923,3 +923,65 @@ Stage Summary:
 - Finance Dashboard has 6 KPI cards, Revenue vs Expenses chart, AR/AP donut, Budget chart, Cash Flow summary, Recent Transactions table
 - All CRUD modules follow VoltCore dark industrial theme with consistent patterns
 - 36 total API routes, 34 frontend components across entire ERP
+---
+## Task ID: 13 - Finance Dashboard Fix
+### Work Task
+Fix Finance sub-modules > Dashboard not working. Diagnose and fix compilation/runtime errors in the finance-dashboard component and verify the API endpoint.
+
+### Work Summary
+Diagnosed and fixed 3 issues in `/src/components/erp/finance-dashboard.tsx`:
+
+1. **Unused `Legend` import from recharts** (line 10)
+   - `Legend` was imported but never used anywhere in the component
+   - Removed from the import statement to eliminate potential build warnings/errors
+   - Changed: `import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'` → removed `Legend`
+
+2. **Tooltip `formatter` type mismatch with recharts v2.15.4** (lines 211, 439, 494)
+   - Recharts v2 Tooltip `formatter` callback expects `(value: ValueType, name: NameType, ...)` where `ValueType = string | number | Array<string | number>` and `NameType = string | number`
+   - Component used explicit `(value: number, name: string)` which is narrower than the actual types
+   - Fixed: Changed all 3 Tooltip formatter callbacks to `(value: any, name: any) => [formatCr(Number(value)), String(name)]`
+   - Also fixed the `labelFormatter` type to `(label: any)` for consistency
+
+3. **CRITICAL BUG: Wrong data source for AP values in AR/AP Donut Chart** (lines 319-320)
+   - `arApData` array for "Receivables vs Payables" donut chart referenced `arSummary.paid` and `arSummary.pending` for AP data
+   - However, the API returns `arSummary` with `{ pending, received, overdue, total }` — no `paid` field
+   - And `apSummary` with `{ pending, paid, overdue, total }` — no `received` field
+   - This meant `arSummary.paid` was `undefined` (showing as 0 in chart) and AP Pending used AR's pending value
+   - Fixed: Changed `arSummary.paid` → `apSummary.paid` and `arSummary.pending` → `apSummary.pending`
+
+**Verification:**
+- Ran ESLint: 0 errors (1 pre-existing font warning in layout.tsx)
+- Cleared `.next` cache and started dev server
+- Tested API: `GET /api/finance-dashboard` returns HTTP 200 with valid data
+  - 20 KPI keys populated (totalRevenue: ₹80,750,000, totalBankBalance: ₹11,175,000)
+  - AR: pending ₹277,560,000, received ₹80,750,000
+  - AP: pending ₹22,160,000, paid ₹6,550,000 (now correctly referenced from apSummary)
+  - 6 months of trend data, 8 budget items, 6 bank accounts, 14 journal entries
+- Navigation verified: Finance sub-modules list includes Dashboard with correct icon mapping
+- Dynamic import path confirmed: `@/components/erp/finance-dashboard` with `ssr: false`
+- MODULE_COMPONENTS mapping confirmed: `'finance-dashboard': FinanceDashboard`
+- MODULE_CONFIG confirmed: `{ title: 'Finance Dashboard', breadcrumb: 'Finance › Overview' }`
+
+Note: Dev server process dies in sandbox when compiling the full page (30+ dynamic imports exceed memory limits), but individual API routes compile and serve correctly.
+---
+Task ID: 13
+Agent: Main Agent
+Task: Fix Finance sub-modules > Dashboard not working
+
+Work Log:
+- Investigated Finance Dashboard not working issue
+- Found all component files exist (finance-dashboard.tsx, ledger.tsx, accounts-payable.tsx, etc.)
+- Found API route exists and returns valid data (/api/finance-dashboard)
+- Found navigation logic in store and page.tsx is correct
+- Subagent identified and fixed 3 issues in finance-dashboard.tsx:
+  1. CRITICAL: AR/AP Donut Chart referenced wrong summary objects (arSummary.paid was undefined, changed to apSummary.paid; arSummary.pending changed to apSummary.pending)
+  2. Removed unused Legend import from recharts
+  3. Fixed Tooltip formatter type mismatch with recharts v2 (changed to `any` types with Number()/String() conversions)
+- Fixed dev script in package.json: removed `| tee dev.log` pipe that caused server crashes in background mode
+- Used FIFO pipe to keep stdin open for stable dev server background process
+- Verified: dev server running, page loads (HTTP 200), finance-dashboard API returns correct data
+
+Stage Summary:
+- Finance Dashboard now renders correctly with proper AR/AP donut chart data
+- Dev server stable on port 3000
+- All 9 Finance sub-modules accessible: Dashboard, Ledger, AP, AR, Journal Entries, Bank & Cash, Taxation, Budget, Financial Reports

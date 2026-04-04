@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
-  Tooltip, ResponsiveContainer, Legend
+  Tooltip, ResponsiveContainer
 } from 'recharts';
 
 // ── Color palette (VoltCore dark theme) ──
@@ -208,7 +208,7 @@ function CashFlowCard({ trends, bankAccounts }: { trends: MonthlyTrend[]; bankAc
           <BarChart data={trends} barSize={14} barGap={2}>
             <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} />
             <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} width={40} tickFormatter={(v) => v >= 10000000 ? (v/10000000).toFixed(1)+'Cr' : v >= 100000 ? (v/100000).toFixed(0)+'L' : String(v)} />
-            <Tooltip {...TOOLTIP_STYLE} formatter={(value: number, name: string) => [formatCr(value), name]} />
+            <Tooltip {...TOOLTIP_STYLE} formatter={(value: any, name: any) => [formatCr(Number(value)), String(name)]} />
             <Bar dataKey="cashIn" name="Cash In" fill="#00e676" radius={[3, 3, 0, 0]} opacity={0.8} />
             <Bar dataKey="cashOut" name="Cash Out" fill="#ff3d3d" radius={[3, 3, 0, 0]} opacity={0.8} />
           </BarChart>
@@ -316,8 +316,8 @@ export default function FinanceDashboard() {
   const arApData = [
     { name: 'AR Received', value: arSummary.received, color: '#00e676' },
     { name: 'AR Pending', value: arSummary.pending, color: '#f5a623' },
-    { name: 'AP Paid', value: arSummary.paid, color: '#00d4ff' },
-    { name: 'AP Pending', value: arSummary.pending, color: '#ff3d3d' },
+    { name: 'AP Paid', value: apSummary.paid, color: '#00d4ff' },
+    { name: 'AP Pending', value: apSummary.pending, color: '#ff3d3d' },
   ];
 
   // Expense category distribution (from budget actuals)
@@ -436,7 +436,7 @@ export default function FinanceDashboard() {
                     return String(v);
                   }}
                 />
-                <Tooltip {...TOOLTIP_STYLE} formatter={(value: number, name: string) => [formatCr(value), name]} />
+                <Tooltip {...TOOLTIP_STYLE} formatter={(value: any, name: any) => [formatCr(Number(value)), String(name)]} />
                 <Bar dataKey="revenue" name="Revenue" fill="#00e676" radius={[4, 4, 0, 0]} opacity={0.85} />
                 <Bar dataKey="expenses" name="Expenses" fill="#ff3d3d" radius={[4, 4, 0, 0]} opacity={0.85} />
               </BarChart>
@@ -491,8 +491,8 @@ export default function FinanceDashboard() {
                 />
                 <Tooltip
                   {...TOOLTIP_STYLE}
-                  formatter={(value: number, name: string) => [formatCr(value), name]}
-                  labelFormatter={(label) => {
+                  formatter={(value: any, name: any) => [formatCr(Number(value)), String(name)]}
+                  labelFormatter={(label: any) => {
                     const item = budgetChartData.find(d => d.name === label);
                     return item?.fullName || label;
                   }}
