@@ -10,7 +10,9 @@ export type ModuleId =
   | 'sites' | 'permits' | 'safety' | 'subcontractors'
   | 'reports' | 'settings'
   // Analytics pages
-  | 'employee-analytics';
+  | 'employee-analytics'
+  // Timesheet
+  | 'timesheet';
 
 interface NavItem {
   id: ModuleId;
@@ -45,6 +47,8 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'attendance', icon: 'ClipboardList', label: 'Attendance', section: 'HRMS' },
     { id: 'leave', icon: 'CalendarDays', label: 'Leave Management', badge: 5, section: 'HRMS' },
     { id: 'shift', icon: 'RotateCcw', label: 'Shift Roster', section: 'HRMS' },
+    { id: 'timesheet', icon: 'TimerReset', label: 'Timesheet', section: 'HRMS' },
+    { id: 'payroll', icon: 'IndianRupee', label: 'Payroll', section: 'HRMS' },
     { id: 'training', icon: 'GraduationCap', label: 'Training & Certs', section: 'HRMS' },
     { id: 'recruitment', icon: 'Search', label: 'Recruitment', section: 'HRMS' },
   ],
@@ -99,6 +103,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   knowledgebase: { title: 'Knowledgebase', breadcrumb: 'VoltCore ERP › Knowledgebase' },
   // Sub-modules
   'employee-analytics': { title: 'Employee Analytics', breadcrumb: 'HRMS › Employee Analytics' },
+  timesheet: { title: 'Timesheet', breadcrumb: 'HRMS › Weekly Timesheet' },
   employees: { title: 'Employees', breadcrumb: 'HRMS › Employee Directory' },
   attendance: { title: 'Attendance', breadcrumb: 'HRMS › Daily Attendance' },
   leave: { title: 'Leave Management', breadcrumb: 'HRMS › Leave Requests' },
@@ -107,7 +112,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   recruitment: { title: 'Recruitment', breadcrumb: 'HRMS › Talent Acquisition' },
   purchases: { title: 'Purchase Orders', breadcrumb: 'Finance › Procurement' },
   expenses: { title: 'Expense Claims', breadcrumb: 'Finance › Expense Management' },
-  payroll: { title: 'Payroll', breadcrumb: 'Finance › Payroll Processing' },
+  payroll: { title: 'Payroll', breadcrumb: 'HRMS › Payroll Processing' },
   invoices: { title: 'Invoicing', breadcrumb: 'Finance › Client Invoices' },
   sites: { title: 'Site Map', breadcrumb: 'VoltCore ERP › Sites' },
   permits: { title: 'Work Permits (PTW)', breadcrumb: 'Operations › Permit to Work' },
@@ -128,7 +133,7 @@ export const PAGE_MODULES = ['dashboard', 'inventory', 'sales', 'crm', 'support'
 const PARENT_MAP: Record<string, string> = {};
 (Object.keys(SUB_MODULES) as string[]).forEach((parent) => {
   SUB_MODULES[parent].forEach((sub) => {
-    PARENT_MAP[sub.id] = parent;
+    if (!PARENT_MAP[sub.id]) PARENT_MAP[sub.id] = parent; // First parent wins
   });
 });
 

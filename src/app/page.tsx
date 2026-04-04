@@ -8,7 +8,7 @@ import {
   TrendingUp, Briefcase, Settings, MessageSquare, BookOpen, Zap,
   UserCog, HardHat, ClipboardList, CalendarDays, RotateCcw, GraduationCap,
   Search, IndianRupee, Receipt, FileText, MapPin, ShieldAlert, Handshake,
-  BarChart3, ShoppingBag, Menu, X, Bell, ChevronRight, ChevronDown,
+  BarChart3, ShoppingBag, TimerReset, Menu, X, Bell, ChevronRight, ChevronDown,
   ArrowLeft
 } from 'lucide-react';
 
@@ -17,7 +17,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   TrendingUp, Briefcase, Settings: Settings, MessageSquare, BookOpen, Zap,
   UserCog, HardHat, ClipboardList, CalendarDays, RotateCcw, GraduationCap,
   Search, IndianRupee, Receipt, FileText, MapPin, ShieldAlert, Handshake,
-  BarChart3, ShoppingBag,
+  BarChart3, ShoppingBag, TimerReset,
 };
 
 // Dynamic imports for all page-level module components
@@ -49,6 +49,7 @@ const CrmModule = dynamic(() => import('@/components/erp/crm'), { ssr: false });
 const SupportModule = dynamic(() => import('@/components/erp/support'), { ssr: false });
 const KnowledgebaseModule = dynamic(() => import('@/components/erp/knowledgebase'), { ssr: false });
 const EmployeeAnalytics = dynamic(() => import('@/components/erp/employee-analytics'), { ssr: false });
+const TimesheetModule = dynamic(() => import('@/components/erp/timesheet'), { ssr: false });
 
 const MODULE_COMPONENTS: Record<string, React.ComponentType> = {
   dashboard: Dashboard,
@@ -77,10 +78,11 @@ const MODULE_COMPONENTS: Record<string, React.ComponentType> = {
   support: SupportModule,
   knowledgebase: KnowledgebaseModule,
   'employee-analytics': EmployeeAnalytics,
+  timesheet: TimesheetModule,
 };
 
 // Modules that don't have a create action
-const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics'];
+const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet'];
 
 // Expandable modules that render a sub-module grid instead of a specific component
 const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'finance', 'projects', 'assets', 'system'];

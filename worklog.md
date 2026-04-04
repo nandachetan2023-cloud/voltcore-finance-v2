@@ -600,11 +600,37 @@ Work Log:
   - Added normalizeMonth() function to convert "YYYY-MM" → "Mon YYYY" format
   - Payroll trend chart now correctly displays gross pay data
 - Updated Attendance interface to include nested employee data from API
-- Improved attendance table rendering to use a.employee?.name directly instead of searching employees array
-- Verified database has real data: 15 employees, 14 attendance, 5 payroll, 5 projects, 6 leave, 5 tickets, 5 expenses
-- Verified attendance dates match today's date format ("YYYY-MM-DD")
-- Ran lint: 0 errors (1 pre-existing font warning)
-- Dev server running cleanly, all APIs returning 200
+---
+Task ID: 14
+Agent: Main Agent
+Task: Add Payroll and Timesheet to HRMS sub-modules
+
+Work Log:
+- Added 'timesheet' to ModuleId type in erp-store.ts
+- Added 'payroll' (IndianRupee icon) and 'timesheet' (TimerReset icon) to HRMS sub-modules list
+- Payroll kept in Finance sub-modules too (shared across both)
+- Fixed PARENT_MAP building: changed to first-parent-wins logic so payroll resolves to HRMS
+- Updated payroll MODULE_CONFIG breadcrumb from "Finance" to "HRMS"
+- Added timesheet MODULE_CONFIG entry: { title: 'Timesheet', breadcrumb: 'HRMS › Weekly Timesheet' }
+- Created /src/components/erp/timesheet.tsx — full weekly timesheet grid component:
+  - Week navigator (prev/next, current week badge)
+  - 4 stat cards: Present Entries, Absent, On Leave, Total OT Hours
+  - Full timesheet grid: employees × 7 days (Mon-Sun)
+  - Per-cell: time in/out, hours calculated, OT hours, status badges
+  - Row totals: Total hours, OT hours, Days present
+  - Site filter dropdown
+  - CSV export functionality
+  - Weekend highlighting, future date handling, no-data states
+  - Data from /api/employees + /api/attendance (real API)
+  - Loading skeleton, error state
+  - VoltCore dark industrial theme
+- Updated page.tsx: dynamic import for TimesheetModule, MODULE_COMPONENTS mapping, NO_CREATE_MODULES, TimerReset in ICON_MAP and lucide imports
+- Zero lint errors, server responding 200
+
+Stage Summary:
+- HRMS sub-modules now has 9 items: Employee Analytics, Employees, Attendance, Leave, Shift, **Timesheet**, **Payroll**, Training, Recruitment
+- New Timesheet page with weekly grid, hour tracking, OT calculation, CSV export
+- Payroll accessible from both HRMS and Finance sidebars (HRMS takes priority)
 
 Stage Summary:
 - Employee Analytics Dashboard is a SEPARATE component from main Dashboard (unchanged)
