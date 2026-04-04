@@ -1048,3 +1048,49 @@ Stage Summary:
 - Finance Dashboard API returning aggregated KPIs from 9 tables
 - Employee Analytics API returning data from 7 tables
 - "db:seed" command available for re-seeding: bun run db:seed
+---
+## Task ID: 13 - MySQL Database Script Generator
+### Work Task
+Create a comprehensive MySQL-compatible SQL script for VoltCore ERP with all 34 tables and realistic Indian power plant contractor mock data.
+
+### Work Summary
+Created `/home/z/my-project/database/voltcore_erp_mysql.sql` - a complete MySQL database script with:
+- **Database**: `voltcore_erp` with `utf8mb4` charset and `utf8mb4_unicode_ci` collation
+- **34 CREATE TABLE statements** with InnoDB engine, DATETIME(3) millisecond precision, proper defaults
+- **240 mock data rows** across all 34 tables with realistic Indian power plant EPC contractor data
+- **Foreign key constraints** on Attendance, LeaveRequest, Payroll, Expense (→Employee.id) with ON DELETE CASCADE
+- **Indexes** on foreign key columns and frequently queried fields
+- **25-char hex string IDs** matching Prisma cuid format (e.g., 'cl...')
+- **Well-commented structure** with section headers for every table
+
+Data Context: VoltCore Engineering Pvt Ltd - Indian power plant EPC contractor
+- Sites across Gujarat, Maharashtra, Tamil Nadu, Rajasthan, Madhya Pradesh, Karnataka
+- Projects: EPC, O&M, BoP type power plant construction (₹125 Cr to ₹850 Cr)
+- 15 employees (Staff + Contract, trades: Electrician, Welder, Fitter, Rigger, Engineer, Safety Officer, etc.)
+- Financial data in Indian Rupees with realistic corporate clients (NTPC, Tata Power, Adani, RVUNL, NLC)
+- Full double-entry bookkeeping in Journal Entries (15 entries with debit/credit pairs)
+- All dates in 2024-2025 range
+
+File: `/home/z/my-project/database/voltcore_erp_mysql.sql` (1056 lines, 96KB)
+
+---
+Task ID: 14
+Agent: Main Agent
+Task: Create MySQL-compatible mock database script for VoltCore ERP
+
+Work Log:
+- Analyzed complete Prisma schema (34 models) covering all ERP modules
+- Created `/home/z/my-project/database/voltcore_erp_mysql.sql` (1,056 lines, 96KB)
+- Converted all Prisma types to MySQL equivalents: String→VARCHAR(255), Float→DOUBLE, Int→INT, DateTime→DATETIME(3), TEXT for long content
+- Added proper foreign key constraints (Attendance, LeaveRequest, Payroll, Expense → Employee) with ON DELETE CASCADE
+- Added indexes on FK columns and frequently queried fields
+- Created realistic Indian power plant contractor mock data (200+ records across 34 tables)
+- Data context: VoltCore Engineering Pvt Ltd, power plant EPC/O&M across Gujarat, Maharashtra, Tamil Nadu, Rajasthan, MP, Karnataka
+
+Stage Summary:
+- File: `/home/z/my-project/database/voltcore_erp_mysql.sql`
+- 34 tables, 200+ mock records, ready for MySQL import
+- Import command: `mysql -u root -p < voltcore_erp_mysql.sql`
+- Foreign keys validated (Employee IDs consistent across Attendance, Leave, Payroll, Expense)
+- Double-entry bookkeeping in Journal Entries (15 entries with balanced debit/credit)
+- Budget variance tracking (Over Budget flag for Safety and Travel categories)
