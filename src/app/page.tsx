@@ -155,11 +155,16 @@ function Sidebar() {
   );
 }
 
+// Modules that don't have a create action
+const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings'];
+
 function Topbar() {
-  const { activeModule } = useERPStore();
+  const { activeModule, triggerCreateDialog } = useERPStore();
   const { setSidebarOpen } = useERPStore();
   const config = MODULE_CONFIG[activeModule];
   const [searchQuery, setSearchQuery] = useState('');
+
+  const showNewBtn = !NO_CREATE_MODULES.includes(activeModule);
 
   return (
     <header className="h-[50px] bg-[#161c24] border-b border-[#252e3a] flex items-center gap-3 px-4 shrink-0">
@@ -183,7 +188,9 @@ function Topbar() {
             className="bg-transparent border-none text-[#e2e8f0] outline-none text-[12px] w-full"
           />
         </div>
-        <button className="vc-btn-primary">+ New</button>
+        {showNewBtn && (
+          <button className="vc-btn-primary" onClick={triggerCreateDialog}>+ New</button>
+        )}
         <button className="relative text-[#8899aa] hover:text-[#e2e8f0] transition-colors">
           <Bell size={16} />
           <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#ff3d3d] rounded-full" />

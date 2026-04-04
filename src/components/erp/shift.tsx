@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { RotateCcw, Sun, Moon, Coffee, Calendar, Plus, Pencil, Trash2, ChevronDown, AlertTriangle, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { useERPStore } from '@/store/erp-store'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -115,6 +116,9 @@ export default function Shift() {
   const [formSite, setFormSite] = useState('')
   const [formShift, setFormShift] = useState('Day A')
   const [formWeekStart, setFormWeekStart] = useState(weekStarts[0])
+  const { triggerCreate } = useERPStore()
+
+  useEffect(() => { if (triggerCreate > 0) setCreateOpen(true) }, [triggerCreate])
 
   /* fetch shifts */
   const fetchShifts = useCallback(async () => {

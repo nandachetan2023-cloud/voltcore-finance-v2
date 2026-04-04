@@ -6,6 +6,7 @@ import {
   Trash2, Loader2, FileText, MapPin, User,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useERPStore } from '@/store/erp-store';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
@@ -133,6 +134,9 @@ export default function SafetyModule() {
   const [editTarget, setEditTarget] = useState<Incident | null>(null);
   const [form, setForm] = useState<IncidentFormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const { triggerCreate } = useERPStore();
+
+  useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
 
   /* ── Fetch ── */
   const fetchData = useCallback(async () => {

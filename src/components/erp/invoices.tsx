@@ -6,6 +6,7 @@ import {
   Trash2, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useERPStore } from '@/store/erp-store';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
@@ -124,6 +125,9 @@ export default function Invoices() {
   const [editTarget, setEditTarget] = useState<Invoice | null>(null);
   const [form, setForm] = useState<InvoiceFormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const { triggerCreate } = useERPStore();
+
+  useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
 
   /* ── Fetch ── */
   const fetchData = useCallback(async () => {

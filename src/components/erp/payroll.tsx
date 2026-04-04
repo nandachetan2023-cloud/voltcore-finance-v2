@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { useERPStore } from '@/store/erp-store';
 
 interface EmployeeInfo { id: string; empId: string; name: string; }
 
@@ -109,6 +110,9 @@ export default function PayrollModule() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<PayrollFormData>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const { triggerCreate } = useERPStore();
+
+  useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
 
   const fetchData = useCallback(async () => {
     try {

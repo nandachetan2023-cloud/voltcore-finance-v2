@@ -5,6 +5,7 @@ import { GraduationCap, Award, AlertTriangle, Clock, Plus, BookOpen, Calendar, P
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { toast } from 'sonner'
+import { useERPStore } from '@/store/erp-store'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -125,6 +126,9 @@ export default function Training() {
     attendees: 0,
     status: 'Scheduled',
   })
+  const { triggerCreate } = useERPStore()
+
+  useEffect(() => { if (triggerCreate > 0) setCreateCertOpen(true) }, [triggerCreate])
 
   /* Fetch data */
   const fetchData = useCallback(async () => {

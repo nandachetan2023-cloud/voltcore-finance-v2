@@ -68,6 +68,8 @@ interface ERPStore {
   setActiveModule: (module: ModuleId) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  triggerCreate: number;
+  triggerCreateDialog: () => void;
 }
 
 export const useERPStore = create<ERPStore>((set) => ({
@@ -75,4 +77,6 @@ export const useERPStore = create<ERPStore>((set) => ({
   setActiveModule: (module) => set({ activeModule: module }),
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  triggerCreate: 0,
+  triggerCreateDialog: () => set((s) => ({ triggerCreate: s.triggerCreate + 1 })),
 }));

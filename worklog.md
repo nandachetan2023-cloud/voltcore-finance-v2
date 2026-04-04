@@ -379,3 +379,23 @@ Stage Summary:
 - Frontend: 19 interactive modules with real API integration, dark industrial theme
 - Dev server: Running persistently on port 3000
 - Code quality: 0 lint errors
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Fix "+ New" button not working in topbar
+
+Work Log:
+- Identified issue: `<button className="vc-btn-primary">+ New</button>` on line 186 of page.tsx had no onClick handler
+- Added `triggerCreate` (number) and `triggerCreateDialog()` to Zustand store (erp-store.ts) — increments counter when called
+- Updated Topbar in page.tsx to: (a) destructure `triggerCreateDialog` from store, (b) call it on button click, (c) hide button on Dashboard/Reports/Settings (modules without create dialogs) via `NO_CREATE_MODULES` list
+- Added `useERPStore` import and `triggerCreate` listener to all 16 module components:
+  - 15 standard modules: `useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);`
+  - Training module: `useEffect(() => { if (triggerCreate > 0) setCreateCertOpen(true) }, [triggerCreate]);`
+- Ran lint: 0 errors (1 pre-existing warning for font loading)
+- Verified dev log: clean compilation, no errors
+
+Stage Summary:
+- "+ New" button now functional across all 16 modules with create dialogs
+- Button hidden on Dashboard, Reports, Settings (no create action available)
+- Zero lint errors introduced
