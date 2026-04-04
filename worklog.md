@@ -584,3 +584,31 @@ Dashboard Features:
 - VoltCore dark theme with consistent styling
 - Zero lint errors
 
+
+---
+Task ID: 13
+Agent: Main Agent
+Task: Fix Employee Analytics Dashboard - labels, payroll month bug, data handling
+
+Work Log:
+- Analyzed user complaint: "you have to add Analytics dashboard for Employee but you changed Hrdashboard"
+- Verified employee-analytics.tsx exists at src/components/erp/employee-analytics.tsx (585 lines)
+- Verified component is properly wired in page.tsx (dynamic import + MODULE_COMPONENTS)
+- Verified main dashboard.tsx is UNCHANGED (proper overall ERP dashboard)
+- Changed label from "HR Dashboard" to "Employee Analytics" in erp-store.ts (SUB_MODULES + MODULE_CONFIG)
+- Fixed critical payroll month format bug: DB stores "2026-04" but component expected "Apr 2026"
+  - Added normalizeMonth() function to convert "YYYY-MM" → "Mon YYYY" format
+  - Payroll trend chart now correctly displays gross pay data
+- Updated Attendance interface to include nested employee data from API
+- Improved attendance table rendering to use a.employee?.name directly instead of searching employees array
+- Verified database has real data: 15 employees, 14 attendance, 5 payroll, 5 projects, 6 leave, 5 tickets, 5 expenses
+- Verified attendance dates match today's date format ("YYYY-MM-DD")
+- Ran lint: 0 errors (1 pre-existing font warning)
+- Dev server running cleanly, all APIs returning 200
+
+Stage Summary:
+- Employee Analytics Dashboard is a SEPARATE component from main Dashboard (unchanged)
+- Navigation: HRMS (grid) → Employee Analytics card → Full analytics page
+- Label changed from "HR Dashboard" to "Employee Analytics"
+- Payroll trend chart now shows real data (month format fixed)
+- All 7 API endpoints returning 200 with real data

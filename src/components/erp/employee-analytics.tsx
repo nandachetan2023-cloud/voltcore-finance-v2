@@ -38,6 +38,8 @@ interface Attendance {
   timeIn?: string;
   timeOut?: string;
   otHours?: number;
+  // Nested from API
+  employee?: { name: string; empId: string };
 }
 
 interface LeaveRequest {
@@ -366,10 +368,22 @@ export default function EmployeeAnalytics() {
 
   // Monthly payroll trend (last 6 months)
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  // Normalize DB month format ("2026-04") to display key ("Apr 2026")
+  function normalizeMonth(m: string): string {
+    const parts = m.split('-');
+    if (parts.length === 2) {
+      const mi = parseInt(parts[1], 10) - 1;
+      return `${monthNames[mi] || m} ${parts[0]}`;
+    }
+    return m;
+  }
+
   const payrollByMonth: Record<string, number> = {};
   payroll.forEach(p => {
     if (p.month) {
-      payrollByMonth[p.month] = (payrollByMonth[p.month] || 0) + (p.gross || 0);
+      const key = normalizeMonth(p.month);
+      payrollByMonth[key] = (payrollByMonth[key] || 0) + (p.gross || 0);
     }
   });
   // Generate last 6 months
@@ -548,13 +562,15 @@ export default function EmployeeAnalytics() {
             </thead>
             <tbody>
               {todayAtt.slice(0, 10).map((a) => {
-                const emp = employees.find(e => e.id === a.empId || e.empId === a.empId);
+                const empName = a.employee?.name || employees.find(e => e.id === a.empId)?.name || 'Unknown';
+                const empCode = a.employee?.empId || employees.find(e => e.id === a.empId)?.empId || a.empId || '—';
+                const empSite = employees.find(e => e.id === a.empId)?.site || a.site || '—';
                 const statusColor = a.status === 'Present' ? '#00e676' : a.status === 'Absent' ? '#ff3d3d' : '#f5a623';
                 return (
                   <tr key={a.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920]">
-                    <td className="py-2 text-[#f5a623] font-mono">{emp?.empId || a.empId || '—'}</td>
-                    <td className="py-2 text-[#e2e8f0]">{emp?.name || 'Unknown'}</td>
-                    <td className="py-2 text-[#8899aa]">{emp?.site || a.site || '—'}</td>
+                    <td className="py-2 text-[#f5a623] font-mono">{empCode}</td>
+                    <td className="py-2 text-[#e2e8f0]">{empName}</td>
+                    <td className="py-2 text-[#8899aa]">{empSite}</td>
                     <td className="py-2 text-[#8899aa]">{a.shift || '—'}</td>
                     <td className="py-2 text-[#8899aa] font-mono">{a.timeIn || '—'}</td>
                     <td className="py-2 text-[#8899aa] font-mono">{a.timeOut || '—'}</td>
