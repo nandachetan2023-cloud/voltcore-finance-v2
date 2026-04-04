@@ -536,3 +536,23 @@ Stage Summary:
 - 29 total database models, 24 API routes, 25 frontend module components
 - Each new module has full CRUD with dark industrial theme, stat cards, tables, dialogs
 - Seed data: 8 departments, 10 designations, 8 inventory items, 5 stock movements, 5 customers, 5 sales orders, 6 CRM contacts, 5 support tickets, 6 KB articles
+---
+Task ID: 11
+Agent: Main Agent
+Task: Fix left sidebar navigation not showing for Inventory, Sales, CRM, Support, Knowledgebase
+
+Work Log:
+- Analyzed screenshot: confirmed Inventory page showing with sidebar only displaying "Dashboard" link, no module context
+- Root cause: `resolveParent()` in erp-store.ts only checked EXPANDABLE_MODULES and PARENT_MAP — PAGE_MODULES like inventory/sales/crm resolved to 'dashboard' parent
+- Added `PAGE_MODULES` check to `resolveParent()` so standalone page modules return themselves as parent
+- Added `MAIN_MODULE_MAP` export for quick lookup of module icon/label
+- Rewrote Sidebar component with 3 navigation modes:
+  1. **Sub-nav mode**: parent is expandable (HRMS, Finance, etc.) → shows sibling sub-modules
+  2. **Page module mode**: active module is standalone page (Inventory, Sales, CRM, Support, Knowledgebase) → shows ← All Modules back button, module header, and the module highlighted as "Active"
+  3. **Dashboard mode**: grid overview → only shows "Dashboard" link
+- Zero lint errors, server responding 200
+
+Stage Summary:
+- Left sidebar now properly shows context for all 5 standalone page modules
+- Navigation flow: Dashboard grid → Inventory → sidebar shows "← All Modules" + "INVENTORY" header + "📦 Inventory (Active)"
+- Same pattern works for Sales, CRM, Support, Knowledgebase

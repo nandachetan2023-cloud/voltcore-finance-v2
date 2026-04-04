@@ -131,9 +131,16 @@ const PARENT_MAP: Record<string, string> = {};
 // Expandable modules that have their own page component
 export const EXPANDABLE_WITH_PAGE = ['organization', 'projects', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
 
+// Build a quick lookup for main module icons/labels
+const MAIN_MODULE_MAP: Record<string, NavItem> = {};
+MAIN_MODULES.forEach((m) => { MAIN_MODULE_MAP[m.id] = m; });
+export { MAIN_MODULE_MAP };
+
 function resolveParent(module: ModuleId): ModuleId {
   if (PARENT_MAP[module]) return PARENT_MAP[module] as ModuleId;
   if (EXPANDABLE_MODULES.includes(module)) return module;
+  // PAGE_MODULES that aren't dashboard are their own parent
+  if (PAGE_MODULES.includes(module) && module !== 'dashboard') return module;
   return 'dashboard';
 }
 
@@ -169,7 +176,8 @@ export const useERPStore = create<ERPStore>((set) => ({
       activeParentModule: parent,
     };
   }),
-  activeParentModule: 'dashboard',
+  // Initialize parent so page modules show correct sidebar
+  activeParentModule: 'dashboard' as ModuleId,
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   triggerCreate: 0,

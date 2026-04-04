@@ -1,6 +1,6 @@
 'use client';
 
-import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES } from '@/store/erp-store';
+import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP } from '@/store/erp-store';
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import {
@@ -115,8 +115,12 @@ function ModuleGrid() {
 function Sidebar() {
   const { activeModule, activeParentModule, setActiveModule, sidebarOpen, setSidebarOpen } = useERPStore();
 
-  // Show sub-module nav when the parent is an expandable module (not dashboard)
+  // Determine sidebar mode:
+  // 1. Sub-nav mode: parent is an expandable module (HRMS, Finance, etc.) — show sibling sub-modules
+  // 2. Page module mode: active module is a standalone page (Inventory, Sales, CRM, Support, Knowledgebase)
+  // 3. Dashboard mode: on the grid overview
   const isSubNav = EXPANDABLE_MODULES.includes(activeParentModule) && activeParentModule !== 'dashboard';
+  const isPageModule = !isSubNav && PAGE_MODULES.includes(activeModule as string) && activeModule !== 'dashboard';
   const subModules = SUB_MODULES[activeParentModule] || [];
 
   return (
@@ -152,8 +156,8 @@ function Sidebar() {
 
         {/* Navigation */}
         <div className="flex-1 py-2">
-          {isSubNav ? (
-            // Sub-module navigation mode
+          {(isSubNav || isPageModule) ? (
+            // Sub-module nav OR standalone page module nav
             <>
               <button
                 onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }}
@@ -165,33 +169,51 @@ function Sidebar() {
               </button>
               <div className="mx-3 my-2 border-t border-[#252e3a]" />
               <div className="text-[9px] tracking-[2px] uppercase text-[#f5a623] font-bold px-4 py-2">
-                {MODULE_CONFIG[activeParentModule]?.title || activeParentModule}
+                {MODULE_CONFIG[isSubNav ? activeParentModule : activeModule]?.title || activeModule}
               </div>
-              {subModules.map(item => {
-                const Icon = ICON_MAP[item.icon] || Zap;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => { setActiveModule(item.id as any); setSidebarOpen(false); }}
-                    className={`
-                      w-full flex items-center gap-2 px-4 py-[7px] text-left text-[12px] font-medium
-                      transition-all duration-150 border-l-[3px]
-                      ${activeModule === item.id
-                        ? 'text-[#f5a623] border-l-[#f5a623] bg-[#f5a623]/7'
-                        : 'text-[#8899aa] border-l-transparent hover:text-[#e2e8f0] hover:bg-[#141920]'
-                      }
-                    `}
-                  >
-                    <Icon size={14} className="w-4 text-center shrink-0" />
-                    <span className="flex-1">{item.label}</span>
-                    {item.badge && (
-                      <span className="bg-[#ff3d3d] text-white text-[9px] font-bold px-[5px] py-[1px] rounded-full">
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+              {isSubNav ? (
+                // Show sub-module list
+                subModules.map(item => {
+                  const Icon = ICON_MAP[item.icon] || Zap;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => { setActiveModule(item.id as any); setSidebarOpen(false); }}
+                      className={`
+                        w-full flex items-center gap-2 px-4 py-[7px] text-left text-[12px] font-medium
+                        transition-all duration-150 border-l-[3px]
+                        ${activeModule === item.id
+                          ? 'text-[#f5a623] border-l-[#f5a623] bg-[#f5a623]/7'
+                          : 'text-[#8899aa] border-l-transparent hover:text-[#e2e8f0] hover:bg-[#141920]'
+                        }
+                      `}
+                    >
+                      <Icon size={14} className="w-4 text-center shrink-0" />
+                      <span className="flex-1">{item.label}</span>
+                      {item.badge && (
+                        <span className="bg-[#ff3d3d] text-white text-[9px] font-bold px-[5px] py-[1px] rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              ) : (
+                // Standalone page module — show the module itself as highlighted
+                (() => {
+                  const modInfo = MAIN_MODULE_MAP[activeModule];
+                  const Icon = ICON_MAP[modInfo?.icon || ''] || Zap;
+                  return (
+                    <button
+                      className="w-full flex items-center gap-2 px-4 py-[7px] text-left text-[12px] font-medium text-[#f5a623] border-l-[3px] border-l-[#f5a623] bg-[#f5a623]/7"
+                    >
+                      <Icon size={14} className="w-4 text-center shrink-0" />
+                      <span className="flex-1">{modInfo?.label || activeModule}</span>
+                      <span className="text-[9px] text-[#f5a623]/60">Active</span>
+                    </button>
+                  );
+                })()
+              )}
             </>
           ) : (
             // Dashboard / grid navigation mode
