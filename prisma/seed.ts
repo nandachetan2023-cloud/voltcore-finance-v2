@@ -142,15 +142,16 @@ async function seedSites() {
 
 async function seedProjects() {
   console.log('🌱 Seeding Projects...')
+  // contractValue stored as number in Lakhs (formatCurrency handles Cr/L display)
   const data = [
-    { code: 'PRJ-001', name: 'Mumbai Metro Line 7 Extension', client: 'MMRDA', type: 'Infrastructure', contractValue: '₹2,450,00,00,000', startDate: '2024-01-15', endDate: '2027-06-30', progress: 42, people: 45, status: 'On Track', site: 'Mumbai Metro Line 7' },
-    { code: 'PRJ-002', name: 'Delhi Smart City Township', client: 'DLF Ltd', type: 'Residential', contractValue: '₹890,00,00,000', startDate: '2023-06-01', endDate: '2026-12-31', progress: 58, people: 62, status: 'On Track', site: 'Delhi Smart City Township' },
-    { code: 'PRJ-003', name: 'Bangalore IT Park Phase 3', client: 'Infosys Ltd', type: 'Commercial', contractValue: '₹560,00,00,000', startDate: '2024-03-01', endDate: '2026-09-30', progress: 31, people: 38, status: 'On Track', site: 'Bangalore IT Park Phase 3' },
-    { code: 'PRJ-004', name: 'Hyderabad ORR Expressway', client: 'NHAI', type: 'Infrastructure', contractValue: '₹1,200,00,00,000', startDate: '2023-09-15', endDate: '2027-03-31', progress: 45, people: 55, status: 'Slight Delay', site: 'Hyderabad Expressway' },
-    { code: 'PRJ-005', name: 'Chennai Port Terminal 4', client: 'Chennai Port Trust', type: 'Industrial', contractValue: '₹780,00,00,000', startDate: '2024-06-01', endDate: '2027-05-30', progress: 22, people: 30, status: 'On Track', site: 'Chennai Port Expansion' },
-    { code: 'PRJ-006', name: 'Pune MIDC Industrial Complex', client: 'MIDC', type: 'Industrial', contractValue: '₹340,00,00,000', startDate: '2024-04-01', endDate: '2026-10-31', progress: 18, people: 28, status: 'On Hold', site: 'Pune Industrial Complex' },
-    { code: 'PRJ-007', name: 'Kolkata Howrah Bridge Retrofit', client: 'Kolkata Port Trust', type: 'Infrastructure', contractValue: '₹220,00,00,000', startDate: '2024-08-01', endDate: '2026-08-31', progress: 15, people: 22, status: 'On Track', site: 'Kolkata Bridge Repair' },
-    { code: 'PRJ-008', name: 'Ahmedabad Solar Farm 50MW', client: 'Gujarat Energy', type: 'Energy', contractValue: '₹185,00,00,000', startDate: '2023-11-01', endDate: '2025-06-30', progress: 92, people: 18, status: 'Completed', site: 'Ahmedabad Solar Farm' },
+    { code: 'PRJ-001', name: 'Mumbai Thermal Plant 500MW', client: 'NTPC Limited', type: 'Thermal', contractValue: '2450', startDate: '2024-01-15', endDate: '2027-06-30', progress: 42, people: 45, status: 'On Track', site: 'Mumbai Metro Line 7' },
+    { code: 'PRJ-002', name: 'Delhi Substation 400kV', client: 'PGCIL', type: 'Substation', contractValue: '890', startDate: '2023-06-01', endDate: '2026-12-31', progress: 58, people: 62, status: 'On Track', site: 'Delhi Smart City Township' },
+    { code: 'PRJ-003', name: 'Bangalore Solar Park 100MW', client: 'Karnataka Energy', type: 'Solar', contractValue: '560', startDate: '2024-03-01', endDate: '2026-09-30', progress: 31, people: 38, status: 'On Track', site: 'Bangalore IT Park Phase 3' },
+    { code: 'PRJ-004', name: 'Hyderabad Transmission Line', client: 'TSTRANSCO', type: 'Transmission', contractValue: '1200', startDate: '2023-09-15', endDate: '2027-03-31', progress: 45, people: 55, status: 'Delayed', site: 'Hyderabad Expressway' },
+    { code: 'PRJ-005', name: 'Chennai Plant Maintenance O&M', client: 'TNEB', type: 'Maintenance', contractValue: '780', startDate: '2024-06-01', endDate: '2027-05-30', progress: 22, people: 30, status: 'On Track', site: 'Chennai Port Expansion' },
+    { code: 'PRJ-006', name: 'Pune Thermal Unit 3 Overhaul', client: 'MAHAGENCO', type: 'Maintenance', contractValue: '340', startDate: '2024-04-01', endDate: '2026-10-31', progress: 18, people: 28, status: 'At Risk', site: 'Pune Industrial Complex' },
+    { code: 'PRJ-007', name: 'Kolkata Substation 220kV', client: 'WBSEDCL', type: 'Substation', contractValue: '220', startDate: '2024-08-01', endDate: '2026-08-31', progress: 15, people: 22, status: 'On Track', site: 'Kolkata Bridge Repair' },
+    { code: 'PRJ-008', name: 'Ahmedabad Solar Farm 50MW', client: 'Gujarat Energy', type: 'Solar', contractValue: '185', startDate: '2023-11-01', endDate: '2025-06-30', progress: 92, people: 18, status: 'Near Done', site: 'Ahmedabad Solar Farm' },
   ]
   await prisma.project.createMany({ data })
   console.log(`  ✅ ${data.length} projects created`)

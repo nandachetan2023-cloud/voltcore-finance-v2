@@ -268,7 +268,7 @@ export default function InventoryModule() {
         unitCost: parseFloat(itemForm.unitCost) || 0,
       };
       const method = mode === 'create' ? 'POST' : 'PUT';
-      const body = mode === 'edit' ? { type: 'item', id: selectedItemId, ...payload } : { type: 'item', ...payload };
+      const body = mode === 'edit' ? { recordType: 'item', id: selectedItemId, ...payload } : { recordType: 'item', ...payload };
       const res = await fetch('/api/inventory', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
       if (json.success) {
@@ -284,7 +284,7 @@ export default function InventoryModule() {
     if (!selectedItemId) return;
     setSubmitting(true);
     try {
-      const res = await fetch('/api/inventory', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'item', id: selectedItemId }) });
+      const res = await fetch('/api/inventory', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recordType: 'item', id: selectedItemId }) });
       const json = await res.json();
       if (json.success) {
         toast.success('Item deleted successfully');
@@ -308,7 +308,7 @@ export default function InventoryModule() {
     setSubmitting(true);
     try {
       const body = {
-        type: 'movement',
+        recordType: 'movement',
         ...movementForm,
         quantity: parseInt(movementForm.quantity) || 0,
       };

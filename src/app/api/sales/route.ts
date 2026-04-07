@@ -106,12 +106,6 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Customer not found' }, { status: 404 })
       }
 
-      // Recalculate amount if quantity or unitPrice changed
-      if (data.quantity != null || data.unitPrice != null) {
-        const qty = data.quantity ?? existing.totalOrders
-        const price = data.unitPrice ?? existing.totalRevenue
-      }
-
       const record = await db.customer.update({ where: { id }, data })
       return NextResponse.json({ success: true, data: record })
     } else {

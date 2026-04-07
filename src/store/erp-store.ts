@@ -15,7 +15,11 @@ export type ModuleId =
   | 'timesheet'
   // Finance sub-modules
   | 'finance-dashboard' | 'ledger' | 'accounts-payable' | 'accounts-receivable'
-  | 'journal-entries' | 'bank-cash' | 'taxation' | 'budget' | 'financial-reports';
+  | 'journal-entries' | 'bank-cash' | 'taxation' | 'budget' | 'financial-reports'
+  // Projects sub-modules
+  | 'project-list'
+  // Downloads
+  | 'downloads';
 
 interface NavItem {
   id: ModuleId;
@@ -38,6 +42,7 @@ export const MAIN_MODULES: NavItem[] = [
   { id: 'system', icon: 'Settings', label: 'System' },
   { id: 'support', icon: 'MessageSquare', label: 'Support' },
   { id: 'knowledgebase', icon: 'BookOpen', label: 'Knowledgebase' },
+  { id: 'downloads', icon: 'Download', label: 'Downloads' },
 ];
 
 export const SUB_MODULES: Record<string, NavItem[]> = {
@@ -71,7 +76,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'financial-reports', icon: 'PieChart', label: 'Financial Reports', section: 'Finance' },
   ],
   projects: [
-    { id: 'projects', icon: 'FolderKanban', label: 'All Projects', section: 'Projects' },
+    { id: 'project-list', icon: 'FolderKanban', label: 'All Projects', section: 'Projects' },
     { id: 'sites', icon: 'MapPin', label: 'Site Map', section: 'Projects' },
   ],
   inventory: [],
@@ -133,20 +138,22 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   taxation: { title: 'Taxation & Compliance', breadcrumb: 'Finance › Tax' },
   budget: { title: 'Budget & Forecasting', breadcrumb: 'Finance › Budget' },
   'financial-reports': { title: 'Financial Reports', breadcrumb: 'Finance › Reports' },
-  sites: { title: 'Site Map', breadcrumb: 'VoltCore ERP › Sites' },
+  'project-list': { title: 'All Projects', breadcrumb: 'Projects › All Projects' },
+  sites: { title: 'Site Map', breadcrumb: 'Projects › Sites' },
   permits: { title: 'Work Permits (PTW)', breadcrumb: 'Operations › Permit to Work' },
   safety: { title: 'Safety & HSE', breadcrumb: 'Operations › HSE Management' },
   equipment: { title: 'Equipment', breadcrumb: 'Operations › Asset Management' },
   subcontractors: { title: 'Subcontractors', breadcrumb: 'Operations › Subcontractor Management' },
   reports: { title: 'Reports', breadcrumb: 'VoltCore ERP › Analytics' },
   settings: { title: 'Settings', breadcrumb: 'VoltCore ERP › System Settings' },
+  downloads: { title: 'Downloads', breadcrumb: 'VoltCore ERP › Project Downloads' },
 };
 
 // Modules with sub-modules (clicking them shows sub-nav instead of a page)
 export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finance', 'projects', 'assets', 'system'];
 
 // Main modules that have their own page (no sub-nav)
-export const PAGE_MODULES = ['dashboard', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
+export const PAGE_MODULES = ['dashboard', 'inventory', 'sales', 'crm', 'support', 'knowledgebase', 'downloads'];
 
 // Reverse lookup: given a sub-module id, find its parent module
 const PARENT_MAP: Record<string, string> = {};

@@ -28,16 +28,16 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { type, ...data } = body
+    const { recordType, ...data } = body
 
-    if (!type || !['item', 'movement'].includes(type)) {
+    if (!recordType || !['item', 'movement'].includes(recordType)) {
       return NextResponse.json(
-        { success: false, error: "type is required and must be 'item' or 'movement'" },
+        { success: false, error: "recordType is required and must be 'item' or 'movement'" },
         { status: 400 }
       )
     }
 
-    if (type === 'item') {
+    if (recordType === 'item') {
       if (!data.name || !data.itemCode) {
         return NextResponse.json(
           { success: false, error: 'itemCode and name are required for inventory item' },
@@ -69,11 +69,11 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { type, id, ...data } = body
+    const { recordType, id, ...data } = body
 
-    if (!type || !['item'].includes(type)) {
+    if (!recordType || !['item'].includes(recordType)) {
       return NextResponse.json(
-        { success: false, error: "Only 'item' type can be updated" },
+        { success: false, error: "Only 'item' recordType can be updated" },
         { status: 400 }
       )
     }
@@ -109,11 +109,11 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const body = await request.json()
-    const { type, id } = body
+    const { recordType, id } = body
 
-    if (!type || !['item'].includes(type)) {
+    if (!recordType || !['item'].includes(recordType)) {
       return NextResponse.json(
-        { success: false, error: "Only 'item' type can be deleted" },
+        { success: false, error: "Only 'item' recordType can be deleted" },
         { status: 400 }
       )
     }

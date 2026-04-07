@@ -1,0 +1,497 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  id            String   @id @default(cuid())
+  empId         String   @unique
+  name          String
+  email         String?
+  phone         String?
+  trade         String
+  role          String
+  site          String
+  type          String   @default("Staff")
+  status        String   @default("Active")
+  joiningDate   String
+  certifications String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  attendance    Attendance[]
+  leaveRequests LeaveRequest[]
+  payroll       Payroll[]
+  expenses      Expense[]
+}
+
+model Site {
+  id            String   @id @default(cuid())
+  name          String
+  state         String
+  project       String
+  manpower      Int      @default(0)
+  incharge      String
+  status        String   @default("Active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Project {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  client        String
+  type          String
+  contractValue String
+  startDate     String
+  endDate       String
+  progress      Int      @default(0)
+  people        Int      @default(0)
+  status        String   @default("On Track")
+  site          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Attendance {
+  id        String   @id @default(cuid())
+  empId     String
+  employee  Employee @relation(fields: [empId], references: [id])
+  site      String
+  date      String
+  timeIn    String?
+  timeOut   String?
+  otHours   Float    @default(0)
+  shift     String?
+  status    String   @default("Present")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LeaveRequest {
+  id          String   @id @default(cuid())
+  empId       String
+  employee    Employee @relation(fields: [empId], references: [id])
+  site        String
+  type        String
+  fromDate    String
+  toDate      String
+  days        Int
+  reason      String
+  status      String   @default("Pending")
+  appliedDate String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Payroll {
+  id        String   @id @default(cuid())
+  empId     String
+  employee  Employee @relation(fields: [empId], references: [id])
+  month     String
+  days      Int
+  basic     Float
+  hra       Float
+  ot        Float    @default(0)
+  gross     Float
+  pf        Float
+  esi       Float    @default(0)
+  tds       Float    @default(0)
+  netPay    Float
+  status    String   @default("Pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WorkPermit {
+  id            String   @id @default(cuid())
+  permitNo      String   @unique
+  type          String
+  location      String
+  issuedTo      String
+  expiry        String
+  status        String   @default("Active")
+  description   String?
+  precautions   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Incident {
+  id        String   @id @default(cuid())
+  refNo     String   @unique
+  date      String
+  site      String
+  type      String
+  severity  String
+  person    String
+  status    String   @default("Investigating")
+  description String?
+  action    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Equipment {
+  id          String   @id @default(cuid())
+  name        String
+  eqId        String   @unique
+  site        String
+  status      String   @default("Operational")
+  lastPM      String?
+  nextPM      String?
+  issue       String?
+  downSince   String?
+  etaRepair   String?
+  assignedTo  String?
+  utilization Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  claimNo     String   @unique
+  empId       String
+  employee    Employee @relation(fields: [empId], references: [id])
+  category    String
+  amount      Float
+  project     String
+  date        String
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PurchaseOrder {
+  id        String   @id @default(cuid())
+  poNo      String   @unique
+  vendor    String
+  item      String
+  amount    Float
+  project   String
+  delivery  String
+  grn       String   @default("Awaited")
+  status    String   @default("Open")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Invoice {
+  id        String   @id @default(cuid())
+  invNo     String   @unique
+  client    String
+  project   String
+  amount    String
+  date      String
+  dueDate   String
+  status    String   @default("Under Review")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Subcontractor {
+  id           String   @id @default(cuid())
+  name         String
+  trade        String
+  workers      Int      @default(0)
+  site         String
+  pfReg        String   @default("Pending")
+  esiReg       String   @default("Pending")
+  labourLic    String   @default("Pending")
+  compliance   String   @default("Non-Compliant")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model JobOpening {
+  id           String   @id @default(cuid())
+  position     String
+  site         String
+  openings     Int
+  applications Int      @default(0)
+  priority     String
+  status       String   @default("Open")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ShiftSchedule {
+  id          String   @id @default(cuid())
+  empId       String
+  employeeName String
+  site        String
+  shift       String
+  weekStart   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Certification {
+  id            String   @id @default(cuid())
+  empId         String
+  employeeName  String
+  name          String
+  issuedBy      String
+  issueDate     String
+  expiryDate    String
+  status        String   @default("Valid")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model TrainingSession {
+  id          String   @id @default(cuid())
+  title       String
+  site        String
+  trainer     String
+  date        String
+  duration    String
+  attendees   Int      @default(0)
+  status      String   @default("Scheduled")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CompanySettings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  label       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── ORGANIZATION MODULE ──
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  head        String?
+  location    String
+  employeeCount Int    @default(0)
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Designation {
+  id          String   @id @default(cuid())
+  title       String
+  department  String
+  level       String
+  minSalary   Float    @default(0)
+  maxSalary   Float    @default(0)
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── INVENTORY MODULE ──
+model InventoryItem {
+  id          String   @id @default(cuid())
+  itemCode    String   @unique
+  name        String
+  category    String
+  unit        String   @default("Nos")
+  currentStock Int     @default(0)
+  minStock    Int      @default(0)
+  maxStock    Int      @default(0)
+  unitCost    Float    @default(0)
+  warehouse   String
+  status      String   @default("In Stock")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model StockMovement {
+  id          String   @id @default(cuid())
+  itemCode    String
+  itemName    String
+  type        String
+  quantity    Int
+  fromWarehouse String?
+  toWarehouse   String?
+  reference   String?
+  date        String
+  remarks     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── SALES MODULE ──
+model Customer {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  contactPerson String
+  email       String?
+  phone       String?
+  address     String?
+  gst         String?
+  city        String?
+  state       String?
+  totalOrders Int      @default(0)
+  totalRevenue Float   @default(0)
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SalesOrder {
+  id          String   @id @default(cuid())
+  soNo        String   @unique
+  customer    String
+  project     String
+  item        String
+  quantity    Int
+  unitPrice   Float
+  amount      Float
+  orderDate   String
+  deliveryDate String?
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── CRM MODULE ──
+model CrmContact {
+  id          String   @id @default(cuid())
+  name        String
+  company     String
+  designation String?
+  email       String?
+  phone       String?
+  source      String
+  stage       String   @default("Lead")
+  value       Float    @default(0)
+  lastContact String?
+  notes       String?
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── SUPPORT MODULE ──
+model SupportTicket {
+  id          String   @id @default(cuid())
+  ticketNo    String   @unique
+  title       String
+  raisedBy    String
+  category    String
+  priority    String   @default("Medium")
+  status      String   @default("Open")
+  assignedTo  String?
+  description String?
+  resolution  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── KNOWLEDGEBASE MODULE ──
+model KBArticle {
+  id          String   @id @default(cuid())
+  title       String
+  category    String
+  content     String
+  author      String
+  tags        String   @default("")
+  views       Int      @default(0)
+  helpful     Int      @default(0)
+  status      String   @default("Published")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── FINANCE MODULE ──
+model LedgerAccount {
+  id          String   @id @default(cuid())
+  accountCode String   @unique
+  name        String
+  group       String
+  type        String
+  balance     Float    @default(0)
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AccountsPayable {
+  id          String   @id @default(cuid())
+  billNo      String   @unique
+  vendor      String
+  description String?
+  amount      Float
+  dueDate     String
+  paidDate    String?
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AccountsReceivable {
+  id          String   @id @default(cuid())
+  invoiceNo   String   @unique
+  client      String
+  description String?
+  amount      Float
+  dueDate     String
+  receivedDate String?
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model JournalEntry {
+  id          String   @id @default(cuid())
+  entryNo     String   @unique
+  date        String
+  account     String
+  debit       Float    @default(0)
+  credit      Float    @default(0)
+  description String?
+  reference   String?
+  status      String   @default("Posted")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BankAccount {
+  id          String   @id @default(cuid())
+  accountName String
+  bankName    String
+  accountNo   String   @unique
+  type        String   @default("Current")
+  balance     Float    @default(0)
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TaxRecord {
+  id          String   @id @default(cuid())
+  taxType     String
+  period      String
+  amount      Float
+  dueDate     String
+  paidDate    String?
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BudgetItem {
+  id          String   @id @default(cuid())
+  category    String
+  description String
+  planned     Float
+  actual      Float    @default(0)
+  period      String
+  status      String   @default("On Track")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
