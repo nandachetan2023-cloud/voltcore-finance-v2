@@ -1,0 +1,87 @@
+'use client';
+
+import React, { Suspense, useState, useEffect } from 'react';
+
+// Map of module key to import path — compiled ONLY when the module is rendered
+const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType }>> = {
+  dashboard: () => import('@/components/erp/dashboard'),
+  employees: () => import('@/components/erp/employees'),
+  attendance: () => import('@/components/erp/attendance'),
+  leave: () => import('@/components/erp/leave'),
+  shift: () => import('@/components/erp/shift'),
+  training: () => import('@/components/erp/training'),
+  recruitment: () => import('@/components/erp/recruitment'),
+  purchases: () => import('@/components/erp/purchases'),
+  expenses: () => import('@/components/erp/expenses'),
+  payroll: () => import('@/components/erp/payroll'),
+  invoices: () => import('@/components/erp/invoices'),
+  projects: () => import('@/components/erp/projects'),
+  sites: () => import('@/components/erp/sites'),
+  equipment: () => import('@/components/erp/equipment'),
+  permits: () => import('@/components/erp/permits'),
+  safety: () => import('@/components/erp/safety'),
+  subcontractors: () => import('@/components/erp/subcontractors'),
+  reports: () => import('@/components/erp/reports'),
+  settings: () => import('@/components/erp/settings'),
+  organization: () => import('@/components/erp/organization'),
+  inventory: () => import('@/components/erp/inventory'),
+  sales: () => import('@/components/erp/sales'),
+  crm: () => import('@/components/erp/crm'),
+  support: () => import('@/components/erp/support'),
+  knowledgebase: () => import('@/components/erp/knowledgebase'),
+  'employee-analytics': () => import('@/components/erp/employee-analytics'),
+  timesheet: () => import('@/components/erp/timesheet'),
+  'finance-dashboard': () => import('@/components/erp/finance-dashboard'),
+  ledger: () => import('@/components/erp/ledger'),
+  'accounts-payable': () => import('@/components/erp/accounts-payable'),
+  'accounts-receivable': () => import('@/components/erp/accounts-receivable'),
+  'journal-entries': () => import('@/components/erp/journal-entries'),
+  'bank-cash': () => import('@/components/erp/bank-cash'),
+  taxation: () => import('@/components/erp/taxation'),
+  budget: () => import('@/components/erp/budget'),
+  'financial-reports': () => import('@/components/erp/financial-reports'),
+  'project-list': () => import('@/components/erp/projects'),
+};
+
+function LoadingFallback() {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-[#f5a623]/30 border-t-[#f5a623] rounded-full animate-spin" />
+        <span className="text-[11px] text-[#5a6878]">Loading module...</span>
+      </div>
+    </div>
+  );
+}
+
+// Use dynamic() from next to avoid Turbopack pre-compilation
+function DynamicModule({ loader }: { loader: () => Promise<{ default: React.ComponentType }> }) {
+  const [Mod, setMod] = useState<React.ComponentType | null>(null);
+
+  useEffect(() => {
+    loader().then((m) => {
+      setMod(() => m.default);
+    }).catch((err) => {
+      console.error('Failed to load module:', err);
+    });
+  }, [loader]);
+
+  if (!Mod) return <LoadingFallback />;
+  return <Mod />;
+}
+
+export function ModuleRenderer({ moduleKey }: { moduleKey: string }) {
+  const loader = MODULE_PATHS[moduleKey];
+
+  if (!loader) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <span className="text-[12px] text-[#5a6878]">Module not found: {moduleKey}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return <DynamicModule loader={loader} />;
+}

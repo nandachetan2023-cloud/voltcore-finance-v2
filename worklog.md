@@ -1208,3 +1208,26 @@ Stage Summary:
 - Dev server running on port 3000 behind Caddy gateway (port 81)
 - Zero lint errors (2 non-blocking warnings)
 
+
+---
+Task ID: 13
+Agent: Main Agent
+Task: Fix "All employee, department data vanished" — server crash preventing data display
+
+Work Log:
+- Investigated: Database has 30 employees, 10 departments, 8 sites, 8 projects (data NOT missing)
+- Root cause: Next.js 16 Turbopack dev server crashing silently during/after page compilation
+- The full page.tsx had 35+ `next/dynamic()` imports causing OOM/crash — module-registry.tsx fix was lost
+- Recreated module-registry.tsx with runtime dynamic imports (useEffect-based lazy loading)
+- Split page.tsx (300+ lines) into thin wrapper + erp-layout.tsx to reduce compilation cost
+- Discovered `bun` runtime was causing additional crashes — switched to `npx next dev` with NODE_OPTIONS='--max-old-space-size=4096'
+- Created serve.sh with automatic route warmup (pre-compiles all 34 API routes sequentially)
+- After warmup, all routes serve from cache in <15ms, server is stable
+
+Stage Summary:
+- Employee data: 30 records ✅
+- Department data: 10 departments, 15 designations ✅
+- Sites: 8, Projects: 8, Payroll: 174, Inventory: 20 items + 35 movements ✅
+- Page loads: HTTP 200 ✅
+- Server stability: Stable with pre-compiled cache ✅
+- Files modified: page.tsx (thin wrapper), erp-layout.tsx (new), module-registry.tsx (rewritten), serve.sh (new warmup script)
