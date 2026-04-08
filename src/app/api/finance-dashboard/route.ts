@@ -139,22 +139,36 @@ export async function GET() {
       apByMonth[key] = (apByMonth[key] || 0) + a.amount;
     });
 
-    // Generate last 6 months
-    const now = new Date();
-    const monthlyTrends = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
-      monthlyTrends.push({
-        month: monthNames[d.getMonth()],
-        year: d.getFullYear(),
+    // Collect all unique months from actual data
+    const allMonths = new Set<string>();
+    Object.keys(payrollByMonth).forEach(k => allMonths.add(k));
+    Object.keys(expenseByMonth).forEach(k => allMonths.add(k));
+    Object.keys(arByMonth).forEach(k => allMonths.add(k));
+    Object.keys(apByMonth).forEach(k => allMonths.add(k));
+
+    // Sort months chronologically and take last 6
+    const sortedMonths = Array.from(allMonths).sort((a, b) => {
+      const [am, ay] = a.split(' ');
+      const [bm, by] = b.split(' ');
+      const ai = monthNames.indexOf(am);
+      const bi = monthNames.indexOf(bm);
+      if (parseInt(ay) !== parseInt(by)) return parseInt(ay) - parseInt(by);
+      return ai - bi;
+    });
+    const trendMonths = sortedMonths.slice(-6);
+
+    const monthlyTrends = trendMonths.map(key => {
+      const [monthStr, yearStr] = key.split(' ');
+      return {
+        month: monthStr,
+        year: parseInt(yearStr),
         revenue: arByMonth[key] || 0,
         expenses: (expenseByMonth[key] || 0) + (payrollByMonth[key] || 0),
         payroll: payrollByMonth[key] || 0,
         cashIn: arByMonth[key] || 0,
         cashOut: (apByMonth[key] || 0) + (payrollByMonth[key] || 0),
-      });
-    }
+      };
+    });
 
     return NextResponse.json({
       success: true,

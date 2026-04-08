@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { FileBarChart, BarChart3, Loader2, Calendar, Users, ClipboardList, IndianRupee, ShieldAlert, Wrench, Receipt } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts'
+
+const CHART_COLORS = ['#f5a623', '#00e676', '#00d4ff', '#ff3d3d', '#a78bfa', '#ffab40', '#22d3ee', '#f472b6']
 
 /* ------------------------------------------------------------------ */
 /*  Report Definitions                                                 */
@@ -158,6 +161,23 @@ function ReportContent({ reportId, data, startDate, endDate }: ReportContentProp
               ))}
             </div>
           </div>
+          {sortedSite.length > 0 && (
+            <div className="mt-4">
+              <div className="text-[10px] text-[#8899aa] uppercase tracking-wider font-semibold mb-2">Headcount by Site</div>
+              <div className="h-[180px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={sortedSite.map(([name, value]) => ({ name, value }))} barSize={24}>
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} width={30} />
+                    <Tooltip contentStyle={{ background: '#1a2030', border: '1px solid #252e3a', borderRadius: '8px', fontSize: '11px', color: '#e2e8f0' }} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {sortedSite.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
         </div>
       )
     }
@@ -191,6 +211,22 @@ function ReportContent({ reportId, data, startDate, endDate }: ReportContentProp
           <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-[#00d4ff]/5 border border-[#00d4ff]/15">
             <span className="text-[11px] text-[#8899aa]">Total OT Hours</span>
             <span className="text-[16px] font-bold text-[#00d4ff]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{totalOT}</span>
+          </div>
+          <div className="h-[160px] mt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={[
+                { name: 'Present', value: present, fill: '#00e676' },
+                { name: 'Absent', value: absent, fill: '#ff3d3d' },
+                { name: 'On Leave', value: onLeave, fill: '#a78bfa' },
+              ].filter(d => d.value > 0)} layout="vertical" barSize={20}>
+                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} />
+                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 10 }} width={60} />
+                <Tooltip contentStyle={{ background: '#1a2030', border: '1px solid #252e3a', borderRadius: '8px', fontSize: '11px', color: '#e2e8f0' }} />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                  {['#00e676', '#ff3d3d', '#a78bfa'].map((color, i) => <Cell key={i} fill={color} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
           <div>
             <div className="text-[10px] text-[#8899aa] uppercase tracking-wider font-semibold mb-2">Recent Records</div>
@@ -245,6 +281,24 @@ function ReportContent({ reportId, data, startDate, endDate }: ReportContentProp
               </div>
             ))}
           </div>
+          <div className="h-[180px] mt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={[
+                { name: 'Gross', value: totalGross },
+                { name: 'Net Pay', value: totalNet },
+                { name: 'PF', value: totalPF },
+                { name: 'ESI', value: totalESI },
+                { name: 'TDS', value: totalTDS },
+              ]} barSize={24}>
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} width={40} tickFormatter={(v) => v >= 100000 ? `${(v/100000).toFixed(1)}L` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)} />
+                <Tooltip contentStyle={{ background: '#1a2030', border: '1px solid #252e3a', borderRadius: '8px', fontSize: '11px', color: '#e2e8f0' }} formatter={(v: number) => [`₹${v.toLocaleString('en-IN')}`, '']} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {['#00d4ff', '#00e676', '#ff3d3d', '#ffab40', '#a78bfa'].map((color, i) => <Cell key={i} fill={color} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )
     }
@@ -282,6 +336,23 @@ function ReportContent({ reportId, data, startDate, endDate }: ReportContentProp
               </div>
             ))}
           </div>
+          {byType.size > 0 && (
+            <div className="mt-4">
+              <div className="text-[10px] text-[#8899aa] uppercase tracking-wider font-semibold mb-2">Incidents by Type</div>
+              <div className="h-[180px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={Array.from(byType.entries()).map(([name, value]) => ({ name, value }))} barSize={24}>
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} width={20} />
+                    <Tooltip contentStyle={{ background: '#1a2030', border: '1px solid #252e3a', borderRadius: '8px', fontSize: '11px', color: '#e2e8f0' }} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {Array.from(byType.keys()).map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
           <div>
             <div className="text-[10px] text-[#8899aa] uppercase tracking-wider font-semibold mb-2">By Severity</div>
             {Array.from(bySeverity.entries()).map(([sev, count]) => {
@@ -322,6 +393,25 @@ function ReportContent({ reportId, data, startDate, endDate }: ReportContentProp
               </div>
             ))}
           </div>
+          {(operational > 0 || maintenance > 0 || breakdown > 0) && (
+            <div className="mt-4">
+              <div className="text-[10px] text-[#8899aa] uppercase tracking-wider font-semibold mb-2">Status Distribution</div>
+              <div className="h-[180px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={[
+                      { name: 'Operational', value: operational },
+                      { name: 'Maintenance', value: maintenance },
+                      { name: 'Breakdown', value: breakdown },
+                    ].filter(d => d.value > 0)} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={3} dataKey="value" stroke="none">
+                      {['#00e676', '#f5a623', '#ff3d3d'].map((color, i) => <Cell key={i} fill={color} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ background: '#1a2030', border: '1px solid #252e3a', borderRadius: '8px', fontSize: '11px', color: '#e2e8f0' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
           <div>
             <div className="text-[10px] text-[#8899aa] uppercase tracking-wider font-semibold mb-2">Equipment List</div>
             <div className="max-h-[200px] overflow-y-auto space-y-1">
@@ -372,6 +462,22 @@ function ReportContent({ reportId, data, startDate, endDate }: ReportContentProp
                 <span className="text-[13px] font-bold" style={{ fontFamily: "'Share Tech Mono', monospace", color: row.color }}>{formatCurrency(row.value)}</span>
               </div>
             ))}
+          </div>
+          <div className="h-[180px] mt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={[
+                { name: 'Pending', value: pendingAmt },
+                { name: 'Approved', value: approvedAmt },
+                { name: 'Total', value: totalAmt },
+              ].filter(d => d.value > 0)} barSize={24}>
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} width={40} tickFormatter={(v) => v >= 100000 ? `${(v/100000).toFixed(1)}L` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)} />
+                <Tooltip contentStyle={{ background: '#1a2030', border: '1px solid #252e3a', borderRadius: '8px', fontSize: '11px', color: '#e2e8f0' }} formatter={(v: number) => [`₹${v.toLocaleString('en-IN')}`, '']} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {['#f5a623', '#00e676', '#00d4ff'].map((color, i) => <Cell key={i} fill={color} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
           <div>
             <div className="text-[10px] text-[#8899aa] uppercase tracking-wider font-semibold mb-2">Recent Claims</div>

@@ -386,18 +386,25 @@ export default function EmployeeAnalytics() {
       payrollByMonth[key] = (payrollByMonth[key] || 0) + (p.gross || 0);
     }
   });
-  // Generate last 6 months
-  const payrollTrend = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
-    const key = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
-    payrollTrend.push({
-      name: monthNames[d.getMonth()],
+  // Generate payroll trend from actual data months
+  const sortedPayrollMonths = Object.keys(payrollByMonth).sort((a, b) => {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const [am, ay] = a.split(' ');
+    const [bm, by] = b.split(' ');
+    const ai = monthNames.indexOf(am);
+    const bi = monthNames.indexOf(bm);
+    if (parseInt(ay) !== parseInt(by)) return parseInt(ay) - parseInt(by);
+    return ai - bi;
+  });
+  const trendMonths = sortedPayrollMonths.slice(-6);
+  const payrollTrend = trendMonths.map((key, i) => {
+    const monthStr = key.split(' ')[0];
+    return {
+      name: monthStr,
       value: payrollByMonth[key] || 0,
-      color: i === 0 ? '#f5a623' : '#00d4ff',
-    });
-  }
+      color: i === trendMonths.length - 1 ? '#f5a623' : '#00d4ff',
+    };
+  });
 
   // KPI Cards
   const kpiCards: KpiCardData[] = [

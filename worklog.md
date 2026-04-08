@@ -1231,3 +1231,81 @@ Stage Summary:
 - Page loads: HTTP 200 ✅
 - Server stability: Stable with pre-compiled cache ✅
 - Files modified: page.tsx (thin wrapper), erp-layout.tsx (new), module-registry.tsx (rewritten), serve.sh (new warmup script)
+---
+Task ID: 3b
+Agent: Main Agent
+Task: Fix Monthly Payroll Trend chart showing all zeros in Employee Analytics
+
+Work Log:
+- Diagnosed: payrollTrend generation used `new Date()` to compute "last 6 months from now", but seed data only has payroll for Jan-Jun 2025 — all lookups missed, resulting in all-zero bars
+- Replaced the `for (let i = 5; i >= 0; i--)` loop (lines 389-400) in employee-analytics.tsx with new logic:
+  - Collects sorted month keys from `payrollByMonth` (chronological sort by year then month index)
+  - Takes last 6 (or fewer) entries via `slice(-6)`
+  - Maps them to payrollTrend using actual data months instead of calendar months from `now`
+- Preserved the existing `normalizeMonth` function and `payrollByMonth` aggregation (unchanged)
+- Ran lint: 0 errors, 2 pre-existing warnings (font loading in layout.tsx, unused eslint-disable in sync.tsx)
+
+Stage Summary:
+- Monthly Payroll Trend VBarChart now displays actual seed data months (Jan-Jun 2025) instead of all zeros
+- No new lint errors introduced
+- Dev server compiling cleanly
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix finance-dashboard monthly trends generating wrong date range (empty chart bars)
+
+Work Log:
+- Diagnosed: /api/finance-dashboard generated monthly trends for "last 6 months from now" (Nov 2025 - Apr 2026), but all seed data has months in Jan-Jun 2025, causing all chart bars to show zero
+- Fixed /src/app/api/finance-dashboard/route.ts lines 142-157: replaced `new Date()`-based month generation with logic that collects all unique month keys from actual data (payrollByMonth, expenseByMonth, arByMonth, apByMonth), sorts them chronologically, takes the last 6, and generates trends from those real data months
+- Reused existing `monthNames` array (line 101) instead of creating a duplicate
+- Verified via curl: API now returns 6 months of actual data (Jan 2025 - Jun 2025) with non-zero revenue, expenses, payroll, cashIn, and cashOut values
+
+Stage Summary:
+- Finance Dashboard charts (Revenue vs Expenses, Cash Flow, etc.) now display actual seed data instead of empty/zero bars
+- Monthly trends: Jan-Jun 2025 with real payroll (~1.7M/mo), expenses (~100K/mo), revenue (0 in Q1, 8.5M-17M in Apr-Jun), and cash flow data
+
+---
+
+## Task #4 — Add Charts to Reports Page
+
+**Date:** 2026-04-08 16:23 UTC
+
+### Summary
+Added interactive recharts bar/pie charts to all 6 report types in the VoltCore ERP Reports dialog. Previously the reports only displayed stat cards and list views.
+
+### Changes
+- Added recharts imports: `BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie`
+- Added `CHART_COLORS` palette constant (8 colors)
+- **Manpower Report**: Vertical BarChart — headcount by site (after "By Status" section)
+- **Attendance Report**: Horizontal BarChart — Present/Absent/On Leave (after "Total OT Hours")
+- **Payroll Report**: Vertical BarChart — Gross/Net/PF/ESI/TDS with ₹ formatter (after stat grid)
+- **HSE Report**: Vertical BarChart — Incidents by type (after "By Type" list)
+- **Equipment Report**: Donut PieChart — Operational/Maintenance/Breakdown distribution (after stat grid)
+- **Expenses Report**: Vertical BarChart — Pending/Approved/Total amounts with ₹ formatter (after amount list)
+
+### Files Modified
+- `src/components/erp/reports.tsx`
+
+### Lint
+- 0 errors, 2 pre-existing warnings (unrelated)
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix graph bars not visible across all dashboard/report charts
+
+Work Log:
+- Investigated: All chart components use recharts (BarChart, PieChart, LineChart)
+- Found DB has plenty of data (30 employees, 174 payroll, 12 budget items, etc.)
+- Root cause: finance-dashboard API generated monthly trends for "last 6 months from now" (Nov 2025-Apr 2026), but seed data months are Jan-Jun 2025 — no overlap = all zeros
+- Fixed finance-dashboard API: Changed trend generation to detect actual data months instead of computing from current date
+- Fixed employee-analytics: Changed payroll trend to use actual payroll month data instead of current-date-based months
+- Added recharts bar/pie charts to all 6 report types in reports.tsx (was missing charts entirely)
+- Verified: Finance dashboard now shows Jan-Jun 2025 trends with real revenue/expense/payroll data
+- Verified: Zero lint errors
+
+Stage Summary:
+- 3 files fixed: finance-dashboard/route.ts, employee-analytics.tsx, reports.tsx
+- Monthly trends now display real data: Jan 2025 (₹18.7L expenses) through Jun 2025 (₹17M revenue)
+- Reports page now has proper bar charts for: Manpower (site headcount), Attendance (present/absent), Payroll (gross/net/PF/ESI/TDS), HSE (incidents by type), Equipment (status pie chart), Expenses (amounts by status)
