@@ -1,5 +1,7 @@
 #!/bin/bash
-cd /home/z/my-project
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 
 WARMUP_APIS=(
   employees organization dashboard sites projects attendance

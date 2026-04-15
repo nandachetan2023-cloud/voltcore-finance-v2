@@ -31,6 +31,7 @@ interface Designation {
   maxSalary: number;
   status: string;
   createdAt: string;
+  employeeCount?: number;
 }
 
 interface OrgData {
@@ -170,13 +171,69 @@ export default function OrganizationModule() {
   useEffect(() => { if (triggerCreate > 0) { if (activeTab === 'departments') setDeptCreateOpen(true); else setDesigCreateOpen(true); } }, [triggerCreate, activeTab]);
 
   const fetchData = useCallback(async () => {
+    console.log('🔍 ORGANIZATION MODULE: Starting fetchData...');
     try {
-      const res = await fetch('/api/organization');
-      const json = await res.json();
-      if (json.success) setData(json.data);
-      else setError(json.error || 'Failed to load organization data');
-    } catch { setError('Network error fetching organization data'); }
-    finally { setLoading(false); }
+      const [deptRes, desigRes] = await Promise.all([
+        fetch('/api/departments'),
+        fetch('/api/designations'),
+      ]);
+      
+      const deptJson = await deptRes.json();
+      const desigJson = await desigRes.json();
+      
+      console.log('🔍 ORGANIZATION MODULE: API responses received');
+      console.log('🔍 Departments response:', deptJson);
+      console.log('🔍 Designations response:', desigJson);
+      
+      if (deptJson.success && desigJson.success) {
+        // Map departments data
+        console.log('Raw department data:', deptJson.data);
+        const mappedDepts = deptJson.data.map((d: any) => {
+          console.log('Department:', d.name, 'Count object:', d._count, 'Employee count:', d._count?.Employee);
+          return {
+            id: d.id.toString(),
+            name: d.name,
+            head: null, // Not in schema
+            location: 'N/A', // Not in schema
+            employeeCount: d._count?.Employee || 0,
+            status: 'Active',
+            createdAt: d.createdAt || new Date().toISOString(),
+          };
+        });
+        
+        // Map designations data
+        console.log('Raw designation data:', desigJson.data);
+        const mappedDesigs = desigJson.data.map((d: any) => {
+          console.log('Designation:', d.name, 'Count object:', d._count, 'Employee count:', d._count?.Employee);
+          return {
+            id: d.id.toString(),
+            title: d.name,
+            department: 'N/A', // Not in schema
+            level: 'N/A', // Not in schema
+            minSalary: 0, // Not in schema
+            maxSalary: 0, // Not in schema
+            status: 'Active',
+            createdAt: d.createdAt || new Date().toISOString(),
+            employeeCount: d._count?.Employee || 0,
+          };
+        });
+        
+        console.log('Mapped departments:', mappedDepts);
+        console.log('Mapped designations:', mappedDesigs);
+        
+        setData({
+          departments: mappedDepts,
+          designations: mappedDesigs,
+        });
+      } else {
+        setError('Failed to load organization data');
+      }
+    } catch (err) {
+      console.error('Error fetching organization data:', err);
+      setError('Network error fetching organization data');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -200,8 +257,8 @@ export default function OrganizationModule() {
     setSubmitting(true);
     try {
       const method = mode === 'create' ? 'POST' : 'PUT';
-      const body = mode === 'edit' ? { type: 'department', id: selectedDeptId, ...deptForm } : { type: 'department', ...deptForm };
-      const res = await fetch('/api/organization', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const body = mode === 'edit' ? { id: parseInt(selectedDeptId), name: deptForm.name, code: deptForm.name.toUpperCase().replace(/\s+/g, '_') } : { name: deptForm.name, code: deptForm.name.toUpperCase().replace(/\s+/g, '_') };
+      const res = await fetch('/api/departments', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
       if (json.success) {
         toast.success(mode === 'create' ? 'Department created successfully' : 'Department updated successfully');
@@ -216,7 +273,7 @@ export default function OrganizationModule() {
     if (!selectedDeptId) return;
     setSubmitting(true);
     try {
-      const res = await fetch('/api/organization', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'department', id: selectedDeptId }) });
+      const res = await fetch('/api/departments', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: parseInt(selectedDeptId) }) });
       const json = await res.json();
       if (json.success) {
         toast.success('Department deleted successfully');
@@ -243,14 +300,9 @@ export default function OrganizationModule() {
     if (!desigForm.title.trim()) { toast.error('Designation title is required'); return; }
     setSubmitting(true);
     try {
-      const payload = {
-        ...desigForm,
-        minSalary: parseFloat(desigForm.minSalary) || 0,
-        maxSalary: parseFloat(desigForm.maxSalary) || 0,
-      };
       const method = mode === 'create' ? 'POST' : 'PUT';
-      const body = mode === 'edit' ? { type: 'designation', id: selectedDesigId, ...payload } : { type: 'designation', ...payload };
-      const res = await fetch('/api/organization', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const body = mode === 'edit' ? { id: parseInt(selectedDesigId), name: desigForm.title } : { name: desigForm.title };
+      const res = await fetch('/api/designations', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
       if (json.success) {
         toast.success(mode === 'create' ? 'Designation created successfully' : 'Designation updated successfully');
@@ -265,7 +317,7 @@ export default function OrganizationModule() {
     if (!selectedDesigId) return;
     setSubmitting(true);
     try {
-      const res = await fetch('/api/organization', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'designation', id: selectedDesigId }) });
+      const res = await fetch('/api/designations', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: parseInt(selectedDesigId) }) });
       const json = await res.json();
       if (json.success) {
         toast.success('Designation deleted successfully');
@@ -290,6 +342,11 @@ export default function OrganizationModule() {
 
   return (
     <div className="space-y-4">
+      {/* DEBUG INDICATOR */}
+      <div className="bg-green-500 text-black px-2 py-1 text-xs font-bold">
+        ✅ UPDATED ORGANIZATION MODULE v2.0 - {new Date().toISOString()}
+      </div>
+      
       {/* ── Stats Row ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={Building2} label="Total Departments" value={departments.length} color="#f5a623" sub="All departments" />

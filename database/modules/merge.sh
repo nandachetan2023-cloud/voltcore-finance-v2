@@ -1,5 +1,9 @@
 #!/bin/bash
-OUTFILE="/home/z/my-project/database/voltcore_erp_mysql.sql"
+# Get script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+OUTFILE="$PROJECT_ROOT/database/voltcore_erp_mysql.sql"
 
 # File merge order (respecting FK dependencies)
 FILES=(
@@ -26,8 +30,8 @@ FILES=(
 )
 
 # Count tables and inserts
-TABLE_COUNT=$(rg -c "^CREATE TABLE" /home/z/my-project/database/modules/*.sql | awk -F: '{s+=$NF} END {print s}')
-INSERT_COUNT=$(rg -c "^INSERT INTO" /home/z/my-project/database/modules/*.sql | awk -F: '{s+=$NF} END {print s}')
+TABLE_COUNT=$(rg -c "^CREATE TABLE" "$SCRIPT_DIR"/*.sql | awk -F: '{s+=$NF} END {print s}')
+INSERT_COUNT=$(rg -c "^INSERT INTO" "$SCRIPT_DIR"/*.sql | awk -F: '{s+=$NF} END {print s}')
 
 # Write header
 cat > "$OUTFILE" << HEADER
@@ -68,9 +72,9 @@ for f in "${FILES[@]}"; do
   echo "-- ############################################################################" >> "$OUTFILE"
   echo "" >> "$OUTFILE"
   # Append file content and ensure it ends with semicolon
-  cat "/home/z/my-project/database/modules/${f}" >> "$OUTFILE"
+  cat "$SCRIPT_DIR/${f}" >> "$OUTFILE"
   # Ensure file ends with semicolon and newline
-  if [ "$(tail -c 1 "/home/z/my-project/database/modules/${f}" | tr -d '\n')" != ";" ]; then
+  if [ "$(tail -c 1 "$SCRIPT_DIR/${f}" | tr -d '\n')" != ";" ]; then
     echo ";" >> "$OUTFILE"
   fi
   echo "" >> "$OUTFILE"

@@ -3,22 +3,54 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-// GET: List all leave requests with employee name
-export async function GET() {
+// GET: List all leave requests
+export async function GET(request: NextRequest) {
   try {
-    const leaveRequests = await db.leaveRequest.findMany({
-      include: {
-        employee: {
-          select: {
-            name: true,
-            empId: true,
+    const { searchParams } = new URL(request.url)
+    const employeeId = searchParams.get('employeeId')
+    const status = searchParams.get('status')
+    const limit = parseInt(searchParams.get('limit') || '100')
+    const offset = parseInt(searchParams.get('offset') || '0')
+
+    const where: any = { isDeleted: false }
+    if (employeeId) where.employeeId = parseInt(employeeId)
+    if (status) where.status = status.toLowerCase()
+
+    const [leaveRequests, total] = await Promise.all([
+      db.leaveRequest.findMany({
+        where,
+        include: {
+          Employee: {
+            select: {
+              id: true,
+              employeeCode: true,
+              firstName: true,
+              lastName: true,
+              Branch: {
+                select: {
+                  name: true,
+                },
+              },
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+        orderBy: { appliedDate: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      db.leaveRequest.count({ where }),
+    ])
 
-    return NextResponse.json({ success: true, data: leaveRequests })
+    return NextResponse.json({
+      success: true,
+      data: leaveRequests,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    })
   } catch (error) {
     console.error('Error fetching leave requests:', error)
     return NextResponse.json(
@@ -28,21 +60,28 @@ export async function GET() {
   }
 }
 
-// POST: Create leave request (auto-generate appliedDate)
+// POST: Create leave request
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { empId, site, type, fromDate, toDate, days, reason, status } = body
+    const {
+      employeeId,
+      leaveType,
+      fromDate,
+      toDate,
+      days,
+      reason,
+    } = body
 
-    if (!empId || !type || !fromDate || !toDate || !days) {
+    if (!employeeId || !leaveType || !fromDate || !toDate) {
       return NextResponse.json(
-        { success: false, error: 'empId, type, fromDate, toDate, and days are required' },
+        { success: false, error: 'employeeId, leaveType, fromDate, and toDate are required' },
         { status: 400 }
       )
     }
 
-    // Check if employee exists
-    const employee = await db.employee.findUnique({ where: { id: empId } })
+    // Validate employee exists
+    const employee = await db.employee.findUnique({ where: { id: parseInt(employeeId) } })
     if (!employee) {
       return NextResponse.json(
         { success: false, error: 'Employee not found' },
@@ -50,19 +89,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const today = new Date().toISOString().split('T')[0]
+    // Calculate days if not provided
+    let leaveDays = days
+    if (!leaveDays) {
+      const from = new Date(fromDate)
+      const to = new Date(toDate)
+      leaveDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+    }
 
     const leaveRequest = await db.leaveRequest.create({
       data: {
-        empId,
-        site: site || employee.site || '',
-        type,
-        fromDate,
-        toDate,
-        days,
+        employeeId: parseInt(employeeId),
+        leaveType,
+        fromDate: new Date(fromDate),
+        toDate: new Date(toDate),
+        days: leaveDays,
         reason: reason || '',
-        status: status || 'Pending',
-        appliedDate: today,
+        status: 'pending',
+      },
+      include: {
+        Employee: {
+          select: {
+            id: true,
+            employeeCode: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
     })
 
@@ -76,20 +129,28 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH: Update leave request status
+// PATCH: Update leave request status (approve/reject)
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, ...data } = body
+    const { id, status, rejectionReason, approvedBy, rejectedBy } = body
 
-    if (!id) {
+    if (!id || !status) {
       return NextResponse.json(
-        { success: false, error: 'id is required' },
+        { success: false, error: 'id and status are required' },
         { status: 400 }
       )
     }
 
-    const existing = await db.leaveRequest.findUnique({ where: { id } })
+    const leaveId = parseInt(id.toString())
+    if (isNaN(leaveId)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid id format' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.leaveRequest.findUnique({ where: { id: leaveId } })
     if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Leave request not found' },
@@ -97,9 +158,22 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    const updateData: any = {
+      status: status.toLowerCase(),
+    }
+
+    if (status.toLowerCase() === 'approved') {
+      updateData.approvedDate = new Date()
+      if (approvedBy) updateData.approvedBy = parseInt(approvedBy)
+    } else if (status.toLowerCase() === 'rejected') {
+      updateData.rejectedDate = new Date()
+      if (rejectedBy) updateData.rejectedBy = parseInt(rejectedBy)
+      if (rejectionReason) updateData.rejectionReason = rejectionReason
+    }
+
     const leaveRequest = await db.leaveRequest.update({
-      where: { id },
-      data,
+      where: { id: leaveId },
+      data: updateData,
     })
 
     return NextResponse.json({ success: true, data: leaveRequest })
@@ -112,7 +186,7 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// DELETE: Delete leave request by id
+// DELETE: Delete leave request (soft delete)
 export async function DELETE(request: NextRequest) {
   try {
     const body = await request.json()
@@ -125,7 +199,15 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const existing = await db.leaveRequest.findUnique({ where: { id } })
+    const leaveId = parseInt(id.toString())
+    if (isNaN(leaveId)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid id format' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.leaveRequest.findUnique({ where: { id: leaveId } })
     if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Leave request not found' },
@@ -133,9 +215,13 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await db.leaveRequest.delete({ where: { id } })
+    // Soft delete
+    await db.leaveRequest.update({
+      where: { id: leaveId },
+      data: { isDeleted: true },
+    })
 
-    return NextResponse.json({ success: true, data: { id } })
+    return NextResponse.json({ success: true, data: { id: leaveId } })
   } catch (error) {
     console.error('Error deleting leave request:', error)
     return NextResponse.json(

@@ -32,6 +32,18 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+/db/*.db
+
+# Prisma
+/prisma/*.db
+/prisma/*.db-journal
 
 # vercel
 .vercel
@@ -50,5 +62,34 @@ test
 prompt
 
 server.log
+
 # Skills directory
 /skills/
+
+# Excel files with sensitive data
+/excels/*.xlsx
+!/excels/sample-employee*.xlsx
+
+# Logs and stats
+.accesslog
+.stats
+
+# Backup files
+*.backup
+*.bak
+.config_backup.json
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

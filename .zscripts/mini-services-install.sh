@@ -1,7 +1,11 @@
 #!/bin/bash
 
+# Get script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # 配置项
-ROOT_DIR="/home/z/my-project/mini-services"
+ROOT_DIR="$PROJECT_ROOT/mini-services"
 
 main() {
     echo "🚀 开始批量安装依赖..."

@@ -3,495 +3,600 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model Employee {
-  id            String   @id @default(cuid())
-  empId         String   @unique
+model AttendanceLog {
+  id                Int       @id @default(autoincrement())
+  employeeId        Int
+  logDate           DateTime
+  punchIn           DateTime?
+  punchOut          DateTime?
+  status            String    @default("present")
+  biometricDeviceId String?
+  biometricLogId    String?
+  source            String    @default("manual")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime
+  Employee          Employee  @relation(fields: [employeeId], references: [id])
+}
+
+model BiometricRawLog {
+  id          Int       @id @default(autoincrement())
+  empCode     String
+  name        String?
+  punchDate   DateTime
+  deviceId    String?
+  mFlag       String?
+  rawJson     Json
+  processed   Boolean   @default(false)
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  siteId      String?
+
+  @@index([empCode, punchDate])
+  @@index([processed])
+  @@index([siteId])
+}
+
+model BiometricSyncLog {
+  id               Int      @id @default(autoincrement())
+  lastRecord       String
+  syncType         String   @default("incremental")
+  recordsFetched   Int      @default(0)
+  recordsProcessed Int      @default(0)
+  status           String   @default("success")
+  errorMessage     String?
+  createdAt        DateTime @default(now())
+  siteId           String?
+
+  @@index([siteId])
+}
+
+model Branch {
+  id        Int         @id @default(autoincrement())
+  name      String      @unique
+  address   String?
+  Employee  Employee[]
+  Warehouse Warehouse[]
+}
+
+model Customer {
+  id            Int          @id @default(autoincrement())
   name          String
+  contactPerson String?
   email         String?
   phone         String?
-  trade         String
-  role          String
-  site          String
-  type          String   @default("Staff")
-  status        String   @default("Active")
-  joiningDate   String
-  certifications String   @default("")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  attendance    Attendance[]
-  leaveRequests LeaveRequest[]
-  payroll       Payroll[]
-  expenses      Expense[]
+  address       String?
+  city          String?
+  state         String?
+  pincode       String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime
+  Invoice       Invoice[]
+  Quotation     Quotation[]
+  SalesOrder    SalesOrder[]
 }
 
-model Site {
-  id            String   @id @default(cuid())
-  name          String
-  state         String
-  project       String
-  manpower      Int      @default(0)
-  incharge      String
-  status        String   @default("Active")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
-model Project {
-  id            String   @id @default(cuid())
-  code          String   @unique
-  name          String
-  client        String
-  type          String
-  contractValue String
-  startDate     String
-  endDate       String
-  progress      Int      @default(0)
-  people        Int      @default(0)
-  status        String   @default("On Track")
-  site          String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
-model Attendance {
-  id        String   @id @default(cuid())
-  empId     String
-  employee  Employee @relation(fields: [empId], references: [id])
-  site      String
-  date      String
-  timeIn    String?
-  timeOut   String?
-  otHours   Float    @default(0)
-  shift     String?
-  status    String   @default("Present")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model LeaveRequest {
-  id          String   @id @default(cuid())
-  empId       String
-  employee    Employee @relation(fields: [empId], references: [id])
-  site        String
-  type        String
-  fromDate    String
-  toDate      String
-  days        Int
-  reason      String
-  status      String   @default("Pending")
-  appliedDate String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model Payroll {
-  id        String   @id @default(cuid())
-  empId     String
-  employee  Employee @relation(fields: [empId], references: [id])
-  month     String
-  days      Int
-  basic     Float
-  hra       Float
-  ot        Float    @default(0)
-  gross     Float
-  pf        Float
-  esi       Float    @default(0)
-  tds       Float    @default(0)
-  netPay    Float
-  status    String   @default("Pending")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model WorkPermit {
-  id            String   @id @default(cuid())
-  permitNo      String   @unique
-  type          String
-  location      String
-  issuedTo      String
-  expiry        String
-  status        String   @default("Active")
-  description   String?
-  precautions   String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
-model Incident {
-  id        String   @id @default(cuid())
-  refNo     String   @unique
-  date      String
-  site      String
-  type      String
-  severity  String
-  person    String
-  status    String   @default("Investigating")
-  description String?
-  action    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Equipment {
-  id          String   @id @default(cuid())
-  name        String
-  eqId        String   @unique
-  site        String
-  status      String   @default("Operational")
-  lastPM      String?
-  nextPM      String?
-  issue       String?
-  downSince   String?
-  etaRepair   String?
-  assignedTo  String?
-  utilization Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model Expense {
-  id          String   @id @default(cuid())
-  claimNo     String   @unique
-  empId       String
-  employee    Employee @relation(fields: [empId], references: [id])
-  category    String
-  amount      Float
-  project     String
-  date        String
-  status      String   @default("Pending")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model PurchaseOrder {
-  id        String   @id @default(cuid())
-  poNo      String   @unique
-  vendor    String
-  item      String
-  amount    Float
-  project   String
-  delivery  String
-  grn       String   @default("Awaited")
-  status    String   @default("Open")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Invoice {
-  id        String   @id @default(cuid())
-  invNo     String   @unique
-  client    String
-  project   String
-  amount    String
-  date      String
-  dueDate   String
-  status    String   @default("Under Review")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Subcontractor {
-  id           String   @id @default(cuid())
-  name         String
-  trade        String
-  workers      Int      @default(0)
-  site         String
-  pfReg        String   @default("Pending")
-  esiReg       String   @default("Pending")
-  labourLic    String   @default("Pending")
-  compliance   String   @default("Non-Compliant")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
-model JobOpening {
-  id           String   @id @default(cuid())
-  position     String
-  site         String
-  openings     Int
-  applications Int      @default(0)
-  priority     String
-  status       String   @default("Open")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
-model ShiftSchedule {
-  id          String   @id @default(cuid())
-  empId       String
-  employeeName String
-  site        String
-  shift       String
-  weekStart   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model Certification {
-  id            String   @id @default(cuid())
-  empId         String
-  employeeName  String
-  name          String
-  issuedBy      String
-  issueDate     String
-  expiryDate    String
-  status        String   @default("Valid")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
-model TrainingSession {
-  id          String   @id @default(cuid())
-  title       String
-  site        String
-  trainer     String
-  date        String
-  duration    String
-  attendees   Int      @default(0)
-  status      String   @default("Scheduled")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model CompanySettings {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  value       String
-  label       String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-// ── ORGANIZATION MODULE ──
 model Department {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  head        String?
-  location    String
-  employeeCount Int    @default(0)
-  status      String   @default("Active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id       Int        @id @default(autoincrement())
+  name     String     @unique
+  code     String     @unique
+  Employee Employee[]
 }
 
 model Designation {
-  id          String   @id @default(cuid())
-  title       String
-  department  String
-  level       String
-  minSalary   Float    @default(0)
-  maxSalary   Float    @default(0)
-  status      String   @default("Active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id       Int        @id @default(autoincrement())
+  name     String     @unique
+  Employee Employee[]
 }
 
-// ── INVENTORY MODULE ──
-model InventoryItem {
-  id          String   @id @default(cuid())
-  itemCode    String   @unique
-  name        String
-  category    String
-  unit        String   @default("Nos")
-  currentStock Int     @default(0)
-  minStock    Int      @default(0)
-  maxStock    Int      @default(0)
-  unitCost    Float    @default(0)
-  warehouse   String
-  status      String   @default("In Stock")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model Employee {
+  id                        Int                         @id @default(autoincrement())
+  employeeCode              String                      @unique
+  userId                    Int?                        @unique
+  firstName                 String
+  middleName                String?
+  lastName                  String
+  email                     String                      @unique
+  phone                     String
+  alternatePhone            String?
+  dateOfBirth               DateTime
+  gender                    String
+  maritalStatus             String?
+  bloodGroup                String?
+  personalEmail             String?
+  currentAddress            String
+  currentCity               String
+  currentState              String
+  currentPincode            String
+  permanentAddress          String?
+  permanentCity             String?
+  permanentState            String?
+  permanentPincode          String?
+  departmentId              Int
+  designationId             Int
+  branchId                  Int
+  reportingManagerId        Int?
+  dateOfJoining             DateTime
+  confirmationDate          DateTime?
+  employmentType            String
+  employmentStatus          String
+  probationMonths           Int                         @default(6)
+  noticePeriodDays          Int                         @default(30)
+  separationDate            DateTime?
+  separationType            String?
+  separationReason          String?
+  panNumber                 String?
+  aadharNumber              String?
+  uanNumber                 String?
+  esicNumber                String?
+  emergencyContactName      String?
+  emergencyContactRelation  String?
+  emergencyContactPhone     String?
+  isActive                  Boolean                     @default(true)
+  isDeleted                 Boolean                     @default(false)
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime
+  AttendanceLog             AttendanceLog[]
+  Branch                    Branch                      @relation(fields: [branchId], references: [id])
+  Department                Department                  @relation(fields: [departmentId], references: [id])
+  Designation               Designation                 @relation(fields: [designationId], references: [id])
+  Employee                  Employee?                   @relation("EmployeeToEmployee", fields: [reportingManagerId], references: [id])
+  other_Employee            Employee[]                  @relation("EmployeeToEmployee")
+  User                      User?                       @relation(fields: [userId], references: [id])
+  LeaveRequest              LeaveRequest[]
+  PayrollItem               PayrollItem[]
+  SalaryStructureAssignment SalaryStructureAssignment[]
+  ShiftAssignment           ShiftAssignment[]
 }
 
-model StockMovement {
-  id          String   @id @default(cuid())
-  itemCode    String
-  itemName    String
-  type        String
-  quantity    Int
-  fromWarehouse String?
-  toWarehouse   String?
-  reference   String?
-  date        String
-  remarks     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model Invoice {
+  id           Int           @id @default(autoincrement())
+  invoiceNo    String        @unique
+  invoiceDate  DateTime
+  customerId   Int
+  salesOrderId Int?
+  status       String        @default("draft")
+  totalAmount  Decimal       @db.Decimal(15, 2)
+  paidAmount   Decimal       @default(0) @db.Decimal(15, 2)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime
+  Customer     Customer      @relation(fields: [customerId], references: [id])
+  SalesOrder   SalesOrder?   @relation(fields: [salesOrderId], references: [id])
+  InvoiceItem  InvoiceItem[]
 }
 
-// ── SALES MODULE ──
-model Customer {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
+model InvoiceItem {
+  id        Int     @id @default(autoincrement())
+  invoiceId Int
+  itemId    Int
+  qty       Decimal @db.Decimal(15, 3)
+  rate      Decimal @db.Decimal(15, 2)
+  amount    Decimal @db.Decimal(15, 2)
+  Invoice   Invoice @relation(fields: [invoiceId], references: [id])
+  Item      Item    @relation(fields: [itemId], references: [id])
+}
+
+model Item {
+  id                          Int                 @id @default(autoincrement())
+  sku                         String              @unique
+  name                        String
+  description                 String?
+  categoryId                  Int?
+  type                        String              @default("finished_goods")
+  uomId                       Int
+  purchaseUomId               Int?
+  salesUomId                  Int?
+  hsnSacCode                  String?
+  costPrice                   Decimal             @default(0.00) @db.Decimal(15, 2)
+  sellingPrice                Decimal             @default(0.00) @db.Decimal(15, 2)
+  reorderLevel                Decimal             @default(0.00) @db.Decimal(15, 3)
+  reorderQty                  Decimal             @default(0.00) @db.Decimal(15, 3)
+  trackInventory              Boolean             @default(true)
+  trackBatch                  Boolean             @default(false)
+  trackSerial                 Boolean             @default(false)
+  valuationMethod             String              @default("weighted_avg")
+  imagePath                   String?
+  isActive                    Boolean             @default(true)
+  isDeleted                   Boolean             @default(false)
+  createdAt                   DateTime            @default(now())
+  updatedAt                   DateTime
+  InvoiceItem                 InvoiceItem[]
+  ItemCategory                ItemCategory?       @relation(fields: [categoryId], references: [id])
+  Uom_Item_purchaseUomIdToUom Uom?                @relation("Item_purchaseUomIdToUom", fields: [purchaseUomId], references: [id])
+  Uom_Item_salesUomIdToUom    Uom?                @relation("Item_salesUomIdToUom", fields: [salesUomId], references: [id])
+  Uom_Item_uomIdToUom         Uom                 @relation("Item_uomIdToUom", fields: [uomId], references: [id])
+  PurchaseOrderItem           PurchaseOrderItem[]
+  QuotationItem               QuotationItem[]
+  SalesOrderItem              SalesOrderItem[]
+  StockEntryLine              StockEntryLine[]
+  StockLedger                 StockLedger[]
+}
+
+model ItemCategory {
+  id   Int     @id @default(autoincrement())
+  name String  @unique
+  code String? @unique
+  Item Item[]
+}
+
+model Lead {
+  id            Int            @id @default(autoincrement())
+  leadNo        String         @unique
+  companyName   String
   contactPerson String
-  email       String?
-  phone       String?
-  address     String?
-  gst         String?
-  city        String?
-  state       String?
-  totalOrders Int      @default(0)
-  totalRevenue Float   @default(0)
-  status      String   @default("Active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  email         String?
+  phone         String?
+  status        String         @default("new")
+  source        String?
+  assignedToId  Int?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime
+  LeadActivity  LeadActivity[]
+}
+
+model LeadActivity {
+  id           Int      @id @default(autoincrement())
+  leadId       Int
+  type         String   @default("note")
+  subject      String
+  description  String?
+  activityDate DateTime
+  createdAt    DateTime @default(now())
+  Lead         Lead     @relation(fields: [leadId], references: [id])
+}
+
+model LeaveRequest {
+  id              Int       @id @default(autoincrement())
+  employeeId      Int
+  leaveType       String
+  fromDate        DateTime
+  toDate          DateTime
+  days            Decimal   @default(1.0) @db.Decimal(5, 1)
+  reason          String?
+  status          String    @default("pending")
+  appliedDate     DateTime  @default(now())
+  approvedBy      Int?
+  approvedDate    DateTime?
+  rejectedBy      Int?
+  rejectedDate    DateTime?
+  rejectionReason String?
+  isDeleted       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime
+  Employee        Employee  @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, status])
+  @@index([fromDate, toDate])
+}
+
+model PayrollItem {
+  id             Int        @id @default(autoincrement())
+  payrollRunId   Int
+  employeeId     Int
+  grossEarning   Decimal    @db.Decimal(15, 2)
+  totalDeduction Decimal    @db.Decimal(15, 2)
+  netPay         Decimal    @db.Decimal(15, 2)
+  details        Json
+  Employee       Employee   @relation(fields: [employeeId], references: [id])
+  PayrollRun     PayrollRun @relation(fields: [payrollRunId], references: [id])
+}
+
+model PayrollRun {
+  id          Int           @id @default(autoincrement())
+  name        String
+  month       Int
+  year        Int
+  status      String        @default("draft")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  PayrollItem PayrollItem[]
+}
+
+model PurchaseOrder {
+  id                Int                 @id @default(autoincrement())
+  poNo              String              @unique
+  poDate            DateTime
+  vendorId          Int
+  warehouseId       Int
+  status            String              @default("draft")
+  subtotal          Decimal             @db.Decimal(15, 2)
+  taxAmount         Decimal             @db.Decimal(15, 2)
+  totalAmount       Decimal             @db.Decimal(15, 2)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime
+  Vendor            Vendor              @relation(fields: [vendorId], references: [id])
+  Warehouse         Warehouse           @relation(fields: [warehouseId], references: [id])
+  PurchaseOrderItem PurchaseOrderItem[]
+}
+
+model PurchaseOrderItem {
+  id              Int           @id @default(autoincrement())
+  purchaseOrderId Int
+  itemId          Int
+  qty             Decimal       @db.Decimal(15, 3)
+  rate            Decimal       @db.Decimal(15, 2)
+  amount          Decimal       @db.Decimal(15, 2)
+  receivedQty     Decimal       @default(0) @db.Decimal(15, 3)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime
+  Item            Item          @relation(fields: [itemId], references: [id])
+  PurchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+}
+
+model Quotation {
+  id            Int             @id @default(autoincrement())
+  quotationNo   String          @unique
+  quotationDate DateTime
+  customerId    Int
+  validUntil    DateTime?
+  status        String          @default("draft")
+  subtotal      Decimal         @db.Decimal(15, 2)
+  taxAmount     Decimal         @db.Decimal(15, 2)
+  totalAmount   Decimal         @db.Decimal(15, 2)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime
+  Customer      Customer        @relation(fields: [customerId], references: [id])
+  QuotationItem QuotationItem[]
+  SalesOrder    SalesOrder[]
+}
+
+model QuotationItem {
+  id          Int       @id @default(autoincrement())
+  quotationId Int
+  itemId      Int
+  qty         Decimal   @db.Decimal(15, 3)
+  rate        Decimal   @db.Decimal(15, 2)
+  amount      Decimal   @db.Decimal(15, 2)
+  Item        Item      @relation(fields: [itemId], references: [id])
+  Quotation   Quotation @relation(fields: [quotationId], references: [id])
+}
+
+model SalaryComponent {
+  id                  Int                   @id @default(autoincrement())
+  name                String
+  code                String                @unique
+  type                String                @default("earning")
+  calculationType     String                @default("fixed")
+  formula             String?
+  defaultValue        Decimal               @default(0) @db.Decimal(15, 2)
+  isTaxable           Boolean               @default(true)
+  affectsGross        Boolean               @default(true)
+  displayOrder        Int                   @default(0)
+  isActive            Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime
+  SalaryStructureItem SalaryStructureItem[]
+}
+
+model SalaryStructure {
+  id                        Int                         @id @default(autoincrement())
+  name                      String                      @unique
+  description               String?
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime
+  SalaryStructureAssignment SalaryStructureAssignment[]
+  SalaryStructureItem       SalaryStructureItem[]
+}
+
+model SalaryStructureAssignment {
+  id                Int             @id @default(autoincrement())
+  employeeId        Int
+  salaryStructureId Int
+  effectiveFrom     DateTime
+  baseSalary        Decimal         @db.Decimal(15, 2)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime
+  Employee          Employee        @relation(fields: [employeeId], references: [id])
+  SalaryStructure   SalaryStructure @relation(fields: [salaryStructureId], references: [id])
+}
+
+model SalaryStructureItem {
+  id                Int             @id @default(autoincrement())
+  salaryStructureId Int
+  componentId       Int
+  fixedAmount       Decimal         @default(0) @db.Decimal(15, 2)
+  formula           String?
+  SalaryComponent   SalaryComponent @relation(fields: [componentId], references: [id])
+  SalaryStructure   SalaryStructure @relation(fields: [salaryStructureId], references: [id])
 }
 
 model SalesOrder {
-  id          String   @id @default(cuid())
-  soNo        String   @unique
-  customer    String
-  project     String
-  item        String
-  quantity    Int
-  unitPrice   Float
-  amount      Float
-  orderDate   String
-  deliveryDate String?
-  status      String   @default("Pending")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             Int              @id @default(autoincrement())
+  soNo           String           @unique
+  soDate         DateTime
+  customerId     Int
+  quotationId    Int?
+  status         String           @default("draft")
+  totalAmount    Decimal          @db.Decimal(15, 2)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime
+  Invoice        Invoice[]
+  Customer       Customer         @relation(fields: [customerId], references: [id])
+  Quotation      Quotation?       @relation(fields: [quotationId], references: [id])
+  SalesOrderItem SalesOrderItem[]
 }
 
-// ── CRM MODULE ──
-model CrmContact {
-  id          String   @id @default(cuid())
+model SalesOrderItem {
+  id           Int        @id @default(autoincrement())
+  salesOrderId Int
+  itemId       Int
+  qty          Decimal    @db.Decimal(15, 3)
+  rate         Decimal    @db.Decimal(15, 2)
+  amount       Decimal    @db.Decimal(15, 2)
+  Item         Item       @relation(fields: [itemId], references: [id])
+  SalesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id])
+}
+
+model Shift {
+  id              Int               @id @default(autoincrement())
+  name            String
+  type            String            @default("fixed")
+  startTime       String
+  endTime         String
+  crossesMidnight Boolean           @default(false)
+  breakMinutes    Int               @default(60)
+  graceMinutes    Int               @default(15)
+  otThresholdMin  Int               @default(30)
+  weekOffDays     Int[]
+  isActive        Boolean           @default(true)
+  isDeleted       Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime
+  ShiftAssignment ShiftAssignment[]
+}
+
+model ShiftAssignment {
+  id            Int       @id @default(autoincrement())
+  employeeId    Int
+  shiftId       Int
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime
+  Employee      Employee  @relation(fields: [employeeId], references: [id])
+  Shift         Shift     @relation(fields: [shiftId], references: [id])
+}
+
+model StockEntry {
+  id                                              Int              @id @default(autoincrement())
+  entryNo                                         String           @unique
+  postingDate                                     DateTime
+  type                                            String           @default("receipt")
+  fromWarehouseId                                 Int?
+  toWarehouseId                                   Int?
+  referenceType                                   String?
+  referenceNo                                     String?
+  status                                          String           @default("draft")
+  createdAt                                       DateTime         @default(now())
+  updatedAt                                       DateTime
+  Warehouse_StockEntry_fromWarehouseIdToWarehouse Warehouse?       @relation("StockEntry_fromWarehouseIdToWarehouse", fields: [fromWarehouseId], references: [id])
+  Warehouse_StockEntry_toWarehouseIdToWarehouse   Warehouse?       @relation("StockEntry_toWarehouseIdToWarehouse", fields: [toWarehouseId], references: [id])
+  StockEntryLine                                  StockEntryLine[]
+  StockLedger                                     StockLedger[]
+}
+
+model StockEntryLine {
+  id           Int        @id @default(autoincrement())
+  stockEntryId Int
+  itemId       Int
+  qty          Decimal    @db.Decimal(15, 3)
+  rate         Decimal    @db.Decimal(15, 2)
+  Item         Item       @relation(fields: [itemId], references: [id])
+  StockEntry   StockEntry @relation(fields: [stockEntryId], references: [id])
+}
+
+model StockLedger {
+  id           Int        @id @default(autoincrement())
+  itemId       Int
+  warehouseId  Int
+  stockEntryId Int
+  qtyChange    Decimal    @db.Decimal(15, 3)
+  balanceQty   Decimal    @db.Decimal(15, 3)
+  postingDate  DateTime
+  createdAt    DateTime   @default(now())
+  Item         Item       @relation(fields: [itemId], references: [id])
+  StockEntry   StockEntry @relation(fields: [stockEntryId], references: [id])
+  Warehouse    Warehouse  @relation(fields: [warehouseId], references: [id])
+}
+
+model Uom {
+  id                           Int    @id @default(autoincrement())
+  name                         String @unique
+  code                         String @unique
+  Item_Item_purchaseUomIdToUom Item[] @relation("Item_purchaseUomIdToUom")
+  Item_Item_salesUomIdToUom    Item[] @relation("Item_salesUomIdToUom")
+  Item_Item_uomIdToUom         Item[] @relation("Item_uomIdToUom")
+}
+
+model User {
+  id                 Int              @id @default(autoincrement())
+  name               String
+  email              String           @unique
+  password           String
+  phone              String?
+  profilePhotoPath   String?
+  isActive           Boolean          @default(true)
+  mustChangePassword Boolean          @default(false)
+  lastActiveAt       DateTime?
+  preferences        Json?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime
+  Employee           Employee?
+  WorkflowAction     WorkflowAction[]
+}
+
+model Vendor {
+  id            Int             @id @default(autoincrement())
+  vendorCode    String          @unique
+  vendorName    String
+  contactPerson String?
+  email         String?
+  phone         String?
+  address       String?
+  city          String?
+  state         String?
+  pincode       String?
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime
+  PurchaseOrder PurchaseOrder[]
+}
+
+model Warehouse {
+  id                                               Int                 @id @default(autoincrement())
+  name                                             String              @unique
+  code                                             String              @unique
+  branchId                                         Int
+  type                                             String              @default("regular")
+  address                                          String?
+  createdAt                                        DateTime            @default(now())
+  updatedAt                                        DateTime
+  PurchaseOrder                                    PurchaseOrder[]
+  StockEntry_StockEntry_fromWarehouseIdToWarehouse StockEntry[]        @relation("StockEntry_fromWarehouseIdToWarehouse")
+  StockEntry_StockEntry_toWarehouseIdToWarehouse   StockEntry[]        @relation("StockEntry_toWarehouseIdToWarehouse")
+  StockLedger                                      StockLedger[]
+  Branch                                           Branch              @relation(fields: [branchId], references: [id])
+  WarehouseLocation                                WarehouseLocation[]
+}
+
+model WarehouseLocation {
+  id          Int       @id @default(autoincrement())
+  warehouseId Int
   name        String
-  company     String
-  designation String?
-  email       String?
-  phone       String?
-  source      String
-  stage       String   @default("Lead")
-  value       Float    @default(0)
-  lastContact String?
-  notes       String?
-  status      String   @default("Active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  code        String
+  Warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
 }
 
-// ── SUPPORT MODULE ──
-model SupportTicket {
-  id          String   @id @default(cuid())
-  ticketNo    String   @unique
-  title       String
-  raisedBy    String
-  category    String
-  priority    String   @default("Medium")
-  status      String   @default("Open")
-  assignedTo  String?
-  description String?
-  resolution  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model WorkflowAction {
+  id               Int              @id @default(autoincrement())
+  instanceId       Int
+  actionByUserId   Int
+  action           String
+  comment          String?
+  createdAt        DateTime         @default(now())
+  User             User             @relation(fields: [actionByUserId], references: [id])
+  WorkflowInstance WorkflowInstance @relation(fields: [instanceId], references: [id])
 }
 
-// ── KNOWLEDGEBASE MODULE ──
-model KBArticle {
-  id          String   @id @default(cuid())
-  title       String
-  category    String
-  content     String
-  author      String
-  tags        String   @default("")
-  views       Int      @default(0)
-  helpful     Int      @default(0)
-  status      String   @default("Published")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model WorkflowDefinition {
+  id               Int                @id @default(autoincrement())
+  name             String
+  entityType       String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime
+  WorkflowInstance WorkflowInstance[]
 }
 
-// ── FINANCE MODULE ──
-model LedgerAccount {
-  id          String   @id @default(cuid())
-  accountCode String   @unique
-  name        String
-  group       String
-  type        String
-  balance     Float    @default(0)
-  status      String   @default("Active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model AccountsPayable {
-  id          String   @id @default(cuid())
-  billNo      String   @unique
-  vendor      String
-  description String?
-  amount      Float
-  dueDate     String
-  paidDate    String?
-  status      String   @default("Pending")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model AccountsReceivable {
-  id          String   @id @default(cuid())
-  invoiceNo   String   @unique
-  client      String
-  description String?
-  amount      Float
-  dueDate     String
-  receivedDate String?
-  status      String   @default("Pending")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model JournalEntry {
-  id          String   @id @default(cuid())
-  entryNo     String   @unique
-  date        String
-  account     String
-  debit       Float    @default(0)
-  credit      Float    @default(0)
-  description String?
-  reference   String?
-  status      String   @default("Posted")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model BankAccount {
-  id          String   @id @default(cuid())
-  accountName String
-  bankName    String
-  accountNo   String   @unique
-  type        String   @default("Current")
-  balance     Float    @default(0)
-  status      String   @default("Active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model TaxRecord {
-  id          String   @id @default(cuid())
-  taxType     String
-  period      String
-  amount      Float
-  dueDate     String
-  paidDate    String?
-  status      String   @default("Pending")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model BudgetItem {
-  id          String   @id @default(cuid())
-  category    String
-  description String
-  planned     Float
-  actual      Float    @default(0)
-  period      String
-  status      String   @default("On Track")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model WorkflowInstance {
+  id                 Int                @id @default(autoincrement())
+  definitionId       Int
+  entityId           Int
+  status             String             @default("pending")
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime
+  WorkflowAction     WorkflowAction[]
+  WorkflowDefinition WorkflowDefinition @relation(fields: [definitionId], references: [id])
 }

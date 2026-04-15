@@ -30,9 +30,14 @@ export async function GET() {
       db.employee.count({ where: { status: 'Active' } }),
       db.project.count(),
       db.project.count({ where: { status: 'On Track' } }),
-      db.attendance.findMany({
-        where: { date: today },
-        include: { employee: { select: { name: true, role: true, site: true } } },
+      db.attendanceLog.findMany({
+        where: { 
+          logDate: {
+            gte: new Date(today),
+            lt: new Date(new Date(today).getTime() + 86400000)
+          }
+        },
+        include: { Employee: { select: { firstName: true, lastName: true, employeeCode: true } } },
       }),
       db.leaveRequest.count({ where: { status: 'Pending' } }),
       db.expense.count({ where: { status: 'Pending' } }),
@@ -71,17 +76,17 @@ export async function GET() {
     })
 
     // Recent activity: last 5 attendance records + last 5 leave requests
-    const recentAttendance = await db.attendance.findMany({
+    const recentAttendance = await db.attendanceLog.findMany({
       take: 5,
       orderBy: { createdAt: 'desc' },
-      include: { employee: { select: { name: true } } },
+      include: { Employee: { select: { firstName: true, lastName: true } } },
     })
 
     const recentLeaves = await db.leaveRequest.findMany({
       take: 5,
-      where: { status: 'Pending' },
+      where: { status: 'pending' },
       orderBy: { appliedDate: 'desc' },
-      include: { employee: { select: { name: true } } },
+      include: { Employee: { select: { firstName: true, lastName: true } } },
     })
 
     return NextResponse.json({

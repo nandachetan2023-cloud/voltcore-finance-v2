@@ -10,20 +10,36 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
+import EmployeeBulkImport from './employee-bulk-import';
 
 interface Employee {
-  id: string;
-  empId: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  trade: string;
-  role: string;
-  site: string;
-  type: string;
-  status: string;
-  joiningDate: string;
-  certifications: string;
+  id: number;
+  employeeCode: string;
+  firstName: string;
+  middleName?: string | null;
+  lastName: string;
+  email: string;
+  phone: string;
+  dateOfBirth: string;
+  gender: string;
+  employmentType: string;
+  employmentStatus: string;
+  dateOfJoining: string;
+  Department?: {
+    id: number;
+    name: string;
+    code: string;
+  };
+  Designation?: {
+    id: number;
+    name: string;
+  };
+  Branch?: {
+    id: number;
+    name: string;
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface EmployeeFormData {
@@ -54,17 +70,32 @@ const AVATAR_COLORS: Record<string, { bg: string; text: string }> = {
 };
 
 function getAvatarColor(name: string) {
+  if (!name || typeof name !== 'string') {
+    return { bg: 'bg-gray-500/20', text: 'text-gray-400' };
+  }
   const letter = name.charAt(0).toUpperCase();
   return AVATAR_COLORS[letter] || { bg: 'bg-red-500/20', text: 'text-red-400' };
 }
 
+function getFullName(emp: Employee): string {
+  const parts = [emp.firstName, emp.middleName, emp.lastName].filter(Boolean);
+  return parts.join(' ') || 'Unknown';
+}
+
+function getInitials(emp: Employee): string {
+  const firstName = emp.firstName || '';
+  const lastName = emp.lastName || '';
+  return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase() || '??';
+}
+
 function getStatusStyle(status: string) {
-  switch (status) {
-    case 'Active': return { bg: 'bg-[#00e676]/10', text: 'text-[#00e676]', border: 'border-[#00e676]/20' };
-    case 'Inactive': return { bg: 'bg-[#5a6878]/10', text: 'text-[#5a6878]', border: 'border-[#5a6878]/20' };
-    case 'On Leave': return { bg: 'bg-[#a78bfa]/10', text: 'text-[#a78bfa]', border: 'border-[#a78bfa]/20' };
-    case 'Notice Period': return { bg: 'bg-[#ffab40]/10', text: 'text-[#ffab40]', border: 'border-[#ffab40]/20' };
-    case 'Separated': return { bg: 'bg-[#ff3d3d]/10', text: 'text-[#ff3d3d]', border: 'border-[#ff3d3d]/20' };
+  const normalized = status.toLowerCase();
+  switch (normalized) {
+    case 'active': return { bg: 'bg-[#00e676]/10', text: 'text-[#00e676]', border: 'border-[#00e676]/20' };
+    case 'inactive': return { bg: 'bg-[#5a6878]/10', text: 'text-[#5a6878]', border: 'border-[#5a6878]/20' };
+    case 'on_leave': return { bg: 'bg-[#a78bfa]/10', text: 'text-[#a78bfa]', border: 'border-[#a78bfa]/20' };
+    case 'notice_period': return { bg: 'bg-[#ffab40]/10', text: 'text-[#ffab40]', border: 'border-[#ffab40]/20' };
+    case 'separated': return { bg: 'bg-[#ff3d3d]/10', text: 'text-[#ff3d3d]', border: 'border-[#ff3d3d]/20' };
     default: return { bg: 'bg-[#8899aa]/10', text: 'text-[#8899aa]', border: 'border-[#8899aa]/20' };
   }
 }
@@ -107,8 +138,16 @@ function StatCard({ icon: Icon, label, value, color }: {
   );
 }
 
-function FormField({ label, children, span = false }: { label: string; children: React.ReactNode; span?: boolean }) {
-  return <div className={span ? 'md:col-span-2' : ''}><label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">{label}</label>{children}</div>;
+function FormField({ label, children, span = false, required = false }: { label: string; children: React.ReactNode; span?: boolean; required?: boolean }) {
+  return (
+    <div className={span ? 'md:col-span-2' : ''}>
+      <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">
+        {label}
+        {required && <span className="text-[#ff3d3d] ml-1">*</span>}
+      </label>
+      {children}
+    </div>
+  );
 }
 
 const inputCls = "w-full bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-2 text-[12px] text-[#e2e8f0] outline-none transition-colors focus:border-[#f5a623]";
@@ -134,6 +173,10 @@ export default function EmployeesModule() {
   const [submitting, setSubmitting] = useState(false);
   const { triggerCreate } = useERPStore();
 
+  // Fetch designations for dropdown
+  const [designations, setDesignations] = useState<Array<{ id: number; name: string }>>([]);
+  const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
+
   useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
 
   const fetchData = useCallback(async () => {
@@ -147,20 +190,51 @@ export default function EmployeesModule() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const fetchDesignations = useCallback(async () => {
+    try {
+      const res = await fetch('/api/designations');
+      const json = await res.json();
+      if (json.success) setDesignations(json.data);
+    } catch (err) {
+      console.error('Failed to fetch designations:', err);
+    }
+  }, []);
 
-  const sites = useMemo(() => Array.from(new Set(employees.map(e => e.site))).sort(), [employees]);
-  const trades = useMemo(() => Array.from(new Set(employees.map(e => e.trade))).sort(), [employees]);
+  const fetchDepartments = useCallback(async () => {
+    try {
+      const res = await fetch('/api/departments');
+      const json = await res.json();
+      if (json.success) setDepartments(json.data);
+    } catch (err) {
+      console.error('Failed to fetch departments:', err);
+    }
+  }, []);
+
+  useEffect(() => { 
+    fetchData(); 
+    fetchDesignations();
+    fetchDepartments();
+  }, [fetchData, fetchDesignations, fetchDepartments]);
+
+  const sites = useMemo(() => Array.from(new Set(employees.map(e => e.Branch?.name).filter(Boolean))).sort(), [employees]);
+  const trades = useMemo(() => Array.from(new Set(employees.map(e => e.Department?.name).filter(Boolean))).sort(), [employees]);
 
   const filtered = useMemo(() => {
     let list = employees;
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter(e => e.name.toLowerCase().includes(q) || e.empId.toLowerCase().includes(q) || e.email?.toLowerCase().includes(q) || e.trade.toLowerCase().includes(q) || e.role.toLowerCase().includes(q));
+      const fullName = (e: Employee) => getFullName(e).toLowerCase();
+      list = list.filter(e => 
+        fullName(e).includes(q) || 
+        e.employeeCode.toLowerCase().includes(q) || 
+        e.email?.toLowerCase().includes(q) || 
+        e.Department?.name.toLowerCase().includes(q) || 
+        e.Designation?.name.toLowerCase().includes(q)
+      );
     }
-    if (siteFilter !== 'all') list = list.filter(e => e.site === siteFilter);
-    if (tradeFilter !== 'all') list = list.filter(e => e.trade === tradeFilter);
-    if (statusFilter !== 'all') list = list.filter(e => e.status === statusFilter);
+    if (siteFilter !== 'all') list = list.filter(e => e.Branch?.name === siteFilter);
+    if (tradeFilter !== 'all') list = list.filter(e => e.Department?.name === tradeFilter);
+    if (statusFilter !== 'all') list = list.filter(e => e.employmentStatus === statusFilter.toLowerCase().replace(' ', '_'));
     return list;
   }, [employees, search, siteFilter, tradeFilter, statusFilter]);
 
@@ -168,39 +242,242 @@ export default function EmployeesModule() {
   const paged = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   const totalEmployees = employees.length;
-  const activeCount = employees.filter(e => e.status === 'Active').length;
+  const activeCount = employees.filter(e => e.employmentStatus === 'active').length;
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0];
-  const newJoiners = employees.filter(e => e.joiningDate >= thirtyDaysAgo).length;
-  const separated = employees.filter(e => e.status === 'Separated').length;
+  const newJoiners = employees.filter(e => e.dateOfJoining >= thirtyDaysAgo).length;
+  const separated = employees.filter(e => e.employmentStatus === 'separated').length;
 
   useEffect(() => { setPage(1); }, [search, siteFilter, tradeFilter, statusFilter]);
 
-  const openCreate = () => { setForm(emptyForm); setCreateOpen(true); };
+  const openCreate = () => { 
+    // Suggest next available employee ID
+    const existingCodes = employees.map(e => e.employeeCode).filter(code => /^EMP\d{4}$/.test(code));
+    const numbers = existingCodes.map(code => parseInt(code.substring(3)));
+    const maxNumber = numbers.length > 0 ? Math.max(...numbers) : 0;
+    const nextNumber = maxNumber + 1;
+    const suggestedId = nextNumber <= 9999 ? `EMP${nextNumber.toString().padStart(4, '0')}` : '';
+    
+    setForm({ ...emptyForm, empId: suggestedId }); 
+    setCreateOpen(true); 
+  };
   const openEdit = (emp: Employee) => {
-    setForm({
-      empId: emp.empId, name: emp.name, email: emp.email || '', phone: emp.phone || '',
-      trade: emp.trade, role: emp.role, site: emp.site, type: emp.type, status: emp.status,
-      joiningDate: emp.joiningDate, certifications: emp.certifications,
-    });
-    setSelectedId(emp.id);
+    // Convert ISO date to YYYY-MM-DD format for date input
+    const joiningDate = emp.dateOfJoining ? emp.dateOfJoining.split('T')[0] : '';
+    
+    const formData = {
+      empId: emp.employeeCode,
+      name: getFullName(emp),
+      email: emp.email || '',
+      phone: emp.phone || '',
+      trade: emp.Department?.name || 'Electrical',
+      role: emp.Designation?.name || '',
+      site: emp.Branch?.name || '',
+      type: emp.employmentType === 'permanent' ? 'Staff' : 'Contract',
+      status: emp.employmentStatus.charAt(0).toUpperCase() + emp.employmentStatus.slice(1).replace('_', ' '),
+      joiningDate: joiningDate,
+      certifications: '',
+    };
+    setForm(formData);
+    setSelectedId(emp.id.toString());
     setEditOpen(true);
   };
-  const openDelete = (id: string) => { setSelectedId(id); setDeleteOpen(true); };
+  const openDelete = (id: number) => { setSelectedId(id.toString()); setDeleteOpen(true); };
 
   const handleSubmit = async (mode: 'create' | 'edit') => {
     setSubmitting(true);
     try {
-      const body = mode === 'edit' ? { id: selectedId, ...form } : form;
-      const res = await fetch('/api/employees', { method: mode === 'create' ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      // Validate required fields
+      const errors: string[] = [];
+      
+      if (!form.empId.trim()) errors.push('Employee ID is required');
+      if (!form.name.trim()) errors.push('Full Name is required');
+      if (!form.email.trim()) errors.push('Email is required');
+      if (!form.phone.trim()) errors.push('Phone is required');
+      if (!form.trade) errors.push('Trade/Department is required');
+      if (!form.role.trim()) errors.push('Role/Designation is required');
+      if (!form.site) errors.push('Site/Branch is required');
+      if (!form.joiningDate) errors.push('Joining Date is required');
+      
+      if (errors.length > 0) {
+        toast.error(
+          <div>
+            <div className="font-semibold mb-1">Please fix the following errors:</div>
+            <ul className="list-disc list-inside text-xs">
+              {errors.map((err, i) => <li key={i}>{err}</li>)}
+            </ul>
+          </div>,
+          { duration: 5000 }
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      // Validate employee ID format (EMP0001 to EMP9999)
+      const empIdPattern = /^EMP\d{4}$/;
+      let employeeCode = form.empId.trim().toUpperCase();
+      
+      // Auto-format if user entered just numbers
+      if (/^\d{1,4}$/.test(employeeCode)) {
+        employeeCode = `EMP${employeeCode.padStart(4, '0')}`;
+      }
+      
+      if (!empIdPattern.test(employeeCode)) {
+        toast.error(
+          <div>
+            <div className="font-semibold mb-1">Invalid Employee ID Format</div>
+            <div className="text-xs">Employee ID must be in format: EMP0001 to EMP9999</div>
+            <div className="text-xs mt-1">Examples: EMP0001, EMP0123, EMP9999</div>
+          </div>,
+          { duration: 5000 }
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      // Validate email format
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(form.email)) {
+        toast.error('Please enter a valid email address');
+        setSubmitting(false);
+        return;
+      }
+
+      // Validate phone format (basic check)
+      const phonePattern = /^[0-9+\-\s()]{10,}$/;
+      if (!phonePattern.test(form.phone)) {
+        toast.error('Please enter a valid phone number (at least 10 digits)');
+        setSubmitting(false);
+        return;
+      }
+
+      // Check for duplicate employee ID (only for create mode)
+      if (mode === 'create') {
+        const existingEmployee = employees.find(e => e.employeeCode === employeeCode);
+        if (existingEmployee) {
+          toast.error(
+            <div>
+              <div className="font-semibold mb-1">Duplicate Employee ID</div>
+              <div className="text-xs">Employee ID {employeeCode} is already assigned to:</div>
+              <div className="text-xs font-semibold mt-1">{getFullName(existingEmployee)}</div>
+              <div className="text-xs mt-1">Please use a different Employee ID</div>
+            </div>,
+            { duration: 6000 }
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      // Transform form data to match API expectations
+      const nameParts = form.name.trim().split(/\s+/);
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : nameParts[0] || '';
+      const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : null;
+
+      // Fetch department, designation, and branch data
+      const [deptRes, desigRes, branchRes] = await Promise.all([
+        fetch('/api/departments'),
+        fetch('/api/designations'),
+        fetch('/api/branches'),
+      ]);
+      
+      if (!deptRes.ok || !desigRes.ok || !branchRes.ok) {
+        toast.error(
+          <div>
+            <div className="font-semibold mb-1">System Configuration Error</div>
+            <div className="text-xs">Failed to load departments, designations, or branches.</div>
+            <div className="text-xs mt-1">Please contact your system administrator.</div>
+          </div>,
+          { duration: 5000 }
+        );
+        setSubmitting(false);
+        return;
+      }
+      
+      const deptData = await deptRes.json();
+      const desigData = await desigRes.json();
+      const branchData = await branchRes.json();
+
+      // Find matching department, designation, and branch by name
+      const department = deptData.data?.find((d: any) => d.name === form.trade);
+      const designation = desigData.data?.find((d: any) => d.name === form.role);
+      const branch = branchData.data?.find((b: any) => b.name === form.site);
+
+      // Use found IDs or default to first available
+      const departmentId = department?.id || deptData.data?.[0]?.id;
+      const designationId = designation?.id || desigData.data?.[0]?.id;
+      const branchId = branch?.id || branchData.data?.[0]?.id;
+
+      if (!departmentId || !designationId || !branchId) {
+        toast.error('System configuration error: Missing department, designation, or branch data. Please contact administrator.');
+        setSubmitting(false);
+        return;
+      }
+
+      const apiBody = {
+        employeeCode,
+        firstName,
+        middleName,
+        lastName,
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        dateOfBirth: new Date('1990-01-01').toISOString(),
+        gender: 'male',
+        currentAddress: 'Address',
+        currentCity: 'City',
+        currentState: 'State',
+        currentPincode: '000000',
+        departmentId,
+        designationId,
+        branchId,
+        dateOfJoining: form.joiningDate,
+        employmentType: form.type.toLowerCase() === 'staff' ? 'permanent' : 'contract',
+        employmentStatus: form.status.toLowerCase().replace(' ', '_'),
+      };
+
+      const body = mode === 'edit' ? { id: parseInt(selectedId || '0'), ...apiBody } : apiBody;
+      
+      const res = await fetch('/api/employees', { 
+        method: mode === 'create' ? 'POST' : 'PUT', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(body) 
+      });
+      
       const json = await res.json();
+      
       if (json.success) {
-        toast.success(mode === 'create' ? 'Employee created successfully' : 'Employee updated successfully');
+        toast.success(
+          <div>
+            <div className="font-semibold">{mode === 'create' ? 'Employee Created!' : 'Employee Updated!'}</div>
+            <div className="text-xs mt-1">{employeeCode} - {form.name}</div>
+          </div>,
+          { duration: 3000 }
+        );
         if (mode === 'create') setCreateOpen(false); else setEditOpen(false);
-        fetchData();
-      } else { toast.error(json.error || `Failed to ${mode} employee`); }
-    } catch { toast.error(`Failed to ${mode} employee`); }
-    finally { setSubmitting(false); }
+        setForm(emptyForm); // Reset form
+        await fetchData(); // Wait for data to refresh
+      } else { 
+        toast.error(
+          <div>
+            <div className="font-semibold mb-1">Failed to {mode} employee</div>
+            <div className="text-xs">{json.error || 'Unknown error occurred'}</div>
+          </div>,
+          { duration: 5000 }
+        );
+      }
+    } catch (error) { 
+      toast.error(
+        <div>
+          <div className="font-semibold mb-1">System Error</div>
+          <div className="text-xs">{error instanceof Error ? error.message : 'Failed to process request'}</div>
+        </div>,
+        { duration: 5000 }
+      );
+      console.error('Submit error:', error);
+    } finally { 
+      setSubmitting(false); 
+    }
   };
 
   const handleDelete = async () => {
@@ -240,40 +517,87 @@ export default function EmployeesModule() {
 
   const dialogContent = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto pr-1">
-      <FormField label="Employee ID">
-        <input className={inputCls} value={form.empId} onChange={e => setForm(f => ({ ...f, empId: e.target.value }))} placeholder="EMP-001" />
+      <FormField label="Employee ID" required>
+        <input 
+          className={inputCls} 
+          value={form.empId} 
+          onChange={e => setForm(f => ({ ...f, empId: e.target.value.toUpperCase() }))} 
+          placeholder="EMP0001" 
+          maxLength={7}
+        />
+        <p className="text-[9px] text-[#5a6878] mt-1">Format: EMP0001 to EMP9999</p>
       </FormField>
-      <FormField label="Full Name">
-        <input className={inputCls} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Rajesh Kumar" />
+      <FormField label="Full Name" required>
+        <input 
+          className={inputCls} 
+          value={form.name} 
+          onChange={e => setForm(f => ({ ...f, name: e.target.value }))} 
+          placeholder="Rajesh Kumar" 
+        />
       </FormField>
-      <FormField label="Email">
-        <input className={inputCls} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="rajesh@voltcore.com" />
+      <FormField label="Email" required>
+        <input 
+          className={inputCls} 
+          type="email" 
+          value={form.email} 
+          onChange={e => setForm(f => ({ ...f, email: e.target.value }))} 
+          placeholder="rajesh@voltcore.com" 
+        />
       </FormField>
-      <FormField label="Phone">
-        <input className={inputCls} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210" />
+      <FormField label="Phone" required>
+        <input 
+          className={inputCls} 
+          value={form.phone} 
+          onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} 
+          placeholder="+91 98765 43210" 
+        />
       </FormField>
-      <FormField label="Trade">
-        <select className={selectCls} value={form.trade} onChange={e => setForm(f => ({ ...f, trade: e.target.value }))}>
-          {TRADES.map(t => <option key={t} value={t}>{t}</option>)}
+      <FormField label="Trade / Department" required>
+        <select 
+          className={selectCls} 
+          value={form.trade} 
+          onChange={e => setForm(f => ({ ...f, trade: e.target.value }))}
+        >
+          <option value="">Select department</option>
+          {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
         </select>
       </FormField>
-      <FormField label="Role">
-        <input className={inputCls} value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} placeholder="Supervisor" />
+      <FormField label="Role / Designation" required>
+        <select 
+          className={selectCls} 
+          value={form.role} 
+          onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+        >
+          <option value="">Select designation</option>
+          {designations.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+        </select>
       </FormField>
-      <FormField label="Site">
-        <select className={selectCls} value={form.site} onChange={e => setForm(f => ({ ...f, site: e.target.value }))}>
+      <FormField label="Site / Branch" required>
+        <select 
+          className={selectCls} 
+          value={form.site} 
+          onChange={e => setForm(f => ({ ...f, site: e.target.value }))}
+        >
           <option value="">Select site</option>
           {sites.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </FormField>
-      <FormField label="Type">
-        <select className={selectCls} value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-          <option value="Staff">Staff</option>
+      <FormField label="Employment Type" required>
+        <select 
+          className={selectCls} 
+          value={form.type} 
+          onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+        >
+          <option value="Staff">Staff (Permanent)</option>
           <option value="Contract">Contract</option>
         </select>
       </FormField>
-      <FormField label="Status">
-        <select className={selectCls} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+      <FormField label="Employment Status" required>
+        <select 
+          className={selectCls} 
+          value={form.status} 
+          onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+        >
           <option value="Active">Active</option>
           <option value="Inactive">Inactive</option>
           <option value="On Leave">On Leave</option>
@@ -281,11 +605,22 @@ export default function EmployeesModule() {
           <option value="Separated">Separated</option>
         </select>
       </FormField>
-      <FormField label="Joining Date">
-        <input className={inputCls} type="date" value={form.joiningDate} onChange={e => setForm(f => ({ ...f, joiningDate: e.target.value }))} />
+      <FormField label="Joining Date" required>
+        <input 
+          className={inputCls} 
+          type="date" 
+          value={form.joiningDate} 
+          onChange={e => setForm(f => ({ ...f, joiningDate: e.target.value }))} 
+        />
       </FormField>
       <FormField label="Certifications (comma separated)" span>
-        <input className={inputCls} value={form.certifications} onChange={e => setForm(f => ({ ...f, certifications: e.target.value }))} placeholder="First Aid, Confined Space, Working at Height" />
+        <input 
+          className={inputCls} 
+          value={form.certifications} 
+          onChange={e => setForm(f => ({ ...f, certifications: e.target.value }))} 
+          placeholder="First Aid, Confined Space, Working at Height" 
+        />
+        <p className="text-[9px] text-[#5a6878] mt-1">Optional: Separate multiple certifications with commas</p>
       </FormField>
     </div>
   );
@@ -304,6 +639,7 @@ export default function EmployeesModule() {
           <HardHat size={14} className="text-[#f5a623]" />
           <span className="text-[13px] font-semibold" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>EMPLOYEE DIRECTORY</span>
           <span className="ml-auto text-[10px] text-[#5a6878]">{filtered.length} records</span>
+          <EmployeeBulkImport onImportComplete={fetchData} />
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={openCreate}><Plus size={13} /> Add Employee</button>
         </div>
         <div className="vc-panel-body space-y-4">
@@ -322,7 +658,7 @@ export default function EmployeesModule() {
               <div key={i} className="relative">
                 <select value={filter.value} onChange={e => filter.set(e.target.value)} className="vc-input appearance-none pr-7 min-w-[130px] cursor-pointer">
                   <option value="all">{filter.label}</option>
-                  {filter.options.map(o => <option key={o} value={o}>{o}</option>)}
+                  {filter.options.map((o, idx) => <option key={`${filter.label}-${o}-${idx}`} value={o}>{o}</option>)}
                 </select>
                 <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#5a6878] pointer-events-none" />
               </div>
@@ -338,28 +674,25 @@ export default function EmployeesModule() {
               {paged.length === 0 ? (
                 <div className="px-4 py-12 text-center text-[#5a6878] text-xs">No employees match your filters.</div>
               ) : paged.map(emp => {
-                const avatar = getAvatarColor(emp.name);
-                const st = getStatusStyle(emp.status);
-                const tp = getTypeStyle(emp.type);
-                const certs = parseCerts(emp.certifications);
-                const initials = emp.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+                const fullName = getFullName(emp);
+                const avatar = getAvatarColor(fullName);
+                const st = getStatusStyle(emp.employmentStatus || 'active');
+                const initials = getInitials(emp);
                 return (
                   <div key={emp.id} className="grid grid-cols-[70px_1fr_110px_90px_65px_80px_130px_75px_60px] gap-2 px-3 py-2.5 items-center border-b border-[#1e252e] last:border-0 hover:bg-[#1a2028] transition-colors group">
-                    <span className="text-[10px] text-[#8899aa] font-medium truncate" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{emp.empId}</span>
+                    <span className="text-[10px] text-[#8899aa] font-medium truncate" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{emp.employeeCode}</span>
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[9px] font-bold ${avatar.bg} ${avatar.text}`}>{initials}</div>
-                      <div className="min-w-0"><div className="text-[11px] font-semibold text-[#e2e8f0] truncate">{emp.name}</div><div className="text-[9px] text-[#5a6878] truncate">{emp.email || emp.phone || '—'}</div></div>
+                      <div className="min-w-0"><div className="text-[11px] font-semibold text-[#e2e8f0] truncate">{fullName}</div><div className="text-[9px] text-[#5a6878] truncate">{emp.email || emp.phone || '—'}</div></div>
                     </div>
-                    <div className="hidden md:block min-w-0"><div className="text-[10px] text-[#e2e8f0] truncate">{emp.trade}</div><div className="text-[9px] text-[#5a6878] truncate">{emp.role}</div></div>
-                    <span className="hidden lg:block text-[10px] text-[#8899aa] truncate">{emp.site}</span>
-                    <span className={`vc-badge ${tp.bg} ${tp.text}`}>{emp.type}</span>
-                    <span className="hidden sm:block text-[9px] text-[#8899aa]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{formatDate(emp.joiningDate)}</span>
+                    <div className="hidden md:block min-w-0"><div className="text-[10px] text-[#e2e8f0] truncate">{emp.Designation?.name || '—'}</div><div className="text-[9px] text-[#5a6878] truncate">{emp.Department?.name || '—'}</div></div>
+                    <span className="hidden lg:block text-[10px] text-[#8899aa] truncate">{emp.Branch?.name || '—'}</span>
+                    <span className={`vc-badge ${emp.employmentType === 'permanent' ? 'bg-[#00e676]/10 text-[#00e676]' : 'bg-[#ffab40]/10 text-[#ffab40]'}`}>{emp.employmentType}</span>
+                    <span className="hidden sm:block text-[9px] text-[#8899aa]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{formatDate(emp.dateOfJoining)}</span>
                     <div className="hidden xl:flex items-center gap-1 flex-wrap">
-                      {certs.length === 0 ? <span className="text-[9px] text-[#5a6878]">None</span> : certs.map((c, i) => (
-                        <span key={i} className="inline-flex items-center px-1.5 py-[1px] rounded text-[8px] font-semibold bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/15">{c}</span>
-                      ))}
+                      <span className="text-[9px] text-[#5a6878]">—</span>
                     </div>
-                    <span className={`vc-badge ${st.bg} ${st.text}`} style={{ border: `1px solid ${st.border}` }}>{emp.status}</span>
+                    <span className={`vc-badge ${st.bg} ${st.text}`} style={{ border: `1px solid ${st.border}` }}>{emp.employmentStatus}</span>
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#f5a623] hover:bg-[#f5a623]/10 transition-colors" onClick={() => openEdit(emp)}><Pencil size={12} /></button>
                       <button className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-colors" onClick={() => openDelete(emp.id)}><Trash2 size={12} /></button>
@@ -395,7 +728,12 @@ export default function EmployeesModule() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Add New Employee</DialogTitle></DialogHeader>{dialogContent()}
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl" aria-describedby="create-employee-description">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base">Add New Employee</DialogTitle>
+            <p id="create-employee-description" className="text-[11px] text-[#5a6878] mt-1">Fill in the employee details below to add a new employee to the system.</p>
+          </DialogHeader>
+          {dialogContent()}
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('create')}>{submitting ? 'Creating...' : 'Add Employee'}</Button>
@@ -405,7 +743,12 @@ export default function EmployeesModule() {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Edit Employee</DialogTitle></DialogHeader>{dialogContent()}
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl" aria-describedby="edit-employee-description">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base">Edit Employee</DialogTitle>
+            <p id="edit-employee-description" className="text-[11px] text-[#5a6878] mt-1">Update the employee information below.</p>
+          </DialogHeader>
+          {dialogContent()}
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setEditOpen(false)}>Cancel</Button>
             <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('edit')}>{submitting ? 'Saving...' : 'Save Changes'}</Button>
@@ -415,9 +758,11 @@ export default function EmployeesModule() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
-          <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Delete Employee</DialogTitle></DialogHeader>
-          <div className="flex items-start gap-3 py-2">
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md" aria-describedby="delete-employee-description">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base">Delete Employee</DialogTitle>
+          </DialogHeader>
+          <div id="delete-employee-description" className="flex items-start gap-3 py-2">
             <div className="w-10 h-10 rounded-full bg-[#ff3d3d]/15 flex items-center justify-center shrink-0 mt-0.5"><AlertTriangle size={20} className="text-[#ff3d3d]" /></div>
             <div><p className="text-[13px] text-[#e2e8f0] mb-1">Are you sure you want to delete this employee?</p><p className="text-[11px] text-[#8899aa]">All associated records will be affected.</p></div>
           </div>

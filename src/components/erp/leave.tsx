@@ -198,9 +198,59 @@ export default function LeaveModule() {
       ]);
       const leaveJson = await leaveRes.json();
       const empJson = await empRes.json();
-      if (leaveJson.success) setRecords(leaveJson.data);
-      if (empJson.success) setEmployees(empJson.data);
-    } catch {
+
+      console.log('Leave Module - Raw employee data:', empJson.data?.slice(0, 3));
+      console.log('Leave Module - Raw leave data:', leaveJson.data?.slice(0, 3));
+
+      if (leaveJson.success) {
+        // Map leave records to match component format
+        const mappedRecords = leaveJson.data.map((record: any) => ({
+          id: record.id.toString(),
+          empId: record.Employee?.employeeCode || '',
+          site: record.Employee?.Branch?.name || 'N/A',
+          type: record.leaveType,
+          fromDate: record.fromDate,
+          toDate: record.toDate,
+          days: record.days,
+          reason: record.reason || '',
+          status: record.status.charAt(0).toUpperCase() + record.status.slice(1), // Capitalize status
+          appliedDate: record.appliedDate || record.createdAt,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+          employee: {
+            id: record.Employee?.id?.toString() || '',
+            empId: record.Employee?.employeeCode || '',
+            name: record.Employee ? `${record.Employee.firstName} ${record.Employee.lastName}` : 'Unknown',
+            role: 'N/A',
+            site: record.Employee?.Branch?.name || 'N/A',
+          },
+        }));
+        
+        console.log('Leave Module - Mapped leave records:', mappedRecords.slice(0, 3));
+        setRecords(mappedRecords);
+      }
+
+      if (empJson.success) {
+        const activeEmployees = empJson.data.filter((e: any) => e.employmentStatus?.toLowerCase() === 'active');
+        console.log('Leave Module - Active employees count:', activeEmployees.length);
+        console.log('Leave Module - Sample raw employee:', empJson.data[0]);
+        
+        const mappedEmployees = activeEmployees.map((e: any) => ({
+          id: e.id.toString(), // Keep as string for form value
+          empId: e.employeeCode,
+          name: `${e.firstName} ${e.lastName}`,
+          role: e.Designation?.name || 'N/A',
+          site: e.Branch?.name || 'N/A',
+        }));
+        
+        console.log('Leave Module - Mapped employees:', mappedEmployees.slice(0, 3));
+        console.log('Leave Module - Total mapped employees:', mappedEmployees.length);
+        setEmployees(mappedEmployees);
+      } else {
+        console.error('Leave Module - Failed to fetch employees:', empJson.error);
+      }
+    } catch (error) {
+      console.error('Error fetching leave data:', error);
       toast.error('Failed to fetch leave data');
     } finally {
       setLoading(false);
@@ -252,12 +302,28 @@ export default function LeaveModule() {
     }
     try {
       setSubmitting(true);
+      
+      // Transform form data to match API expectations
+      const payload = {
+        employeeId: parseInt(form.empId),
+        leaveType: form.type,
+        fromDate: form.fromDate,
+        toDate: form.toDate,
+        days: form.days,
+        reason: form.reason || '',
+      };
+      
+      console.log('Leave Module - Creating leave request:', payload);
+      
       const res = await fetch('/api/leave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
+      
+      console.log('Leave Module - API response:', json);
+      
       if (json.success) {
         toast.success('Leave request created successfully');
         setCreateOpen(false);
@@ -266,7 +332,8 @@ export default function LeaveModule() {
       } else {
         toast.error(json.error || 'Failed to create leave request');
       }
-    } catch {
+    } catch (error) {
+      console.error('Leave Module - Error creating leave:', error);
       toast.error('Network error creating leave request');
     } finally {
       setSubmitting(false);
@@ -280,7 +347,10 @@ export default function LeaveModule() {
       const res = await fetch('/api/leave', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status }),
+        body: JSON.stringify({ 
+          id: parseInt(id), 
+          status: status.toLowerCase() // API expects lowercase
+        }),
       });
       const json = await res.json();
       if (json.success) {
@@ -289,7 +359,8 @@ export default function LeaveModule() {
       } else {
         toast.error(json.error || 'Action failed');
       }
-    } catch {
+    } catch (error) {
+      console.error('Leave Module - Error updating status:', error);
       toast.error('Network error updating status');
     } finally {
       setActionLoading(null);
@@ -470,8 +541,8 @@ export default function LeaveModule() {
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site</label>
                 <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none">
                   <option value="">Auto from employee</option>
-                  {employees.map(emp => emp.site).filter((v, i, a) => a.indexOf(v) === i).map(s => (
-                    <option key={s} value={s}>{s}</option>
+                  {Array.from(new Set(employees.map(emp => emp.site).filter(Boolean))).map((s, idx) => (
+                    <option key={`site-${idx}-${s}`} value={s}>{s}</option>
                   ))}
                 </select>
               </div>

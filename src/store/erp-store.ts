@@ -19,7 +19,11 @@ export type ModuleId =
   // Projects sub-modules
   | 'project-list'
   // Downloads
-  | 'downloads';
+  | 'downloads'
+  // Organization sub-modules
+  | 'departments' | 'designations'
+  // Biometric
+  | 'biometric';
 
 interface NavItem {
   id: ModuleId;
@@ -47,13 +51,15 @@ export const MAIN_MODULES: NavItem[] = [
 
 export const SUB_MODULES: Record<string, NavItem[]> = {
   organization: [
-    { id: 'employees', icon: 'UserCog', label: 'Departments & Roles' },
+    { id: 'departments', icon: 'Building2', label: 'Departments' },
+    { id: 'designations', icon: 'Award', label: 'Designations' },
   ],
   hrms: [
     { id: 'employee-analytics', icon: 'BarChart3', label: 'Employee Analytics', section: 'HRMS' },
     { id: 'employees', icon: 'HardHat', label: 'Employees', section: 'HRMS' },
     { id: 'attendance', icon: 'ClipboardList', label: 'Attendance', section: 'HRMS' },
-    { id: 'leave', icon: 'CalendarDays', label: 'Leave Management', badge: 5, section: 'HRMS' },
+    { id: 'biometric', icon: 'Fingerprint', label: 'Biometric Sync', section: 'HRMS' },
+    { id: 'leave', icon: 'CalendarDays', label: 'Leave Management', section: 'HRMS' },
     { id: 'shift', icon: 'RotateCcw', label: 'Shift Roster', section: 'HRMS' },
     { id: 'timesheet', icon: 'TimerReset', label: 'Timesheet', section: 'HRMS' },
     { id: 'payroll', icon: 'IndianRupee', label: 'Payroll', section: 'HRMS' },
@@ -116,11 +122,15 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   system: { title: 'System', breadcrumb: 'VoltCore ERP › System' },
   support: { title: 'Support', breadcrumb: 'VoltCore ERP › Support' },
   knowledgebase: { title: 'Knowledgebase', breadcrumb: 'VoltCore ERP › Knowledgebase' },
-  // Sub-modules
+  // Organization sub-modules
+  departments: { title: 'Departments', breadcrumb: 'Organization › Departments' },
+  designations: { title: 'Designations', breadcrumb: 'Organization › Designations' },
+  // HRMS sub-modules
   'employee-analytics': { title: 'Employee Analytics', breadcrumb: 'HRMS › Employee Analytics' },
   timesheet: { title: 'Timesheet', breadcrumb: 'HRMS › Weekly Timesheet' },
   employees: { title: 'Employees', breadcrumb: 'HRMS › Employee Directory' },
   attendance: { title: 'Attendance', breadcrumb: 'HRMS › Daily Attendance' },
+  biometric: { title: 'Biometric Sync', breadcrumb: 'HRMS › Biometric Integration' },
   leave: { title: 'Leave Management', breadcrumb: 'HRMS › Leave Requests' },
   shift: { title: 'Shift Roster', breadcrumb: 'HRMS › Shift Planning' },
   training: { title: 'Training & Certifications', breadcrumb: 'HRMS › Competency Management' },

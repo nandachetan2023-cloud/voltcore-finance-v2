@@ -7,8 +7,23 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const [customers, orders] = await Promise.all([
-      db.customer.findMany({ orderBy: { createdAt: 'desc' } }),
-      db.salesOrder.findMany({ orderBy: { createdAt: 'desc' } }),
+      db.customer.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      db.salesOrder.findMany({
+        include: {
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
     ])
 
     return NextResponse.json({
@@ -45,28 +60,39 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const count = await db.customer.count()
-      const code = `CUST-${String(count + 1).padStart(3, '0')}`
-
       const record = await db.customer.create({
-        data: { ...data, code },
+        data: {
+          name: data.name,
+          contactPerson: data.contactPerson || null,
+          email: data.email || null,
+          phone: data.phone || null,
+          address: data.address || null,
+          city: data.city || null,
+          state: data.state || null,
+          pincode: data.pincode || null,
+        },
       })
 
       return NextResponse.json({ success: true, data: record }, { status: 201 })
     } else {
-      if (!data.customer || !data.item || !data.quantity || data.unitPrice == null) {
+      if (!data.customerId || !data.soNo || !data.soDate || !data.totalAmount) {
         return NextResponse.json(
-          { success: false, error: 'customer, item, quantity, and unitPrice are required for sales order' },
+          { success: false, error: 'customerId, soNo, soDate, and totalAmount are required for sales order' },
           { status: 400 }
         )
       }
 
-      const count = await db.salesOrder.count()
-      const soNo = `SO-${String(count + 1).padStart(5, '0')}`
-      const amount = data.quantity * data.unitPrice
-
       const record = await db.salesOrder.create({
-        data: { ...data, soNo, amount },
+        data: {
+          soNo: data.soNo,
+          soDate: new Date(data.soDate),
+          customerId: parseInt(data.customerId),
+          status: data.status || 'draft',
+          totalAmount: parseFloat(data.totalAmount),
+        },
+        include: {
+          customer: true,
+        },
       })
 
       return NextResponse.json({ success: true, data: record }, { status: 201 })
@@ -114,12 +140,11 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Sales order not found' }, { status: 404 })
       }
 
-      // Recalculate amount if quantity or unitPrice changed
-      const qty = data.quantity ?? existing.quantity
-      const price = data.unitPrice ?? existing.unitPrice
-      const amount = qty * price
+      const updateData: any = { ...data }
+      if (updateData.soDate) updateData.soDate = new Date(updateData.soDate)
+      if (updateData.totalAmount) updateData.totalAmount = parseFloat(updateData.totalAmount)
 
-      const record = await db.salesOrder.update({ where: { id }, data: { ...data, amount } })
+      const record = await db.salesOrder.update({ where: { id }, data: updateData })
       return NextResponse.json({ success: true, data: record })
     }
   } catch (error) {

@@ -1,35 +1,72 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
-// GET: List all attendance with employee name
-export async function GET() {
+// GET: List all attendance logs with employee info
+export async function GET(request: NextRequest) {
   try {
-    const attendance = await db.attendance.findMany({
-      select: {
-        id: true,
-        empId: true,
-        date: true,
-        site: true,
-        timeIn: true,
-        timeOut: true,
-        otHours: true,
-        shift: true,
-        status: true,
-        createdAt: true,
-        employee: {
-          select: {
-            name: true,
-            empId: true,
+    const { searchParams } = new URL(request.url)
+    const limit = parseInt(searchParams.get('limit') || '100')
+    const offset = parseInt(searchParams.get('offset') || '0')
+    const date = searchParams.get('date')
+    const employeeId = searchParams.get('employeeId')
+
+    // Build where clause
+    const where: any = {}
+    if (date) {
+      const targetDate = new Date(date)
+      targetDate.setHours(0, 0, 0, 0)
+      const nextDate = new Date(targetDate)
+      nextDate.setDate(nextDate.getDate() + 1)
+      where.logDate = {
+        gte: targetDate,
+        lt: nextDate,
+      }
+    }
+    if (employeeId) {
+      where.employeeId = parseInt(employeeId)
+    }
+
+    // Fetch attendance with optimized query
+    const [attendance, total] = await Promise.all([
+      db.attendanceLog.findMany({
+        where,
+        select: {
+          id: true,
+          employeeId: true,
+          logDate: true,
+          punchIn: true,
+          punchOut: true,
+          status: true,
+          biometricDeviceId: true,
+          source: true,
+          createdAt: true,
+          Employee: {
+            select: {
+              employeeCode: true,
+              firstName: true,
+              lastName: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+        orderBy: { logDate: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      db.attendanceLog.count({ where }),
+    ])
 
-    return NextResponse.json({ success: true, data: attendance })
+    return NextResponse.json({ 
+      success: true, 
+      data: attendance,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    })
   } catch (error) {
     console.error('Error fetching attendance:', error)
     return NextResponse.json(
@@ -43,17 +80,17 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { empId, date, site, timeIn, timeOut, otHours, shift, status } = body
+    const { employeeId, logDate, punchIn, punchOut, status } = body
 
-    if (!empId || !date) {
+    if (!employeeId || !logDate) {
       return NextResponse.json(
-        { success: false, error: 'empId and date are required' },
+        { success: false, error: 'employeeId and logDate are required' },
         { status: 400 }
       )
     }
 
     // Check if employee exists
-    const employee = await db.employee.findUnique({ where: { id: empId } })
+    const employee = await db.employee.findUnique({ where: { id: parseInt(employeeId) } })
     if (!employee) {
       return NextResponse.json(
         { success: false, error: 'Employee not found' },
@@ -61,27 +98,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check duplicate empId + date combo
-    const existing = await db.attendance.findFirst({
-      where: { empId, date },
-    })
-    if (existing) {
-      return NextResponse.json(
-        { success: false, error: 'Attendance record already exists for this employee on this date' },
-        { status: 409 }
-      )
-    }
-
-    const record = await db.attendance.create({
+    const record = await db.attendanceLog.create({
       data: {
-        empId,
-        date,
-        site: site || '',
-        timeIn: timeIn || null,
-        timeOut: timeOut || null,
-        otHours: otHours || 0,
-        shift: shift || null,
-        status: status || 'Present',
+        employeeId: parseInt(employeeId),
+        logDate: new Date(logDate),
+        punchIn: punchIn ? new Date(punchIn) : null,
+        punchOut: punchOut ? new Date(punchOut) : null,
+        status: status || 'present',
+      },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            employeeCode: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
     })
 
@@ -108,7 +141,15 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const existing = await db.attendance.findUnique({ where: { id } })
+    const attendanceId = parseInt(id.toString())
+    if (isNaN(attendanceId)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid id format' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.attendanceLog.findUnique({ where: { id: attendanceId } })
     if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Attendance record not found' },
@@ -116,9 +157,16 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const record = await db.attendance.update({
-      where: { id },
-      data,
+    // Convert date strings to Date objects if present
+    const updateData: any = { ...data }
+    if (updateData.logDate) updateData.logDate = new Date(updateData.logDate)
+    if (updateData.punchIn) updateData.punchIn = new Date(updateData.punchIn)
+    if (updateData.punchOut) updateData.punchOut = new Date(updateData.punchOut)
+    if (updateData.employeeId) updateData.employeeId = parseInt(updateData.employeeId)
+
+    const record = await db.attendanceLog.update({
+      where: { id: attendanceId },
+      data: updateData,
     })
 
     return NextResponse.json({ success: true, data: record })
@@ -144,7 +192,15 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const existing = await db.attendance.findUnique({ where: { id } })
+    const attendanceId = parseInt(id.toString())
+    if (isNaN(attendanceId)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid id format' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.attendanceLog.findUnique({ where: { id: attendanceId } })
     if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Attendance record not found' },
@@ -152,9 +208,9 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await db.attendance.delete({ where: { id } })
+    await db.attendanceLog.delete({ where: { id: attendanceId } })
 
-    return NextResponse.json({ success: true, data: { id } })
+    return NextResponse.json({ success: true, data: { id: attendanceId } })
   } catch (error) {
     console.error('Error deleting attendance:', error)
     return NextResponse.json(

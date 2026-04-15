@@ -9,25 +9,32 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 /* ── Types ── */
 interface Employee {
-  id: string;
-  empId: string;
-  name: string;
-  role: string;
-  site: string;
-  status: string;
+  id: number;
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+  department?: {
+    name: string;
+  };
+  branch?: {
+    name: string;
+  };
+  employmentStatus: string;
 }
 
 interface AttendanceRecord {
-  id: string;
-  empId: string;
-  date: string;
+  id: number;
+  employeeId: number;
+  logDate: string;
+  punchIn: string | null;
+  punchOut: string | null;
   status: string;
-  site: string;
-  timeIn: string | null;
-  timeOut: string | null;
-  otHours: number;
-  shift: string | null;
-  employee: { name: string; empId: string };
+  biometricDeviceId: string | null;
+  employee: {
+    employeeCode: string;
+    firstName: string;
+    lastName: string;
+  };
 }
 
 /* ── Helpers ── */
@@ -58,25 +65,56 @@ function formatDisplayDate(d: Date): string {
   return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
 }
 
-function calcHours(timeIn: string | null, timeOut: string | null): number {
-  if (!timeIn || !timeOut) return 0;
-  const [hIn, mIn] = timeIn.split(':').map(Number);
-  const [hOut, mOut] = timeOut.split(':').map(Number);
-  let diff = (hOut * 60 + mOut) - (hIn * 60 + mIn);
-  if (diff < 0) diff += 24 * 60; // overnight shift
-  return Math.round((diff / 60) * 10) / 10;
+function formatTime(dateTimeStr: string | null): string {
+  if (!dateTimeStr) return '';
+  try {
+    const date = new Date(dateTimeStr);
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch {
+    return '';
+  }
+}
+
+function calcHours(punchIn: string | null, punchOut: string | null): number {
+  if (!punchIn || !punchOut) return 0;
+  try {
+    const inTime = new Date(punchIn);
+    const outTime = new Date(punchOut);
+    const diff = outTime.getTime() - inTime.getTime();
+    if (diff < 0) return 0;
+    return Math.round((diff / (1000 * 60 * 60)) * 10) / 10;
+  } catch {
+    return 0;
+  }
+}
+
+function calcOtHours(totalHours: number): number {
+  // OT is hours worked beyond 8 hours
+  return Math.max(0, Math.round((totalHours - 8) * 10) / 10);
 }
 
 function getStatusStyle(status: string) {
-  switch (status) {
-    case 'Present': return 'bg-[#00e676]/15 text-[#00e676] border border-[#00e676]/30';
-    case 'Absent': return 'bg-[#ff3d3d]/15 text-[#ff3d3d] border border-[#ff3d3d]/30';
-    case 'Leave': return 'bg-[#ffab40]/15 text-[#ffab40] border border-[#ffab40]/30';
-    case 'Holiday': return 'bg-[#a78bfa]/15 text-[#a78bfa] border border-[#a78bfa]/30';
-    case 'Late': return 'bg-[#ffab40]/15 text-[#ffab40] border border-[#ffab40]/30';
-    case 'OT': return 'bg-[#00d4ff]/15 text-[#00d4ff] border border-[#00d4ff]/30';
-    case 'Half Day': return 'bg-[#ffab40]/15 text-[#ffab40] border border-[#ffab40]/30';
+  const normalized = status.toLowerCase();
+  switch (normalized) {
+    case 'present': return 'bg-[#00e676]/15 text-[#00e676] border border-[#00e676]/30';
+    case 'absent': return 'bg-[#ff3d3d]/15 text-[#ff3d3d] border border-[#ff3d3d]/30';
+    case 'leave': return 'bg-[#ffab40]/15 text-[#ffab40] border border-[#ffab40]/30';
+    case 'half_day': return 'bg-[#ffab40]/15 text-[#ffab40] border border-[#ffab40]/30';
+    case 'holiday': return 'bg-[#a78bfa]/15 text-[#a78bfa] border border-[#a78bfa]/30';
+    case 'late': return 'bg-[#ffab40]/15 text-[#ffab40] border border-[#ffab40]/30';
     default: return 'bg-[#5a6878]/15 text-[#5a6878] border border-[#5a6878]/30';
+  }
+}
+
+function getStatusLabel(status: string): string {
+  const normalized = status.toLowerCase();
+  switch (normalized) {
+    case 'present': return 'P';
+    case 'absent': return 'A';
+    case 'leave': return 'L';
+    case 'half_day': return 'HD';
+    case 'holiday': return 'H';
+    default: return status.substring(0, 2).toUpperCase();
   }
 }
 
@@ -120,24 +158,25 @@ export default function TimesheetModule() {
 
   const isCurrentWeek = weekOffset === 0;
 
-  // Build attendance lookup: empId + date -> record
+  // Build attendance lookup: employeeId + date -> record
   const attMap = useMemo(() => {
     const map: Record<string, AttendanceRecord> = {};
     attendance.forEach(a => {
-      map[`${a.empId}_${a.date}`] = a;
+      const dateStr = new Date(a.logDate).toISOString().split('T')[0];
+      map[`${a.employeeId}_${dateStr}`] = a;
     });
     return map;
   }, [attendance]);
 
   // Filtered employees
   const sites = useMemo(() => {
-    const s = new Set(employees.map(e => e.site).filter(Boolean));
+    const s = new Set(employees.map(e => e.Branch?.name).filter(Boolean));
     return Array.from(s).sort();
   }, [employees]);
 
   const filteredEmployees = useMemo(() => {
-    let result = employees.filter(e => e.status === 'Active');
-    if (siteFilter) result = result.filter(e => e.site === siteFilter);
+    let result = employees.filter(e => e.employmentStatus === 'active');
+    if (siteFilter) result = result.filter(e => e.Branch?.name === siteFilter);
     return result;
   }, [employees, siteFilter]);
 
@@ -145,13 +184,29 @@ export default function TimesheetModule() {
   const stats = useMemo(() => {
     const weekStart = formatDate(weekDates[0]);
     const weekEnd = formatDate(weekDates[6]);
-    const weekRecords = attendance.filter(a => a.date >= weekStart && a.date <= weekEnd);
+    const weekRecords = attendance.filter(a => {
+      const dateStr = new Date(a.logDate).toISOString().split('T')[0];
+      return dateStr >= weekStart && dateStr <= weekEnd;
+    });
 
-    const present = weekRecords.filter(a => a.status === 'Present' || a.status === 'Late' || a.status === 'OT').length;
-    const absent = weekRecords.filter(a => a.status === 'Absent').length;
-    const onLeave = weekRecords.filter(a => a.status === 'Leave').length;
-    const totalOt = weekRecords.reduce((s, a) => s + (a.otHours || 0), 0);
-    const uniquePresent = new Set(weekRecords.filter(a => a.status === 'Present' || a.status === 'Late' || a.status === 'OT').map(a => a.empId)).size;
+    const present = weekRecords.filter(a => a.status.toLowerCase() === 'present').length;
+    const absent = weekRecords.filter(a => a.status.toLowerCase() === 'absent').length;
+    const onLeave = weekRecords.filter(a => a.status.toLowerCase() === 'leave').length;
+    
+    let totalOt = 0;
+    weekRecords.forEach(a => {
+      if (a.status.toLowerCase() === 'present' && a.punchIn && a.punchOut) {
+        const hours = calcHours(a.punchIn, a.punchOut);
+        totalOt += calcOtHours(hours);
+      }
+    });
+    
+    // Count unique employees who were present this week
+    const uniquePresent = new Set(
+      weekRecords
+        .filter(a => a.status.toLowerCase() === 'present')
+        .map(a => a.employeeId)
+    ).size;
 
     return { present, absent, onLeave, totalOt: Math.round(totalOt * 10) / 10, uniquePresent };
   }, [attendance, weekDates]);
@@ -159,48 +214,91 @@ export default function TimesheetModule() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
+      
+      // Fetch employees and attendance for the week range
+      const weekStart = formatDate(weekDates[0]);
+      const weekEnd = formatDate(weekDates[6]);
+      
       const [empRes, attRes] = await Promise.all([
         fetch('/api/employees'),
-        fetch('/api/attendance'),
+        fetch(`/api/attendance?limit=1000`), // Get more records to cover the week
       ]);
+      
       const empJson = await empRes.json();
       const attJson = await attRes.json();
-      if (empJson.success) setEmployees(empJson.data || []);
-      if (attJson.success) setAttendance(attJson.data || []);
-    } catch {
-      setError('Failed to load timesheet data');
+      
+      if (empJson.success) {
+        setEmployees(empJson.data || []);
+      } else {
+        throw new Error(empJson.error || 'Failed to fetch employees');
+      }
+      
+      if (attJson.success) {
+        // Filter attendance records to only include the current week
+        const weekAttendance = (attJson.data || []).filter((a: AttendanceRecord) => {
+          const dateStr = new Date(a.logDate).toISOString().split('T')[0];
+          return dateStr >= weekStart && dateStr <= weekEnd;
+        });
+        setAttendance(weekAttendance);
+      } else {
+        throw new Error(attJson.error || 'Failed to fetch attendance');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load timesheet data');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [weekDates]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleExport = () => {
-    const headers = ['Employee', 'Emp ID', 'Site', ...DAYS.map((_, i) => `${DAYS[i]} ${formatDisplayDate(weekDates[i])}`), 'Total Hrs', 'OT Hrs', 'Days Present'];
+    const headers = [
+      'Employee',
+      'Emp ID',
+      'Site',
+      ...DAYS.map((_, i) => `${DAYS[i]} ${formatDisplayDate(weekDates[i])}`),
+      'Total Hrs',
+      'OT Hrs',
+      'Days Present'
+    ];
+    
     const csvRows = filteredEmployees.map(emp => {
-      const cells = [`"${emp.name}"`, emp.empId, emp.site];
+      const cells = [
+        `"${emp.firstName} ${emp.lastName}"`,
+        emp.employeeCode,
+        emp.Branch?.name || ''
+      ];
+      
       let totalHrs = 0;
       let totalOt = 0;
       let daysPresent = 0;
+      
       DAYS.forEach((_, i) => {
         const dateStr = formatDate(weekDates[i]);
         const record = attMap[`${emp.id}_${dateStr}`];
-        if (record && (record.status === 'Present' || record.status === 'Late' || record.status === 'OT')) {
-          const hrs = calcHours(record.timeIn, record.timeOut);
+        
+        if (record && record.status.toLowerCase() === 'present' && record.punchIn && record.punchOut) {
+          const hrs = calcHours(record.punchIn, record.punchOut);
+          const ot = calcOtHours(hrs);
           totalHrs += hrs;
-          totalOt += record.otHours || 0;
+          totalOt += ot;
           daysPresent++;
-          cells.push(`${record.timeIn || ''}-${record.timeOut || ''} (${hrs}h)`);
+          const timeIn = formatTime(record.punchIn);
+          const timeOut = formatTime(record.punchOut);
+          cells.push(`${timeIn}-${timeOut} (${hrs}h)`);
         } else if (record) {
-          cells.push(record.status);
+          cells.push(getStatusLabel(record.status));
         } else {
           cells.push('—');
         }
       });
+      
       cells.push(`${totalHrs}h`, `${totalOt}h`, `${daysPresent}/7`);
       return cells.join(',');
     });
+    
     const csv = [headers.join(','), ...csvRows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -212,6 +310,7 @@ export default function TimesheetModule() {
   };
 
   if (loading) return <LoadingSkeleton />;
+  
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -345,37 +444,39 @@ export default function TimesheetModule() {
                 let totalHrs = 0;
                 let totalOt = 0;
                 let daysPresent = 0;
+                
                 return (
                   <tr key={emp.id} className="border-b border-[#252e3a]/40 hover:bg-[#141920] transition-colors group">
                     <td className="py-2.5 px-3">
-                      <div className="text-[12px] font-semibold text-[#e2e8f0] truncate max-w-[130px]">{emp.name}</div>
-                      <div className="text-[9px] text-[#5a6878] font-mono">{emp.empId}</div>
+                      <div className="text-[12px] font-semibold text-[#e2e8f0] truncate max-w-[130px]">
+                        {emp.firstName} {emp.lastName}
+                      </div>
+                      <div className="text-[9px] text-[#5a6878] font-mono">{emp.employeeCode}</div>
                     </td>
                     <td className="py-2.5 px-2 text-center">
-                      <span className="text-[10px] text-[#8899aa]">{emp.site}</span>
+                      <span className="text-[10px] text-[#8899aa]">{emp.Branch?.name || '—'}</span>
                     </td>
                     {DAYS.map((_, i) => {
                       const dateStr = formatDate(weekDates[i]);
                       const record = attMap[`${emp.id}_${dateStr}`];
                       const isWeekend = i >= 5;
 
-                      if (record && (record.status === 'Present' || record.status === 'Late' || record.status === 'OT')) {
-                        const hrs = calcHours(record.timeIn, record.timeOut);
+                      if (record && record.status.toLowerCase() === 'present' && record.punchIn && record.punchOut) {
+                        const hrs = calcHours(record.punchIn, record.punchOut);
+                        const ot = calcOtHours(hrs);
                         totalHrs += hrs;
-                        totalOt += record.otHours || 0;
+                        totalOt += ot;
                         daysPresent++;
+                        
                         return (
                           <td key={i} className={`py-2 px-1 text-center ${isWeekend ? 'bg-[#141920]/50' : ''}`}>
                             <div className="flex flex-col items-center gap-[2px]">
                               <span className="text-[10px] text-[#8899aa] font-mono">
-                                {record.timeIn || '—'}–{record.timeOut || '—'}
+                                {formatTime(record.punchIn)}–{formatTime(record.punchOut)}
                               </span>
                               <span className="text-[11px] font-bold text-[#e2e8f0] font-mono">{hrs}h</span>
-                              {(record.otHours || 0) > 0 && (
-                                <span className="text-[9px] text-[#00d4ff] font-mono">+{record.otHours}h OT</span>
-                              )}
-                              {record.status === 'Late' && (
-                                <span className={`inline-block px-1.5 py-[1px] rounded text-[8px] font-bold ${getStatusStyle('Late')}`}>LATE</span>
+                              {ot > 0 && (
+                                <span className="text-[9px] text-[#00d4ff] font-mono">+{ot}h OT</span>
                               )}
                             </div>
                           </td>
@@ -386,7 +487,7 @@ export default function TimesheetModule() {
                         return (
                           <td key={i} className={`py-2 px-1 text-center ${isWeekend ? 'bg-[#141920]/50' : ''}`}>
                             <span className={`inline-block px-2 py-[2px] rounded text-[9px] font-bold ${getStatusStyle(record.status)}`}>
-                              {record.status.toUpperCase()}
+                              {getStatusLabel(record.status)}
                             </span>
                           </td>
                         );
@@ -411,15 +512,15 @@ export default function TimesheetModule() {
                         );
                       }
 
-                      // Past date with no record = absent
+                      // Past date with no record = no data
                       return (
                         <td key={i} className="py-2 px-1 text-center">
-                          <span className="text-[9px] text-[#5a6878] italic">No data</span>
+                          <span className="text-[9px] text-[#5a6878] italic">—</span>
                         </td>
                       );
                     })}
                     <td className="py-2.5 px-2 text-center">
-                      <span className="text-[13px] font-bold text-[#00e676] font-mono">{totalHrs}h</span>
+                      <span className="text-[13px] font-bold text-[#00e676] font-mono">{totalHrs > 0 ? `${totalHrs}h` : '—'}</span>
                     </td>
                     <td className="py-2.5 px-2 text-center">
                       <span className="text-[13px] font-bold text-[#00d4ff] font-mono">{totalOt > 0 ? `${totalOt}h` : '—'}</span>

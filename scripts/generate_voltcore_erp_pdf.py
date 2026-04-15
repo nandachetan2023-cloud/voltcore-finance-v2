@@ -19,7 +19,10 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 # ─── Constants ───────────────────────────────────────────────────────────────
-OUTPUT_PATH = "/home/z/my-project/download/voltcore_erp_documentation.pdf"
+import os
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+OUTPUT_PATH = os.path.join(PROJECT_ROOT, "download", "voltcore_erp_documentation.pdf")
 PAGE_W, PAGE_H = A4
 MARGIN = 0.75 * inch
 

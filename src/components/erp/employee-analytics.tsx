@@ -158,13 +158,17 @@ function DonutChart({ data, title }: { data: { name: string; value: number; colo
 }
 
 // ── Horizontal bar chart component ──
-function HBarChart({ data, title, barKey, labelKey }: {
+function HBarChart({ data, title, barKey, labelKey, useTotal = false }: {
   data: { name: string; value: number; color: string; fill?: string }[];
   title: string;
   barKey: string;
   labelKey: string;
+  useTotal?: boolean;
 }) {
   const maxVal = Math.max(...data.map(d => d.value), 1);
+  const totalVal = data.reduce((sum, d) => sum + d.value, 0);
+  const baseVal = useTotal ? totalVal : maxVal;
+  
   return (
     <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3">
@@ -178,7 +182,7 @@ function HBarChart({ data, title, barKey, labelKey }: {
               <span className="text-[11px] text-[#8899aa]">{d.name}</span>
               <span className="text-[12px] font-semibold text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
                 {typeof d.value === 'number' ? d.value.toLocaleString('en-IN') : d.value}
-                {d.value > 0 && <span className="text-[9px] text-[#5a6878] ml-1">({((d.value / maxVal) * 100).toFixed(0)}%)</span>}
+                {d.value > 0 && <span className="text-[9px] text-[#5a6878] ml-1">({((d.value / baseVal) * 100).toFixed(0)}%)</span>}
               </span>
             </div>
             <div className="w-full h-[8px] bg-[#0a0d12] rounded-full overflow-hidden">
@@ -267,6 +271,7 @@ export default function EmployeeAnalytics() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Safe fetch helper
   async function safeFetch(url: string): Promise<any> {
@@ -292,8 +297,41 @@ export default function EmployeeAnalytics() {
           safeFetch('/api/expenses'),
         ]);
 
-        setEmployees(Array.isArray(empData?.data) ? empData.data : []);
-        setAttendance(Array.isArray(attData?.data) ? attData.data : []);
+        // Map employee data to match expected format
+        const mappedEmployees = Array.isArray(empData?.data) ? empData.data.map((e: any) => ({
+          id: e.id?.toString() || '',
+          empId: e.employeeCode || '',
+          name: `${e.firstName || ''} ${e.lastName || ''}`.trim(),
+          role: e.Designation?.name || 'Unassigned',
+          site: e.Branch?.name || 'Unassigned',
+          type: e.employmentType || 'Unknown',
+          status: e.employmentStatus || 'Unknown',
+          trade: e.Department?.name || 'Unassigned',
+          joiningDate: e.dateOfJoining || '',
+          email: e.email || '',
+          phone: e.phone || '',
+          certifications: '',
+        })) : [];
+
+        // Map attendance data
+        const mappedAttendance = Array.isArray(attData?.data) ? attData.data.map((a: any) => ({
+          id: a.id?.toString() || '',
+          empId: a.employeeId?.toString() || '',
+          date: new Date(a.logDate).toISOString().split('T')[0],
+          status: a.status === 'present' ? 'Present' : a.status === 'absent' ? 'Absent' : 'Leave',
+          site: a.biometricDeviceId || '',
+          shift: '',
+          timeIn: a.punchIn ? new Date(a.punchIn).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '',
+          timeOut: a.punchOut ? new Date(a.punchOut).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '',
+          otHours: a.punchIn && a.punchOut ? Math.max(0, (new Date(a.punchOut).getTime() - new Date(a.punchIn).getTime()) / (1000 * 60 * 60) - 8) : 0,
+          employee: a.Employee ? {
+            name: `${a.Employee.firstName} ${a.Employee.lastName}`,
+            empId: a.Employee.employeeCode,
+          } : undefined,
+        })) : [];
+
+        setEmployees(mappedEmployees);
+        setAttendance(mappedAttendance);
         setLeaveRequests(Array.isArray(leaveData?.data) ? leaveData.data : []);
         setPayroll(Array.isArray(payData?.data) ? payData.data : []);
         setProjects(Array.isArray(projData?.data) ? projData.data : []);
@@ -309,19 +347,19 @@ export default function EmployeeAnalytics() {
   }, []);
 
   // ── Computed KPIs ──
-  const activeEmployees = employees.filter(e => e.status === 'Active').length;
+  const activeEmployees = employees.filter(e => e.status?.toLowerCase() === 'active').length;
   const totalEmployees = employees.length;
-  const pendingLeave = leaveRequests.filter(l => l.status === 'Pending').length;
+  const pendingLeave = leaveRequests.filter(l => l.status?.toLowerCase() === 'pending').length;
   const openTickets = tickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
   const pendingExpenses = expenses.filter(e => e.status === 'Pending').length;
   const totalPayroll = payroll.reduce((s, p) => s + (p.gross || 0), 0);
 
-  // Today's attendance
-  const today = new Date().toISOString().split('T')[0];
-  const todayAtt = attendance.filter(a => a.date === today);
+  // Today's attendance (or selected date)
+  const todayAtt = attendance.filter(a => a.date === selectedDate);
   const presentToday = todayAtt.filter(a => a.status === 'Present').length;
-  const absentToday = todayAtt.filter(a => a.status === 'Absent').length;
   const leaveToday = todayAtt.filter(a => a.status === 'Leave').length;
+  // Calculate absent as: active employees who are not present and not on leave
+  const absentToday = Math.max(0, activeEmployees - presentToday - leaveToday);
   const totalTodayAtt = todayAtt.length;
 
   // Department / Role distribution
@@ -362,9 +400,22 @@ export default function EmployeeAnalytics() {
   leaveRequests.forEach(l => {
     leaveTypeMap[l.type || 'Unknown'] = (leaveTypeMap[l.type || 'Unknown'] || 0) + 1;
   });
-  const leaveTypeData = Object.entries(leaveTypeMap).map(([name, value], i) => ({
-    name, value, color: COLORS[i % COLORS.length]
-  }));
+  
+  let leaveTypeData: { name: string; value: number; color: string }[] = [];
+  
+  if (Object.keys(leaveTypeMap).length > 0) {
+    leaveTypeData = Object.entries(leaveTypeMap).map(([name, value], i) => ({
+      name, value, color: COLORS[i % COLORS.length]
+    }));
+  } else {
+    // Show placeholder data when no leave requests exist
+    leaveTypeData = [
+      { name: 'Sick Leave', value: 0, color: COLORS[0] },
+      { name: 'Casual Leave', value: 0, color: COLORS[1] },
+      { name: 'Annual Leave', value: 0, color: COLORS[2] },
+      { name: 'Other', value: 0, color: COLORS[3] },
+    ];
+  }
 
   // Monthly payroll trend (last 6 months)
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -386,25 +437,42 @@ export default function EmployeeAnalytics() {
       payrollByMonth[key] = (payrollByMonth[key] || 0) + (p.gross || 0);
     }
   });
-  // Generate payroll trend from actual data months
-  const sortedPayrollMonths = Object.keys(payrollByMonth).sort((a, b) => {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const [am, ay] = a.split(' ');
-    const [bm, by] = b.split(' ');
-    const ai = monthNames.indexOf(am);
-    const bi = monthNames.indexOf(bm);
-    if (parseInt(ay) !== parseInt(by)) return parseInt(ay) - parseInt(by);
-    return ai - bi;
-  });
-  const trendMonths = sortedPayrollMonths.slice(-6);
-  const payrollTrend = trendMonths.map((key, i) => {
-    const monthStr = key.split(' ')[0];
-    return {
-      name: monthStr,
-      value: payrollByMonth[key] || 0,
-      color: i === trendMonths.length - 1 ? '#f5a623' : '#00d4ff',
-    };
-  });
+  
+  // Generate payroll trend from actual data months or show placeholder
+  let payrollTrend: { name: string; value: number; color: string }[] = [];
+  
+  if (Object.keys(payrollByMonth).length > 0) {
+    const sortedPayrollMonths = Object.keys(payrollByMonth).sort((a, b) => {
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const [am, ay] = a.split(' ');
+      const [bm, by] = b.split(' ');
+      const ai = monthNames.indexOf(am);
+      const bi = monthNames.indexOf(bm);
+      if (parseInt(ay) !== parseInt(by)) return parseInt(ay) - parseInt(by);
+      return ai - bi;
+    });
+    const trendMonths = sortedPayrollMonths.slice(-6);
+    payrollTrend = trendMonths.map((key, i) => {
+      const monthStr = key.split(' ')[0];
+      return {
+        name: monthStr,
+        value: payrollByMonth[key] || 0,
+        color: i === trendMonths.length - 1 ? '#f5a623' : '#00d4ff',
+      };
+    });
+  } else {
+    // Show placeholder data when no payroll exists
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    payrollTrend = Array.from({ length: 6 }, (_, i) => {
+      const monthIndex = (currentMonth - 5 + i + 12) % 12;
+      return {
+        name: monthNames[monthIndex],
+        value: 0,
+        color: i === 5 ? '#f5a623' : '#00d4ff',
+      };
+    });
+  }
 
   // KPI Cards
   const kpiCards: KpiCardData[] = [
@@ -443,7 +511,7 @@ export default function EmployeeAnalytics() {
     {
       label: 'Pending Claims',
       value: pendingExpenses,
-      sub: formatCurrency(expenses.filter(e => e.status === 'Pending').reduce((s, e) => s + (e.amount || 0), 0)),
+      sub: formatCurrency(expenses.filter(e => e.status?.toLowerCase() === 'pending').reduce((s, e) => s + (e.amount || 0), 0)),
       icon: Plane,
       color: '#a78bfa',
       trend: pendingExpenses > 0 ? 'up' : 'neutral',
@@ -476,8 +544,20 @@ export default function EmployeeAnalytics() {
             <p className="text-[11px] text-[#5a6878]">HRMS › Workforce Overview & Insights</p>
           </div>
         </div>
-        <div className="text-[10px] text-[#5a6878]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-          Last updated: {new Date().toLocaleDateString('en-IN')}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-lg px-3 py-2">
+            <span className="text-[10px] text-[#5a6878] font-semibold uppercase tracking-wider">Date:</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-transparent border-none text-[#e2e8f0] outline-none text-[11px] cursor-pointer"
+              style={{ fontFamily: "'Share Tech Mono', monospace" }}
+            />
+          </div>
+          <div className="text-[10px] text-[#5a6878]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+            Last updated: {new Date().toLocaleDateString('en-IN')}
+          </div>
         </div>
       </div>
 
@@ -523,9 +603,10 @@ export default function EmployeeAnalytics() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <HBarChart
           data={attBarData}
-          title={`Today's Attendance — ${totalTodayAtt} Records`}
+          title={`Attendance for ${new Date(selectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} — ${activeEmployees} Active Employees`}
           barKey="value"
           labelKey="name"
+          useTotal={true}
         />
         <HBarChart
           data={projectBarData.length > 0 ? projectBarData : [{ name: 'No Projects', value: 0, color: '#5a6878' }]}
@@ -543,15 +624,48 @@ export default function EmployeeAnalytics() {
 
       {/* ── Row 5: Payroll Trend & Leave Distribution ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <VBarChart data={payrollTrend} title="Monthly Payroll Trend (Gross)" />
-        <DonutChart data={leaveTypeData} title="Leave by Type" />
+        {payrollTrend.length > 0 ? (
+          <VBarChart data={payrollTrend} title="Monthly Payroll Trend (Gross)" />
+        ) : (
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart3 size={14} className="text-[#f5a623]" />
+              <span className="text-[12px] font-semibold text-[#e2e8f0]">Monthly Payroll Trend (Gross)</span>
+            </div>
+            <div className="h-[160px] flex items-center justify-center">
+              <div className="text-center">
+                <Wallet size={32} className="mx-auto text-[#5a6878] mb-2" />
+                <p className="text-[11px] text-[#5a6878]">No payroll data available</p>
+                <p className="text-[10px] text-[#5a6878] mt-1">Run payroll to see trends</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {leaveTypeData.some(d => d.value > 0) ? (
+          <DonutChart data={leaveTypeData} title="Leave by Type" />
+        ) : (
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <PieIcon size={14} className="text-[#f5a623]" />
+              <span className="text-[12px] font-semibold text-[#e2e8f0]">Leave by Type</span>
+            </div>
+            <div className="h-[160px] flex items-center justify-center">
+              <div className="text-center">
+                <CalendarOff size={32} className="mx-auto text-[#5a6878] mb-2" />
+                <p className="text-[11px] text-[#5a6878]">No leave requests yet</p>
+                <p className="text-[10px] text-[#5a6878] mt-1">Leave data will appear here</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Row 6: Recent attendance table ── */}
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <BarChart3 size={14} className="text-[#f5a623]" />
-          <span className="text-[12px] font-semibold text-[#e2e8f0]">Recent Attendance ({today})</span>
+          <span className="text-[12px] font-semibold text-[#e2e8f0]">Recent Attendance ({new Date(selectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})</span>
         </div>
         <div className="max-h-[240px] overflow-y-auto">
           <table className="w-full text-[11px]">
@@ -595,7 +709,7 @@ export default function EmployeeAnalytics() {
               })}
               {todayAtt.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-6 text-center text-[#5a6878]">No attendance records for today</td>
+                  <td colSpan={8} className="py-6 text-center text-[#5a6878]">No attendance records for {new Date(selectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                 </tr>
               )}
             </tbody>

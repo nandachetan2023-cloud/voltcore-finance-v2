@@ -9,42 +9,68 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const include = searchParams.get('include')
+    const includeDeleted = searchParams.get('includeDeleted') === 'true'
+    const limit = parseInt(searchParams.get('limit') || '1000')
+    const offset = parseInt(searchParams.get('offset') || '0')
+
+    const where: any = includeDeleted ? {} : { isDeleted: false }
 
     const selectBase: any = {
       id: true,
-      empId: true,
-      name: true,
+      employeeCode: true,
+      firstName: true,
+      middleName: true,
+      lastName: true,
       email: true,
       phone: true,
-      trade: true,
-      role: true,
-      site: true,
-      type: true,
-      status: true,
-      joiningDate: true,
-      certifications: true,
+      alternatePhone: true,
+      dateOfBirth: true,
+      gender: true,
+      employmentType: true,
+      employmentStatus: true,
+      dateOfJoining: true,
+      Department: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      Designation: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      Branch: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       createdAt: true,
       updatedAt: true,
     }
 
     if (include === 'attendance') {
-      selectBase.attendance = {
+      selectBase.attendanceLogs = {
         select: {
           id: true,
-          date: true,
-          site: true,
-          timeIn: true,
-          timeOut: true,
-          otHours: true,
-          shift: true,
+          logDate: true,
+          punchIn: true,
+          punchOut: true,
           status: true,
         },
+        orderBy: { logDate: 'desc' },
+        take: 30,
       }
     }
 
     const employees = await db.employee.findMany({
+      where,
       select: selectBase,
       orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset,
     })
 
     return NextResponse.json({ success: true, data: employees })
@@ -61,45 +87,134 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { empId, name, trade, role, site, joiningDate, email, phone, type, status, certifications } = body
+    const {
+      employeeCode,
+      firstName,
+      lastName,
+      email,
+      phone,
+      dateOfBirth,
+      gender,
+      currentAddress,
+      currentCity,
+      currentState,
+      currentPincode,
+      departmentId,
+      designationId,
+      branchId,
+      dateOfJoining,
+      employmentType,
+      employmentStatus,
+    } = body
 
-    if (!empId || !name || !trade || !role || !site || !joiningDate) {
+    if (!employeeCode || !firstName || !lastName || !email || !phone || !dateOfBirth || !gender || !currentAddress || !currentCity || !currentState || !currentPincode || !departmentId || !designationId || !branchId || !dateOfJoining) {
       return NextResponse.json(
-        { success: false, error: 'empId, name, trade, role, site, and joiningDate are required' },
+        { success: false, error: 'Required fields: employeeCode, firstName, lastName, email, phone, dateOfBirth, gender, currentAddress, currentCity, currentState, currentPincode, departmentId, designationId, branchId, dateOfJoining' },
         { status: 400 }
       )
     }
 
-    // Check empId uniqueness
-    const existing = await db.employee.findUnique({ where: { empId } })
-    if (existing) {
+    // Check employeeCode uniqueness (exclude soft-deleted employees)
+    const existingCode = await db.employee.findFirst({ 
+      where: { 
+        employeeCode,
+        isDeleted: false 
+      } 
+    })
+    if (existingCode) {
       return NextResponse.json(
-        { success: false, error: 'An employee with this empId already exists' },
+        { success: false, error: `Employee code ${employeeCode} is already assigned to ${existingCode.firstName} ${existingCode.lastName}` },
+        { status: 409 }
+      )
+    }
+
+    // Check email uniqueness (exclude soft-deleted employees)
+    const existingEmail = await db.employee.findFirst({ 
+      where: { 
+        email,
+        isDeleted: false 
+      } 
+    })
+    if (existingEmail) {
+      return NextResponse.json(
+        { success: false, error: `Email ${email} is already registered to ${existingEmail.firstName} ${existingEmail.lastName} (${existingEmail.employeeCode})` },
         { status: 409 }
       )
     }
 
     const employee = await db.employee.create({
       data: {
-        empId,
-        name,
-        trade,
-        role,
-        site,
-        joiningDate,
-        email: email || null,
-        phone: phone || null,
-        type: type || 'Staff',
-        status: status || 'Active',
-        certifications: certifications || '',
+        employeeCode,
+        firstName,
+        lastName,
+        email,
+        phone,
+        dateOfBirth: new Date(dateOfBirth),
+        gender,
+        currentAddress,
+        currentCity,
+        currentState,
+        currentPincode,
+        departmentId: parseInt(departmentId),
+        designationId: parseInt(designationId),
+        branchId: parseInt(branchId),
+        dateOfJoining: new Date(dateOfJoining),
+        employmentType: employmentType || 'permanent',
+        employmentStatus: employmentStatus || 'active',
+      },
+      include: {
+        Department: true,
+        Designation: true,
+        Branch: true,
       },
     })
 
     return NextResponse.json({ success: true, data: employee }, { status: 201 })
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const target = (error.meta?.target as string[]) || []
+      
+      // Check if it's a soft-deleted employee
+      if (target.includes('email')) {
+        const softDeleted = await db.employee.findFirst({
+          where: { email: body.email, isDeleted: true }
+        })
+        if (softDeleted) {
+          return NextResponse.json(
+            { 
+              success: false, 
+              error: `This email was previously used by a deleted employee (${softDeleted.employeeCode}). Please use a different email or contact administrator to permanently remove the old record.` 
+            },
+            { status: 409 }
+          )
+        }
+        return NextResponse.json(
+          { success: false, error: 'This email address is already registered to another employee' },
+          { status: 409 }
+        )
+      }
+      
+      if (target.includes('employeeCode')) {
+        const softDeleted = await db.employee.findFirst({
+          where: { employeeCode: body.employeeCode, isDeleted: true }
+        })
+        if (softDeleted) {
+          return NextResponse.json(
+            { 
+              success: false, 
+              error: `This employee code was previously used by a deleted employee. Please use a different code or contact administrator to permanently remove the old record.` 
+            },
+            { status: 409 }
+          )
+        }
+        return NextResponse.json(
+          { success: false, error: 'This employee code is already assigned to another employee' },
+          { status: 409 }
+        )
+      }
+      
       return NextResponse.json(
-        { success: false, error: 'An employee with this empId already exists' },
+        { success: false, error: 'An employee with this information already exists' },
         { status: 409 }
       )
     }
@@ -124,7 +239,15 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const existing = await db.employee.findUnique({ where: { id } })
+    const employeeId = parseInt(id.toString())
+    if (isNaN(employeeId)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid id format' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.employee.findUnique({ where: { id: employeeId } })
     if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Employee not found' },
@@ -132,9 +255,17 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // Convert date strings to Date objects if present
+    const updateData: any = { ...data }
+    if (updateData.dateOfBirth) updateData.dateOfBirth = new Date(updateData.dateOfBirth)
+    if (updateData.dateOfJoining) updateData.dateOfJoining = new Date(updateData.dateOfJoining)
+    if (updateData.departmentId) updateData.departmentId = parseInt(updateData.departmentId)
+    if (updateData.designationId) updateData.designationId = parseInt(updateData.designationId)
+    if (updateData.branchId) updateData.branchId = parseInt(updateData.branchId)
+
     const employee = await db.employee.update({
-      where: { id },
-      data,
+      where: { id: employeeId },
+      data: updateData,
     })
 
     return NextResponse.json({ success: true, data: employee })
@@ -157,7 +288,7 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id } = body
+    const { id, permanent } = body
 
     if (!id) {
       return NextResponse.json(
@@ -166,7 +297,23 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const existing = await db.employee.findUnique({ where: { id } })
+    const employeeId = parseInt(id.toString())
+    if (isNaN(employeeId)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid id format' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.employee.findUnique({ 
+      where: { id: employeeId },
+      include: {
+        attendanceLogs: { take: 1 },
+        payrollItems: { take: 1 },
+        salaryAssignments: { take: 1 },
+      }
+    })
+    
     if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Employee not found' },
@@ -174,11 +321,84 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await db.employee.delete({ where: { id } })
+    // Check if employee has related records
+    const hasRelatedRecords = 
+      existing.attendanceLogs.length > 0 || 
+      existing.payrollItems.length > 0 || 
+      existing.salaryAssignments.length > 0
 
-    return NextResponse.json({ success: true, data: { id } })
+    // If permanent flag is true, force hard delete
+    if (permanent === true) {
+      try {
+        await db.employee.delete({ where: { id: employeeId } })
+        return NextResponse.json({ 
+          success: true, 
+          data: { id: employeeId, softDeleted: false },
+          message: 'Employee permanently deleted'
+        })
+      } catch (deleteError) {
+        // If hard delete fails due to foreign key constraints, do soft delete
+        await db.employee.update({
+          where: { id: employeeId },
+          data: {
+            isDeleted: true,
+            isActive: false,
+            employmentStatus: 'separated',
+            // Append timestamp to email and code to allow reuse
+            email: `${existing.email}.deleted.${Date.now()}`,
+            employeeCode: `${existing.employeeCode}.deleted.${Date.now()}`,
+          },
+        })
+        return NextResponse.json({ 
+          success: true, 
+          data: { id: employeeId, softDeleted: true },
+          message: 'Employee marked as deleted and email/code freed for reuse'
+        })
+      }
+    }
+
+    if (hasRelatedRecords) {
+      // Soft delete - mark as deleted and free up email/code
+      await db.employee.update({
+        where: { id: employeeId },
+        data: {
+          isDeleted: true,
+          isActive: false,
+          employmentStatus: 'separated',
+          // Append timestamp to email and code to allow reuse
+          email: `${existing.email}.deleted.${Date.now()}`,
+          employeeCode: `${existing.employeeCode}.deleted.${Date.now()}`,
+        },
+      })
+
+      return NextResponse.json({ 
+        success: true, 
+        data: { id: employeeId, softDeleted: true },
+        message: 'Employee marked as deleted. Email and employee code are now available for reuse.'
+      })
+    } else {
+      // Hard delete if no related records
+      await db.employee.delete({ where: { id: employeeId } })
+
+      return NextResponse.json({ 
+        success: true, 
+        data: { id: employeeId, softDeleted: false },
+        message: 'Employee permanently deleted'
+      })
+    }
   } catch (error) {
     console.error('Error deleting employee:', error)
+    
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Cannot delete employee with related records. Employee has been marked as inactive instead.' 
+        },
+        { status: 409 }
+      )
+    }
+    
     return NextResponse.json(
       { success: false, error: 'Failed to delete employee' },
       { status: 500 }

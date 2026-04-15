@@ -6,9 +6,11 @@ import React, { Suspense, useState, useEffect } from 'react';
 const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType }>> = {
   dashboard: () => import('@/components/erp/dashboard'),
   employees: () => import('@/components/erp/employees'),
+  departments: () => import('@/components/erp/departments'),
+  designations: () => import('@/components/erp/designations'),
   attendance: () => import('@/components/erp/attendance'),
   leave: () => import('@/components/erp/leave'),
-  shift: () => import('@/components/erp/shift'),
+  shift: () => import('@/components/erp/shift-roster'),
   training: () => import('@/components/erp/training'),
   recruitment: () => import('@/components/erp/recruitment'),
   purchases: () => import('@/components/erp/purchases'),
@@ -41,6 +43,7 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   budget: () => import('@/components/erp/budget'),
   'financial-reports': () => import('@/components/erp/financial-reports'),
   'project-list': () => import('@/components/erp/projects'),
+  biometric: () => import('@/components/erp/biometric'),
 };
 
 function LoadingFallback() {

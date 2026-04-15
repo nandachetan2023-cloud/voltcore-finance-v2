@@ -11,7 +11,7 @@ import {
   BarChart3, ShoppingBag, TimerReset, Menu, X, Bell, ChevronRight, ChevronDown,
   ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileEdit, Landmark, Scale, Target, PieChart,
   Wallet, FileSpreadsheet, ReceiptIndianRupee, BadgeIndianRupee, CircleDollarSign, Undo2,
-  ArrowRightLeft, HandCoins, RefreshCw, AlertTriangle
+  ArrowRightLeft, HandCoins, RefreshCw, AlertTriangle, Award, Download, Fingerprint
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -21,7 +21,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Search, IndianRupee, Receipt, FileText, MapPin, ShieldAlert, Handshake,
   BarChart3, ShoppingBag, TimerReset, ArrowDownCircle, ArrowUpCircle, FileEdit,
   Landmark, Scale, Target, PieChart, Wallet, FileSpreadsheet, ReceiptIndianRupee,
-  BadgeIndianRupee, CircleDollarSign, Undo2, ArrowRightLeft, HandCoins,
+  BadgeIndianRupee, CircleDollarSign, Undo2, ArrowRightLeft, HandCoins, Award, Download,
+  Fingerprint,
 };
 
 const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'financial-reports'];
@@ -145,9 +146,47 @@ function SubModuleGrid({ moduleId }: { moduleId: string }) {
 }
 
 // ── Sidebar ─────────────────────────────────────────────────────
-function Sidebar() {
+function Sidebar({ onLogout }: { onLogout?: () => void }) {
   const { activeModule, activeParentModule, setActiveModule, sidebarOpen, setSidebarOpen } = useERPStore();
   const isSubNav = EXPANDABLE_MODULES.includes(activeParentModule) && activeParentModule !== 'dashboard';
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [userData, setUserData] = useState<{ name: string; email: string } | null>(null);
+
+  useEffect(() => {
+    // Load user data from localStorage
+    const userStr = localStorage.getItem('erp_auth_user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        setUserData(user);
+      } catch (e) {
+        console.error('Failed to parse user data:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    // Close user menu when clicking outside
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (showUserMenu && !target.closest('.user-menu-container')) {
+        setShowUserMenu(false);
+      }
+    };
+
+    if (showUserMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showUserMenu]);
+
+  const getInitials = (name: string) => {
+    const parts = name.split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
   const isPageModule = !isSubNav && PAGE_MODULES.includes(activeModule as string) && activeModule !== 'dashboard';
   const subModules = SUB_MODULES[activeParentModule] || [];
 
@@ -201,15 +240,40 @@ function Sidebar() {
             </button>
           )}
         </div>
-        <div className="border-t border-[#252e3a] p-3">
-          <div className="flex items-center gap-2 p-2 rounded-lg bg-[#141920] cursor-pointer">
-            <div className="w-[30px] h-[30px] rounded-full bg-gradient-to-br from-[#f5a623] to-[#e8891a] flex items-center justify-center text-[11px] font-bold text-black" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>RK</div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-semibold truncate">Rajesh Kumar</div>
-              <div className="text-[10px] text-[#5a6878]">HR Manager</div>
+        <div className="border-t border-[#252e3a] p-3 relative user-menu-container">
+          <button 
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className="w-full flex items-center gap-2 p-2 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors cursor-pointer"
+          >
+            <div className="w-[30px] h-[30px] rounded-full bg-gradient-to-br from-[#f5a623] to-[#e8891a] flex items-center justify-center text-[11px] font-bold text-black" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+              {userData ? getInitials(userData.name) : 'AD'}
             </div>
-            <ChevronDown size={14} className="text-[#5a6878] shrink-0" />
-          </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] font-semibold truncate">{userData?.name || 'Admin'}</div>
+              <div className="text-[10px] text-[#5a6878]">Administrator</div>
+            </div>
+            <ChevronDown size={14} className={`text-[#5a6878] shrink-0 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {/* User Menu Dropdown */}
+          {showUserMenu && (
+            <div className="absolute bottom-full left-3 right-3 mb-2 bg-[#161c24] border border-[#252e3a] rounded-lg shadow-lg overflow-hidden z-50">
+              <div className="p-3 border-b border-[#252e3a]">
+                <div className="text-[11px] font-semibold text-[#e2e8f0]">{userData?.name || 'Admin'}</div>
+                <div className="text-[10px] text-[#5a6878]">{userData?.email || 'admin@voltcore.com'}</div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowUserMenu(false);
+                  onLogout?.();
+                }}
+                className="w-full px-3 py-2 text-left text-[11px] text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-colors flex items-center gap-2"
+              >
+                <ArrowLeft size={14} />
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </aside>
     </>
@@ -217,11 +281,47 @@ function Sidebar() {
 }
 
 // ── Topbar ──────────────────────────────────────────────────────
-function Topbar() {
-  const { activeModule, triggerCreateDialog, setSidebarOpen } = useERPStore();
+function Topbar({ onLogout }: { onLogout?: () => void }) {
+  const { activeModule, setSidebarOpen } = useERPStore();
   const config = MODULE_CONFIG[activeModule];
   const [searchQuery, setSearchQuery] = useState('');
-  const showNewBtn = !NO_CREATE_MODULES.includes(activeModule);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+
+  // Fetch notifications on mount
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const response = await fetch('/api/notifications');
+      const data = await response.json();
+      if (data.success) {
+        setNotifications(data.data.notifications || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+      setNotifications([]);
+    }
+  };
+
+  useEffect(() => {
+    // Close notifications when clicking outside
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (showNotifications && !target.closest('.notifications-container')) {
+        setShowNotifications(false);
+      }
+    };
+
+    if (showNotifications) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showNotifications]);
+
+  const hasNotifications = notifications.length > 0;
 
   return (
     <header className="h-[50px] bg-[#161c24] border-b border-[#252e3a] flex items-center gap-3 px-4 shrink-0">
@@ -235,18 +335,54 @@ function Topbar() {
           <Search size={14} className="text-[#5a6878] shrink-0" />
           <input type="text" placeholder="Quick search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-transparent border-none text-[#e2e8f0] outline-none text-[12px] w-full" />
         </div>
-        {showNewBtn && <button className="vc-btn-primary" onClick={triggerCreateDialog}>+ New</button>}
-        <button className="relative text-[#8899aa] hover:text-[#e2e8f0] transition-colors">
-          <Bell size={16} />
-          <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#ff3d3d] rounded-full" />
-        </button>
+        
+        {/* Notifications Bell */}
+        <div className="relative notifications-container">
+          <button 
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative text-[#8899aa] hover:text-[#e2e8f0] transition-colors"
+          >
+            <Bell size={16} />
+            {hasNotifications && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#ff3d3d] rounded-full" />
+            )}
+          </button>
+
+          {/* Notifications Dropdown */}
+          {showNotifications && (
+            <div className="absolute top-full right-0 mt-2 w-[320px] bg-[#161c24] border border-[#252e3a] rounded-lg shadow-lg overflow-hidden z-50">
+              <div className="p-3 border-b border-[#252e3a] flex items-center justify-between">
+                <div className="text-[12px] font-semibold text-[#e2e8f0]">Notifications</div>
+                {hasNotifications && (
+                  <span className="text-[10px] text-[#5a6878]">{notifications.length} new</span>
+                )}
+              </div>
+              <div className="max-h-[400px] overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <Bell size={32} className="mx-auto text-[#5a6878] mb-2" />
+                    <p className="text-[11px] text-[#5a6878]">No new notifications</p>
+                  </div>
+                ) : (
+                  notifications.map((notif, idx) => (
+                    <div key={idx} className="p-3 border-b border-[#252e3a] hover:bg-[#141920] transition-colors cursor-pointer">
+                      <div className="text-[11px] text-[#e2e8f0] mb-1">{notif.title}</div>
+                      <div className="text-[10px] text-[#5a6878]">{notif.message}</div>
+                      <div className="text-[9px] text-[#5a6878] mt-1">{notif.time}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
 }
 
 // ── Main Layout ─────────────────────────────────────────────────
-export default function ERPLayout() {
+export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
   const { activeModule } = useERPStore();
   const [mounted, setMounted] = useState(false);
 
@@ -291,9 +427,9 @@ export default function ERPLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#0a0d12]">
-      <Sidebar />
+      <Sidebar onLogout={onLogout} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <Topbar />
+        <Topbar onLogout={onLogout} />
         <main className="flex-1 overflow-y-auto">
           <div className="animate-in fade-in duration-200">
             {isDashboard ? <ModuleGrid /> : isSubGrid ? <SubModuleGrid moduleId={activeModule} /> : <ModuleRenderer moduleKey={activeModule} />}

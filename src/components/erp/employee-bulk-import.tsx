@@ -1,0 +1,440 @@
+'use client';
+
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
+import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
+
+interface ImportResult {
+  success: boolean;
+  summary: {
+    totalRows: number;
+    validRows: number;
+    importedRows: number;
+    skippedRows: number;
+    errorRows: number;
+  };
+  errors: Array<{
+    row: number;
+    employeeCode: string;
+    field: string;
+    message: string;
+  }>;
+  warnings: Array<{
+    row: number;
+    employeeCode: string;
+    field: string;
+    message: string;
+  }>;
+  imported: Array<{
+    employeeCode: string;
+    name: string;
+  }>;
+}
+
+export default function EmployeeBulkImport({ onImportComplete }: { onImportComplete?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [selectedSheet, setSelectedSheet] = useState<string>('');
+  const [uploading, setUploading] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<ImportResult | null>(null);
+  const [showResults, setShowResults] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      if (!selectedFile.name.endsWith('.xlsx') && !selectedFile.name.endsWith('.xls')) {
+        toast.error('Please select an Excel file (.xlsx or .xls)');
+        return;
+      }
+      
+      setFile(selectedFile);
+      setValidationResult(null);
+      setShowResults(false);
+      
+      // Read sheet names
+      try {
+        const buffer = await selectedFile.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const sheets = workbook.SheetNames;
+        
+        setSheetNames(sheets);
+        
+        // Auto-select if only one sheet or if there's an "employee format" sheet
+        if (sheets.length === 1) {
+          setSelectedSheet(sheets[0]);
+          toast.success('File loaded successfully');
+        } else {
+          const employeeSheet = sheets.find(name => 
+            name.toLowerCase().includes('employee') || 
+            name.toLowerCase().includes('format')
+          );
+          if (employeeSheet) {
+            setSelectedSheet(employeeSheet);
+            toast.success(`Auto-selected sheet: ${employeeSheet}`);
+          } else {
+            setSelectedSheet('');
+            toast.info('Please select which sheet contains employee data');
+          }
+        }
+      } catch (error) {
+        toast.error('Failed to read Excel file');
+        setFile(null);
+      }
+    }
+  };
+
+  const handleValidate = async () => {
+    if (!file) {
+      toast.error('Please select a file first');
+      return;
+    }
+
+    if (!selectedSheet) {
+      toast.error('Please select a sheet');
+      return;
+    }
+
+    try {
+      setValidating(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('sheetName', selectedSheet);
+      formData.append('dryRun', 'true');
+
+      const response = await fetch('/api/employees/bulk-import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setValidationResult(data);
+        setShowResults(true);
+        toast.success('Validation complete');
+      } else {
+        toast.error(data.error || 'Validation failed');
+      }
+    } catch (error) {
+      toast.error('Validation failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!file) {
+      toast.error('Please select a file first');
+      return;
+    }
+
+    if (!selectedSheet) {
+      toast.error('Please select a sheet');
+      return;
+    }
+
+    try {
+      setUploading(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('sheetName', selectedSheet);
+      formData.append('dryRun', 'false');
+
+      const response = await fetch('/api/employees/bulk-import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setValidationResult(data);
+        setShowResults(true);
+        toast.success(`Successfully imported ${data.summary.importedRows} employees!`);
+        
+        if (onImportComplete) {
+          onImportComplete();
+        }
+      } else {
+        toast.error(data.error || 'Import failed');
+      }
+    } catch (error) {
+      toast.error('Import failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    // Create a link to download the template file
+    const link = document.createElement('a');
+    link.href = '/employee-import-template.xlsx';
+    link.download = 'employee-import-template.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Template download started');
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="bg-[#f5a623] hover:bg-[#f5a623]/90">
+          <Upload className="w-4 h-4 mr-2" />
+          Bulk Import
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-[#0d1117] border-[#30363d]">
+        <DialogHeader>
+          <DialogTitle className="text-white">Bulk Import Employees</DialogTitle>
+          <DialogDescription>
+            Upload an Excel file to import multiple employees at once
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          {/* File Upload */}
+          <Card className="bg-[#161b22] border-[#30363d]">
+            <CardHeader>
+              <CardTitle className="text-white text-sm">Step 1: Select Excel File</CardTitle>
+              <CardDescription>
+                Use the employee format template with all required fields
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                <label className="flex-1">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  <div className="flex items-center gap-3 p-4 border-2 border-dashed border-[#30363d] rounded-lg cursor-pointer hover:border-[#f5a623] transition-colors">
+                    <FileSpreadsheet className="w-8 h-8 text-gray-400" />
+                    <div className="flex-1">
+                      {file ? (
+                        <div>
+                          <p className="text-white font-medium">{file.name}</p>
+                          <p className="text-sm text-gray-400">{(file.size / 1024).toFixed(2)} KB</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-white">Click to select Excel file</p>
+                          <p className="text-sm text-gray-400">or drag and drop</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </label>
+                <Button
+                  variant="outline"
+                  onClick={downloadTemplate}
+                  className="border-[#30363d]"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Template
+                </Button>
+              </div>
+
+              {/* Sheet Selector */}
+              {file && sheetNames.length > 1 && (
+                <div className="space-y-2">
+                  <label className="text-sm text-gray-300">Select Sheet with Employee Data</label>
+                  <Select value={selectedSheet} onValueChange={setSelectedSheet}>
+                    <SelectTrigger className="bg-[#0d1117] border-[#30363d] text-white">
+                      <SelectValue placeholder="Choose a sheet..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#161b22] border-[#30363d]">
+                      {sheetNames.map((name) => (
+                        <SelectItem key={name} value={name} className="text-white">
+                          {name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {file && (
+                <div className="flex gap-3">
+                  <Button
+                    onClick={handleValidate}
+                    disabled={validating}
+                    variant="outline"
+                    className="border-[#30363d]"
+                  >
+                    {validating ? 'Validating...' : 'Validate'}
+                  </Button>
+                  <Button
+                    onClick={handleImport}
+                    disabled={uploading || !validationResult}
+                    className="bg-[#f5a623] hover:bg-[#f5a623]/90"
+                  >
+                    {uploading ? 'Importing...' : 'Import'}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Validation Results */}
+          {showResults && validationResult && (
+            <>
+              {/* Summary */}
+              <Card className="bg-[#161b22] border-[#30363d]">
+                <CardHeader>
+                  <CardTitle className="text-white text-sm">Import Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-white">
+                        {validationResult.summary.totalRows}
+                      </div>
+                      <div className="text-sm text-gray-400">Total Rows</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-500">
+                        {validationResult.summary.validRows}
+                      </div>
+                      <div className="text-sm text-gray-400">Valid</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-500">
+                        {validationResult.summary.importedRows}
+                      </div>
+                      <div className="text-sm text-gray-400">Imported</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-yellow-500">
+                        {validationResult.warnings.length}
+                      </div>
+                      <div className="text-sm text-gray-400">Warnings</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-red-500">
+                        {validationResult.summary.errorRows}
+                      </div>
+                      <div className="text-sm text-gray-400">Errors</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Imported Employees */}
+              {validationResult.imported.length > 0 && (
+                <Card className="bg-[#161b22] border-[#30363d]">
+                  <CardHeader>
+                    <CardTitle className="text-white text-sm flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      Successfully Imported ({validationResult.imported.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="max-h-48 overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-[#30363d]">
+                            <TableHead className="text-gray-400">Employee Code</TableHead>
+                            <TableHead className="text-gray-400">Name</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {validationResult.imported.slice(0, 50).map((emp, idx) => (
+                            <TableRow key={idx} className="border-[#30363d]">
+                              <TableCell className="text-white font-mono">{emp.employeeCode}</TableCell>
+                              <TableCell className="text-white">{emp.name}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Warnings */}
+              {validationResult.warnings.length > 0 && (
+                <Card className="bg-[#161b22] border-[#30363d]">
+                  <CardHeader>
+                    <CardTitle className="text-white text-sm flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-yellow-500" />
+                      Warnings ({validationResult.warnings.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="max-h-48 overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-[#30363d]">
+                            <TableHead className="text-gray-400">Row</TableHead>
+                            <TableHead className="text-gray-400">Employee Code</TableHead>
+                            <TableHead className="text-gray-400">Message</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {validationResult.warnings.map((warning, idx) => (
+                            <TableRow key={idx} className="border-[#30363d]">
+                              <TableCell className="text-yellow-500">{warning.row}</TableCell>
+                              <TableCell className="text-white font-mono">{warning.employeeCode}</TableCell>
+                              <TableCell className="text-gray-300">{warning.message}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Errors */}
+              {validationResult.errors.length > 0 && (
+                <Card className="bg-[#161b22] border-[#30363d]">
+                  <CardHeader>
+                    <CardTitle className="text-white text-sm flex items-center gap-2">
+                      <XCircle className="w-4 h-4 text-red-500" />
+                      Errors ({validationResult.errors.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="max-h-48 overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-[#30363d]">
+                            <TableHead className="text-gray-400">Row</TableHead>
+                            <TableHead className="text-gray-400">Employee Code</TableHead>
+                            <TableHead className="text-gray-400">Message</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {validationResult.errors.map((error, idx) => (
+                            <TableRow key={idx} className="border-[#30363d]">
+                              <TableCell className="text-red-500">{error.row}</TableCell>
+                              <TableCell className="text-white font-mono">{error.employeeCode}</TableCell>
+                              <TableCell className="text-gray-300">{error.message}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

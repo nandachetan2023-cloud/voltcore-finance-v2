@@ -1,0 +1,73 @@
+# HRMS Data Mapping & Sheet Analysis
+
+This document outlines the structure of the provided Excel sheets and explains how the data within each sheet can be utilized within a Human Resource Management System (HRMS).
+
+---
+
+## 1. Sheet: `employee format` (Employee Master Data)
+
+This sheet contains the foundational demographic, statutory, and organizational data for every employee.
+
+### **Data Present:**
+* **Personal Details:** Employee ID, Full Name, Gender, Father's Name, Date of Birth, Blood Group, Ethnicity/Nationality ID, Mark of Identification.
+* **Contact & Address:** Contact No., Personal & Work Email, Current Address (Village, Post Office, Police Station, District, State, ZIP), Permanent Address.
+* **Statutory & Identification:** UAN (Provident Fund), ESIC, LWF, UIDIA (Aadhaar), PAN.
+* **Financial Details:** Bank Name, Bank Branch, Account Number, Bank Code (IFSC).
+* **Employment Details:** Company ID, Location ID, Date of Joining, Department ID, Designation ID, Skill Category, Type of Employment, Reports To (Manager), Office Shift ID.
+* **System & Access:** User Role ID, Username, Password.
+* **Emergency & Background:** Education Level, Emergency Contact (Name, Email, Phone, Relation).
+* **Lifecycle Status:** Status (Active/Inactive), Reason of Exit, Date of Exit, Service Book.
+
+### **How it is used in an HRMS:**
+* **Core Employee Database:** Acts as the central repository (Master Data) for all employee records.
+* **Onboarding & Offboarding:** Tracks an employee's lifecycle from the `date_of_joining` to the `date_of_exit` and manages separation reasons.
+* **Access Control:** Uses the `username`, `password`, and `user_role_id` to grant employees self-service portal access with appropriate permissions.
+* **Organizational Hierarchy:** The `reports_to` and `department_id` fields are used to build the company org chart and route leave/expense approval workflows to the correct managers.
+* **Compliance Verification:** Stores vital compliance IDs (PAN, Aadhaar, UAN) necessary for legal employment and tax filing.
+
+---
+
+## 2. Sheet: `Salary comp.` (Payroll Computation & Attendance)
+
+This sheet is a transactional database used to calculate the monthly wages based on attendance, fixed salaries, and variable components.
+
+### **Data Present:**
+* **Employee Identifiers:** Token No., Sl. No., Name, Father's Name, DOJ, DOB, Bank Details, UAN, ESIC IP No.
+* **Role Info:** Designation, Department, Nature of Designation.
+* **Attendance Metrics:** Monthly Working Days, Actual Attendance, Extra Days, PH (Public Holiday) Days, OT (Overtime) Hrs.
+* **Earnings Breakdown:** Monthly Gross Salary, Basic Wages/Day, Earn Wages, PH Amount, OT Amount, Total Earn Wages.
+* **Allowances:** Monthly Basic Salary, House Rent Allowance (HRA), Site Allowance, Leave Travel Allowance (LTA), Special Allowance, Attendance Allowance.
+* **Deductions & Advances:** EPF, ESIC, PT (Professional Tax), TDS, Advances, Arrears, Total Deductions.
+* **Final Payout:** Total Nett Payable, Grand Total Nett Payable Salary.
+
+### **How it is used in an HRMS:**
+* **Payroll Processing Engine:** The HRMS payroll module ingests this data to automate the calculation of gross-to-net pay. 
+* **Time & Attendance Integration:** The attendance metrics (Actual Attendance, OT Hours) bridge the gap between the time-tracking module and the payroll module.
+* **Statutory Deductions:** Automatically calculates and deducts exact amounts for EPF, ESIC, and PT based on the basic wages and gross earnings, ensuring legal compliance.
+* **Expense & Advance Management:** Tracks loan/advance recoveries (`ADVANCE` column) against the employee's monthly salary.
+
+---
+
+## 3. Sheet: `Salary sheet` (Payslip Generation)
+
+This sheet represents the formatted output of the payroll computation, designed to be employee-facing.
+
+### **Data Present:**
+* **Employer Details:** Name & Address of Principal Employer (e.g., Hindalco Industries Ltd.), Vendor/Associate Name (e.g., Upasana Associate).
+* **Payslip Metadata:** "Employee pay summary for the month of [Month-Year]".
+* **Employee Summary:** Employee Name, Code, Designation, Total Working Days, Attended Days.
+* **Bank & Statutory Summary:** Bank Name, Account No, IFSC, EPF Number, UAN Number, ESIC Number.
+* **Earnings Table:** Clear itemization of Basic Salary, HRA, Site Allowances, Travel Allowances, Special Allowances, Attendance Allowances, OT Amount, PH Amount.
+* **Deductions Table:** Clear itemization of EPF, ESIC, PT, Advances, Other Deductions.
+
+### **How it is used in an HRMS:**
+* **Employee Self-Service (ESS):** The HRMS uses this template structure to automatically generate monthly PDF payslips. Employees can log into their portal and download this document.
+* **Transparency & Dispute Resolution:** Provides a clear, human-readable breakdown of exactly how the `Total Nett Payable` from the "Salary comp" sheet was achieved.
+* **Audit & Labor Law Compliance:** Labor laws require employers to provide a structured wage slip to workmen. The HRMS automates the generation of these compliant formats for audits.
+
+---
+
+### **Summary of the HRMS Workflow**
+1. **Setup:** The HR admin enters the employee into the system using the **`employee format`** data.
+2. **Monthly Cycle:** The system tracks attendance and calculates wages, allowances, and deductions using the logic found in the **`Salary comp.`** sheet.
+3. **Distribution:** The system formats the finalized payroll data into the readable **`Salary sheet`** template and emails/publishes it to the employee's dashboard.

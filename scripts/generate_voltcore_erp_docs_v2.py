@@ -165,7 +165,10 @@ def make_table(headers, rows, col_widths=None):
 
 
 # ---- Build the Document ----
-OUTPUT_PATH = "/home/z/my-project/download/voltcore_erp_documentation.pdf"
+import os
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+OUTPUT_PATH = os.path.join(PROJECT_ROOT, "download", "voltcore_erp_documentation.pdf")
 
 doc = SimpleDocTemplate(
     OUTPUT_PATH,
