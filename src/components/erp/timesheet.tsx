@@ -30,7 +30,7 @@ interface AttendanceRecord {
   punchOut: string | null;
   status: string;
   biometricDeviceId: string | null;
-  employee: {
+  Employee: {
     employeeCode: string;
     firstName: string;
     lastName: string;
@@ -144,89 +144,155 @@ export default function TimesheetModule() {
   const [error, setError] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [siteFilter, setSiteFilter] = useState('');
+  const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
-  const weekLabel = useMemo(() => {
-    const start = weekDates[0];
-    const end = weekDates[6];
-    const sameMonth = start.getMonth() === end.getMonth();
-    if (sameMonth) {
-      return `${start.getDate()} – ${end.getDate()} ${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
+  
+  // Get date range based on view mode
+  const dateRange = useMemo(() => {
+    if (viewMode === 'daily') {
+      const date = new Date(selectedDate);
+      return { start: date, end: date, dates: [date] };
+    } else if (viewMode === 'weekly') {
+      return { start: weekDates[0], end: weekDates[6], dates: weekDates };
+    } else {
+      // Monthly
+      const date = new Date(selectedDate);
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const dates: Date[] = [];
+      for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+        dates.push(new Date(d));
+      }
+      return { start: firstDay, end: lastDay, dates };
     }
-    return `${start.getDate()} ${MONTH_NAMES[start.getMonth()]} – ${end.getDate()} ${MONTH_NAMES[end.getMonth()]} ${start.getFullYear()}`;
-  }, [weekDates]);
+  }, [viewMode, weekDates, selectedDate]);
+  
+  const weekLabel = useMemo(() => {
+    if (viewMode === 'daily') {
+      const date = new Date(selectedDate);
+      return `${date.getDate()} ${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
+    } else if (viewMode === 'weekly') {
+      const start = weekDates[0];
+      const end = weekDates[6];
+      const sameMonth = start.getMonth() === end.getMonth();
+      if (sameMonth) {
+        return `${start.getDate()} – ${end.getDate()} ${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
+      }
+      return `${start.getDate()} ${MONTH_NAMES[start.getMonth()]} – ${end.getDate()} ${MONTH_NAMES[end.getMonth()]} ${start.getFullYear()}`;
+    } else {
+      const date = new Date(selectedDate);
+      return `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
+    }
+  }, [viewMode, weekDates, selectedDate]);
 
-  const isCurrentWeek = weekOffset === 0;
+  const isCurrentWeek = weekOffset === 0 && viewMode === 'weekly';
+  const isToday = selectedDate === new Date().toISOString().split('T')[0] && viewMode === 'daily';
+  const isCurrentMonth = (() => {
+    if (viewMode !== 'monthly') return false;
+    const now = new Date();
+    const selected = new Date(selectedDate);
+    return now.getMonth() === selected.getMonth() && now.getFullYear() === selected.getFullYear();
+  })();
 
-  // Build attendance lookup: employeeId + date -> record
+  // Build attendance lookup: employeeCode + date -> record (using employeeCode for stability)
   const attMap = useMemo(() => {
     const map: Record<string, AttendanceRecord> = {};
     attendance.forEach(a => {
       const dateStr = new Date(a.logDate).toISOString().split('T')[0];
-      map[`${a.employeeId}_${dateStr}`] = a;
+      // Use employeeCode from the attendance record's Employee object (PascalCase from API)
+      const empCode = a.Employee?.employeeCode;
+      if (empCode) {
+        map[`${empCode}_${dateStr}`] = a;
+      } else {
+        console.warn('⚠️ Attendance record missing employee code:', a);
+      }
     });
+    console.log('🔍 Timesheet: Attendance map built with', Object.keys(map).length, 'entries');
+    console.log('🔍 Timesheet: Sample map keys:', Object.keys(map).slice(0, 5));
     return map;
   }, [attendance]);
 
-  // Filtered employees
+  // Filtered employees (deduplicate by employeeCode)
   const sites = useMemo(() => {
-    const s = new Set(employees.map(e => e.Branch?.name).filter(Boolean));
+    const s = new Set(employees.map(e => e.branch?.name).filter(Boolean));
     return Array.from(s).sort();
   }, [employees]);
 
   const filteredEmployees = useMemo(() => {
     let result = employees.filter(e => e.employmentStatus === 'active');
-    if (siteFilter) result = result.filter(e => e.Branch?.name === siteFilter);
+    if (siteFilter) result = result.filter(e => e.branch?.name === siteFilter);
+    
+    // Deduplicate by employeeCode (keep the first occurrence)
+    const seen = new Set<string>();
+    result = result.filter(e => {
+      if (seen.has(e.employeeCode)) {
+        console.warn(`Duplicate employee found: ${e.employeeCode} - ${e.firstName} ${e.lastName}`);
+        return false;
+      }
+      seen.add(e.employeeCode);
+      return true;
+    });
+    
     return result;
   }, [employees, siteFilter]);
 
-  // Computed stats for the week
+  // Computed stats for the date range
   const stats = useMemo(() => {
-    const weekStart = formatDate(weekDates[0]);
-    const weekEnd = formatDate(weekDates[6]);
-    const weekRecords = attendance.filter(a => {
+    const startStr = formatDate(dateRange.start);
+    const endStr = formatDate(dateRange.end);
+    const rangeRecords = attendance.filter(a => {
       const dateStr = new Date(a.logDate).toISOString().split('T')[0];
-      return dateStr >= weekStart && dateStr <= weekEnd;
+      return dateStr >= startStr && dateStr <= endStr;
     });
 
-    const present = weekRecords.filter(a => a.status.toLowerCase() === 'present').length;
-    const absent = weekRecords.filter(a => a.status.toLowerCase() === 'absent').length;
-    const onLeave = weekRecords.filter(a => a.status.toLowerCase() === 'leave').length;
+    const present = rangeRecords.filter(a => a.status.toLowerCase() === 'present').length;
+    const absent = rangeRecords.filter(a => a.status.toLowerCase() === 'absent').length;
+    const onLeave = rangeRecords.filter(a => a.status.toLowerCase() === 'leave').length;
     
     let totalOt = 0;
-    weekRecords.forEach(a => {
+    rangeRecords.forEach(a => {
       if (a.status.toLowerCase() === 'present' && a.punchIn && a.punchOut) {
         const hours = calcHours(a.punchIn, a.punchOut);
         totalOt += calcOtHours(hours);
       }
     });
     
-    // Count unique employees who were present this week
+    // Count unique employees who were present in this range
     const uniquePresent = new Set(
-      weekRecords
+      rangeRecords
         .filter(a => a.status.toLowerCase() === 'present')
         .map(a => a.employeeId)
     ).size;
 
     return { present, absent, onLeave, totalOt: Math.round(totalOt * 10) / 10, uniquePresent };
-  }, [attendance, weekDates]);
+  }, [attendance, dateRange]);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Fetch employees and attendance for the week range
-      const weekStart = formatDate(weekDates[0]);
-      const weekEnd = formatDate(weekDates[6]);
+      // Fetch employees and attendance for the date range
+      const startStr = formatDate(dateRange.start);
+      const endStr = formatDate(dateRange.end);
+      
+      console.log('🔍 Timesheet: Fetching data for range:', startStr, 'to', endStr);
+      console.log('🔍 Timesheet: View mode:', viewMode);
       
       const [empRes, attRes] = await Promise.all([
         fetch('/api/employees'),
-        fetch(`/api/attendance?limit=1000`), // Get more records to cover the week
+        fetch(`/api/attendance?limit=10000`), // Get more records for monthly view
       ]);
       
       const empJson = await empRes.json();
       const attJson = await attRes.json();
+      
+      console.log('🔍 Timesheet: Employees fetched:', empJson.data?.length);
+      console.log('🔍 Timesheet: Attendance records fetched:', attJson.data?.length);
       
       if (empJson.success) {
         setEmployees(empJson.data || []);
@@ -235,12 +301,14 @@ export default function TimesheetModule() {
       }
       
       if (attJson.success) {
-        // Filter attendance records to only include the current week
-        const weekAttendance = (attJson.data || []).filter((a: AttendanceRecord) => {
+        // Filter attendance records to only include the current date range
+        const rangeAttendance = (attJson.data || []).filter((a: AttendanceRecord) => {
           const dateStr = new Date(a.logDate).toISOString().split('T')[0];
-          return dateStr >= weekStart && dateStr <= weekEnd;
+          return dateStr >= startStr && dateStr <= endStr;
         });
-        setAttendance(weekAttendance);
+        console.log('🔍 Timesheet: Filtered attendance for range:', rangeAttendance.length);
+        console.log('🔍 Timesheet: Sample attendance:', rangeAttendance.slice(0, 3));
+        setAttendance(rangeAttendance);
       } else {
         throw new Error(attJson.error || 'Failed to fetch attendance');
       }
@@ -249,16 +317,17 @@ export default function TimesheetModule() {
     } finally {
       setLoading(false);
     }
-  }, [weekDates]);
+  }, [dateRange, viewMode]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleExport = () => {
+    const dates = dateRange.dates;
     const headers = [
       'Employee',
       'Emp ID',
       'Site',
-      ...DAYS.map((_, i) => `${DAYS[i]} ${formatDisplayDate(weekDates[i])}`),
+      ...dates.map(d => formatDisplayDate(d)),
       'Total Hrs',
       'OT Hrs',
       'Days Present'
@@ -268,16 +337,16 @@ export default function TimesheetModule() {
       const cells = [
         `"${emp.firstName} ${emp.lastName}"`,
         emp.employeeCode,
-        emp.Branch?.name || ''
+        emp.branch?.name || ''
       ];
       
       let totalHrs = 0;
       let totalOt = 0;
       let daysPresent = 0;
       
-      DAYS.forEach((_, i) => {
-        const dateStr = formatDate(weekDates[i]);
-        const record = attMap[`${emp.id}_${dateStr}`];
+      dates.forEach(date => {
+        const dateStr = formatDate(date);
+        const record = attMap[`${emp.employeeCode}_${dateStr}`];
         
         if (record && record.status.toLowerCase() === 'present' && record.punchIn && record.punchOut) {
           const hrs = calcHours(record.punchIn, record.punchOut);
@@ -295,7 +364,7 @@ export default function TimesheetModule() {
         }
       });
       
-      cells.push(`${totalHrs}h`, `${totalOt}h`, `${daysPresent}/7`);
+      cells.push(`${totalHrs}h`, `${totalOt}h`, `${daysPresent}/${dates.length}`);
       return cells.join(',');
     });
     
@@ -304,7 +373,7 @@ export default function TimesheetModule() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `timesheet-${weekLabel.replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+    a.download = `timesheet-${viewMode}-${weekLabel.replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -338,6 +407,15 @@ export default function TimesheetModule() {
         </div>
         <div className="flex items-center gap-2">
           <select
+            className="vc-input w-[100px] text-[11px] appearance-none cursor-pointer"
+            value={viewMode}
+            onChange={e => setViewMode(e.target.value as 'daily' | 'weekly' | 'monthly')}
+          >
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+          <select
             className="vc-input w-[120px] text-[11px] appearance-none cursor-pointer"
             value={siteFilter}
             onChange={e => setSiteFilter(e.target.value)}
@@ -355,29 +433,70 @@ export default function TimesheetModule() {
         </div>
       </div>
 
-      {/* ── Week Navigator ── */}
+      {/* ── Date Navigator ── */}
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-3 flex items-center justify-between">
         <button
           className="flex items-center gap-1.5 text-[#8899aa] hover:text-[#e2e8f0] transition-colors text-[12px] font-medium"
-          onClick={() => setWeekOffset(w => w - 1)}
+          onClick={() => {
+            if (viewMode === 'weekly') {
+              setWeekOffset(w => w - 1);
+            } else if (viewMode === 'daily') {
+              const date = new Date(selectedDate);
+              date.setDate(date.getDate() - 1);
+              setSelectedDate(date.toISOString().split('T')[0]);
+            } else {
+              const date = new Date(selectedDate);
+              date.setMonth(date.getMonth() - 1);
+              setSelectedDate(date.toISOString().split('T')[0]);
+            }
+          }}
         >
           <ChevronLeft size={16} />
-          <span className="hidden sm:inline">Prev Week</span>
+          <span className="hidden sm:inline">Prev {viewMode === 'daily' ? 'Day' : viewMode === 'weekly' ? 'Week' : 'Month'}</span>
         </button>
         <div className="text-center">
           <div className="text-[14px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
             {weekLabel}
           </div>
-          {isCurrentWeek && (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-[#00e676] bg-[#00e676]/10 px-2 py-[1px] rounded">Current Week</span>
+          {(isCurrentWeek || isToday || isCurrentMonth) && (
+            <span className="text-[9px] font-bold uppercase tracking-wider text-[#00e676] bg-[#00e676]/10 px-2 py-[1px] rounded">
+              {viewMode === 'daily' ? 'Today' : viewMode === 'weekly' ? 'Current Week' : 'Current Month'}
+            </span>
           )}
         </div>
         <button
-          className={`flex items-center gap-1.5 text-[12px] font-medium transition-colors ${weekOffset >= 0 ? 'text-[#5a6878] cursor-not-allowed' : 'text-[#8899aa] hover:text-[#e2e8f0]'}`}
-          onClick={() => setWeekOffset(w => Math.min(w + 1, 0))}
-          disabled={weekOffset >= 0}
+          className={`flex items-center gap-1.5 text-[12px] font-medium transition-colors ${
+            (viewMode === 'weekly' && weekOffset >= 0) || 
+            (viewMode === 'daily' && selectedDate >= new Date().toISOString().split('T')[0]) ||
+            (viewMode === 'monthly' && isCurrentMonth)
+              ? 'text-[#5a6878] cursor-not-allowed' 
+              : 'text-[#8899aa] hover:text-[#e2e8f0]'
+          }`}
+          onClick={() => {
+            if (viewMode === 'weekly') {
+              setWeekOffset(w => Math.min(w + 1, 0));
+            } else if (viewMode === 'daily') {
+              const date = new Date(selectedDate);
+              const today = new Date().toISOString().split('T')[0];
+              if (selectedDate < today) {
+                date.setDate(date.getDate() + 1);
+                setSelectedDate(date.toISOString().split('T')[0]);
+              }
+            } else {
+              if (!isCurrentMonth) {
+                const date = new Date(selectedDate);
+                date.setMonth(date.getMonth() + 1);
+                setSelectedDate(date.toISOString().split('T')[0]);
+              }
+            }
+          }}
+          disabled={
+            (viewMode === 'weekly' && weekOffset >= 0) || 
+            (viewMode === 'daily' && selectedDate >= new Date().toISOString().split('T')[0]) ||
+            (viewMode === 'monthly' && isCurrentMonth)
+          }
         >
-          <span className="hidden sm:inline">Next Week</span>
+          <span className="hidden sm:inline">Next {viewMode === 'daily' ? 'Day' : viewMode === 'weekly' ? 'Week' : 'Month'}</span>
           <ChevronRight size={16} />
         </button>
       </div>
@@ -386,9 +505,9 @@ export default function TimesheetModule() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { icon: UserCheck, label: 'Present Entries', value: stats.present, sub: `${stats.uniquePresent} unique employees`, color: '#00e676' },
-          { icon: AlertCircle, label: 'Absent Entries', value: stats.absent, sub: 'This week', color: '#ff3d3d' },
+          { icon: AlertCircle, label: 'Absent Entries', value: stats.absent, sub: `This ${viewMode === 'daily' ? 'day' : viewMode === 'weekly' ? 'week' : 'month'}`, color: '#ff3d3d' },
           { icon: Clock, label: 'On Leave', value: stats.onLeave, sub: 'Approved leaves', color: '#ffab40' },
-          { icon: TimerReset, label: 'Total OT Hours', value: `${stats.totalOt}h`, sub: 'Overtime this week', color: '#00d4ff' },
+          { icon: TimerReset, label: 'Total OT Hours', value: `${stats.totalOt}h`, sub: `Overtime this ${viewMode === 'daily' ? 'day' : viewMode === 'weekly' ? 'week' : 'month'}`, color: '#00d4ff' },
         ].map((stat, i) => {
           const Icon = stat.icon;
           return (
@@ -422,21 +541,44 @@ export default function TimesheetModule() {
               <tr className="border-b border-[#252e3a]">
                 <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] w-[180px]">Employee</th>
                 <th className="text-center py-2.5 px-2 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] w-[50px]">Site</th>
-                {DAYS.map((day, i) => (
-                  <th key={day} className="text-center py-2.5 px-1 min-w-[110px]">
-                    <div className="text-[9px] font-semibold uppercase tracking-wider text-[#8899aa]">{day}</div>
-                    <div className="text-[10px] text-[#5a6878]">{formatDisplayDate(weekDates[i])}</div>
-                  </th>
-                ))}
-                <th className="text-center py-2.5 px-2 text-[#00e676] font-bold text-[9px] uppercase tracking-wider min-w-[60px]">Total</th>
-                <th className="text-center py-2.5 px-2 text-[#00d4ff] font-bold text-[9px] uppercase tracking-wider min-w-[50px]">OT</th>
-                <th className="text-center py-2.5 px-2 text-[#f5a623] font-bold text-[9px] uppercase tracking-wider min-w-[50px]">Days</th>
+                {viewMode === 'daily' ? (
+                  <>
+                    <th className="text-center py-2.5 px-2 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] min-w-[80px]">Time In</th>
+                    <th className="text-center py-2.5 px-2 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] min-w-[80px]">Time Out</th>
+                    <th className="text-center py-2.5 px-2 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] min-w-[60px]">Hours</th>
+                    <th className="text-center py-2.5 px-2 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] min-w-[50px]">OT</th>
+                    <th className="text-center py-2.5 px-2 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] min-w-[60px]">Status</th>
+                  </>
+                ) : viewMode === 'weekly' ? (
+                  <>
+                    {DAYS.map((day, i) => (
+                      <th key={day} className="text-center py-2.5 px-1 min-w-[110px]">
+                        <div className="text-[9px] font-semibold uppercase tracking-wider text-[#8899aa]">{day}</div>
+                        <div className="text-[10px] text-[#5a6878]">{formatDisplayDate(weekDates[i])}</div>
+                      </th>
+                    ))}
+                    <th className="text-center py-2.5 px-2 text-[#00e676] font-bold text-[9px] uppercase tracking-wider min-w-[60px]">Total</th>
+                    <th className="text-center py-2.5 px-2 text-[#00d4ff] font-bold text-[9px] uppercase tracking-wider min-w-[50px]">OT</th>
+                    <th className="text-center py-2.5 px-2 text-[#f5a623] font-bold text-[9px] uppercase tracking-wider min-w-[50px]">Days</th>
+                  </>
+                ) : (
+                  <>
+                    {dateRange.dates.slice(0, 31).map((date, i) => (
+                      <th key={i} className="text-center py-2.5 px-1 min-w-[40px]">
+                        <div className="text-[9px] font-semibold text-[#8899aa]">{date.getDate()}</div>
+                      </th>
+                    ))}
+                    <th className="text-center py-2.5 px-2 text-[#00e676] font-bold text-[9px] uppercase tracking-wider min-w-[60px]">Total</th>
+                    <th className="text-center py-2.5 px-2 text-[#00d4ff] font-bold text-[9px] uppercase tracking-wider min-w-[50px]">OT</th>
+                    <th className="text-center py-2.5 px-2 text-[#f5a623] font-bold text-[9px] uppercase tracking-wider min-w-[50px]">Days</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-10 text-center text-[#5a6878] text-[12px]">
+                  <td colSpan={viewMode === 'daily' ? 7 : viewMode === 'weekly' ? 12 : dateRange.dates.length + 5} className="py-10 text-center text-[#5a6878] text-[12px]">
                     No active employees found
                   </td>
                 </tr>
@@ -445,8 +587,65 @@ export default function TimesheetModule() {
                 let totalOt = 0;
                 let daysPresent = 0;
                 
+                // For daily view, get single day record
+                if (viewMode === 'daily') {
+                  const dateStr = formatDate(dateRange.dates[0]);
+                  const record = attMap[`${emp.employeeCode}_${dateStr}`];
+                  
+                  return (
+                    <tr key={emp.employeeCode} className="border-b border-[#252e3a]/40 hover:bg-[#141920] transition-colors group">
+                      <td className="py-2.5 px-3">
+                        <div className="text-[12px] font-semibold text-[#e2e8f0] truncate max-w-[130px]">
+                          {emp.firstName} {emp.lastName}
+                        </div>
+                        <div className="text-[9px] text-[#5a6878] font-mono">{emp.employeeCode}</div>
+                      </td>
+                      <td className="py-2.5 px-2 text-center">
+                        <span className="text-[10px] text-[#8899aa]">{emp.branch?.name || '—'}</span>
+                      </td>
+                      {record ? (
+                        <>
+                          <td className="py-2.5 px-2 text-center">
+                            <span className="text-[11px] text-[#e2e8f0] font-mono">{formatTime(record.punchIn)}</span>
+                          </td>
+                          <td className="py-2.5 px-2 text-center">
+                            <span className="text-[11px] text-[#e2e8f0] font-mono">{formatTime(record.punchOut)}</span>
+                          </td>
+                          <td className="py-2.5 px-2 text-center">
+                            <span className="text-[12px] font-bold text-[#00e676] font-mono">
+                              {record.punchIn && record.punchOut ? `${calcHours(record.punchIn, record.punchOut)}h` : '—'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-2 text-center">
+                            <span className="text-[12px] font-bold text-[#00d4ff] font-mono">
+                              {record.punchIn && record.punchOut ? `${calcOtHours(calcHours(record.punchIn, record.punchOut))}h` : '—'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-2 text-center">
+                            <span className={`inline-block px-2 py-[2px] rounded text-[10px] font-bold ${getStatusStyle(record.status)}`}>
+                              {record.status}
+                            </span>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="py-2.5 px-2 text-center" colSpan={4}>
+                            <span className="text-[11px] text-[#5a6878] italic">No record</span>
+                          </td>
+                          <td className="py-2.5 px-2 text-center">
+                            <span className={`inline-block px-2 py-[2px] rounded text-[10px] font-bold ${getStatusStyle('absent')}`}>
+                              Absent
+                            </span>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                }
+                
+                // For weekly and monthly views
                 return (
-                  <tr key={emp.id} className="border-b border-[#252e3a]/40 hover:bg-[#141920] transition-colors group">
+                  <tr key={emp.employeeCode} className="border-b border-[#252e3a]/40 hover:bg-[#141920] transition-colors group">
                     <td className="py-2.5 px-3">
                       <div className="text-[12px] font-semibold text-[#e2e8f0] truncate max-w-[130px]">
                         {emp.firstName} {emp.lastName}
@@ -454,12 +653,12 @@ export default function TimesheetModule() {
                       <div className="text-[9px] text-[#5a6878] font-mono">{emp.employeeCode}</div>
                     </td>
                     <td className="py-2.5 px-2 text-center">
-                      <span className="text-[10px] text-[#8899aa]">{emp.Branch?.name || '—'}</span>
+                      <span className="text-[10px] text-[#8899aa]">{emp.branch?.name || '—'}</span>
                     </td>
-                    {DAYS.map((_, i) => {
-                      const dateStr = formatDate(weekDates[i]);
-                      const record = attMap[`${emp.id}_${dateStr}`];
-                      const isWeekend = i >= 5;
+                    {dateRange.dates.map((date, i) => {
+                      const dateStr = formatDate(date);
+                      const record = attMap[`${emp.employeeCode}_${dateStr}`];
+                      const isWeekend = viewMode === 'weekly' && i >= 5;
 
                       if (record && record.status.toLowerCase() === 'present' && record.punchIn && record.punchOut) {
                         const hrs = calcHours(record.punchIn, record.punchOut);
@@ -467,6 +666,14 @@ export default function TimesheetModule() {
                         totalHrs += hrs;
                         totalOt += ot;
                         daysPresent++;
+                        
+                        if (viewMode === 'monthly') {
+                          return (
+                            <td key={i} className="py-2 px-1 text-center">
+                              <span className="text-[9px] font-bold text-[#00e676]">P</span>
+                            </td>
+                          );
+                        }
                         
                         return (
                           <td key={i} className={`py-2 px-1 text-center ${isWeekend ? 'bg-[#141920]/50' : ''}`}>
@@ -526,7 +733,7 @@ export default function TimesheetModule() {
                       <span className="text-[13px] font-bold text-[#00d4ff] font-mono">{totalOt > 0 ? `${totalOt}h` : '—'}</span>
                     </td>
                     <td className="py-2.5 px-2 text-center">
-                      <span className="text-[13px] font-bold text-[#f5a623] font-mono">{daysPresent}/7</span>
+                      <span className="text-[13px] font-bold text-[#f5a623] font-mono">{daysPresent}/{dateRange.dates.length}</span>
                     </td>
                   </tr>
                 );

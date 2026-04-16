@@ -10,7 +10,11 @@ export async function GET() {
       include: {
         _count: {
           select: {
-            Employee: true,
+            Employee: {
+              where: {
+                isDeleted: false,
+              },
+            },
           },
         },
       },
@@ -119,12 +123,15 @@ export async function DELETE(request: NextRequest) {
 
     // Check if department has employees
     const employeeCount = await db.employee.count({
-      where: { departmentId: id },
+      where: { 
+        departmentId: id,
+        isDeleted: false,
+      },
     })
 
     if (employeeCount > 0) {
       return NextResponse.json(
-        { success: false, error: `Cannot delete department with ${employeeCount} employee(s)` },
+        { success: false, error: `Cannot delete department with ${employeeCount} active employee(s)` },
         { status: 400 }
       )
     }
