@@ -279,8 +279,14 @@ export class BiometricService {
         const firstPunch = sortedLogs[0]
         const lastPunch = sortedLogs[sortedLogs.length - 1]
 
-        const logDate = new Date(dateStr)
-        logDate.setHours(0, 0, 0, 0)
+        // Parse dateStr correctly - create UTC date at midnight for the given date
+        // This ensures the date is stored correctly in the database
+        const [year, month, day] = dateStr.split('-').map(Number)
+        const logDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0))
+
+        console.log(`Processing ${empCode} for ${dateStr}:`)
+        console.log(`  - First punch: ${firstPunch.punchDate}`)
+        console.log(`  - Calculated logDate: ${logDate.toISOString()} (${logDate.toLocaleDateString()})`)
 
         // Check if attendance already exists
         const existingAttendance = await db.attendanceLog.findFirst({
@@ -313,6 +319,7 @@ export class BiometricService {
               biometricDeviceId: firstPunch.deviceId,
               source: 'biometric',
               status: 'present',
+              updatedAt: new Date(),
             },
           })
         }
@@ -361,7 +368,7 @@ export class BiometricService {
     processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }>;
   }> {
     try {
-      // Get last sync record for this site
+      // Get last successful sync for this site
       const lastSync = await db.biometricSyncLog.findFirst({
         where: { 
           status: 'success',
@@ -370,31 +377,46 @@ export class BiometricService {
         orderBy: { createdAt: 'desc' },
       })
 
-      const lastRecord = lastSync?.lastRecord || ''
+      // Calculate date range
+      const now = new Date()
+      const fromDate = lastSync?.createdAt 
+        ? new Date(lastSync.createdAt) 
+        : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) // Default: 7 days ago
 
-      // Fetch new data
-      const response = await this.fetchLastPunchData(lastRecord)
-      const punchData = response.PunchData || []
+      // Format dates for API (DD/MM/YYYY_HH:MM)
+      const formatDate = (date: Date) => {
+        const day = String(date.getDate()).padStart(2, '0')
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const year = date.getFullYear()
+        const hours = String(date.getHours()).padStart(2, '0')
+        const minutes = String(date.getMinutes()).padStart(2, '0')
+        return `${day}/${month}/${year}_${hours}:${minutes}`
+      }
+
+      const fromDateStr = formatDate(fromDate)
+      const toDateStr = formatDate(now)
+
+      console.log(`[${this.config.siteId}] Incremental sync from ${fromDateStr} to ${toDateStr}`)
+
+      // Fetch data using date range
+      const punchData = await this.fetchRawPunchDataWithMCID('ALL', fromDateStr, toDateStr)
 
       // Save raw logs
       const savedCount = await this.saveRawLogs(punchData)
-
-      // Process logs
-      const { processedCount, processedEmployees } = await this.processRawLogs()
 
       // Save sync log
       await db.biometricSyncLog.create({
         data: {
           siteId: this.config.siteId,
-          lastRecord: response.MaxRecord || lastRecord,
+          lastRecord: toDateStr,
           syncType: 'incremental',
           recordsFetched: punchData.length,
-          recordsProcessed: processedCount,
+          recordsProcessed: 0, // Will be updated after processing
           status: 'success',
         },
       })
 
-      return { fetched: savedCount, processed: processedCount, processedEmployees }
+      return { fetched: savedCount, processed: 0, processedEmployees: [] }
     } catch (error) {
       // Log failed sync
       await db.biometricSyncLog.create({
@@ -467,7 +489,11 @@ export class BiometricService {
 
     for (const log of logs) {
       const date = new Date(log.punchDate)
-      const dateKey = date.toISOString().split('T')[0]
+      // Use local date instead of UTC to avoid timezone issues
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const dateKey = `${year}-${month}-${day}`
       const key = `${log.empCode}|${dateKey}`
 
       if (!grouped[key]) {

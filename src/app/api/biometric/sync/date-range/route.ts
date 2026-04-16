@@ -19,14 +19,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const biometricService = createBiometricService(siteId)
-    const result = await biometricService.syncDateRange(fromDate, toDate)
+    if (siteId) {
+      // Sync specific site
+      const biometricService = createBiometricService(siteId)
+      const result = await biometricService.syncDateRange(fromDate, toDate)
 
-    return NextResponse.json({
-      success: true,
-      message: 'Date range sync completed',
-      data: result,
-    })
+      return NextResponse.json({
+        success: true,
+        message: `Date range sync completed for ${siteId}`,
+        data: result,
+      })
+    } else {
+      // Sync all sites
+      const { loadBiometricSites } = await import('@/lib/biometric')
+      const sites = loadBiometricSites()
+      const results = []
+
+      for (const site of sites) {
+        const biometricService = createBiometricService(site.id)
+        const result = await biometricService.syncDateRange(fromDate, toDate)
+        results.push({
+          site: site.id,
+          result,
+        })
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Date range sync completed for all sites',
+        data: results,
+      })
+    }
   } catch (error) {
     console.error('Date range sync error:', error)
     return NextResponse.json(

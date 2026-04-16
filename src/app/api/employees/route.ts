@@ -161,6 +161,7 @@ export async function POST(request: NextRequest) {
         dateOfJoining: new Date(dateOfJoining),
         employmentType: employmentType || 'permanent',
         employmentStatus: employmentStatus || 'active',
+        updatedAt: new Date(),
       },
       include: {
         Department: true,
@@ -255,6 +256,42 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // Check if employeeCode is being changed and if it's already taken
+    if (data.employeeCode && data.employeeCode !== existing.employeeCode) {
+      const codeExists = await db.employee.findFirst({
+        where: {
+          employeeCode: data.employeeCode,
+          id: { not: employeeId },
+          isDeleted: false,
+        }
+      })
+      
+      if (codeExists) {
+        return NextResponse.json(
+          { success: false, error: `Employee code ${data.employeeCode} is already assigned to ${codeExists.firstName} ${codeExists.lastName}` },
+          { status: 409 }
+        )
+      }
+    }
+
+    // Check if email is being changed and if it's already taken
+    if (data.email && data.email !== existing.email) {
+      const emailExists = await db.employee.findFirst({
+        where: {
+          email: data.email,
+          id: { not: employeeId },
+          isDeleted: false,
+        }
+      })
+      
+      if (emailExists) {
+        return NextResponse.json(
+          { success: false, error: `Email ${data.email} is already registered to ${emailExists.firstName} ${emailExists.lastName} (${emailExists.employeeCode})` },
+          { status: 409 }
+        )
+      }
+    }
+
     // Convert date strings to Date objects if present
     const updateData: any = { ...data }
     if (updateData.dateOfBirth) updateData.dateOfBirth = new Date(updateData.dateOfBirth)
@@ -262,6 +299,7 @@ export async function PUT(request: NextRequest) {
     if (updateData.departmentId) updateData.departmentId = parseInt(updateData.departmentId)
     if (updateData.designationId) updateData.designationId = parseInt(updateData.designationId)
     if (updateData.branchId) updateData.branchId = parseInt(updateData.branchId)
+    updateData.updatedAt = new Date()
 
     const employee = await db.employee.update({
       where: { id: employeeId },
@@ -271,8 +309,21 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, data: employee })
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const target = (error.meta?.target as string[]) || []
+      if (target.includes('employeeCode')) {
+        return NextResponse.json(
+          { success: false, error: 'This employee code is already in use' },
+          { status: 409 }
+        )
+      }
+      if (target.includes('email')) {
+        return NextResponse.json(
+          { success: false, error: 'This email is already registered' },
+          { status: 409 }
+        )
+      }
       return NextResponse.json(
-        { success: false, error: 'An employee with this empId already exists' },
+        { success: false, error: 'A unique constraint was violated' },
         { status: 409 }
       )
     }
@@ -308,9 +359,9 @@ export async function DELETE(request: NextRequest) {
     const existing = await db.employee.findUnique({ 
       where: { id: employeeId },
       include: {
-        attendanceLogs: { take: 1 },
-        payrollItems: { take: 1 },
-        salaryAssignments: { take: 1 },
+        AttendanceLog: { take: 1 },
+        PayrollItem: { take: 1 },
+        SalaryStructureAssignment: { take: 1 },
       }
     })
     
@@ -323,9 +374,9 @@ export async function DELETE(request: NextRequest) {
 
     // Check if employee has related records
     const hasRelatedRecords = 
-      existing.attendanceLogs.length > 0 || 
-      existing.payrollItems.length > 0 || 
-      existing.salaryAssignments.length > 0
+      existing.AttendanceLog.length > 0 || 
+      existing.PayrollItem.length > 0 || 
+      existing.SalaryStructureAssignment.length > 0
 
     // If permanent flag is true, force hard delete
     if (permanent === true) {

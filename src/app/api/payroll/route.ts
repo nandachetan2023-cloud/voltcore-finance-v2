@@ -4,9 +4,20 @@ import { NextRequest, NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 
 // GET: List all payroll runs with items
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const month = searchParams.get('month');
+    const year = searchParams.get('year');
+    const status = searchParams.get('status');
+
+    const where: any = {};
+    if (month) where.month = parseInt(month);
+    if (year) where.year = parseInt(year);
+    if (status) where.status = status;
+
     const payrollRuns = await db.payrollRun.findMany({
+      where,
       include: {
         PayrollItem: {
           include: {
@@ -15,8 +26,12 @@ export async function GET() {
                 id: true,
                 employeeCode: true,
                 firstName: true,
+                middleName: true,
                 lastName: true,
                 email: true,
+                Department: { select: { name: true } },
+                Designation: { select: { name: true } },
+                Branch: { select: { name: true } },
               },
             },
           },

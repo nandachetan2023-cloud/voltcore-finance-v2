@@ -400,7 +400,7 @@ export default function TimesheetModule() {
           </div>
           <div>
             <h2 className="text-[18px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-              Weekly Timesheet
+              {viewMode === 'daily' ? 'Daily' : viewMode === 'weekly' ? 'Weekly' : 'Monthly'} Timesheet
             </h2>
             <p className="text-[11px] text-[#5a6878]">HRMS › Time Tracking & Hours</p>
           </div>

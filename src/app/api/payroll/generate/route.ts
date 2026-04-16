@@ -1,0 +1,282 @@
+import { db } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+import { PayrollCalculator } from '@/lib/services/payroll-calculator';
+
+export const dynamic = 'force-dynamic';
+
+interface GeneratePayrollRequest {
+  mode: 'single' | 'bulk';
+  month: number;
+  year: number;
+  employeeId?: number;
+  employeeIds?: number[];
+  filters?: {
+    departmentId?: number;
+    designationId?: number;
+    branchId?: number;
+    employmentType?: string;
+  };
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body: GeneratePayrollRequest = await request.json();
+    const { mode, month, year, employeeId, employeeIds, filters } = body;
+
+    // Validation
+    if (!mode || !month || !year) {
+      return NextResponse.json(
+        { success: false, error: 'mode, month, and year are required' },
+        { status: 400 }
+      );
+    }
+
+    if (mode === 'single' && !employeeId) {
+      return NextResponse.json(
+        { success: false, error: 'employeeId is required for single mode' },
+        { status: 400 }
+      );
+    }
+
+    // Get employees to process
+    let employees: any[] = [];
+
+    if (mode === 'single') {
+      const emp = await db.employee.findUnique({
+        where: { id: employeeId },
+        include: {
+          Department: true,
+          Designation: true,
+          Branch: true,
+        },
+      });
+      if (!emp) {
+        return NextResponse.json(
+          { success: false, error: 'Employee not found' },
+          { status: 404 }
+        );
+      }
+      employees = [emp];
+    } else {
+      // Bulk mode
+      const where: any = { isActive: true, isDeleted: false };
+
+      if (employeeIds && employeeIds.length > 0) {
+        where.id = { in: employeeIds };
+      } else if (filters) {
+        if (filters.departmentId) where.departmentId = filters.departmentId;
+        if (filters.designationId) where.designationId = filters.designationId;
+        if (filters.branchId) where.branchId = filters.branchId;
+        if (filters.employmentType) where.employmentType = filters.employmentType;
+      }
+
+      employees = await db.employee.findMany({
+        where,
+        include: {
+          Department: true,
+          Designation: true,
+          Branch: true,
+        },
+      });
+    }
+
+    if (employees.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No employees found matching criteria' },
+        { status: 404 }
+      );
+    }
+
+    // Create payroll run
+    const payrollRun = await db.payrollRun.create({
+      data: {
+        name: `Payroll - ${getMonthName(month)} ${year}`,
+        month,
+        year,
+        status: 'processing',
+        totalEmployees: employees.length,
+        totalGross: 0,
+        totalNet: 0,
+      },
+    });
+
+    const calculator = new PayrollCalculator();
+    const errors: Array<{ employeeId: number; error: string }> = [];
+    let totalGross = 0;
+    let totalNet = 0;
+
+    // Process each employee
+    for (const employee of employees) {
+      try {
+        // Check for duplicate
+        const existing = await db.payrollItem.findFirst({
+          where: {
+            employeeId: employee.id,
+            payrollRunId: payrollRun.id,
+          },
+        });
+
+        if (existing) {
+          errors.push({
+            employeeId: employee.id,
+            error: 'Payroll already exists for this period',
+          });
+          continue;
+        }
+
+        // Get attendance data for the month
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0);
+
+        const attendanceLogs = await db.attendanceLog.findMany({
+          where: {
+            employeeId: employee.id,
+            logDate: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+        });
+
+        // Calculate attendance
+        const presentDays = attendanceLogs.filter(log => log.status === 'present').length;
+        
+        // Get paid leave days
+        const leaveRequests = await db.leaveRequest.findMany({
+          where: {
+            employeeId: employee.id,
+            status: 'approved',
+            fromDate: { lte: endDate },
+            toDate: { gte: startDate },
+          },
+        });
+
+        let paidLeaveDays = 0;
+        for (const leave of leaveRequests) {
+          const leaveStart = new Date(Math.max(leave.fromDate.getTime(), startDate.getTime()));
+          const leaveEnd = new Date(Math.min(leave.toDate.getTime(), endDate.getTime()));
+          const days = Math.ceil((leaveEnd.getTime() - leaveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          paidLeaveDays += days;
+        }
+
+        // Calculate OT hours
+        let totalOTHours = 0;
+        for (const log of attendanceLogs) {
+          if (log.punchIn && log.punchOut) {
+            const hours = (log.punchOut.getTime() - log.punchIn.getTime()) / (1000 * 60 * 60);
+            const otHours = Math.max(0, hours - 8);
+            totalOTHours += otHours;
+          }
+        }
+
+        // Get salary structure (for now, use basic values from employee or defaults)
+        // In production, fetch from SalaryStructureAssignment
+        const basicSalary = 15000; // Default, should come from salary structure
+        const hra = basicSalary * 0.4;
+
+        const attendanceData = {
+          totalDays: endDate.getDate(),
+          presentDays,
+          paidLeaveDays,
+          weeklyOffs: 4, // Approximate
+          holidays: 0,
+          lopDays: 0,
+          totalHours: presentDays * 8,
+        };
+
+        const payrollItem = calculator.calculateSalary(
+          {
+            id: employee.id,
+            basicSalary,
+            hra,
+            conveyanceAllowance: 1600,
+            medicalAllowance: 1250,
+            specialAllowance: 2000,
+            state: 'Maharashtra',
+          },
+          attendanceData,
+          month,
+          year,
+          totalOTHours,
+          0, // TDS
+          0  // Other deductions
+        );
+
+        // Create payroll item
+        await db.payrollItem.create({
+          data: {
+            payrollRunId: payrollRun.id,
+            employeeId: employee.id,
+            workingDays: payrollItem.workingDays,
+            presentDays: payrollItem.presentDays,
+            paidLeaveDays: payrollItem.paidLeaveDays,
+            lopDays: payrollItem.lopDays,
+            otHours: payrollItem.otHours,
+            basicSalary: payrollItem.basicSalary,
+            hra: payrollItem.hra,
+            conveyanceAllowance: payrollItem.conveyanceAllowance,
+            medicalAllowance: payrollItem.medicalAllowance,
+            specialAllowance: payrollItem.specialAllowance,
+            otAmount: payrollItem.otAmount,
+            grossEarning: payrollItem.grossEarnings,
+            pfDeduction: payrollItem.pfDeduction,
+            esiDeduction: payrollItem.esiDeduction,
+            ptDeduction: payrollItem.ptDeduction,
+            tdsDeduction: payrollItem.tdsDeduction,
+            lopDeduction: payrollItem.lopDeduction,
+            otherDeductions: payrollItem.otherDeductions,
+            totalDeduction: payrollItem.totalDeductions,
+            netPay: payrollItem.netSalary,
+            status: 'pending',
+            payslipGenerated: false,
+            details: payrollItem.details,
+          },
+        });
+
+        totalGross += payrollItem.grossEarnings;
+        totalNet += payrollItem.netSalary;
+      } catch (error) {
+        console.error(`Error processing employee ${employee.id}:`, error);
+        errors.push({
+          employeeId: employee.id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    // Update payroll run with totals
+    await db.payrollRun.update({
+      where: { id: payrollRun.id },
+      data: {
+        status: errors.length === employees.length ? 'failed' : 'completed',
+        totalGross,
+        totalNet,
+        processedAt: new Date(),
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        payrollRunId: payrollRun.id,
+        itemsCreated: employees.length - errors.length,
+        totalEmployees: employees.length,
+        errors,
+      },
+    });
+  } catch (error) {
+    console.error('Error generating payroll:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to generate payroll' },
+      { status: 500 }
+    );
+  }
+}
+
+function getMonthName(month: number): string {
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  return months[month - 1] || 'Unknown';
+}

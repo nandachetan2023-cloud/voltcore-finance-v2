@@ -421,13 +421,15 @@ export default function EmployeeAnalytics() {
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   // Normalize DB month format ("2026-04") to display key ("Apr 2026")
-  function normalizeMonth(m: string): string {
-    const parts = m.split('-');
+  function normalizeMonth(m: string | number | null | undefined): string {
+    if (!m) return 'Unknown';
+    const str = String(m);
+    const parts = str.split('-');
     if (parts.length === 2) {
       const mi = parseInt(parts[1], 10) - 1;
-      return `${monthNames[mi] || m} ${parts[0]}`;
+      return `${monthNames[mi] || str} ${parts[0]}`;
     }
-    return m;
+    return str;
   }
 
   const payrollByMonth: Record<string, number> = {};

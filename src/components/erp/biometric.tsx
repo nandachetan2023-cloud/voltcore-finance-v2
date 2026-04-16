@@ -146,10 +146,10 @@ export default function BiometricPage() {
       const data = await response.json();
       
       if (data.success) {
-        if (Array.isArray(data.data)) {
+        if (Array.isArray(data.data.sync)) {
           // Multiple sites
-          const totalFetched = data.data.reduce((sum: number, r: any) => sum + r.result.fetched, 0);
-          const totalProcessed = data.data.reduce((sum: number, r: any) => sum + r.result.processed, 0);
+          const totalFetched = data.data.sync.reduce((sum: number, r: any) => sum + r.result.fetched, 0);
+          const totalProcessed = data.data.processing.reduce((sum: number, r: any) => sum + r.result.processedCount, 0);
           
           if (totalFetched === 0) {
             toast.info(
@@ -157,20 +157,23 @@ export default function BiometricPage() {
               { duration: 8000 }
             );
           } else {
-            const summary = data.data.map((r: any) => 
-              `${r.site}: ${r.result.fetched} fetched, ${r.result.processed} processed`
+            const summary = data.data.sync.map((r: any, i: number) => 
+              `${r.site}: ${r.result.fetched} synced, ${data.data.processing[i].result.processedCount} processed`
             ).join('\n');
-            toast.success(`Sync completed!\n${summary}`);
+            toast.success(`Sync & Processing completed!\n${summary}`);
           }
         } else {
           // Single site
-          if (data.data.fetched === 0) {
+          const fetched = data.data.sync?.fetched || 0;
+          const processed = data.data.processing?.processedCount || 0;
+          
+          if (fetched === 0) {
             toast.info(
               `No new data available.\n\nThis is normal - incremental sync only fetches NEW records since last sync.\n\nTo get new data:\n• Wait for employees to punch in/out today\n• Use Date Range Sync for specific dates`,
               { duration: 8000 }
             );
           } else {
-            toast.success(`Sync completed! Fetched: ${data.data.fetched}, Processed: ${data.data.processed}`);
+            toast.success(`Sync & Processing completed! Fetched: ${fetched}, Processed: ${processed} employees`);
           }
         }
         fetchSyncStatus();
@@ -209,7 +212,16 @@ export default function BiometricPage() {
       const data = await response.json();
       
       if (data.success) {
-        toast.success(`Date range sync completed! Fetched: ${data.data.fetched}, Processed: ${data.data.processed}`);
+        if (Array.isArray(data.data)) {
+          // Multiple sites
+          const summary = data.data.map((r: any) => 
+            `${r.site}: ${r.result.fetched} fetched, ${r.result.processed} processed`
+          ).join('\n');
+          toast.success(`Date range sync completed!\n${summary}`);
+        } else {
+          // Single site
+          toast.success(`Date range sync completed! Fetched: ${data.data.fetched}, Processed: ${data.data.processed}`);
+        }
         fetchSyncStatus();
         fetchRawLogs();
       } else {
@@ -473,8 +485,11 @@ export default function BiometricPage() {
 
           <Card className="bg-[#161b22] border-[#30363d]">
             <CardHeader>
-              <CardTitle className="text-white">Process Raw Logs</CardTitle>
-              <CardDescription>Convert unprocessed raw logs to attendance records</CardDescription>
+              <CardTitle className="text-white">Process Unmatched Logs</CardTitle>
+              <CardDescription>
+                Matched employee logs are processed automatically during sync. 
+                Use this to retry processing logs for employees not found in the system.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-4">
@@ -492,12 +507,12 @@ export default function BiometricPage() {
                   ) : (
                     <>
                       <Database className="w-4 h-4 mr-2" />
-                      Process Logs ({syncStatus?.unprocessedCount || 0})
+                      Retry Unmatched ({syncStatus?.unprocessedCount || 0})
                     </>
                   )}
                 </Button>
                 <div className="text-sm text-gray-400">
-                  Converts raw punch data to attendance records
+                  Attempts to process logs for employees not found during sync
                 </div>
               </div>
             </CardContent>

@@ -132,6 +132,10 @@ model Employee {
   aadharNumber              String?
   uanNumber                 String?
   esicNumber                String?
+  bankName                  String?
+  bankAccount               String?
+  bankIfsc                  String?
+  fatherName                String?
   emergencyContactName      String?
   emergencyContactRelation  String?
   emergencyContactPhone     String?
@@ -273,26 +277,55 @@ model LeaveRequest {
 }
 
 model PayrollItem {
-  id             Int        @id @default(autoincrement())
-  payrollRunId   Int
-  employeeId     Int
-  grossEarning   Decimal    @db.Decimal(15, 2)
-  totalDeduction Decimal    @db.Decimal(15, 2)
-  netPay         Decimal    @db.Decimal(15, 2)
-  details        Json
-  Employee       Employee   @relation(fields: [employeeId], references: [id])
-  PayrollRun     PayrollRun @relation(fields: [payrollRunId], references: [id])
+  id                   Int        @id @default(autoincrement())
+  payrollRunId         Int
+  employeeId           Int
+  workingDays          Int        @default(26)
+  presentDays          Int        @default(0)
+  paidLeaveDays        Int        @default(0)
+  lopDays              Int        @default(0)
+  otHours              Decimal    @default(0) @db.Decimal(5, 2)
+  basicSalary          Decimal    @default(0) @db.Decimal(15, 2)
+  hra                  Decimal    @default(0) @db.Decimal(15, 2)
+  conveyanceAllowance  Decimal    @default(0) @db.Decimal(15, 2)
+  medicalAllowance     Decimal    @default(0) @db.Decimal(15, 2)
+  specialAllowance     Decimal    @default(0) @db.Decimal(15, 2)
+  otAmount             Decimal    @default(0) @db.Decimal(15, 2)
+  grossEarning         Decimal    @db.Decimal(15, 2)
+  pfDeduction          Decimal    @default(0) @db.Decimal(15, 2)
+  esiDeduction         Decimal    @default(0) @db.Decimal(15, 2)
+  ptDeduction          Decimal    @default(0) @db.Decimal(15, 2)
+  tdsDeduction         Decimal    @default(0) @db.Decimal(15, 2)
+  lopDeduction         Decimal    @default(0) @db.Decimal(15, 2)
+  otherDeductions      Decimal    @default(0) @db.Decimal(15, 2)
+  totalDeduction       Decimal    @db.Decimal(15, 2)
+  netPay               Decimal    @db.Decimal(15, 2)
+  status               String     @default("pending")
+  payslipGenerated     Boolean    @default(false)
+  payslipPath          String?
+  remarks              String?
+  details              Json?
+  Employee             Employee   @relation(fields: [employeeId], references: [id])
+  PayrollRun           PayrollRun @relation(fields: [payrollRunId], references: [id])
+
+  @@index([employeeId, payrollRunId])
 }
 
 model PayrollRun {
-  id          Int           @id @default(autoincrement())
-  name        String
-  month       Int
-  year        Int
-  status      String        @default("draft")
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime
-  PayrollItem PayrollItem[]
+  id             Int           @id @default(autoincrement())
+  name           String
+  month          Int
+  year           Int
+  status         String        @default("draft")
+  totalEmployees Int           @default(0)
+  totalGross     Decimal       @default(0) @db.Decimal(15, 2)
+  totalNet       Decimal       @default(0) @db.Decimal(15, 2)
+  processedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime
+  PayrollItem    PayrollItem[]
+
+  @@index([month, year, status])
 }
 
 model PurchaseOrder {

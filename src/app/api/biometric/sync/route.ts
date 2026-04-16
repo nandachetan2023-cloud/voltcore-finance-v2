@@ -12,21 +12,43 @@ export async function POST(request: NextRequest) {
     if (siteId) {
       // Sync specific site
       const biometricService = createBiometricService(siteId)
-      const result = await biometricService.syncIncremental()
+      const syncResult = await biometricService.syncIncremental()
+
+      // Automatically process logs for matched employees
+      const processResult = await biometricService.processRawLogs()
 
       return NextResponse.json({
         success: true,
-        message: `Biometric sync completed for ${siteId}`,
-        data: result,
+        message: `Biometric sync and processing completed for ${siteId}`,
+        data: {
+          sync: syncResult,
+          processing: processResult,
+        },
       })
     } else {
       // Sync all sites
       const results = await syncAllSites()
 
+      // Process logs for all sites
+      const sites = loadBiometricSites()
+      const processingResults = []
+      
+      for (const site of sites) {
+        const biometricService = createBiometricService(site.id)
+        const processResult = await biometricService.processRawLogs()
+        processingResults.push({
+          site: site.id,
+          result: processResult,
+        })
+      }
+
       return NextResponse.json({
         success: true,
-        message: 'Biometric sync completed for all sites',
-        data: results,
+        message: 'Biometric sync and processing completed for all sites',
+        data: {
+          sync: results,
+          processing: processingResults,
+        },
       })
     }
   } catch (error) {
