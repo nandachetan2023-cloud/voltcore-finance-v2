@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { GraduationCap, Award, AlertTriangle, Clock, Plus, BookOpen, Calendar, Pencil, Trash2, Loader2 } from 'lucide-react'
+import { GraduationCap, Award, AlertTriangle, Clock, Plus, BookOpen, Calendar, Pencil, Trash2, Loader2, FileText, Download } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { toast } from 'sonner'
@@ -20,6 +20,7 @@ interface Certification {
   issueDate: string
   expiryDate: string
   status: string
+  filePath?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -38,11 +39,15 @@ interface TrainingSession {
 }
 
 interface Employee {
-  id: string
-  empId: string
-  name: string
-  site: string
-  status: string
+  id: number
+  employeeCode: string
+  firstName: string
+  lastName: string
+  employmentStatus: string
+  Designation?: {
+    id: number
+    name: string
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -88,33 +93,36 @@ export default function Training() {
   const [certifications, setCertifications] = useState<Certification[]>([])
   const [trainingSessions, setTrainingSessions] = useState<TrainingSession[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [designations, setDesignations] = useState<Array<{ id: number; name: string }>>([])
+  const [sites, setSites] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('certifications')
 
   // Dialogs
   const [createCertOpen, setCreateCertOpen] = useState(false)
-  const [editCertOpen, setEditCertOpen] = useState(false)
   const [deleteCertOpen, setDeleteCertOpen] = useState(false)
   const [createTrainingOpen, setCreateTrainingOpen] = useState(false)
   const [editTrainingOpen, setEditTrainingOpen] = useState(false)
   const [deleteTrainingOpen, setDeleteTrainingOpen] = useState(false)
 
   // Editing state
-  const [editingCert, setEditingCert] = useState<Certification | null>(null)
   const [deletingCert, setDeletingCert] = useState<Certification | null>(null)
   const [editingTraining, setEditingTraining] = useState<TrainingSession | null>(null)
   const [deletingTraining, setDeletingTraining] = useState<TrainingSession | null>(null)
 
   // Cert form
   const [certForm, setCertForm] = useState({
-    empId: '',
+    empId: 0,
     name: '',
     issuedBy: '',
     issueDate: '',
     expiryDate: '',
     status: 'Valid',
+    filePath: '',
   })
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   // Training form
   const [trainingForm, setTrainingForm] = useState({
@@ -133,12 +141,16 @@ export default function Training() {
   /* Fetch data */
   const fetchData = useCallback(async () => {
     try {
-      const [trainingRes, empRes] = await Promise.all([
+      const [trainingRes, empRes, desigRes, siteRes] = await Promise.all([
         fetch('/api/training'),
         fetch('/api/employees'),
+        fetch('/api/designations'),
+        fetch('/api/biometric/sites'),
       ])
       const trainingJson = await trainingRes.json()
       const empJson = await empRes.json()
+      const desigJson = await desigRes.json()
+      const siteJson = await siteRes.json()
 
       if (trainingJson.success) {
         setCertifications(trainingJson.data.certifications || [])
@@ -146,6 +158,13 @@ export default function Training() {
       }
       if (empJson.success) {
         setEmployees(empJson.data)
+      }
+      if (desigJson.success) {
+        setDesignations(desigJson.data)
+      }
+      if (siteJson.success) {
+        const siteNames = siteJson.data.map((s: any) => s.name)
+        setSites(siteNames)
       }
     } catch {
       toast.error('Failed to fetch training data')
@@ -185,37 +204,69 @@ export default function Training() {
     return { validCerts, expiring, trainingThisMonth, avgHours }
   }, [certifications, trainingSessions])
 
-  /* Sites from employees */
-  const sites = useMemo(() => {
-    const unique = Array.from(new Set(employees.map(e => e.site))).filter(Boolean).sort()
-    return unique
-  }, [employees])
-
   /* ===== Cert CRUD ===== */
   const handleCreateCert = async () => {
-    if (!certForm.empId || !certForm.name || !certForm.issuedBy || !certForm.issueDate || !certForm.expiryDate) {
-      toast.error('All fields are required')
+    console.log('🔍 Form data:', certForm)
+    console.log('🔍 Uploaded file:', uploadedFile)
+    console.log('🔍 Employees:', employees.length)
+    
+    if (!certForm.empId || !uploadedFile) {
+      toast.error('Please select an employee and upload a certificate file')
       return
     }
-    const emp = employees.find(e => e.id === certForm.empId || e.empId === certForm.empId)
-    if (!emp) { toast.error('Employee not found'); return }
+    
+    const emp = employees.find(e => e.id === certForm.empId)
+    console.log('🔍 Found employee:', emp)
+    
+    if (!emp) { 
+      toast.error('Employee not found')
+      return 
+    }
 
     setSaving(true)
     try {
+      // Upload file first
+      setUploading(true)
+      const formData = new FormData()
+      formData.append('file', uploadedFile)
+      
+      console.log('📤 Uploading file...')
+      const uploadRes = await fetch('/api/upload/certificate', {
+        method: 'POST',
+        body: formData,
+      })
+      const uploadJson = await uploadRes.json()
+      console.log('📥 Upload response:', uploadJson)
+      setUploading(false)
+
+      if (!uploadJson.success) {
+        toast.error(uploadJson.error || 'Failed to upload file')
+        setSaving(false)
+        return
+      }
+
+      // Create certification record
+      console.log('💾 Creating certification record...')
+      const certData = {
+        empId: emp.employeeCode,
+        employeeName: `${emp.firstName} ${emp.lastName}`,
+        name: certForm.name || uploadedFile.name,
+        issuedBy: certForm.issuedBy || 'N/A',
+        issueDate: certForm.issueDate || new Date().toISOString().split('T')[0],
+        expiryDate: certForm.expiryDate || new Date().toISOString().split('T')[0],
+        status: certForm.status,
+        filePath: uploadJson.data.path,
+      }
+      console.log('📋 Cert data:', certData)
+      
       const res = await fetch('/api/training?type=cert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          empId: emp.empId,
-          employeeName: emp.name,
-          name: certForm.name,
-          issuedBy: certForm.issuedBy,
-          issueDate: certForm.issueDate,
-          expiryDate: certForm.expiryDate,
-          status: certForm.status,
-        }),
+        body: JSON.stringify(certData),
       })
       const json = await res.json()
+      console.log('📥 Create response:', json)
+      
       if (json.success) {
         toast.success('Certification added')
         setCreateCertOpen(false)
@@ -224,35 +275,12 @@ export default function Training() {
       } else {
         toast.error(json.error || 'Failed to add certification')
       }
-    } catch {
+    } catch (error) {
+      console.error('❌ Error:', error)
       toast.error('Network error')
     } finally {
       setSaving(false)
-    }
-  }
-
-  const handleEditCert = async () => {
-    if (!editingCert) return
-    setSaving(true)
-    try {
-      const res = await fetch('/api/training?type=cert', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingCert.id, ...certForm }),
-      })
-      const json = await res.json()
-      if (json.success) {
-        toast.success('Certification updated')
-        setEditCertOpen(false)
-        resetCertForm()
-        fetchData()
-      } else {
-        toast.error(json.error || 'Failed to update')
-      }
-    } catch {
-      toast.error('Network error')
-    } finally {
-      setSaving(false)
+      setUploading(false)
     }
   }
 
@@ -359,16 +387,13 @@ export default function Training() {
   }
 
   /* Reset forms */
-  const resetCertForm = () => setCertForm({ empId: '', name: '', issuedBy: '', issueDate: '', expiryDate: '', status: 'Valid' })
+  const resetCertForm = () => {
+    setCertForm({ empId: 0, name: '', issuedBy: '', issueDate: '', expiryDate: '', status: 'Valid', filePath: '' })
+    setUploadedFile(null)
+  }
   const resetTrainingForm = () => setTrainingForm({ title: '', site: '', trainer: '', date: '', duration: '', attendees: 0, status: 'Scheduled' })
 
   /* Open edit dialogs */
-  const openEditCert = (c: Certification) => {
-    setEditingCert(c)
-    setCertForm({ empId: c.empId, name: c.name, issuedBy: c.issuedBy, issueDate: c.issueDate, expiryDate: c.expiryDate, status: c.status })
-    setEditCertOpen(true)
-  }
-
   const openEditTraining = (t: TrainingSession) => {
     setEditingTraining(t)
     setTrainingForm({ title: t.title, site: t.site, trainer: t.trainer, date: t.date, duration: t.duration, attendees: t.attendees, status: t.status })
@@ -494,6 +519,7 @@ export default function Training() {
                       <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Issue</th>
                       <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Expiry</th>
                       <th className="text-center py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Status</th>
+                      <th className="text-center py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">File</th>
                       <th className="text-center py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Actions</th>
                     </tr>
                   </thead>
@@ -519,10 +545,22 @@ export default function Training() {
                           <span className={`vc-badge ${getCertStatusBadge(cert.status)}`}>{cert.status}</span>
                         </td>
                         <td className="py-2.5 px-3 text-center">
+                          {cert.filePath ? (
+                            <a 
+                              href={cert.filePath} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 p-1.5 rounded hover:bg-[#00d4ff]/10 text-[#8899aa] hover:text-[#00d4ff] transition-colors"
+                              title="View Certificate"
+                            >
+                              <FileText size={12} />
+                            </a>
+                          ) : (
+                            <span className="text-[#5a6878] text-[9px]">—</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
                           <div className="flex items-center justify-center gap-1">
-                            <button onClick={() => openEditCert(cert)} className="p-1.5 rounded hover:bg-[#f5a623]/10 text-[#8899aa] hover:text-[#f5a623] transition-colors" title="Edit">
-                              <Pencil size={12} />
-                            </button>
                             <button onClick={() => { setDeletingCert(cert); setDeleteCertOpen(true) }} className="p-1.5 rounded hover:bg-[#ff3d3d]/10 text-[#8899aa] hover:text-[#ff3d3d] transition-colors" title="Delete">
                               <Trash2 size={12} />
                             </button>
@@ -608,29 +646,68 @@ export default function Training() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Employee</label>
-              <select value={certForm.empId} onChange={(e) => setCertForm(f => ({ ...f, empId: e.target.value }))} className="vc-input">
+              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
+                Employee <span className="text-[#ff3d3d]">*</span>
+              </label>
+              <select value={certForm.empId || ''} onChange={(e) => setCertForm(f => ({ ...f, empId: Number(e.target.value) }))} className="vc-input">
                 <option value="">Select employee...</option>
-                {employees.filter(e => e.status === 'Active').map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.empId} – {emp.name}</option>
+                {employees.filter(e => e.employmentStatus?.toLowerCase() === 'active').map(emp => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.employeeCode} – {emp.firstName} {emp.lastName} {emp.Designation ? `(${emp.Designation.name})` : ''}
+                  </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Certification Name</label>
-              <input type="text" value={certForm.name} onChange={(e) => setCertForm(f => ({ ...f, name: e.target.value }))} className="vc-input" placeholder="e.g., NEBOSH IGC" />
+              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
+                Certificate File <span className="text-[#ff3d3d]">*</span>
+              </label>
+              <input 
+                type="file" 
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    setUploadedFile(file)
+                    // Auto-fill name from filename if empty
+                    if (!certForm.name) {
+                      setCertForm(f => ({ ...f, name: file.name.replace(/\.[^/.]+$/, '') }))
+                    }
+                  }
+                }}
+                className="vc-input text-[11px]"
+              />
+              {uploadedFile && (
+                <div className="mt-1 text-[10px] text-[#00e676] flex items-center gap-1">
+                  <span>✓</span>
+                  <span>{uploadedFile.name} ({(uploadedFile.size / 1024).toFixed(1)} KB)</span>
+                </div>
+              )}
+              <div className="mt-1 text-[9px] text-[#5a6878]">Accepted: PDF, JPG, PNG (Max 10MB)</div>
             </div>
             <div>
-              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Issued By</label>
-              <input type="text" value={certForm.issuedBy} onChange={(e) => setCertForm(f => ({ ...f, issuedBy: e.target.value }))} className="vc-input" placeholder="e.g., NEBOSH UK" />
+              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
+                Certification Name
+              </label>
+              <input type="text" value={certForm.name} onChange={(e) => setCertForm(f => ({ ...f, name: e.target.value }))} className="vc-input" placeholder="Auto-filled from filename" />
+            </div>
+            <div>
+              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
+                Issued By
+              </label>
+              <input type="text" value={certForm.issuedBy} onChange={(e) => setCertForm(f => ({ ...f, issuedBy: e.target.value }))} className="vc-input" placeholder="e.g., NEBOSH UK (Optional)" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Issue Date</label>
+                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
+                  Issue Date
+                </label>
                 <input type="date" value={certForm.issueDate} onChange={(e) => setCertForm(f => ({ ...f, issueDate: e.target.value }))} className="vc-input" style={{ fontFamily: "'Share Tech Mono', monospace" }} />
               </div>
               <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Expiry Date</label>
+                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
+                  Expiry Date
+                </label>
                 <input type="date" value={certForm.expiryDate} onChange={(e) => setCertForm(f => ({ ...f, expiryDate: e.target.value }))} className="vc-input" style={{ fontFamily: "'Share Tech Mono', monospace" }} />
               </div>
             </div>
@@ -645,60 +722,9 @@ export default function Training() {
           </div>
           <DialogFooter>
             <button onClick={() => setCreateCertOpen(false)} className="vc-btn-ghost py-2 px-4">Cancel</button>
-            <button onClick={handleCreateCert} disabled={saving} className="vc-btn-primary flex items-center gap-1.5 py-2 px-4 disabled:opacity-50">
-              {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-              {saving ? 'Saving...' : 'Add Certification'}
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ===== EDIT CERT DIALOG ===== */}
-      <Dialog open={editCertOpen} onOpenChange={setEditCertOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-[#00d4ff] text-sm flex items-center gap-2">
-              <Pencil size={14} /><Award size={14} />
-              Edit Certification
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div>
-              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Employee</label>
-              <input type="text" value={editingCert?.employeeName || ''} disabled className="vc-input opacity-60" />
-            </div>
-            <div>
-              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Certification Name</label>
-              <input type="text" value={certForm.name} onChange={(e) => setCertForm(f => ({ ...f, name: e.target.value }))} className="vc-input" />
-            </div>
-            <div>
-              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Issued By</label>
-              <input type="text" value={certForm.issuedBy} onChange={(e) => setCertForm(f => ({ ...f, issuedBy: e.target.value }))} className="vc-input" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Issue Date</label>
-                <input type="date" value={certForm.issueDate} onChange={(e) => setCertForm(f => ({ ...f, issueDate: e.target.value }))} className="vc-input" style={{ fontFamily: "'Share Tech Mono', monospace" }} />
-              </div>
-              <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Expiry Date</label>
-                <input type="date" value={certForm.expiryDate} onChange={(e) => setCertForm(f => ({ ...f, expiryDate: e.target.value }))} className="vc-input" style={{ fontFamily: "'Share Tech Mono', monospace" }} />
-              </div>
-            </div>
-            <div>
-              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Status</label>
-              <select value={certForm.status} onChange={(e) => setCertForm(f => ({ ...f, status: e.target.value }))} className="vc-input">
-                <option value="Valid">Valid</option>
-                <option value="Expiring">Expiring</option>
-                <option value="Expired">Expired</option>
-              </select>
-            </div>
-          </div>
-          <DialogFooter>
-            <button onClick={() => setEditCertOpen(false)} className="vc-btn-ghost py-2 px-4">Cancel</button>
-            <button onClick={handleEditCert} disabled={saving} className="vc-btn-primary flex items-center gap-1.5 py-2 px-4 disabled:opacity-50">
-              {saving ? <Loader2 size={12} className="animate-spin" /> : <Pencil size={12} />}
-              {saving ? 'Saving...' : 'Update'}
+            <button onClick={handleCreateCert} disabled={saving || uploading} className="vc-btn-primary flex items-center gap-1.5 py-2 px-4 disabled:opacity-50">
+              {(saving || uploading) ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+              {uploading ? 'Uploading...' : saving ? 'Saving...' : 'Add Certification'}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -736,29 +762,39 @@ export default function Training() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Title</label>
+              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
+                Title <span className="text-[#ff3d3d]">*</span>
+              </label>
               <input type="text" value={trainingForm.title} onChange={(e) => setTrainingForm(f => ({ ...f, title: e.target.value }))} className="vc-input" placeholder="e.g., Fire Safety Drill" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Site</label>
+                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
+                  Site <span className="text-[#ff3d3d]">*</span>
+                </label>
                 <select value={trainingForm.site} onChange={(e) => setTrainingForm(f => ({ ...f, site: e.target.value }))} className="vc-input">
                   <option value="">Select site...</option>
                   {sites.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Trainer</label>
+                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
+                  Trainer <span className="text-[#ff3d3d]">*</span>
+                </label>
                 <input type="text" value={trainingForm.trainer} onChange={(e) => setTrainingForm(f => ({ ...f, trainer: e.target.value }))} className="vc-input" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Date</label>
+                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
+                  Date <span className="text-[#ff3d3d]">*</span>
+                </label>
                 <input type="date" value={trainingForm.date} onChange={(e) => setTrainingForm(f => ({ ...f, date: e.target.value }))} className="vc-input" style={{ fontFamily: "'Share Tech Mono', monospace" }} />
               </div>
               <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Duration (hrs)</label>
+                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
+                  Duration (hrs) <span className="text-[#ff3d3d]">*</span>
+                </label>
                 <input type="text" value={trainingForm.duration} onChange={(e) => setTrainingForm(f => ({ ...f, duration: e.target.value }))} className="vc-input" placeholder="e.g., 4" />
               </div>
             </div>

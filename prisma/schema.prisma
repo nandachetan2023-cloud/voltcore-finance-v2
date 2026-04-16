@@ -600,3 +600,43 @@ model WorkflowInstance {
   WorkflowAction     WorkflowAction[]
   WorkflowDefinition WorkflowDefinition @relation(fields: [definitionId], references: [id])
 }
+
+model JobOpening {
+  id           Int      @id @default(autoincrement())
+  position     String
+  designationId Int?
+  site         String
+  openings     Int
+  applications Int      @default(0)
+  priority     String
+  status       String   @default("Open")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+}
+
+model Certification {
+  id           Int      @id @default(autoincrement())
+  empId        String
+  employeeName String
+  name         String
+  issuedBy     String
+  issueDate    String
+  expiryDate   String
+  status       String   @default("Valid")
+  filePath     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+}
+
+model TrainingSession {
+  id        Int      @id @default(autoincrement())
+  title     String
+  site      String
+  trainer   String
+  date      String
+  duration  String
+  attendees Int      @default(0)
+  status    String   @default("Scheduled")
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}

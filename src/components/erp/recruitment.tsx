@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface JobOpening {
   id: string;
   position: string;
+  designationId?: number | null;
   site: string;
   openings: number;
   applications: number;
@@ -26,8 +27,14 @@ interface JobOpening {
   createdAt: string;
 }
 
+interface Designation {
+  id: number;
+  name: string;
+}
+
 interface JobFormData {
   position: string;
+  designationId: number | null;
   site: string;
   openings: number;
   priority: string;
@@ -35,7 +42,7 @@ interface JobFormData {
 }
 
 const EMPTY_FORM: JobFormData = {
-  position: '', site: '', openings: 1, priority: 'Medium', status: 'Open',
+  position: '', designationId: null, site: '', openings: 1, priority: 'Medium', status: 'Open',
 };
 
 const PRIORITY_OPTIONS = ['Urgent', 'High', 'Medium', 'Low'];
@@ -118,6 +125,7 @@ function StatCard({ icon: Icon, label, value, color }: {
 export default function Recruitment() {
   const [openings, setOpenings] = useState<JobOpening[]>([]);
   const [sites, setSites] = useState<string[]>([]);
+  const [designations, setDesignations] = useState<Designation[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Dialogs
@@ -136,17 +144,20 @@ export default function Recruitment() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [jobRes, siteRes] = await Promise.all([
+      const [jobRes, siteRes, desigRes] = await Promise.all([
         fetch('/api/recruitment'),
-        fetch('/api/sites'),
+        fetch('/api/biometric/sites'),
+        fetch('/api/designations'),
       ]);
       const jobJson = await jobRes.json();
       const siteJson = await siteRes.json();
+      const desigJson = await desigRes.json();
       if (jobJson.success) setOpenings(jobJson.data);
       if (siteJson.success) {
-        const uniqueSites = [...new Set(siteJson.data.map((s: any) => s.name))] as string[];
-        setSites(uniqueSites);
+        const siteNames = siteJson.data.map((s: any) => s.name);
+        setSites(siteNames);
       }
+      if (desigJson.success) setDesignations(desigJson.data);
     } catch {
       toast.error('Failed to fetch recruitment data');
     } finally {
@@ -249,7 +260,7 @@ export default function Recruitment() {
   const openEditDialog = (job: JobOpening) => {
     setEditTarget(job);
     setForm({
-      position: job.position, site: job.site, openings: job.openings,
+      position: job.position, designationId: job.designationId || null, site: job.site, openings: job.openings,
       priority: job.priority, status: job.status,
     });
     setEditOpen(true);
@@ -346,6 +357,13 @@ export default function Recruitment() {
               <input type="text" value={form.position} onChange={e => updateForm('position', e.target.value)} placeholder="e.g. Site Engineer" className="vc-input" />
             </div>
             <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Designation</label>
+              <select value={form.designationId || ''} onChange={e => updateForm('designationId', e.target.value ? Number(e.target.value) : null)} className="vc-input appearance-none">
+                <option value="">Select designation (optional)...</option>
+                {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
               <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none">
                 <option value="">Select site...</option>
@@ -394,6 +412,13 @@ export default function Recruitment() {
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Position *</label>
               <input type="text" value={form.position} onChange={e => updateForm('position', e.target.value)} className="vc-input" />
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Designation</label>
+              <select value={form.designationId || ''} onChange={e => updateForm('designationId', e.target.value ? Number(e.target.value) : null)} className="vc-input appearance-none">
+                <option value="">Select designation (optional)...</option>
+                {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
