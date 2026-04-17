@@ -1,9 +1,10 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const today = new Date().toISOString().split('T')[0]
 

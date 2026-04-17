@@ -1,6 +1,6 @@
 'use client';
 
-import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP } from '@/store/erp-store';
+import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed } from '@/store/erp-store';
 import { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
 import {
@@ -11,7 +11,8 @@ import {
   BarChart3, ShoppingBag, TimerReset, Menu, X, Bell, ChevronRight, ChevronDown,
   ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileEdit, Landmark, Scale, Target, PieChart,
   Wallet, FileSpreadsheet, ReceiptIndianRupee, BadgeIndianRupee, CircleDollarSign, Undo2,
-  ArrowRightLeft, HandCoins, RefreshCw, AlertTriangle, Award, Download, Fingerprint
+  ArrowRightLeft, HandCoins, RefreshCw, AlertTriangle, Award, Download, Fingerprint, Shield, Trash2,
+  UserCircle
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -22,10 +23,10 @@ const ICON_MAP: Record<string, React.ElementType> = {
   BarChart3, ShoppingBag, TimerReset, ArrowDownCircle, ArrowUpCircle, FileEdit,
   Landmark, Scale, Target, PieChart, Wallet, FileSpreadsheet, ReceiptIndianRupee,
   BadgeIndianRupee, CircleDollarSign, Undo2, ArrowRightLeft, HandCoins, Award, Download,
-  Fingerprint,
+  Fingerprint, Shield, Trash2, UserCircle,
 };
 
-const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'financial-reports'];
+const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'financial-reports', 'trash'];
 const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'finance', 'projects', 'assets', 'system'];
 
 // ── Error Boundary ──────────────────────────────────────────────
@@ -87,12 +88,18 @@ function ModuleRenderer({ moduleKey }: { moduleKey: string }) {
 
 // ── Module Grid (Dashboard) ─────────────────────────────────────
 function ModuleGrid() {
-  const { setActiveModule } = useERPStore();
+  const { setActiveModule, userRole, allowedModules } = useERPStore();
+  const visibleModules = MAIN_MODULES.filter(mod =>
+    userRole === 'admin' || isModuleAllowed(mod.id, allowedModules)
+  );
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
-      {MAIN_MODULES.map((mod) => {
+      {visibleModules.map((mod) => {
         const Icon = ICON_MAP[mod.icon] || Zap;
-        const hasSubModules = SUB_MODULES[mod.id] && SUB_MODULES[mod.id].length > 0;
+        const allSubs = SUB_MODULES[mod.id] || [];
+        const visibleSubs = userRole === 'admin'
+          ? allSubs
+          : allSubs.filter(s => isModuleAllowed(s.id, allowedModules));
         return (
           <button key={mod.id} onClick={() => setActiveModule(mod.id as any)}
             className="group bg-[#161c24] border border-[#252e3a] rounded-xl p-6 text-left hover:border-[#f5a623]/40 transition-all duration-200 hover:shadow-lg hover:shadow-[#f5a623]/5">
@@ -100,7 +107,7 @@ function ModuleGrid() {
               <Icon size={24} className="text-[#f5a623]" />
             </div>
             <div className="text-[14px] font-semibold text-[#e2e8f0] group-hover:text-[#f5a623] transition-colors">{mod.label}</div>
-            {hasSubModules && <div className="text-[11px] text-[#5a6878] mt-1">{SUB_MODULES[mod.id].length} sub-modules</div>}
+            {visibleSubs.length > 0 && <div className="text-[11px] text-[#5a6878] mt-1">{visibleSubs.length} sub-modules</div>}
           </button>
         );
       })}
@@ -110,8 +117,11 @@ function ModuleGrid() {
 
 // ── Sub-Module Grid ─────────────────────────────────────────────
 function SubModuleGrid({ moduleId }: { moduleId: string }) {
-  const { setActiveModule } = useERPStore();
-  const items = SUB_MODULES[moduleId] || [];
+  const { setActiveModule, userRole, allowedModules } = useERPStore();
+  const allItems = SUB_MODULES[moduleId] || [];
+  const items = userRole === 'admin'
+    ? allItems
+    : allItems.filter(item => isModuleAllowed(item.id, allowedModules));
   const config = MODULE_CONFIG[moduleId];
   const parentInfo = MAIN_MODULE_MAP[moduleId];
   return (
@@ -147,13 +157,17 @@ function SubModuleGrid({ moduleId }: { moduleId: string }) {
 
 // ── Sidebar ─────────────────────────────────────────────────────
 function Sidebar({ onLogout }: { onLogout?: () => void }) {
-  const { activeModule, activeParentModule, setActiveModule, sidebarOpen, setSidebarOpen } = useERPStore();
+  const { activeModule, activeParentModule, setActiveModule, sidebarOpen, setSidebarOpen, userRole, allowedModules } = useERPStore();
   const isSubNav = EXPANDABLE_MODULES.includes(activeParentModule) && activeParentModule !== 'dashboard';
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [userData, setUserData] = useState<{ name: string; email: string } | null>(null);
+  const [userData, setUserData] = useState<{
+    name: string;
+    email: string;
+    role?: string;
+    moduleAccess?: string[];
+  } | null>(null);
 
   useEffect(() => {
-    // Load user data from localStorage
     const userStr = localStorage.getItem('erp_auth_user');
     if (userStr) {
       try {
@@ -166,14 +180,12 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
   }, []);
 
   useEffect(() => {
-    // Close user menu when clicking outside
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (showUserMenu && !target.closest('.user-menu-container')) {
         setShowUserMenu(false);
       }
     };
-
     if (showUserMenu) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
@@ -182,13 +194,17 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
 
   const getInitials = (name: string) => {
     const parts = name.split(' ');
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return name.substring(0, 2).toUpperCase();
   };
+
   const isPageModule = !isSubNav && PAGE_MODULES.includes(activeModule as string) && activeModule !== 'dashboard';
-  const subModules = SUB_MODULES[activeParentModule] || [];
+  const allSubModules = SUB_MODULES[activeParentModule] || [];
+  const subModules = userRole === 'admin'
+    ? allSubModules
+    : allSubModules.filter(item => isModuleAllowed(item.id, allowedModules));
+
+  const isDemo = userRole === 'demo';
 
   return (
     <>
@@ -204,6 +220,15 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
           </button>
           <button className="ml-auto lg:hidden text-[#5a6878] hover:text-[#e2e8f0]" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
         </div>
+
+        {/* Demo mode banner */}
+        {isDemo && (
+          <div className="mx-3 mt-2 px-3 py-2 bg-[#f5a623]/10 border border-[#f5a623]/30 rounded-lg flex items-center gap-2">
+            <Shield size={12} className="text-[#f5a623] shrink-0" />
+            <span className="text-[10px] text-[#f5a623] font-semibold tracking-wide">DEMO ACCESS</span>
+          </div>
+        )}
+
         <div className="flex-1 py-2">
           {(isSubNav || isPageModule) ? (
             <>
@@ -240,34 +265,36 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
             </button>
           )}
         </div>
+
         <div className="border-t border-[#252e3a] p-3 relative user-menu-container">
-          <button 
+          <button
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="w-full flex items-center gap-2 p-2 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors cursor-pointer"
           >
-            <div className="w-[30px] h-[30px] rounded-full bg-gradient-to-br from-[#f5a623] to-[#e8891a] flex items-center justify-center text-[11px] font-bold text-black" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-              {userData ? getInitials(userData.name) : 'AD'}
+            <div className={`w-[30px] h-[30px] rounded-full flex items-center justify-center text-[11px] font-bold text-black ${isDemo ? 'bg-gradient-to-br from-[#4a9eff] to-[#2563eb]' : 'bg-gradient-to-br from-[#f5a623] to-[#e8891a]'}`} style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+              {userData ? getInitials(userData.name) : isDemo ? 'DM' : 'AD'}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-semibold truncate">{userData?.name || 'Admin'}</div>
-              <div className="text-[10px] text-[#5a6878]">Administrator</div>
+              <div className="text-[11px] font-semibold truncate">{userData?.name || (isDemo ? 'Demo User' : 'Admin')}</div>
+              <div className={`text-[10px] ${isDemo ? 'text-[#4a9eff]' : 'text-[#5a6878]'}`}>
+                {isDemo ? 'Demo Account' : 'Administrator'}
+              </div>
             </div>
             <ChevronDown size={14} className={`text-[#5a6878] shrink-0 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
           </button>
-          
-          {/* User Menu Dropdown */}
+
           {showUserMenu && (
             <div className="absolute bottom-full left-3 right-3 mb-2 bg-[#161c24] border border-[#252e3a] rounded-lg shadow-lg overflow-hidden z-50">
               <div className="p-3 border-b border-[#252e3a]">
-                <div className="text-[11px] font-semibold text-[#e2e8f0]">{userData?.name || 'Admin'}</div>
+                <div className="text-[11px] font-semibold text-[#e2e8f0]">{userData?.name || (isDemo ? 'Demo User' : 'Admin')}</div>
                 <div className="text-[10px] text-[#5a6878]">{userData?.email || 'admin@voltcore.com'}</div>
+                <div className={`inline-flex items-center gap-1 mt-1 px-2 py-[2px] rounded-full text-[9px] font-bold ${isDemo ? 'bg-[#4a9eff]/15 text-[#4a9eff]' : 'bg-[#f5a623]/15 text-[#f5a623]'}`}>
+                  {isDemo ? <><Shield size={9} /> DEMO</> : <><Zap size={9} /> ADMIN</>}
+                </div>
               </div>
               <button
-                onClick={() => {
-                  setShowUserMenu(false);
-                  onLogout?.();
-                }}
-                className="w-full px-3 py-2 text-left text-[11px] text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-colors flex items-center gap-2"
+                onClick={() => { setShowUserMenu(false); onLogout?.(); }}
+                className="w-full px-3 py-2 text-left text-[11px] text-[#8899aa] hover:bg-[#1a2028] transition-colors flex items-center gap-2"
               >
                 <ArrowLeft size={14} />
                 Logout
@@ -288,9 +315,11 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
 
-  // Fetch notifications on mount
+  // Fetch notifications on mount and poll every 30s
   useEffect(() => {
     fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchNotifications = async () => {
@@ -304,6 +333,20 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
       console.error('Failed to fetch notifications:', error);
       setNotifications([]);
     }
+  };
+
+  const markAllRead = async () => {
+    try {
+      const user = localStorage.getItem('erp_auth_user');
+      const email = user ? JSON.parse(user).email : null;
+      if (!email) return;
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markAllRead: true, userEmail: email }),
+      });
+      setNotifications([]);
+    } catch {}
   };
 
   useEffect(() => {
@@ -354,7 +397,12 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
               <div className="p-3 border-b border-[#252e3a] flex items-center justify-between">
                 <div className="text-[12px] font-semibold text-[#e2e8f0]">Notifications</div>
                 {hasNotifications && (
-                  <span className="text-[10px] text-[#5a6878]">{notifications.length} new</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-[#5a6878]">{notifications.length} new</span>
+                    <button onClick={markAllRead} className="text-[10px] text-[#f5a623] hover:text-[#e8891a] font-semibold transition-colors">
+                      Mark all read
+                    </button>
+                  </div>
                 )}
               </div>
               <div className="max-h-[400px] overflow-y-auto">

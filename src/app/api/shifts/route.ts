@@ -1,10 +1,11 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
 // GET: List all shifts
 export async function GET() {
+  const db = getDbForRequest(request)
   try {
     const shifts = await db.shift.findMany({
       where: { isDeleted: false },
@@ -26,6 +27,7 @@ export async function GET() {
 
 // POST: Create shift
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const {
@@ -58,6 +60,7 @@ export async function POST(request: NextRequest) {
         graceMinutes: graceMinutes || 10,
         otThresholdMin: otThresholdMin || 30,
         weekOffDays: weekOffDays || [],
+        updatedAt: new Date(),
       },
     })
 
@@ -73,6 +76,7 @@ export async function POST(request: NextRequest) {
 
 // PUT: Update shift by id
 export async function PUT(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id, ...data } = body
@@ -94,7 +98,10 @@ export async function PUT(request: NextRequest) {
 
     const shift = await db.shift.update({
       where: { id },
-      data,
+      data: {
+        ...data,
+        updatedAt: new Date(),
+      },
     })
 
     return NextResponse.json({ success: true, data: shift })
@@ -109,6 +116,7 @@ export async function PUT(request: NextRequest) {
 
 // DELETE: Delete shift by id (soft delete)
 export async function DELETE(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id } = body
@@ -131,7 +139,11 @@ export async function DELETE(request: NextRequest) {
     // Soft delete
     await db.shift.update({
       where: { id },
-      data: { isDeleted: true, isActive: false },
+      data: { 
+        isDeleted: true, 
+        isActive: false,
+        updatedAt: new Date(),
+      },
     })
 
     return NextResponse.json({ success: true, data: { id } })

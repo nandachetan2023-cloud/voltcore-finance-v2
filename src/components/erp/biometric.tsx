@@ -21,8 +21,10 @@ import {
   Calendar,
   Download,
   AlertCircle,
-  Building2
+  Building2,
+  Settings2
 } from 'lucide-react';
+import BiometricSiteSettings from '@/components/erp/biometric-settings';
 
 interface BiometricSite {
   id: string;
@@ -395,6 +397,7 @@ export default function BiometricPage() {
           <TabsTrigger value="sync">Sync Operations</TabsTrigger>
           <TabsTrigger value="logs">Raw Logs</TabsTrigger>
           <TabsTrigger value="history">Sync History</TabsTrigger>
+          <TabsTrigger value="settings">Site Settings</TabsTrigger>
         </TabsList>
 
         {/* Sync Operations Tab */}
@@ -685,6 +688,11 @@ export default function BiometricPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Site Settings Tab */}
+        <TabsContent value="settings">
+          <BiometricSiteSettings />
         </TabsContent>
       </Tabs>
     </div>

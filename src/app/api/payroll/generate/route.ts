@@ -1,6 +1,8 @@
-import { db } from '@/lib/db';
+import { getDbForRequest } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { PayrollCalculator } from '@/lib/services/payroll-calculator';
+import { getHolidaysInRange } from '@/lib/services/holiday-service';
+import { calculateTotalOvertimeHours } from '@/lib/services/overtime-calculator';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +21,7 @@ interface GeneratePayrollRequest {
 }
 
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body: GeneratePayrollRequest = await request.json();
     const { mode, month, year, employeeId, employeeIds, filters } = body;
@@ -128,6 +131,10 @@ export async function POST(request: NextRequest) {
         const startDate = new Date(year, month - 1, 1);
         const endDate = new Date(year, month, 0);
 
+        // Get holidays for the month
+        const holidays = await getHolidaysInRange(startDate, endDate, employee.branchId);
+        const holidayDates = new Set(holidays.map(h => h.date.toISOString().split('T')[0]));
+
         const attendanceLogs = await db.attendanceLog.findMany({
           where: {
             employeeId: employee.id,
@@ -138,7 +145,7 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        // Calculate attendance
+        // Calculate attendance (excluding holidays)
         const presentDays = attendanceLogs.filter(log => log.status === 'present').length;
         
         // Get paid leave days
@@ -159,15 +166,16 @@ export async function POST(request: NextRequest) {
           paidLeaveDays += days;
         }
 
-        // Calculate OT hours
-        let totalOTHours = 0;
-        for (const log of attendanceLogs) {
-          if (log.punchIn && log.punchOut) {
-            const hours = (log.punchOut.getTime() - log.punchIn.getTime()) / (1000 * 60 * 60);
-            const otHours = Math.max(0, hours - 8);
-            totalOTHours += otHours;
-          }
-        }
+        // Calculate OT hours (includes holiday work as full OT)
+        const totalOTHours = await calculateTotalOvertimeHours(
+          attendanceLogs.map(log => ({
+            punchIn: log.punchIn,
+            punchOut: log.punchOut,
+            logDate: log.logDate
+          })),
+          employee.branchId,
+          8 // Standard hours
+        );
 
         // Get salary structure (for now, use basic values from employee or defaults)
         // In production, fetch from SalaryStructureAssignment
@@ -179,7 +187,7 @@ export async function POST(request: NextRequest) {
           presentDays,
           paidLeaveDays,
           weeklyOffs: 4, // Approximate
-          holidays: 0,
+          holidays: holidays.length, // Include actual holiday count
           lopDays: 0,
           totalHours: presentDays * 8,
         };

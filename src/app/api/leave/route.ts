@@ -1,10 +1,12 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { getHolidaysInRange, calculateWorkingDays } from '@/lib/services/holiday-service'
 
 export const dynamic = 'force-dynamic'
 
 // GET: List all leave requests
 export async function GET(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const { searchParams } = new URL(request.url)
     const employeeId = searchParams.get('employeeId')
@@ -62,6 +64,7 @@ export async function GET(request: NextRequest) {
 
 // POST: Create leave request
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const {
@@ -81,7 +84,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate employee exists
-    const employee = await db.employee.findUnique({ where: { id: parseInt(employeeId) } })
+    const employee = await db.employee.findUnique({ 
+      where: { id: parseInt(employeeId) },
+      select: {
+        id: true,
+        branchId: true,
+        departmentId: true,
+        designationId: true,
+      }
+    })
     if (!employee) {
       return NextResponse.json(
         { success: false, error: 'Employee not found' },
@@ -89,12 +100,90 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Calculate days if not provided
-    let leaveDays = days
-    if (!leaveDays) {
-      const from = new Date(fromDate)
-      const to = new Date(toDate)
-      leaveDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+    // Validate leave policy exists and is applicable to employee
+    const policy = await db.leavePolicy.findFirst({
+      where: {
+        code: leaveType,
+        isActive: true,
+        OR: [
+          { applicableTo: 'all' },
+          { 
+            applicableTo: 'department',
+            departmentId: employee.departmentId 
+          },
+          { 
+            applicableTo: 'designation',
+            designationId: employee.designationId 
+          },
+          { 
+            applicableTo: 'both',
+            departmentId: employee.departmentId,
+            designationId: employee.designationId 
+          }
+        ]
+      }
+    })
+
+    if (!policy) {
+      return NextResponse.json(
+        { success: false, error: 'This leave type is not applicable to your role or department' },
+        { status: 400 }
+      )
+    }
+
+    // Check for holidays in the leave date range
+    const holidays = await getHolidaysInRange(fromDate, toDate, employee.branchId, db)
+    
+    // Calculate working days excluding weekends, holidays, and employee's shift off days
+    const workingDays = await calculateWorkingDays(fromDate, toDate, employee.branchId, employee.id, true, db)
+    
+    if (workingDays === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Leave request contains only off days and/or holidays. No working days to apply leave.' },
+        { status: 400 }
+      )
+    }
+
+    // Use calculated working days (holidays and shift off days are automatically excluded)
+    const leaveDays = days || workingDays
+    
+    // Prepare message about holidays and off days if any exist in the range
+    let responseMessage = 'Leave request created successfully'
+    let holidayInfo = null
+    if (holidays.length > 0) {
+      const holidayNames = holidays.map(h => h.name).join(', ')
+      const totalDays = Math.ceil((new Date(toDate).getTime() - new Date(fromDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
+      const offDays = totalDays - workingDays - holidays.length
+      
+      if (offDays > 0) {
+        responseMessage = `Leave request created. ${holidays.length} holiday(s) (${holidayNames}) and ${offDays} off day(s) excluded. ${workingDays} working days will be deducted.`
+      } else {
+        responseMessage = `Leave request created. ${holidays.length} holiday(s) (${holidayNames}) excluded. ${workingDays} working days will be deducted.`
+      }
+      
+      holidayInfo = {
+        count: holidays.length,
+        holidays: holidays.map(h => ({
+          name: h.name,
+          date: h.date.toISOString().split('T')[0]
+        })),
+        workingDays: workingDays,
+        offDays: offDays
+      }
+    } else {
+      // Check if there are off days without holidays
+      const totalDays = Math.ceil((new Date(toDate).getTime() - new Date(fromDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
+      const offDays = totalDays - workingDays
+      
+      if (offDays > 0) {
+        responseMessage = `Leave request created. ${offDays} off day(s) excluded. ${workingDays} working days will be deducted.`
+        holidayInfo = {
+          count: 0,
+          holidays: [],
+          workingDays: workingDays,
+          offDays: offDays
+        }
+      }
     }
 
     const leaveRequest = await db.leaveRequest.create({
@@ -106,6 +195,8 @@ export async function POST(request: NextRequest) {
         days: leaveDays,
         reason: reason || '',
         status: 'pending',
+        appliedDate: new Date(),
+        updatedAt: new Date(),
       },
       include: {
         Employee: {
@@ -119,7 +210,12 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ success: true, data: leaveRequest }, { status: 201 })
+    return NextResponse.json({ 
+      success: true, 
+      data: leaveRequest,
+      message: responseMessage,
+      holidayInfo: holidayInfo
+    }, { status: 201 })
   } catch (error) {
     console.error('Error creating leave request:', error)
     return NextResponse.json(
@@ -131,6 +227,7 @@ export async function POST(request: NextRequest) {
 
 // PATCH: Update leave request status (approve/reject)
 export async function PATCH(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id, status, rejectionReason, approvedBy, rejectedBy } = body
@@ -188,6 +285,7 @@ export async function PATCH(request: NextRequest) {
 
 // DELETE: Delete leave request (soft delete)
 export async function DELETE(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id } = body

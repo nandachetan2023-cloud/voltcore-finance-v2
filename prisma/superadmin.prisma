@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/superadmin-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("SUPERADMIN_DATABASE_URL")
+}
+
+// ── Tenant: one row per company/client ──────────────────────────
+model Tenant {
+  id          String   @id @default(cuid())
+  name        String                        // e.g. "Voltcore", "Upasana Associates"
+  slug        String   @unique              // e.g. "voltcore", "upasana"
+  dbUrl       String                        // full postgres connection string
+  status      String   @default("active")  // active | inactive
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       TenantUser[]
+  biometric   BiometricSiteConfig[]
+  orgRoles    OrgRole[]
+  approvalChains ApprovalChain[]
+}
+
+// ── TenantUser: login accounts for each tenant ──────────────────
+model TenantUser {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name           String
+  email          String
+  password       String                        // bcrypt hash
+  phone          String   @default("")
+  allowedModules String   @default("all")      // "all" or comma-separated: "organization,hrms"
+  orgRoleId      String?                       // assigned OrgRole (module access flows from here)
+  employeeId     Int?                          // linked employee record in the tenant's DB
+  createdBySuperadmin Boolean @default(false)  // true = exempt from maxUsers limit
+  isActive       Boolean  @default(true)
+  lastActiveAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([email])
+}
+
+// ── BiometricSiteConfig: per-tenant punch machine credentials ───
+model BiometricSiteConfig {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  siteId      String                          // e.g. "site1"
+  siteName    String                          // e.g. "Head Office"
+  baseUrl     String   @default("https://api.etimeoffice.com/api")
+  corporateId String
+  username    String
+  password    String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, siteId])
+  @@index([tenantId])
+}
+
+// ── SuperAdminUser: the superadmin login itself ─────────────────
+model SuperAdminUser {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // bcrypt hash
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ── OrgRole: business roles defined per tenant ──────────────────
+// Superadmin defines these; tenant admin assigns them to users.
+// level: 1=lowest authority, higher=more authority
+// departments: "" = universal, "HR,Finance" = scoped to those depts
+// designations: "" = universal, "Manager,Executive" = scoped
+// moduleAccess: "all" or "organization,hrms" — controls what this role can see
+model OrgRole {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name          String                        // e.g. "Employee", "HR Manager", "Admin"
+  level         Int      @default(1)          // hierarchy level
+  maxUsers      Int      @default(0)          // 0 = unlimited; >0 = max tenant-admin-created users for this role
+  moduleAccess  String   @default("all")      // module access for this role
+  departments   String   @default("")         // "" = universal, else comma-separated dept names
+  designations  String   @default("")         // "" = universal, else comma-separated designation names
+  color         String   @default("#5a6878")  // UI badge color
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  approvalSteps     ApprovalStep[] @relation("ApproverRole")
+  escalationSteps   ApprovalStep[] @relation("EscalationRole")
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+// ── ApprovalChain: one chain per request type per tenant ─────────
+// requestType: "leave" | "expense" | "attendance" | "payroll" | "custom"
+model ApprovalChain {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  requestType String                          // "leave", "expense", etc.
+  name        String                          // display name e.g. "Leave Approval"
+  description String   @default("")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  steps       ApprovalStep[]
+
+  @@unique([tenantId, requestType])
+  @@index([tenantId])
+}
+
+// ── ApprovalStep: one step in an approval chain ──────────────────
+// scope: "universal" | "same_department" | "same_branch"
+// selfEscalateToRoleId: if the approver IS the requester, use this role instead
+model ApprovalStep {
+  id                    String   @id @default(cuid())
+  chainId               String
+  chain                 ApprovalChain @relation(fields: [chainId], references: [id], onDelete: Cascade)
+
+  stepNumber            Int                   // 1, 2, 3...
+  approverRoleId        String
+  approverRole          OrgRole  @relation("ApproverRole", fields: [approverRoleId], references: [id])
+  scope                 String   @default("universal") // "universal" | "same_department" | "same_branch"
+  selfEscalateToRoleId  String?
+  selfEscalateTo        OrgRole? @relation("EscalationRole", fields: [selfEscalateToRoleId], references: [id])
+  isRequired            Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([chainId, stepNumber])
+  @@index([chainId])
+}

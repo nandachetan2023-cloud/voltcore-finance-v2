@@ -417,7 +417,7 @@ export default function PayrollModule() {
 
   const handleDownloadSalarySheet = async (runId: number, month: number, year: number) => {
     try {
-      toast.info('Generating salary compliance sheet...');
+      toast.info('Generating salary non-compliance sheet...');
       
       const res = await fetch('/api/payroll/salary-sheet', {
         method: 'POST',
@@ -431,12 +431,12 @@ export default function PayrollModule() {
         const a = document.createElement('a');
         a.href = url;
         const timestamp = Date.now();
-        a.download = `Salary_Sheet_${MONTHS[month - 1].label}_${year}_${timestamp}.xlsx`;
+        a.download = `Salary_NonCompliance_Sheet_${MONTHS[month - 1].label}_${year}_${timestamp}.xlsx`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        toast.success('Salary sheet downloaded successfully');
+        toast.success('Salary non-compliance sheet downloaded successfully');
       } else {
         toast.error('Failed to generate salary sheet');
       }

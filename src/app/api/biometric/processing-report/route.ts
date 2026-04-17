@@ -1,10 +1,11 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
 // GET: Detailed report of biometric processing
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     // Get all processed raw logs grouped by employee and date
     const processedLogs = await db.biometricRawLog.findMany({

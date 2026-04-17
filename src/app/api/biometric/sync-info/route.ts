@@ -1,10 +1,11 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
 // GET: Get detailed sync information
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     // Get last sync for each site
     const lastSyncs = await db.biometricSyncLog.findMany({

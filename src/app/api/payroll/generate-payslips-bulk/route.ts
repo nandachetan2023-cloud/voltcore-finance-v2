@@ -1,4 +1,4 @@
-import { db } from '@/lib/db';
+import { getDbForRequest } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { PayslipGenerator } from '@/lib/services/payslip-generator';
 import { PayrollCalculator } from '@/lib/services/payroll-calculator';
@@ -10,6 +10,7 @@ interface GenerateBulkPayslipsRequest {
 }
 
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body: GenerateBulkPayslipsRequest = await request.json();
     const { payrollRunId } = body;

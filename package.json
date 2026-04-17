@@ -14,6 +14,8 @@
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
     "db:seed": "tsx prisma/seed-simple.ts",
+    "cleanup:deleted": "tsx scripts/cleanup-deleted-records.ts",
+    "cleanup:deleted:dry-run": "tsx scripts/cleanup-deleted-records.ts",
     "biometric:sync": "tsx scripts/biometric-sync-cron.ts",
     "biometric:scheduler": "tsx scripts/biometric-sync-scheduler.ts",
     "biometric:test": "curl -X POST http://localhost:3000/api/biometric/sync"

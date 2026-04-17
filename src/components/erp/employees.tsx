@@ -667,10 +667,11 @@ export default function EmployeesModule() {
 
           {/* Table */}
           <div className="rounded-lg border border-[#252e3a] overflow-hidden">
-            <div className="max-h-[480px] overflow-y-auto">
-              <div className="grid grid-cols-[70px_1fr_110px_90px_65px_80px_130px_75px_60px] gap-2 px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-[#5a6878] bg-[#141920] border-b border-[#252e3a] sticky top-0 z-10">
-                <span>ID</span><span>Name</span><span className="hidden md:block">Trade/Role</span><span className="hidden lg:block">Site</span><span>Type</span><span className="hidden sm:block">Joined</span><span className="hidden xl:block">Certifications</span><span>Status</span><span className="text-right">Actions</span>
-              </div>
+            <div className="overflow-x-auto">
+              <div className="max-h-[480px] overflow-y-auto min-w-[900px]">
+                <div className="grid grid-cols-[70px_1fr_110px_90px_90px_80px_130px_75px_60px] gap-2 px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-[#5a6878] bg-[#141920] border-b border-[#252e3a] sticky top-0 z-10">
+                  <span>ID</span><span>Name</span><span className="hidden md:block">Trade/Role</span><span className="hidden lg:block">Site</span><span>Type</span><span className="hidden sm:block">Joined</span><span className="hidden xl:block">Certifications</span><span>Status</span><span className="text-right">Actions</span>
+                </div>
               {paged.length === 0 ? (
                 <div className="px-4 py-12 text-center text-[#5a6878] text-xs">No employees match your filters.</div>
               ) : paged.map(emp => {
@@ -679,7 +680,7 @@ export default function EmployeesModule() {
                 const st = getStatusStyle(emp.employmentStatus || 'active');
                 const initials = getInitials(emp);
                 return (
-                  <div key={emp.id} className="grid grid-cols-[70px_1fr_110px_90px_65px_80px_130px_75px_60px] gap-2 px-3 py-2.5 items-center border-b border-[#1e252e] last:border-0 hover:bg-[#1a2028] transition-colors group">
+                  <div key={emp.id} className="grid grid-cols-[70px_1fr_110px_90px_90px_80px_130px_75px_60px] gap-2 px-3 py-2.5 items-center border-b border-[#1e252e] last:border-0 hover:bg-[#1a2028] transition-colors group">
                     <span className="text-[10px] text-[#8899aa] font-medium truncate" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{emp.employeeCode}</span>
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[9px] font-bold ${avatar.bg} ${avatar.text}`}>{initials}</div>
@@ -700,6 +701,7 @@ export default function EmployeesModule() {
                   </div>
                 );
               })}
+              </div>
             </div>
           </div>
 

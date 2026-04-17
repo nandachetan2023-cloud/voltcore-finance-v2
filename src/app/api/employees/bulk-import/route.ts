@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 
@@ -68,6 +68,7 @@ interface ImportResult {
 
 // POST: Bulk import employees from Excel
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File

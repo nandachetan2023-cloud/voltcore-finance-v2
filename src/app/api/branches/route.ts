@@ -1,10 +1,11 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
 // GET: List all branches
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const branches = await db.branch.findMany({
       orderBy: { name: 'asc' },
@@ -25,6 +26,7 @@ export async function GET() {
 
 // POST: Create branch
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { name, address } = body
@@ -55,6 +57,7 @@ export async function POST(request: NextRequest) {
 
 // PUT: Update branch by id
 export async function PUT(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id, ...data } = body
@@ -91,6 +94,7 @@ export async function PUT(request: NextRequest) {
 
 // DELETE: Delete branch by id
 export async function DELETE(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id } = body

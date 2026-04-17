@@ -1,4 +1,4 @@
-import { db } from '@/lib/db';
+import { getDbForRequest } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 
@@ -11,6 +11,7 @@ interface SalarySheetRequest {
 }
 
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body: SalarySheetRequest = await request.json();
     const { payrollRunId, month, year } = body;
@@ -22,7 +23,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch payroll items with employee details
+    // Fetch payroll run to check type
+    const payrollRun = await db.payrollRun.findUnique({
+      where: { id: payrollRunId },
+    });
+
+    if (!payrollRun) {
+      return NextResponse.json(
+        { success: false, error: 'Payroll run not found' },
+        { status: 404 }
+      );
+    }
+
+    // Fetch payroll items with ALL employee details
     const payrollItems = await db.payrollItem.findMany({
       where: { payrollRunId },
       include: {
@@ -31,11 +44,15 @@ export async function POST(request: NextRequest) {
             Department: true,
             Designation: true,
             Branch: true,
+            Grade: true,
           },
         },
         PayrollRun: true,
       },
-      orderBy: { employeeId: 'asc' },
+      orderBy: [
+        { Employee: { Department: { name: 'asc' } } },
+        { Employee: { employeeCode: 'asc' } },
+      ],
     });
 
     if (payrollItems.length === 0) {
@@ -48,7 +65,7 @@ export async function POST(request: NextRequest) {
     // Create Excel workbook
     const workbook = XLSX.utils.book_new();
 
-    // Prepare data for salary compliance sheet
+    // Prepare data for salary NON-COMPLIANCE sheet
     const sheetData: any[] = [];
 
     // Header row - EXACT format from jan_non_compliance_salary_sheet.xlsx (68 columns)
@@ -297,13 +314,13 @@ export async function POST(request: NextRequest) {
 
     // Add worksheet to workbook
     const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    const sheetName = 'COMBINED SALARY SHEET';
+    const sheetName = 'NON-COMPLIANCE SALARY SHEET';
     XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
 
     // Generate Excel file
     const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
-    const filename = `Salary_Compliance_Sheet_${monthNames[month - 1]}_${year}.xlsx`;
+    const filename = `Salary_NonCompliance_Sheet_${monthNames[month - 1]}_${year}.xlsx`;
 
     return new NextResponse(excelBuffer, {
       headers: {

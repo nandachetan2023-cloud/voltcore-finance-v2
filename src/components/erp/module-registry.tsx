@@ -8,6 +8,9 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   employees: () => import('@/components/erp/employees'),
   departments: () => import('@/components/erp/departments'),
   designations: () => import('@/components/erp/designations'),
+  holidays: () => import('@/components/erp/holidays'),
+  'leave-policies': () => import('@/components/erp/leave-policies'),
+  'attendance-rules': () => import('@/components/erp/attendance-rules'),
   attendance: () => import('@/components/erp/attendance'),
   leave: () => import('@/components/erp/leave'),
   shift: () => import('@/components/erp/shift-roster'),
@@ -15,7 +18,8 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   recruitment: () => import('@/components/erp/recruitment'),
   purchases: () => import('@/components/erp/purchases'),
   expenses: () => import('@/components/erp/expenses'),
-  payroll: () => import('@/components/erp/payroll-new'),
+  payroll: () => import('@/components/erp/payroll-unified'),
+  'payroll-generate': () => import('@/components/erp/payroll-generate'),
   invoices: () => import('@/components/erp/invoices'),
   projects: () => import('@/components/erp/projects'),
   sites: () => import('@/components/erp/sites'),
@@ -44,6 +48,12 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   'financial-reports': () => import('@/components/erp/financial-reports'),
   'project-list': () => import('@/components/erp/projects'),
   biometric: () => import('@/components/erp/biometric'),
+  trash: () => import('@/components/erp/trash'),
+  'user-management': () => import('@/components/erp/user-management'),
+  'my-attendance': () => import('@/components/erp/my-attendance'),
+  'my-leave': () => import('@/components/erp/my-leave'),
+  'my-requests': () => import('@/components/erp/my-requests'),
+  'requests': () => import('@/components/erp/admin-requests'),
 };
 
 function LoadingFallback() {

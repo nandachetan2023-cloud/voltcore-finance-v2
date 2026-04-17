@@ -1,10 +1,13 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { isHoliday } from '@/lib/services/holiday-service'
+import { applyAttendanceRules } from '@/lib/services/attendance-rule-service'
 
 export const dynamic = 'force-dynamic'
 
 // GET: List all attendance logs with employee info
 export async function GET(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '100')
@@ -78,6 +81,7 @@ export async function GET(request: NextRequest) {
 
 // POST: Create attendance record
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { employeeId, logDate, punchIn, punchOut, status } = body
@@ -89,13 +93,68 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if employee exists
-    const employee = await db.employee.findUnique({ where: { id: parseInt(employeeId) } })
+    // Check if employee exists and get shift info
+    const employee = await db.employee.findUnique({ 
+      where: { id: parseInt(employeeId) },
+      select: {
+        id: true,
+        branchId: true,
+        ShiftAssignment: {
+          where: { isActive: true },
+          include: {
+            Shift: true,
+          },
+          take: 1,
+        },
+      }
+    })
     if (!employee) {
       return NextResponse.json(
         { success: false, error: 'Employee not found' },
         { status: 400 }
       )
+    }
+
+    // Check if the date is a holiday (for information, not blocking)
+    const holidayCheck = await isHoliday(logDate, employee.branchId, db)
+    let isHolidayWork = false
+    if (holidayCheck.isHoliday) {
+      isHolidayWork = true
+      console.log(`Attendance on holiday: ${holidayCheck.holiday?.name} - All hours will be OT`)
+    }
+
+    // Apply attendance rules if punch-in time is provided
+    let calculatedStatus = status || 'present'
+    let ruleResult = null
+    
+    if (punchIn && employee.ShiftAssignment[0]?.Shift) {
+      const shift = employee.ShiftAssignment[0].Shift
+      
+      // Parse shift start time
+      const [hours, minutes] = shift.startTime.split(':').map(Number)
+      const scheduledTime = new Date(logDate)
+      scheduledTime.setHours(hours, minutes, 0, 0)
+      
+      // Apply attendance rules
+      ruleResult = await applyAttendanceRules(
+        parseInt(employeeId),
+        scheduledTime,
+        new Date(punchIn),
+        'late',
+        db
+      )
+      
+      // Use rule-calculated status if not explicitly provided
+      if (!status) {
+        calculatedStatus = ruleResult.status
+      }
+      
+      console.log('Attendance rule applied:', {
+        employee: employeeId,
+        scheduledTime: scheduledTime.toISOString(),
+        actualTime: punchIn,
+        result: ruleResult,
+      })
     }
 
     const record = await db.attendanceLog.create({
@@ -104,10 +163,10 @@ export async function POST(request: NextRequest) {
         logDate: new Date(logDate),
         punchIn: punchIn ? new Date(punchIn) : null,
         punchOut: punchOut ? new Date(punchOut) : null,
-        status: status || 'present',
+        status: calculatedStatus,
       },
       include: {
-        employee: {
+        Employee: {
           select: {
             id: true,
             employeeCode: true,
@@ -118,7 +177,17 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ success: true, data: record }, { status: 201 })
+    return NextResponse.json({ 
+      success: true, 
+      data: record,
+      ruleApplied: ruleResult ? {
+        status: ruleResult.status,
+        isLate: ruleResult.isLate,
+        lateMinutes: ruleResult.lateMinutes,
+        fineAmount: ruleResult.fineAmount,
+        appliedRule: ruleResult.appliedRule,
+      } : null,
+    }, { status: 201 })
   } catch (error) {
     console.error('Error creating attendance:', error)
     return NextResponse.json(
@@ -130,6 +199,7 @@ export async function POST(request: NextRequest) {
 
 // PUT: Update attendance by id
 export async function PUT(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id, ...data } = body
@@ -181,6 +251,7 @@ export async function PUT(request: NextRequest) {
 
 // DELETE: Delete attendance by id
 export async function DELETE(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id } = body

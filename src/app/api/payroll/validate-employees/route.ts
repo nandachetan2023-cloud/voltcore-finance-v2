@@ -1,18 +1,21 @@
-import { db } from '@/lib/db';
+import { getDbForRequest } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Validate employee codes from uploaded salary sheet before import
+ * Validate employee codes/names from uploaded salary sheet before import
+ * Supports both compliance (24-col) and non-compliance (68-col) formats
  * Returns matched, unmatched, and suggestions
  */
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const sheetName = formData.get('sheetName') as string;
+    const formatType = formData.get('formatType') as string; // 'compliance' or 'non-compliance'
 
     if (!file) {
       return NextResponse.json(
@@ -25,10 +28,17 @@ export async function POST(request: NextRequest) {
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
-    // Use specified sheet or find "COMBINED SALARY SHEET" or use first sheet
+    // Use specified sheet or auto-detect based on format
     let targetSheet = sheetName;
     if (!targetSheet || !workbook.SheetNames.includes(targetSheet)) {
-      targetSheet = workbook.SheetNames.find(name => name === 'COMBINED SALARY SHEET') || workbook.SheetNames[0];
+      if (formatType === 'compliance') {
+        targetSheet = workbook.SheetNames.find(name => 
+          name.toLowerCase().includes('compliance') || 
+          name.toLowerCase().includes('form')
+        ) || workbook.SheetNames[0];
+      } else {
+        targetSheet = workbook.SheetNames.find(name => name === 'COMBINED SALARY SHEET') || workbook.SheetNames[0];
+      }
     }
     
     const worksheet = workbook.Sheets[targetSheet];
@@ -43,8 +53,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Skip header row
-    const dataRows = rawData.slice(1);
+    // Determine which row is the header (compliance format may have title rows)
+    let headerRowIndex = 0;
+    let dataStartIndex = 1;
+    
+    if (formatType === 'compliance') {
+      // Find the header row (look for "Sl. No." or "Name of the workman")
+      for (let i = 0; i < Math.min(15, rawData.length); i++) {
+        const row = rawData[i];
+        if (row && (
+          String(row[0]).toLowerCase().includes('sl') ||
+          String(row[1]).toLowerCase().includes('workman') ||
+          String(row[1]).toLowerCase().includes('name')
+        )) {
+          headerRowIndex = i;
+          dataStartIndex = i + 1;
+          break;
+        }
+      }
+    }
+
+    // Skip to data rows
+    const dataRows = rawData.slice(dataStartIndex);
 
     // Get all employees from database
     const allEmployees = await db.employee.findMany({
@@ -60,9 +90,16 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create lookup map
-    const employeeMap = new Map(
+    // Create lookup maps
+    const employeeByCodeMap = new Map(
       allEmployees.map(emp => [emp.employeeCode.toLowerCase(), emp])
+    );
+    
+    const employeeByNameMap = new Map(
+      allEmployees.map(emp => {
+        const fullName = `${emp.firstName} ${emp.middleName || ''} ${emp.lastName}`.trim().toLowerCase();
+        return [fullName, emp];
+      })
     );
 
     const matched: Array<{
@@ -89,25 +126,50 @@ export async function POST(request: NextRequest) {
     // Process each row
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i];
-      const rowNumber = i + 2;
+      const rowNumber = dataStartIndex + i + 1;
 
       // Skip empty rows
-      if (!row || row.length === 0 || !row[2]) continue;
+      if (!row || row.length === 0) continue;
 
-      const tokenNo = String(row[2] || '').trim();
-      const nameInSheet = String(row[3] || '').trim();
+      let identifier = '';
+      let nameInSheet = '';
+      let employee = null;
 
-      if (!tokenNo) continue;
-
-      // Try to find employee
-      const employee = employeeMap.get(tokenNo.toLowerCase());
+      if (formatType === 'compliance') {
+        // Compliance format: Column 2 (index 1) = "Name of the workman"
+        nameInSheet = String(row[1] || '').trim();
+        if (!nameInSheet) continue;
+        
+        identifier = nameInSheet;
+        
+        // Try to match by name first
+        employee = employeeByNameMap.get(nameInSheet.toLowerCase());
+        
+        // If not found, try partial matching
+        if (!employee) {
+          for (const [fullName, emp] of employeeByNameMap.entries()) {
+            if (fullName.includes(nameInSheet.toLowerCase()) || nameInSheet.toLowerCase().includes(fullName)) {
+              employee = emp;
+              break;
+            }
+          }
+        }
+      } else {
+        // Non-compliance format: Column 3 (index 2) = "TOKEN NO."
+        identifier = String(row[2] || '').trim();
+        nameInSheet = String(row[3] || '').trim();
+        if (!identifier) continue;
+        
+        // Match by employee code
+        employee = employeeByCodeMap.get(identifier.toLowerCase());
+      }
 
       if (employee) {
         // Matched
         const fullName = `${employee.firstName} ${employee.middleName || ''} ${employee.lastName}`.trim();
         matched.push({
           row: rowNumber,
-          tokenNo,
+          tokenNo: formatType === 'compliance' ? employee.employeeCode : identifier,
           name: nameInSheet,
           employeeId: employee.id,
           employeeName: fullName,
@@ -116,10 +178,10 @@ export async function POST(request: NextRequest) {
         });
       } else {
         // Not matched - find suggestions
-        const suggestions = findSimilarEmployees(tokenNo, nameInSheet, allEmployees);
+        const suggestions = findSimilarEmployees(identifier, nameInSheet, allEmployees, formatType === 'compliance');
         unmatched.push({
           row: rowNumber,
-          tokenNo,
+          tokenNo: identifier,
           name: nameInSheet,
           suggestions,
         });
@@ -129,13 +191,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        totalRows: dataRows.length,
+        totalRows: dataRows.filter(r => r && r.length > 0).length,
         matched: matched.length,
         unmatched: unmatched.length,
         matchedEmployees: matched,
         unmatchedEmployees: unmatched,
         summary: {
-          matchRate: ((matched.length / (matched.length + unmatched.length)) * 100).toFixed(1),
+          matchRate: matched.length + unmatched.length > 0 
+            ? ((matched.length / (matched.length + unmatched.length)) * 100).toFixed(1)
+            : '0',
           canProceed: unmatched.length === 0,
         },
       },
@@ -153,9 +217,10 @@ export async function POST(request: NextRequest) {
  * Find similar employees based on code and name
  */
 function findSimilarEmployees(
-  tokenNo: string,
+  identifier: string,
   name: string,
-  allEmployees: any[]
+  allEmployees: any[],
+  matchByName: boolean = false
 ): Array<{ employeeCode: string; name: string; similarity: number }> {
   const suggestions: Array<{ employeeCode: string; name: string; similarity: number }> = [];
 
@@ -165,13 +230,19 @@ function findSimilarEmployees(
     // Calculate similarity
     let similarity = 0;
 
-    // Code similarity (Levenshtein distance)
-    const codeSimilarity = calculateSimilarity(tokenNo.toLowerCase(), emp.employeeCode.toLowerCase());
-    similarity += codeSimilarity * 0.6;
+    if (matchByName) {
+      // For compliance format - prioritize name matching
+      const nameSimilarity = calculateSimilarity(identifier.toLowerCase(), fullName.toLowerCase());
+      similarity = nameSimilarity;
+    } else {
+      // For non-compliance format - prioritize code matching
+      const codeSimilarity = calculateSimilarity(identifier.toLowerCase(), emp.employeeCode.toLowerCase());
+      similarity += codeSimilarity * 0.6;
 
-    // Name similarity
-    const nameSimilarity = calculateSimilarity(name.toLowerCase(), fullName.toLowerCase());
-    similarity += nameSimilarity * 0.4;
+      // Name similarity
+      const nameSimilarity = calculateSimilarity(name.toLowerCase(), fullName.toLowerCase());
+      similarity += nameSimilarity * 0.4;
+    }
 
     if (similarity > 0.5) {
       suggestions.push({

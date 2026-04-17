@@ -1,10 +1,11 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
 // GET: List all designations
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const designations = await db.designation.findMany({
       include: {
@@ -36,6 +37,7 @@ export async function GET() {
 
 // POST: Create designation
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { name } = body
@@ -65,6 +67,7 @@ export async function POST(request: NextRequest) {
 
 // PUT: Update designation by id
 export async function PUT(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id, ...data } = body
@@ -101,6 +104,7 @@ export async function PUT(request: NextRequest) {
 
 // DELETE: Delete designation by id
 export async function DELETE(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id } = body

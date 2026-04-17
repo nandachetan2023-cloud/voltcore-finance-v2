@@ -22,6 +22,8 @@ interface Employee {
   name: string;
   role: string;
   site: string;
+  departmentId?: number;
+  designationId?: number;
 }
 
 interface LeaveRequest {
@@ -174,6 +176,7 @@ function BalanceCard({ label, allocated, used, color }: {
 export default function LeaveModule() {
   const [records, setRecords] = useState<LeaveRequest[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [leavePolicies, setLeavePolicies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -192,15 +195,18 @@ export default function LeaveModule() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [leaveRes, empRes] = await Promise.all([
+      const [leaveRes, empRes, policiesRes] = await Promise.all([
         fetch('/api/leave'),
         fetch('/api/employees'),
+        fetch('/api/leave-policies'),
       ]);
       const leaveJson = await leaveRes.json();
       const empJson = await empRes.json();
+      const policiesJson = await policiesRes.json();
 
       console.log('Leave Module - Raw employee data:', empJson.data?.slice(0, 3));
       console.log('Leave Module - Raw leave data:', leaveJson.data?.slice(0, 3));
+      console.log('Leave Module - Leave policies:', policiesJson.data);
 
       if (leaveJson.success) {
         // Map leave records to match component format
@@ -241,6 +247,8 @@ export default function LeaveModule() {
           name: `${e.firstName} ${e.lastName}`,
           role: e.Designation?.name || 'N/A',
           site: e.Branch?.name || 'N/A',
+          departmentId: e.departmentId,
+          designationId: e.designationId,
         }));
         
         console.log('Leave Module - Mapped employees:', mappedEmployees.slice(0, 3));
@@ -248,6 +256,10 @@ export default function LeaveModule() {
         setEmployees(mappedEmployees);
       } else {
         console.error('Leave Module - Failed to fetch employees:', empJson.error);
+      }
+
+      if (policiesJson.success) {
+        setLeavePolicies(policiesJson.data || []);
       }
     } catch (error) {
       console.error('Error fetching leave data:', error);
@@ -268,31 +280,114 @@ export default function LeaveModule() {
     return r.status === 'Approved' && r.fromDate <= today && r.toDate >= today;
   }).length;
 
-  /* ── Leave balances (computed from approved data) ── */
+  /* ── Leave balances (computed from leave policies and approved leaves) ── */
   const balances = useMemo(() => {
-    const allocMap: Record<string, number> = { EL: 24, SL: 12, CL: 6, ML: 180, 'Comp Off': 2 };
-    const usedMap: Record<string, number> = { EL: 0, SL: 0, CL: 0, ML: 0, 'Comp Off': 0 };
+    if (leavePolicies.length === 0) return [];
+    
+    // Create map of used leave days by leave type
+    const usedMap: Record<string, number> = {};
     records.filter(r => r.status === 'Approved').forEach(r => {
-      if (usedMap[r.type] !== undefined) usedMap[r.type] += r.days;
+      const leaveType = r.type.toUpperCase();
+      usedMap[leaveType] = (usedMap[leaveType] || 0) + r.days;
     });
-    return Object.entries(allocMap).map(([type, alloc]) => ({
-      type, allocated: alloc, used: usedMap[type],
-      color: typeBadge(type).split(' ')[1],
-    }));
-  }, [records]);
+    
+    // Map leave policies to balance cards - show all active policies
+    return leavePolicies
+      .filter(policy => policy.isActive)
+      .map(policy => {
+        const code = policy.code || policy.leaveType;
+        const colorClass = typeBadge(code).split(' ')[1];
+        const colorValue = colorClass.replace('text-[', '').replace(']', '');
+        
+        return {
+          type: code,
+          allocated: Number(policy.annualQuota),
+          used: usedMap[code] || usedMap[policy.leaveType] || 0,
+          color: colorValue,
+          name: policy.name,
+          applicableTo: policy.applicableTo || 'all',
+          department: policy.Department?.name,
+          designation: policy.Designation?.name,
+        };
+      });
+  }, [records, leavePolicies]);
 
   /* ── Filtered ── */
   const filtered = activeTab === 'all' ? records : records.filter(r => r.status === activeTab);
 
-  /* ── Form helpers ── */
-  const updateForm = (field: keyof LeaveFormData, value: string | number) => {
-    setForm(prev => {
-      const next = { ...prev, [field]: value };
-      if (field === 'fromDate' || field === 'toDate') {
-        next.days = calcDays(next.fromDate, next.toDate);
+  /* ── Get applicable leave policies for selected employee ── */
+  const getApplicablePolicies = useCallback((employeeId: string) => {
+    if (!employeeId) return leavePolicies.filter(p => p.isActive);
+    
+    const employee = employees.find(e => e.id === employeeId);
+    if (!employee) return leavePolicies.filter(p => p.isActive);
+    
+    return leavePolicies.filter(policy => {
+      if (!policy.isActive) return false;
+      
+      // All employees policy
+      if (!policy.applicableTo || policy.applicableTo === 'all') return true;
+      
+      // Department-specific
+      if (policy.applicableTo === 'department') {
+        return policy.departmentId === employee.departmentId;
       }
-      return next;
+      
+      // Designation-specific
+      if (policy.applicableTo === 'designation') {
+        return policy.designationId === employee.designationId;
+      }
+      
+      // Both department and designation
+      if (policy.applicableTo === 'both') {
+        return policy.departmentId === employee.departmentId &&
+               policy.designationId === employee.designationId;
+      }
+      
+      return false;
     });
+  }, [employees, leavePolicies]);
+
+  /* ── Form helpers ── */
+  const updateForm = async (field: keyof LeaveFormData, value: string | number) => {
+    // Update the field immediately
+    setForm(prev => ({ ...prev, [field]: value }));
+    
+    // Calculate working days when dates or employee changes
+    const updatedForm = { ...form, [field]: value };
+    
+    if (updatedForm.fromDate && updatedForm.toDate && updatedForm.empId) {
+      // First show calendar days immediately
+      const calendarDays = calcDays(updatedForm.fromDate, updatedForm.toDate);
+      setForm(prev => ({ ...prev, [field]: value, days: calendarDays }));
+      
+      // Then fetch actual working days from backend
+      if (field === 'fromDate' || field === 'toDate' || field === 'empId') {
+        try {
+          console.log('Fetching working days for:', {
+            employeeId: updatedForm.empId,
+            startDate: updatedForm.fromDate,
+            endDate: updatedForm.toDate
+          });
+          
+          const res = await fetch(
+            `/api/leave/calculate-days?employeeId=${updatedForm.empId}&startDate=${updatedForm.fromDate}&endDate=${updatedForm.toDate}`
+          );
+          const json = await res.json();
+          
+          console.log('Working days response:', json);
+          
+          if (json.success) {
+            setForm(prev => ({ ...prev, days: json.data.workingDays }));
+          }
+        } catch (error) {
+          console.error('Error calculating working days:', error);
+        }
+      }
+    } else if (field === 'fromDate' || field === 'toDate') {
+      const calendarDays = calcDays(updatedForm.fromDate, updatedForm.toDate);
+      setForm(prev => ({ ...prev, [field]: value, days: calendarDays }));
+    }
   };
 
   const handleCreate = async () => {
@@ -325,7 +420,38 @@ export default function LeaveModule() {
       console.log('Leave Module - API response:', json);
       
       if (json.success) {
-        toast.success('Leave request created successfully');
+        // Show success message with holiday and off days info if present
+        if (json.holidayInfo) {
+          const parts = [];
+          
+          if (json.holidayInfo.count > 0) {
+            const holidayNames = json.holidayInfo.holidays.map((h: any) => h.name).join(', ');
+            parts.push(`${json.holidayInfo.count} holiday(s) (${holidayNames})`);
+          }
+          
+          if (json.holidayInfo.offDays > 0) {
+            parts.push(`${json.holidayInfo.offDays} off day(s)`);
+          }
+          
+          if (parts.length > 0) {
+            toast.success(
+              <div>
+                <div className="font-semibold">Leave request created!</div>
+                <div className="text-xs mt-1">
+                  {parts.join(' and ')} excluded.
+                </div>
+                <div className="text-xs">
+                  {json.holidayInfo.workingDays} working days will be deducted.
+                </div>
+              </div>,
+              { duration: 6000 }
+            );
+          } else {
+            toast.success('Leave request created successfully');
+          }
+        } else {
+          toast.success('Leave request created successfully');
+        }
         setCreateOpen(false);
         setForm(EMPTY_FORM);
         await fetchData();
@@ -534,7 +660,20 @@ export default function LeaveModule() {
               <div>
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Leave Type *</label>
                 <select value={form.type} onChange={e => updateForm('type', e.target.value)} className="vc-input appearance-none">
-                  {LEAVE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  <option value="">Select Leave Type</option>
+                  {form.empId ? (
+                    getApplicablePolicies(form.empId).map(policy => (
+                      <option key={policy.id} value={policy.code || policy.leaveType}>
+                        {policy.name} ({policy.code || policy.leaveType})
+                      </option>
+                    ))
+                  ) : (
+                    leavePolicies.filter(p => p.isActive && (!p.applicableTo || p.applicableTo === 'all')).map(policy => (
+                      <option key={policy.id} value={policy.code || policy.leaveType}>
+                        {policy.name} ({policy.code || policy.leaveType})
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
               <div>

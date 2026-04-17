@@ -1,6 +1,5 @@
-import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import bcrypt from 'bcryptjs'
+import { authenticateUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,57 +15,55 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find user by email
-    const user = await db.user.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        password: true,
-        isActive: true,
-        phone: true,
-      },
-    })
+    const { user, error } = await authenticateUser(email, password)
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: 'Invalid credentials' },
+        { success: false, error: error || 'Invalid credentials' },
         { status: 401 }
       )
     }
 
-    if (!user.isActive) {
-      return NextResponse.json(
-        { success: false, error: 'Account is inactive' },
-        { status: 401 }
-      )
+    const response = NextResponse.json({ success: true, user })
+
+    const cookieOpts = {
+      httpOnly: true,
+      sameSite: 'lax' as const,
+      path: '/',
+      maxAge: 60 * 60 * 24, // 24 hours
     }
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password)
+    // Role cookie (superadmin | admin | demo)
+    response.cookies.set('erp_user_role', user.role, cookieOpts)
 
-    if (!isValidPassword) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid credentials' },
-        { status: 401 }
-      )
+    // Tenant DB URL cookie (empty for superadmin)
+    if (user.dbUrl) {
+      response.cookies.set('erp_tenant_db', encodeURIComponent(user.dbUrl), cookieOpts)
+    } else {
+      response.cookies.delete('erp_tenant_db')
     }
 
-    // Update last active timestamp
-    await db.user.update({
-      where: { id: user.id },
-      data: { lastActiveAt: new Date() },
-    })
+    // Tenant ID cookie (for biometric and other superadmin-DB lookups)
+    if (user.tenantId) {
+      response.cookies.set('erp_tenant_id', user.tenantId, cookieOpts)
+    } else {
+      response.cookies.delete('erp_tenant_id')
+    }
 
-    // Return user data (without password)
-    const { password: _, ...userWithoutPassword } = user
+    // Allowed modules cookie (for frontend store)
+    response.cookies.set('erp_allowed_modules', user.allowedModules, cookieOpts)
 
-    return NextResponse.json({
-      success: true,
-      user: userWithoutPassword,
-      token: 'authenticated', // In production, use JWT
-    })
+    // User email cookie (for notification lookup)
+    response.cookies.set('erp_user_email', user.email, cookieOpts)
+
+    // Employee ID cookie (for self-service modules)
+    if (user.employeeId) {
+      response.cookies.set('erp_employee_id', String(user.employeeId), cookieOpts)
+    } else {
+      response.cookies.delete('erp_employee_id')
+    }
+
+    return response
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json(

@@ -1,10 +1,11 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
 // GET: Check which employee codes from biometric exist in ERP
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     // Get unique employee codes from biometric logs
     const biometricLogs = await db.biometricRawLog.findMany({

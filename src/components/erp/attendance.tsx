@@ -299,6 +299,24 @@ export default function AttendanceModule() {
         return;
       }
 
+      // Check if date is a holiday (only for create mode)
+      if (mode === 'create') {
+        const holidayCheckRes = await fetch(`/api/holidays/check?date=${form.date}`);
+        const holidayCheck = await holidayCheckRes.json();
+        
+        if (holidayCheck.success && holidayCheck.data.isHoliday) {
+          // Show warning but allow creation (for employees working on holidays)
+          toast(
+            <div>
+              <div className="font-semibold mb-1 text-[#ffab40]">⚠️ Holiday Work Detected</div>
+              <div className="text-xs">{holidayCheck.data.holiday.name} - {form.date}</div>
+              <div className="text-xs mt-1 text-[#8899aa]">All hours will be counted as overtime</div>
+            </div>,
+            { duration: 5000 }
+          );
+        }
+      }
+
       // Validate time logic
       if (form.timeIn && form.timeOut) {
         const timeIn = new Date(`2000-01-01 ${form.timeIn}`);
@@ -349,13 +367,24 @@ export default function AttendanceModule() {
         setForm(emptyForm);
         await fetchData(); // Wait for data to refresh
       } else {
-        toast.error(
-          <div>
-            <div className="font-semibold mb-1">Failed to {mode} attendance</div>
-            <div className="text-xs">{json.error || 'Unknown error occurred'}</div>
-          </div>,
-          { duration: 5000 }
-        );
+        // Check if error is due to holiday
+        if (json.holiday) {
+          toast.error(
+            <div>
+              <div className="font-semibold mb-1">Cannot Create Attendance on Holiday</div>
+              <div className="text-xs">{json.holiday.name} - {json.holiday.date}</div>
+            </div>,
+            { duration: 6000 }
+          );
+        } else {
+          toast.error(
+            <div>
+              <div className="font-semibold mb-1">Failed to {mode} attendance</div>
+              <div className="text-xs">{json.error || 'Unknown error occurred'}</div>
+            </div>,
+            { duration: 5000 }
+          );
+        }
       }
     } catch (error) {
       toast.error(

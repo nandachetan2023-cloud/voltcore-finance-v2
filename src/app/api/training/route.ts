@@ -1,10 +1,11 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
 // GET: List all certifications and training sessions combined
 export async function GET() {
+  const db = getDbForRequest(request)
   try {
     const [certifications, trainingSessions] = await Promise.all([
       db.certification.findMany({
@@ -33,6 +34,7 @@ export async function GET() {
 
 // POST: Create certification or training session
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
@@ -104,6 +106,7 @@ export async function POST(request: NextRequest) {
 
 // PUT: Update by id
 export async function PUT(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
@@ -170,6 +173,7 @@ export async function PUT(request: NextRequest) {
 
 // DELETE: Delete by id
 export async function DELETE(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')

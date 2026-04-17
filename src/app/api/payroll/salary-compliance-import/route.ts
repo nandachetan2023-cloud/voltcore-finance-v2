@@ -1,4 +1,4 @@
-import { db } from '@/lib/db';
+import { getDbForRequest } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 
@@ -6,56 +6,33 @@ export const dynamic = 'force-dynamic';
 
 interface SalaryComplianceRow {
   slNo: number;
-  tokenNo: string;
-  employeeName: string;
-  fatherName: string;
-  doj: string;
-  dob: string;
-  bankName: string;
-  accountNo: string;
-  ifscCode: string;
-  uanNo: string;
-  esicNo: string;
+  nameOfWorkman: string;
+  site: string;
+  uan: string;
+  ipNo: string;
   designation: string;
-  department: string;
-  natureOfDesignation: string;
-  monthlyGrossSalary: number;
-  actualAttendance: number;
-  extraDays: number;
-  phDays: number;
-  actualEarnWages: number;
-  actualOtHrs: number;
-  actualOtAmount: number;
-  grossEarnWages: number;
-  basicWagesPerDay: number;
-  monthlyWorkingDays: number;
-  otHrs: number;
-  attendance: number;
-  ph: number;
-  wagesPerMonth: number;
-  earnWages: number;
-  phAmount: number;
-  totalEarnWages: number;
-  otHrsPayment: number;
-  totalNettPayable: number;
+  totalDaysWorked: number;
+  otHours: number;
+  workDone: string;
+  dailyRate: number;
+  basicWages: number;
+  da: number;
+  overtime: number;
+  otherPayment: number;
+  totalWagesForESI: number;
   epf: number;
-  esic: number;
-  pt: number;
+  esi: number;
+  houseRent: number;
+  otherDeduction: number;
   totalDeduction: number;
-  nettPayable: number;
-  advance: number;
-  arrears: number;
-  monthlyBasicSalary: number;
-  monthlyHRA: number;
-  monthlySiteAllow: number;
-  monthlyLTA: number;
-  monthlySpecialAllow: number;
-  monthlyAttendanceAllow: number;
-  totalSalary: number;
-  tds: number;
+  netAmount: number;
+  timeDate: string;
+  place: string;
+  signature: string;
 }
 
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -90,10 +67,14 @@ export async function POST(request: NextRequest) {
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
-    // Use specified sheet or find "COMBINED SALARY SHEET" or use first sheet
+    // Use specified sheet or find compliance sheet
     let targetSheet = sheetName;
     if (!targetSheet || !workbook.SheetNames.includes(targetSheet)) {
-      targetSheet = workbook.SheetNames.find(name => name === 'COMBINED SALARY SHEET') || workbook.SheetNames[0];
+      targetSheet = workbook.SheetNames.find(name => 
+        name.toLowerCase().includes('compliance') || 
+        name.toLowerCase().includes('form') ||
+        name.toLowerCase().includes('salary')
+      ) || workbook.SheetNames[0];
     }
 
     const worksheet = workbook.Sheets[targetSheet];
@@ -108,8 +89,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Skip header row
-    const dataRows = rawData.slice(1);
+    // Find the header row (compliance format may have title rows)
+    let headerRowIndex = 0;
+    let dataStartIndex = 1;
+    
+    for (let i = 0; i < Math.min(15, rawData.length); i++) {
+      const row = rawData[i];
+      if (row && (
+        String(row[0]).toLowerCase().includes('sl') ||
+        String(row[1]).toLowerCase().includes('workman') ||
+        String(row[1]).toLowerCase().includes('name')
+      )) {
+        headerRowIndex = i;
+        dataStartIndex = i + 1;
+        break;
+      }
+    }
+
+    // Skip to data rows
+    const dataRows = rawData.slice(dataStartIndex);
 
     const errors: Array<{ row: number; error: string }> = [];
     let imported = 0;
@@ -121,18 +119,24 @@ export async function POST(request: NextRequest) {
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
 
-    // Find or create payroll run
+    // Find or create payroll run for compliance
     let payrollRun = await db.payrollRun.findFirst({
-      where: { month, year, status: 'draft' },
+      where: { 
+        month, 
+        year, 
+        status: 'draft',
+        payrollType: 'compliance',
+      },
     });
 
     if (!payrollRun) {
       payrollRun = await db.payrollRun.create({
         data: {
-          name: `Payroll - ${getMonthName(month)} ${year} (Imported)`,
+          name: `Compliance Payroll - ${getMonthName(month)} ${year} (Imported)`,
           month,
           year,
           status: 'draft',
+          payrollType: 'compliance',
           totalEmployees: 0,
           totalGross: 0,
           totalNet: 0,
@@ -144,15 +148,15 @@ export async function POST(request: NextRequest) {
     // Process each row
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i];
-      const rowNumber = i + 2; // +2 because of header and 0-index
+      const rowNumber = dataStartIndex + i + 1;
 
       try {
         // Skip empty rows
-        if (!row || row.length === 0 || !row[2]) continue;
+        if (!row || row.length === 0 || !row[1]) continue;
 
-        const tokenNo = String(row[2] || '').trim();
-        if (!tokenNo) {
-          errors.push({ row: rowNumber, error: 'Missing TOKEN NO.' });
+        const nameOfWorkman = String(row[1] || '').trim();
+        if (!nameOfWorkman) {
+          errors.push({ row: rowNumber, error: 'Missing employee name' });
           failed++;
           continue;
         }
@@ -166,76 +170,73 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Determine which employee code to use
-        let employeeCodeToUse = tokenNo;
+        // Determine which employee to use
+        let employee = null;
+        
         if (manualMapping && manualMapping.action === 'map' && manualMapping.mappedEmployeeCode) {
-          employeeCodeToUse = manualMapping.mappedEmployeeCode;
+          // Use manually mapped employee code
+          employee = await db.employee.findFirst({
+            where: { employeeCode: manualMapping.mappedEmployeeCode },
+          });
+        } else {
+          // Try to find employee by name
+          const allEmployees = await db.employee.findMany({
+            select: {
+              id: true,
+              employeeCode: true,
+              firstName: true,
+              middleName: true,
+              lastName: true,
+            },
+          });
+
+          // Try exact match first
+          employee = allEmployees.find(emp => {
+            const fullName = `${emp.firstName} ${emp.middleName || ''} ${emp.lastName}`.trim().toLowerCase();
+            return fullName === nameOfWorkman.toLowerCase();
+          });
+
+          // Try partial match
+          if (!employee) {
+            employee = allEmployees.find(emp => {
+              const fullName = `${emp.firstName} ${emp.middleName || ''} ${emp.lastName}`.trim().toLowerCase();
+              return fullName.includes(nameOfWorkman.toLowerCase()) || nameOfWorkman.toLowerCase().includes(fullName);
+            });
+          }
         }
 
-        // Find employee by employee code
-        const employee = await db.employee.findFirst({
-          where: { employeeCode: employeeCodeToUse },
-        });
-
         if (!employee) {
-          errors.push({ row: rowNumber, error: `Employee not found: ${employeeCodeToUse}` });
+          errors.push({ row: rowNumber, error: `Employee not found: ${nameOfWorkman}` });
           failed++;
           continue;
         }
 
-        // Parse data - Column indices based on actual file format (68 columns)
+        // Parse data - 24 columns compliance format
         const salaryData: SalaryComplianceRow = {
           slNo: Number(row[0]) || 0,
-          tokenNo,
-          employeeName: String(row[3] || ''),
-          fatherName: String(row[4] || ''),
-          doj: String(row[5] || ''),
-          dob: String(row[6] || ''),
-          bankName: String(row[7] || ''),
-          accountNo: String(row[8] || ''),
-          ifscCode: String(row[9] || ''),
-          // Column 10 is empty
-          uanNo: String(row[11] || ''),
-          esicNo: String(row[12] || ''),
-          designation: String(row[13] || ''),
-          department: String(row[14] || ''),
-          natureOfDesignation: String(row[15] || ''),
-          monthlyGrossSalary: Number(row[16]) || 0,
-          actualAttendance: Number(row[17]) || 0,
-          extraDays: Number(row[18]) || 0,
-          phDays: Number(row[19]) || 0,
-          actualEarnWages: Number(row[20]) || 0,
-          actualOtHrs: Number(row[21]) || 0,
-          actualOtAmount: Number(row[22]) || 0,
-          grossEarnWages: Number(row[23]) || 0,
-          basicWagesPerDay: Number(row[24]) || 0,
-          monthlyWorkingDays: Number(row[25]) || 26,
-          otHrs: Number(row[26]) || 0,
-          attendance: Number(row[27]) || 0,
-          ph: Number(row[28]) || 0,
-          wagesPerMonth: Number(row[29]) || 0,
-          earnWages: Number(row[30]) || 0,
-          phAmount: Number(row[31]) || 0,
-          totalEarnWages: Number(row[32]) || 0,
-          otHrsPayment: Number(row[33]) || 0,
-          totalNettPayable: Number(row[34]) || 0,
-          epf: Number(row[35]) || 0,
-          esic: Number(row[36]) || 0,
-          pt: Number(row[37]) || 0,
-          totalDeduction: Number(row[38]) || 0,
-          nettPayable: Number(row[39]) || 0,
-          // Columns 40-42 are signature/empty
-          advance: Number(row[44]) || 0,
-          arrears: Number(row[45]) || 0,
-          // Column 48 is empty
-          monthlyBasicSalary: Number(row[54]) || 0,
-          monthlyHRA: Number(row[58]) || 0,
-          monthlySiteAllow: Number(row[59]) || 0,
-          monthlyLTA: Number(row[60]) || 0,
-          monthlySpecialAllow: Number(row[61]) || 0,
-          monthlyAttendanceAllow: Number(row[62]) || 0,
-          totalSalary: Number(row[63]) || 0,
-          tds: Number(row[66]) || 0,
+          nameOfWorkman,
+          site: String(row[2] || ''),
+          uan: String(row[3] || ''),
+          ipNo: String(row[4] || ''),
+          designation: String(row[5] || ''),
+          totalDaysWorked: Number(row[6]) || 0,
+          otHours: Number(row[7]) || 0,
+          workDone: String(row[8] || ''),
+          dailyRate: Number(row[9]) || 0,
+          basicWages: Number(row[10]) || 0,
+          da: Number(row[11]) || 0,
+          overtime: Number(row[12]) || 0,
+          otherPayment: Number(row[13]) || 0,
+          totalWagesForESI: Number(row[14]) || 0,
+          epf: Number(row[15]) || 0,
+          esi: Number(row[16]) || 0,
+          houseRent: Number(row[17]) || 0,
+          otherDeduction: Number(row[18]) || 0,
+          totalDeduction: Number(row[19]) || 0,
+          netAmount: Number(row[20]) || 0,
+          timeDate: String(row[21] || ''),
+          place: String(row[22] || ''),
+          signature: String(row[23] || ''),
         };
 
         // Check if payroll item already exists
@@ -246,33 +247,46 @@ export async function POST(request: NextRequest) {
           },
         });
 
+        // Calculate working days (default 26 if not specified)
+        const workingDays = 26;
+        const presentDays = salaryData.totalDaysWorked;
+        const lopDays = workingDays - presentDays;
+
         if (existing) {
           // Update existing
           await db.payrollItem.update({
             where: { id: existing.id },
             data: {
-              workingDays: salaryData.monthlyWorkingDays,
-              presentDays: salaryData.actualAttendance,
+              workingDays,
+              presentDays,
               paidLeaveDays: 0,
-              lopDays: salaryData.monthlyWorkingDays - salaryData.actualAttendance,
-              otHours: salaryData.actualOtHrs,
-              basicSalary: salaryData.monthlyBasicSalary,
-              hra: salaryData.monthlyHRA,
-              conveyanceAllowance: salaryData.monthlySiteAllow,
-              medicalAllowance: salaryData.monthlyLTA,
-              specialAllowance: salaryData.monthlySpecialAllow,
-              otAmount: salaryData.actualOtAmount,
-              grossEarning: salaryData.monthlyGrossSalary,
+              lopDays,
+              otHours: salaryData.otHours,
+              basicSalary: salaryData.basicWages,
+              hra: salaryData.houseRent,
+              conveyanceAllowance: 0,
+              medicalAllowance: 0,
+              specialAllowance: salaryData.otherPayment,
+              otAmount: salaryData.overtime,
+              grossEarning: salaryData.totalWagesForESI,
               pfDeduction: salaryData.epf,
-              esiDeduction: salaryData.esic,
-              ptDeduction: salaryData.pt,
-              tdsDeduction: salaryData.tds,
+              esiDeduction: salaryData.esi,
+              ptDeduction: salaryData.otherDeduction,
+              tdsDeduction: 0,
               lopDeduction: 0,
-              otherDeductions: salaryData.advance,
+              otherDeductions: 0,
               totalDeduction: salaryData.totalDeduction,
-              netPay: salaryData.nettPayable,
+              netPay: salaryData.netAmount,
               status: 'pending',
-              details: { imported: true, importedAt: new Date().toISOString(), rawData: salaryData },
+              details: { 
+                imported: true, 
+                importedAt: new Date().toISOString(), 
+                rawData: salaryData,
+                format: 'compliance',
+                site: salaryData.site,
+                uan: salaryData.uan,
+                ipNo: salaryData.ipNo,
+              },
             },
           });
         } else {
@@ -281,42 +295,37 @@ export async function POST(request: NextRequest) {
             data: {
               payrollRunId: payrollRun.id,
               employeeId: employee.id,
-              workingDays: salaryData.monthlyWorkingDays,
-              presentDays: salaryData.actualAttendance,
+              workingDays,
+              presentDays,
               paidLeaveDays: 0,
-              lopDays: salaryData.monthlyWorkingDays - salaryData.actualAttendance,
-              otHours: salaryData.actualOtHrs,
-              basicSalary: salaryData.monthlyBasicSalary,
-              hra: salaryData.monthlyHRA,
-              conveyanceAllowance: salaryData.monthlySiteAllow,
-              medicalAllowance: salaryData.monthlyLTA,
-              specialAllowance: salaryData.monthlySpecialAllow,
-              otAmount: salaryData.actualOtAmount,
-              grossEarning: salaryData.monthlyGrossSalary,
+              lopDays,
+              otHours: salaryData.otHours,
+              basicSalary: salaryData.basicWages,
+              hra: salaryData.houseRent,
+              conveyanceAllowance: 0,
+              medicalAllowance: 0,
+              specialAllowance: salaryData.otherPayment,
+              otAmount: salaryData.overtime,
+              grossEarning: salaryData.totalWagesForESI,
               pfDeduction: salaryData.epf,
-              esiDeduction: salaryData.esic,
-              ptDeduction: salaryData.pt,
-              tdsDeduction: salaryData.tds,
+              esiDeduction: salaryData.esi,
+              ptDeduction: salaryData.otherDeduction,
+              tdsDeduction: 0,
               lopDeduction: 0,
-              otherDeductions: salaryData.advance,
+              otherDeductions: 0,
               totalDeduction: salaryData.totalDeduction,
-              netPay: salaryData.nettPayable,
+              netPay: salaryData.netAmount,
               status: 'pending',
               payslipGenerated: false,
-              details: { imported: true, importedAt: new Date().toISOString(), rawData: salaryData },
-            },
-          });
-        }
-
-        // Update employee bank details if provided
-        if (salaryData.bankName || salaryData.accountNo || salaryData.ifscCode) {
-          await db.employee.update({
-            where: { id: employee.id },
-            data: {
-              bankName: salaryData.bankName || employee.bankName,
-              bankAccount: salaryData.accountNo || employee.bankAccount,
-              bankIfsc: salaryData.ifscCode || employee.bankIfsc,
-              fatherName: salaryData.fatherName || employee.fatherName,
+              details: { 
+                imported: true, 
+                importedAt: new Date().toISOString(), 
+                rawData: salaryData,
+                format: 'compliance',
+                site: salaryData.site,
+                uan: salaryData.uan,
+                ipNo: salaryData.ipNo,
+              },
             },
           });
         }

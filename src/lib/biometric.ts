@@ -1,5 +1,9 @@
 // Biometric Integration Service for eTimeOffice API
-import { db } from './db'
+import { db as defaultDb } from './db'
+import { superadminDb } from './superadmin-db'
+import { PrismaClient } from '@prisma/client'
+
+type DbClient = PrismaClient
 
 export interface BiometricConfig {
   baseUrl: string
@@ -42,12 +46,50 @@ export interface BiometricAPIResponse {
   MaxRecord?: string
 }
 
-// Load all configured sites from environment
+// Load sites from the superadmin DB for a specific tenant
+// Falls back to .env only if tenantId is not provided
+export async function loadBiometricSitesFromDb(dbClient?: DbClient, tenantId?: string): Promise<BiometricSite[]> {
+  // If we have a tenantId, load from superadmin DB
+  if (tenantId) {
+    try {
+      const configs = await superadminDb.biometricSiteConfig.findMany({
+        where: { tenantId, isActive: true },
+        orderBy: { createdAt: 'asc' },
+      })
+      if (configs.length > 0) {
+        return configs.map(c => ({
+          id: c.siteId,
+          name: c.siteName,
+          config: {
+            baseUrl: c.baseUrl,
+            corporateId: c.corporateId,
+            username: c.username,
+            password: c.password,
+            siteId: c.siteId,
+            siteName: c.siteName,
+          },
+        }))
+      }
+    } catch (error) {
+      console.error('[Biometric] Failed to load sites from superadmin DB:', error)
+    }
+    return [] // No config in superadmin DB — don't fall back to .env
+  }
+
+  // No tenantId — legacy path, try .env
+  return loadBiometricSitesFromEnv()
+}
+
+// Load sites from .env — only used by the legacy /api/biometric/sites and /test routes
+// NOT used for sync operations anymore
 export function loadBiometricSites(): BiometricSite[] {
+  return loadBiometricSitesFromEnv()
+}
+
+function loadBiometricSitesFromEnv(): BiometricSite[] {
   const sites: BiometricSite[] = []
   const baseUrl = process.env.BIOMETRIC_API_URL || 'https://api.etimeoffice.com/api'
 
-  // Site 1
   if (process.env.BIOMETRIC_SITE1_CORPORATE_ID) {
     sites.push({
       id: 'site1',
@@ -63,7 +105,6 @@ export function loadBiometricSites(): BiometricSite[] {
     })
   }
 
-  // Site 2
   if (process.env.BIOMETRIC_SITE2_CORPORATE_ID) {
     sites.push({
       id: 'site2',
@@ -85,10 +126,12 @@ export function loadBiometricSites(): BiometricSite[] {
 export class BiometricService {
   private config: BiometricConfig
   private authToken: string
+  private db: DbClient
 
-  constructor(config: BiometricConfig) {
+  constructor(config: BiometricConfig, dbClient?: DbClient) {
     this.config = config
     this.authToken = this.generateAuthToken()
+    this.db = dbClient ?? defaultDb
   }
 
   private generateAuthToken(): string {
@@ -185,7 +228,7 @@ export class BiometricService {
     for (const punch of punchData) {
       try {
         // Check if log already exists
-        const existing = await db.biometricRawLog.findFirst({
+        const existing = await this.db.biometricRawLog.findFirst({
           where: {
             empCode: punch.Empcode,
             punchDate: new Date(this.parsePunchDate(punch.PunchDate)),
@@ -194,7 +237,7 @@ export class BiometricService {
         })
 
         if (!existing) {
-          await db.biometricRawLog.create({
+          await this.db.biometricRawLog.create({
             data: {
               empCode: punch.Empcode,
               name: punch.Name,
@@ -221,7 +264,7 @@ export class BiometricService {
     processedCount: number; 
     processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }> 
   }> {
-    const unprocessedLogs = await db.biometricRawLog.findMany({
+    const unprocessedLogs = await this.db.biometricRawLog.findMany({
       where: { 
         processed: false,
         siteId: this.config.siteId,
@@ -241,7 +284,7 @@ export class BiometricService {
         const [empCode, dateStr] = key.split('|')
         
         // Find employee by employeeCode - try with EMP prefix first, then without
-        let employee = await db.employee.findUnique({
+        let employee = await this.db.employee.findUnique({
           where: { employeeCode: `EMP${empCode}` },
           select: {
             id: true,
@@ -253,7 +296,7 @@ export class BiometricService {
 
         // If not found with EMP prefix, try without
         if (!employee) {
-          employee = await db.employee.findUnique({
+          employee = await this.db.employee.findUnique({
             where: { employeeCode: empCode },
             select: {
               id: true,
@@ -289,7 +332,7 @@ export class BiometricService {
         console.log(`  - Calculated logDate: ${logDate.toISOString()} (${logDate.toLocaleDateString()})`)
 
         // Check if attendance already exists
-        const existingAttendance = await db.attendanceLog.findFirst({
+        const existingAttendance = await this.db.attendanceLog.findFirst({
           where: {
             employeeId: employee.id,
             logDate: logDate,
@@ -298,7 +341,7 @@ export class BiometricService {
 
         if (existingAttendance) {
           // Update existing
-          await db.attendanceLog.update({
+          await this.db.attendanceLog.update({
             where: { id: existingAttendance.id },
             data: {
               punchIn: new Date(firstPunch.punchDate),
@@ -310,7 +353,7 @@ export class BiometricService {
           })
         } else {
           // Create new
-          await db.attendanceLog.create({
+          await this.db.attendanceLog.create({
             data: {
               employeeId: employee.id,
               logDate: logDate,
@@ -325,7 +368,7 @@ export class BiometricService {
         }
 
         // Mark logs as processed
-        await db.biometricRawLog.updateMany({
+        await this.db.biometricRawLog.updateMany({
           where: {
             id: { in: logs.map(l => l.id) },
           },
@@ -369,7 +412,7 @@ export class BiometricService {
   }> {
     try {
       // Get last successful sync for this site
-      const lastSync = await db.biometricSyncLog.findFirst({
+      const lastSync = await this.db.biometricSyncLog.findFirst({
         where: { 
           status: 'success',
           siteId: this.config.siteId,
@@ -405,7 +448,7 @@ export class BiometricService {
       const savedCount = await this.saveRawLogs(punchData)
 
       // Save sync log
-      await db.biometricSyncLog.create({
+      await this.db.biometricSyncLog.create({
         data: {
           siteId: this.config.siteId,
           lastRecord: toDateStr,
@@ -419,7 +462,7 @@ export class BiometricService {
       return { fetched: savedCount, processed: 0, processedEmployees: [] }
     } catch (error) {
       // Log failed sync
-      await db.biometricSyncLog.create({
+      await this.db.biometricSyncLog.create({
         data: {
           siteId: this.config.siteId,
           lastRecord: '',
@@ -446,7 +489,7 @@ export class BiometricService {
       const savedCount = await this.saveRawLogs(punchData)
       const { processedCount, processedEmployees } = await this.processRawLogs()
 
-      await db.biometricSyncLog.create({
+      await this.db.biometricSyncLog.create({
         data: {
           siteId: this.config.siteId,
           lastRecord: '',
@@ -459,7 +502,7 @@ export class BiometricService {
 
       return { fetched: savedCount, processed: processedCount, processedEmployees }
     } catch (error) {
-      await db.biometricSyncLog.create({
+      await this.db.biometricSyncLog.create({
         data: {
           siteId: this.config.siteId,
           lastRecord: '',
@@ -506,44 +549,58 @@ export class BiometricService {
   }
 }
 
-// Sync all sites
-export async function syncAllSites(): Promise<{ site: string; result: { fetched: number; processed: number } }[]> {
-  const sites = loadBiometricSites()
-  const results = []
+// Sync all sites (loads config from superadmin DB)
+export async function syncAllSites(dbClient?: DbClient, tenantId?: string): Promise<{ site: string; result: { fetched: number; processed: number } }[]> {
+  const db = dbClient ?? defaultDb
+  const sites = await loadBiometricSitesFromDb(db, tenantId)
 
+  if (sites.length === 0) {
+    throw new Error('No biometric sites configured. Go to HRMS → Biometric Sync → Site Settings to add your punch machine credentials.')
+  }
+
+  const results = []
   for (const site of sites) {
     try {
-      const service = new BiometricService(site.config)
+      const service = new BiometricService(site.config, db)
       const result = await service.syncIncremental()
       results.push({ site: site.name, result })
     } catch (error) {
       console.error(`Error syncing ${site.name}:`, error)
-      results.push({ 
-        site: site.name, 
-        result: { fetched: 0, processed: 0 } 
-      })
+      results.push({ site: site.name, result: { fetched: 0, processed: 0 } })
     }
   }
 
   return results
 }
 
-// Factory function to create service instance for specific site
-export function createBiometricService(siteId?: string): BiometricService {
-  const sites = loadBiometricSites()
-  
+// Factory: create service for a specific site (loads config from superadmin DB)
+export async function createBiometricServiceFromDb(siteId?: string, dbClient?: DbClient, tenantId?: string): Promise<BiometricService> {
+  const db = dbClient ?? defaultDb
+  const sites = await loadBiometricSitesFromDb(db, tenantId)
+
+  if (sites.length === 0) {
+    throw new Error('No biometric sites configured. Go to HRMS → Biometric Sync → Site Settings to add your punch machine credentials.')
+  }
+
   if (siteId) {
     const site = sites.find(s => s.id === siteId)
-    if (!site) {
-      throw new Error(`Site not found: ${siteId}`)
-    }
-    return new BiometricService(site.config)
+    if (!site) throw new Error(`Site "${siteId}" not found. Please check your Biometric Site Settings.`)
+    return new BiometricService(site.config, db)
   }
-  
-  // Default to first site if no siteId specified
-  if (sites.length === 0) {
-    throw new Error('No biometric sites configured')
+
+  return new BiometricService(sites[0].config, db)
+}
+
+// Legacy sync factory (uses .env, kept for backward compat)
+export function createBiometricService(siteId?: string, dbClient?: DbClient): BiometricService {
+  const sites = loadBiometricSites()
+
+  if (siteId) {
+    const site = sites.find(s => s.id === siteId)
+    if (!site) throw new Error(`Site not found: ${siteId}`)
+    return new BiometricService(site.config, dbClient)
   }
-  
-  return new BiometricService(sites[0].config)
+
+  if (sites.length === 0) throw new Error('No biometric sites configured')
+  return new BiometricService(sites[0].config, dbClient)
 }

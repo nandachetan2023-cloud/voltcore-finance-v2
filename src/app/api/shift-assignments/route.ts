@@ -1,10 +1,11 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
 // GET: List all shift assignments
 export async function GET(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const { searchParams } = new URL(request.url)
     const employeeId = searchParams.get('employeeId')
@@ -61,6 +62,7 @@ export async function GET(request: NextRequest) {
 
 // POST: Create shift assignment
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { employeeId, shiftId, effectiveFrom, effectiveTo } = body
@@ -101,6 +103,7 @@ export async function POST(request: NextRequest) {
       },
       data: {
         effectiveTo: new Date(effectiveFrom),
+        updatedAt: new Date(),
       },
     })
 
@@ -111,6 +114,7 @@ export async function POST(request: NextRequest) {
         shiftId: parseInt(shiftId),
         effectiveFrom: new Date(effectiveFrom),
         effectiveTo: effectiveTo ? new Date(effectiveTo) : null,
+        updatedAt: new Date(),
       },
       include: {
         Employee: {
@@ -137,6 +141,7 @@ export async function POST(request: NextRequest) {
 
 // PUT: Update shift assignment
 export async function PUT(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id, ...data } = body
@@ -172,7 +177,10 @@ export async function PUT(request: NextRequest) {
 
     const assignment = await db.shiftAssignment.update({
       where: { id: assignmentId },
-      data: updateData,
+      data: {
+        ...updateData,
+        updatedAt: new Date(),
+      },
     })
 
     return NextResponse.json({ success: true, data: assignment })
@@ -187,6 +195,7 @@ export async function PUT(request: NextRequest) {
 
 // DELETE: Delete shift assignment
 export async function DELETE(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id } = body

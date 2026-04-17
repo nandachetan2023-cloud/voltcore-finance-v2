@@ -37,6 +37,14 @@ interface AttendanceRecord {
   };
 }
 
+interface Holiday {
+  id: number;
+  name: string;
+  date: string;
+  type: string;
+  description?: string | null;
+}
+
 /* ── Helpers ── */
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -140,6 +148,7 @@ function LoadingSkeleton() {
 export default function TimesheetModule() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [holidays, setHolidays] = useState<Record<string, Holiday>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -283,16 +292,19 @@ export default function TimesheetModule() {
       console.log('🔍 Timesheet: Fetching data for range:', startStr, 'to', endStr);
       console.log('🔍 Timesheet: View mode:', viewMode);
       
-      const [empRes, attRes] = await Promise.all([
+      const [empRes, attRes, holidayRes] = await Promise.all([
         fetch('/api/employees'),
         fetch(`/api/attendance?limit=10000`), // Get more records for monthly view
+        fetch(`/api/timesheet/holidays?startDate=${startStr}&endDate=${endStr}`),
       ]);
       
       const empJson = await empRes.json();
       const attJson = await attRes.json();
+      const holidayJson = await holidayRes.json();
       
       console.log('🔍 Timesheet: Employees fetched:', empJson.data?.length);
       console.log('🔍 Timesheet: Attendance records fetched:', attJson.data?.length);
+      console.log('🔍 Timesheet: Holidays fetched:', holidayJson.data?.holidays?.length);
       
       if (empJson.success) {
         setEmployees(empJson.data || []);
@@ -311,6 +323,11 @@ export default function TimesheetModule() {
         setAttendance(rangeAttendance);
       } else {
         throw new Error(attJson.error || 'Failed to fetch attendance');
+      }
+
+      if (holidayJson.success && holidayJson.data?.holidayMap) {
+        setHolidays(holidayJson.data.holidayMap);
+        console.log('🔍 Timesheet: Holiday map:', holidayJson.data.holidayMap);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load timesheet data');
@@ -536,7 +553,8 @@ export default function TimesheetModule() {
           <span className="ml-auto text-[10px] text-[#5a6878]">{filteredEmployees.length} employees</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-[11px] min-w-[900px]">
+          <div className="max-h-[600px] overflow-y-auto">
+            <table className="w-full text-[11px] min-w-[1200px]">
             <thead className="sticky top-0 bg-[#161c24] z-10">
               <tr className="border-b border-[#252e3a]">
                 <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] w-[180px]">Employee</th>
@@ -700,6 +718,18 @@ export default function TimesheetModule() {
                         );
                       }
 
+                      // Check if date is a holiday
+                      const holiday = holidays[dateStr];
+                      if (holiday) {
+                        return (
+                          <td key={i} className="py-2 px-1 text-center bg-[#a78bfa]/10" title={`${holiday.name} - ${holiday.type}`}>
+                            <span className="inline-block px-2 py-[2px] rounded text-[10px] font-bold bg-[#a78bfa]/15 text-[#a78bfa] border border-[#a78bfa]/30">
+                              H
+                            </span>
+                          </td>
+                        );
+                      }
+
                       // No record
                       if (isWeekend) {
                         return (
@@ -740,6 +770,7 @@ export default function TimesheetModule() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 

@@ -55,11 +55,13 @@ model BiometricSyncLog {
 }
 
 model Branch {
-  id        Int         @id @default(autoincrement())
-  name      String      @unique
-  address   String?
-  Employee  Employee[]
-  Warehouse Warehouse[]
+  id             Int              @id @default(autoincrement())
+  name           String           @unique
+  address        String?
+  Employee       Employee[]
+  Warehouse      Warehouse[]
+  Holiday        Holiday[]
+  AttendanceRule AttendanceRule[]
 }
 
 model Customer {
@@ -80,16 +82,19 @@ model Customer {
 }
 
 model Department {
-  id       Int        @id @default(autoincrement())
-  name     String     @unique
-  code     String     @unique
-  Employee Employee[]
+  id             Int              @id @default(autoincrement())
+  name           String           @unique
+  code           String           @unique
+  Employee       Employee[]
+  AttendanceRule AttendanceRule[]
+  LeavePolicy    LeavePolicy[]
 }
 
 model Designation {
-  id       Int        @id @default(autoincrement())
-  name     String     @unique
-  Employee Employee[]
+  id          Int           @id @default(autoincrement())
+  name        String        @unique
+  Employee    Employee[]
+  LeavePolicy LeavePolicy[]
 }
 
 model Employee {
@@ -141,12 +146,14 @@ model Employee {
   emergencyContactPhone     String?
   isActive                  Boolean                     @default(true)
   isDeleted                 Boolean                     @default(false)
+  gradeId                   Int?
   createdAt                 DateTime                    @default(now())
   updatedAt                 DateTime
   AttendanceLog             AttendanceLog[]
   Branch                    Branch                      @relation(fields: [branchId], references: [id])
   Department                Department                  @relation(fields: [departmentId], references: [id])
   Designation               Designation                 @relation(fields: [designationId], references: [id])
+  Grade                     Grade?                      @relation(fields: [gradeId], references: [id])
   Employee                  Employee?                   @relation("EmployeeToEmployee", fields: [reportingManagerId], references: [id])
   other_Employee            Employee[]                  @relation("EmployeeToEmployee")
   User                      User?                       @relation(fields: [userId], references: [id])
@@ -154,6 +161,7 @@ model Employee {
   PayrollItem               PayrollItem[]
   SalaryStructureAssignment SalaryStructureAssignment[]
   ShiftAssignment           ShiftAssignment[]
+  EmployeeRequest           EmployeeRequest[]
 }
 
 model Invoice {
@@ -316,6 +324,7 @@ model PayrollRun {
   name           String
   month          Int
   year           Int
+  payrollType    String        @default("non-compliance") // "compliance" or "non-compliance"
   status         String        @default("draft")
   totalEmployees Int           @default(0)
   totalGross     Decimal       @default(0) @db.Decimal(15, 2)
@@ -326,6 +335,7 @@ model PayrollRun {
   PayrollItem    PayrollItem[]
 
   @@index([month, year, status])
+  @@index([payrollType])
 }
 
 model PurchaseOrder {
@@ -479,6 +489,7 @@ model Shift {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime
   ShiftAssignment ShiftAssignment[]
+  AttendanceRule  AttendanceRule[]
 }
 
 model ShiftAssignment {
@@ -672,4 +683,158 @@ model TrainingSession {
   status    String   @default("Scheduled")
   createdAt DateTime @default(now())
   updatedAt DateTime
+}
+
+model Holiday {
+  id            Int       @id @default(autoincrement())
+  name          String
+  date          DateTime
+  type          String    @default("public")
+  description   String?
+  isRecurring   Boolean   @default(false)
+  applicableTo  String    @default("all")
+  branchId      Int?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime
+  Branch        Branch?   @relation(fields: [branchId], references: [id])
+
+  @@index([date])
+  @@index([branchId])
+}
+
+model LeavePolicy {
+  id                    Int          @id @default(autoincrement())
+  name                  String
+  code                  String       @unique
+  leaveType             String
+  annualQuota           Decimal      @default(0) @db.Decimal(5, 1)
+  carryForward          Boolean      @default(false)
+  maxCarryForward       Decimal      @default(0) @db.Decimal(5, 1)
+  encashable            Boolean      @default(false)
+  maxEncashment         Decimal      @default(0) @db.Decimal(5, 1)
+  minDaysNotice         Int          @default(0)
+  maxConsecutiveDays    Int          @default(0)
+  applicableAfterMonths Int          @default(0)
+  applicableGender      String       @default("all")
+  applicableTo          String       @default("all")
+  departmentId          Int?
+  designationId         Int?
+  requiresDocument      Boolean      @default(false)
+  isActive              Boolean      @default(true)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime
+  Department            Department?  @relation(fields: [departmentId], references: [id])
+  Designation           Designation? @relation(fields: [designationId], references: [id])
+
+  @@index([leaveType])
+  @@index([departmentId])
+  @@index([designationId])
+}
+
+model AttendanceRule {
+  id                    Int         @id @default(autoincrement())
+  name                  String
+  ruleType              String
+  gracePeriodMinutes    Int         @default(0)
+  lateMarkAfterMinutes  Int         @default(0)
+  halfDayAfterMinutes   Int         @default(0)
+  absentAfterMinutes    Int         @default(0)
+  fineAmount            Decimal     @default(0) @db.Decimal(10, 2)
+  fineType              String      @default("fixed")
+  finePerMinute         Decimal     @default(0) @db.Decimal(10, 2)
+  maxFinePerDay         Decimal     @default(0) @db.Decimal(10, 2)
+  applyToShiftId        Int?
+  applyToDepartmentId   Int?
+  applyToBranchId       Int?
+  isActive              Boolean     @default(true)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime
+  Shift                 Shift?      @relation(fields: [applyToShiftId], references: [id])
+  Department            Department? @relation(fields: [applyToDepartmentId], references: [id])
+  Branch                Branch?     @relation(fields: [applyToBranchId], references: [id])
+}
+
+model Grade {
+  id          Int        @id @default(autoincrement())
+  name        String
+  code        String     @unique
+  level       Int
+  minSalary   Decimal    @default(0) @db.Decimal(15, 2)
+  maxSalary   Decimal    @default(0) @db.Decimal(15, 2)
+  description String?
+  benefits    String?
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime
+  Employee    Employee[]
+
+  @@index([level])
+}
+
+// Key-value store for company-wide settings (per tenant DB)
+model CompanySettings {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  label     String
+  group     String   @default("general")
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+}
+
+// Per-tenant biometric site configuration (stored in each tenant's DB)
+model BiometricSiteConfig {
+  id          Int      @id @default(autoincrement())
+  siteId      String   @unique  // e.g. "site1", "site2"
+  siteName    String
+  baseUrl     String   @default("https://api.etimeoffice.com/api")
+  corporateId String
+  username    String
+  password    String   // store encrypted in production
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+}
+
+// ── Employee Requests (general + advance payment) ────────────────
+model EmployeeRequest {
+  id            Int      @id @default(autoincrement())
+  employeeId    Int
+  requestType   String                        // "general" | "advance_payment"
+  subject       String
+  description   String
+  amount        Decimal? @db.Decimal(15, 2)   // only for advance_payment
+  status        String   @default("pending")  // pending | approved | rejected
+  approvedBy    Int?
+  approvedDate  DateTime?
+  rejectedBy    Int?
+  rejectedDate  DateTime?
+  rejectionNote String?
+  isDeleted     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime
+
+  Employee      Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, status])
+  @@index([requestType, status])
+}
+
+// ── In-app Notifications ─────────────────────────────────────────
+model Notification {
+  id          Int      @id @default(autoincrement())
+  userId      Int                               // TenantUser id (from superadmin DB) — stored as string ref
+  userEmail   String                            // email of recipient (easier lookup)
+  title       String
+  message     String
+  type        String   @default("info")         // info | warning | success | error
+  link        String   @default("")             // optional deep link
+  isRead      Boolean  @default(false)
+  entityType  String   @default("")             // "leave" | "request" | "attendance"
+  entityId    Int?                              // id of the related record
+  createdAt   DateTime @default(now())
+
+  @@index([userEmail, isRead])
+  @@index([createdAt])
 }

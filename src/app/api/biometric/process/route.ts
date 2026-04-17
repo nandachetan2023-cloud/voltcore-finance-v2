@@ -1,29 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createBiometricService } from '@/lib/biometric'
+import { createBiometricServiceFromDb } from '@/lib/biometric'
+import { getDbForRequest } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
 // POST: Process unprocessed raw logs to attendance
 export async function POST(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
-    const biometricService = createBiometricService()
+    const biometricService = await createBiometricServiceFromDb(undefined, db)
     const { processedCount, processedEmployees } = await biometricService.processRawLogs()
 
     return NextResponse.json({
       success: true,
       message: 'Raw logs processed successfully',
-      data: { 
-        processedCount,
-        processedEmployees,
-      },
+      data: { processedCount, processedEmployees },
     })
   } catch (error) {
     console.error('Process logs error:', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Processing failed',
-      },
+      { success: false, error: error instanceof Error ? error.message : 'Processing failed' },
       { status: 500 }
     )
   }

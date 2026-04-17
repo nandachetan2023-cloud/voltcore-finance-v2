@@ -1,5 +1,38 @@
 import { create } from 'zustand';
 
+export type UserRole = 'superadmin' | 'admin' | 'demo';
+
+// All top-level modules and their sub-modules for access checking
+export const MODULE_TREE: Record<string, string[]> = {
+  organization: ['organization', 'departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules'],
+  hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'shift', 'timesheet', 'payroll', 'training', 'recruitment'],
+  procurement: ['procurement', 'purchases', 'expenses'],
+  finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
+  projects: ['projects', 'project-list', 'sites'],
+  inventory: ['inventory'],
+  assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
+  sales: ['sales'],
+  crm: ['crm'],
+  // A dedicated "self-service" group for employees
+  'self-service': ['my-attendance', 'my-leave', 'my-requests'],
+  system: ['system', 'reports', 'settings', 'user-management', 'requests'],
+  support: ['support'],
+  knowledgebase: ['knowledgebase'],
+  downloads: ['downloads'],
+}
+
+// Check if a module is accessible given an allowedModules string
+export function isModuleAllowed(moduleId: string, allowedModules: string): boolean {
+  if (!allowedModules || allowedModules === 'all') return true
+  const allowed = allowedModules.split(',').map(s => s.trim()).filter(Boolean)
+  for (const key of allowed) {
+    const tree = MODULE_TREE[key]
+    if (tree && tree.includes(moduleId)) return true
+    if (key === moduleId) return true
+  }
+  return false
+}
+
 export type ModuleId =
   | 'dashboard' | 'organization' | 'hrms' | 'procurement' | 'finance'
   | 'projects' | 'inventory' | 'assets' | 'sales' | 'crm'
@@ -21,9 +54,19 @@ export type ModuleId =
   // Downloads
   | 'downloads'
   // Organization sub-modules
-  | 'departments' | 'designations'
+  | 'departments' | 'designations' | 'holidays' | 'leave-policies' | 'attendance-rules'
   // Biometric
-  | 'biometric';
+  | 'biometric'
+  // Admin
+  | 'trash'
+  // User Management (tenant admin)
+  | 'user-management'
+  // Employee self-service
+  | 'my-attendance'
+  | 'my-leave'
+  | 'my-requests'
+  // Admin requests view
+  | 'requests';
 
 interface NavItem {
   id: ModuleId;
@@ -32,6 +75,28 @@ interface NavItem {
   badge?: number;
   section?: string;
 }
+
+// Modules the demo user is allowed to access (top-level and sub-modules)
+export const DEMO_ALLOWED_MODULES: Set<string> = new Set([
+  'dashboard',
+  'organization',
+  'departments',
+  'designations',
+  'holidays',
+  'leave-policies',
+  'attendance-rules',
+  'hrms',
+  'employee-analytics',
+  'employees',
+  'attendance',
+  'leave',
+  'shift',
+  'timesheet',
+  'payroll',
+  'training',
+  'recruitment',
+  'biometric',
+]);
 
 export const MAIN_MODULES: NavItem[] = [
   { id: 'organization', icon: 'Building2', label: 'Organization' },
@@ -47,12 +112,16 @@ export const MAIN_MODULES: NavItem[] = [
   { id: 'support', icon: 'MessageSquare', label: 'Support' },
   { id: 'knowledgebase', icon: 'BookOpen', label: 'Knowledgebase' },
   { id: 'downloads', icon: 'Download', label: 'Downloads' },
+  { id: 'self-service', icon: 'UserCircle', label: 'My Portal' },
 ];
 
 export const SUB_MODULES: Record<string, NavItem[]> = {
   organization: [
     { id: 'departments', icon: 'Building2', label: 'Departments' },
     { id: 'designations', icon: 'Award', label: 'Designations' },
+    { id: 'holidays', icon: 'CalendarDays', label: 'Holidays' },
+    { id: 'leave-policies', icon: 'FileText', label: 'Leave Policies' },
+    { id: 'attendance-rules', icon: 'Shield', label: 'Attendance Rules' },
   ],
   hrms: [
     { id: 'employee-analytics', icon: 'BarChart3', label: 'Employee Analytics', section: 'HRMS' },
@@ -97,6 +166,13 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
   system: [
     { id: 'reports', icon: 'BarChart3', label: 'Reports', section: 'System' },
     { id: 'settings', icon: 'Settings', label: 'Settings', section: 'System' },
+    { id: 'user-management', icon: 'UserCog', label: 'User Management', section: 'System' },
+    { id: 'requests', icon: 'ClipboardList', label: 'Employee Requests', section: 'System' },
+  ],
+  'self-service': [
+    { id: 'my-attendance', icon: 'ClipboardList', label: 'My Attendance', section: 'My Portal' },
+    { id: 'my-leave', icon: 'CalendarDays', label: 'Apply Leave', section: 'My Portal' },
+    { id: 'my-requests', icon: 'FileText', label: 'My Requests', section: 'My Portal' },
   ],
   support: [],
   knowledgebase: [],
@@ -125,6 +201,9 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   // Organization sub-modules
   departments: { title: 'Departments', breadcrumb: 'Organization › Departments' },
   designations: { title: 'Designations', breadcrumb: 'Organization › Designations' },
+  holidays: { title: 'Holidays', breadcrumb: 'Organization › Holidays' },
+  'leave-policies': { title: 'Leave Policies', breadcrumb: 'Organization › Leave Policies' },
+  'attendance-rules': { title: 'Attendance Rules', breadcrumb: 'Organization › Attendance Rules' },
   // HRMS sub-modules
   'employee-analytics': { title: 'Employee Analytics', breadcrumb: 'HRMS › Employee Analytics' },
   timesheet: { title: 'Timesheet', breadcrumb: 'HRMS › Weekly Timesheet' },
@@ -157,10 +236,17 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   reports: { title: 'Reports', breadcrumb: 'VoltCore ERP › Analytics' },
   settings: { title: 'Settings', breadcrumb: 'VoltCore ERP › System Settings' },
   downloads: { title: 'Downloads', breadcrumb: 'VoltCore ERP › Project Downloads' },
+  trash: { title: 'Recycle Bin', breadcrumb: 'Admin › Deleted Items' },
+  'user-management': { title: 'User Management', breadcrumb: 'System › User Management' },
+  'requests': { title: 'Employee Requests', breadcrumb: 'System › Employee Requests' },
+  'self-service': { title: 'My Portal', breadcrumb: 'VoltCore ERP › My Portal' },
+  'my-attendance': { title: 'My Attendance', breadcrumb: 'My Portal › Attendance' },
+  'my-leave': { title: 'Apply for Leave', breadcrumb: 'My Portal › Leave Application' },
+  'my-requests': { title: 'My Requests', breadcrumb: 'My Portal › Requests' },
 };
 
 // Modules with sub-modules (clicking them shows sub-nav instead of a page)
-export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finance', 'projects', 'assets', 'system'];
+export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finance', 'projects', 'assets', 'system', 'self-service'];
 
 // Main modules that have their own page (no sub-nav)
 export const PAGE_MODULES = ['dashboard', 'inventory', 'sales', 'crm', 'support', 'knowledgebase', 'downloads'];
@@ -174,7 +260,7 @@ const PARENT_MAP: Record<string, string> = {};
 });
 
 // Expandable modules that show their own sub-module grid (instead of auto-redirecting to first child)
-export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'projects', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
+export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'projects', 'inventory', 'sales', 'crm', 'support', 'knowledgebase', 'self-service'];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};
@@ -203,13 +289,16 @@ interface ERPStore {
   setSidebarOpen: (open: boolean) => void;
   triggerCreate: number;
   triggerCreateDialog: () => void;
+  userRole: UserRole;
+  setUserRole: (role: UserRole) => void;
+  allowedModules: string;
+  setAllowedModules: (modules: string) => void;
 }
 
 export const useERPStore = create<ERPStore>((set) => ({
   activeModule: 'dashboard',
   setActiveModule: (module) => set((s) => {
     const parent = resolveParent(module);
-    // If clicking an expandable module that has NO page and HAS sub-modules, go to first sub-module
     const finalModule = (
       EXPANDABLE_MODULES.includes(module) &&
       !EXPANDABLE_WITH_PAGE.includes(module) &&
@@ -221,10 +310,13 @@ export const useERPStore = create<ERPStore>((set) => ({
       activeParentModule: parent,
     };
   }),
-  // Initialize parent so page modules show correct sidebar
   activeParentModule: 'dashboard' as ModuleId,
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   triggerCreate: 0,
   triggerCreateDialog: () => set((s) => ({ triggerCreate: s.triggerCreate + 1 })),
+  userRole: 'admin',
+  setUserRole: (role) => set({ userRole: role }),
+  allowedModules: 'all',
+  setAllowedModules: (modules) => set({ allowedModules: modules }),
 }));

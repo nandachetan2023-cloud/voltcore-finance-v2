@@ -178,6 +178,7 @@ export default function SalaryComplianceBulkImport({ onImportComplete }: { onImp
       const formData = new FormData();
       formData.append('file', file);
       formData.append('sheetName', sheetName);
+      formData.append('formatType', 'compliance'); // Specify compliance format
 
       const res = await fetch('/api/payroll/validate-employees', {
         method: 'POST',
@@ -382,14 +383,14 @@ export default function SalaryComplianceBulkImport({ onImportComplete }: { onImp
                 <div className="text-[11px] text-[#8899aa] space-y-2">
                   <p className="font-semibold text-[#e2e8f0]">Import Instructions:</p>
                   <ol className="list-decimal list-inside space-y-1">
-                    <li>Download the template file below</li>
-                    <li>Fill in the salary compliance data (TOKEN NO. must match employee codes)</li>
+                    <li>Download the template file below (24-column FORM XVII/XIII format)</li>
+                    <li>Fill in the salary compliance data (Name of workman must match employee names)</li>
                     <li>Save the file and upload it here</li>
-                    <li>System will validate employee codes before import</li>
+                    <li>System will validate employee names before import</li>
                     <li>Review validation results and proceed with import</li>
                   </ol>
                   <p className="text-[10px] text-[#5a6878] mt-2">
-                    Note: TOKEN NO. column must contain valid employee codes from your system.
+                    Note: "Name of the workman" column must contain valid employee names from your system.
                   </p>
                 </div>
               </div>
@@ -602,7 +603,7 @@ export default function SalaryComplianceBulkImport({ onImportComplete }: { onImp
                               Row {emp.row}: {emp.name}
                             </div>
                             <div className="text-[10px] text-[#5a6878] mt-0.5">
-                              TOKEN NO: {emp.tokenNo}
+                              Employee Name: {emp.tokenNo}
                             </div>
                           </div>
                           <div className="flex gap-1">
