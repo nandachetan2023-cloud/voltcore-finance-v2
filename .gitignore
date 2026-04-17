@@ -93,3 +93,6 @@ server.log
 # OS
 .DS_Store
 Thumbs.db
+
+# Reference/example folders
+superadmin_example/
