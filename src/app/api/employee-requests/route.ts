@@ -1,68 +1,78 @@
 import { getDbForRequest } from '@/lib/db'
+import { superadminDb } from '@/lib/superadmin-db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-// Helper: send notification to approver(s)
-async function notifyApprovers(
-  db: any,
-  employeeId: number,
-  entityType: string,
-  entityId: number,
-  subject: string,
-  requestType: string
-) {
+// ── Resolve the tenant ID from the request cookie ────────────────
+function getTenantId(request: NextRequest): string | null {
+  return request.cookies.get('erp_tenant_id')?.value || null
+}
+
+// ── Fetch approval chain for a request type from superadmin DB ─
+// Looks for role-specific chain first, falls back to default (null requesterRoleId)
+// ── Fetch approval chain for a role (universal — no request type) ─
+// Level-1 roles go to admin directly. All other roles need a chain.
+async function getChainForRole(tenantId: string, requesterRoleId: string | undefined | null) {
+  if (!requesterRoleId) return null
   try {
-    // Get employee info
-    const employee = await db.employee.findUnique({
-      where: { id: employeeId },
-      select: {
-        firstName: true, lastName: true,
-        departmentId: true, designationId: true,
-        Department: { select: { name: true } },
-      },
+    return await superadminDb.approvalChain.findFirst({
+      where: { tenantId, requesterRoleId, isActive: true },
+      include: { steps: { include: { approverRole: true }, orderBy: { stepNumber: 'asc' } } },
     })
-    if (!employee) return
+  } catch { return null }
+}
 
-    const empName = `${employee.firstName} ${employee.lastName}`
+async function findApproversForRole(
+  tenantId: string,
+  roleId: string,
+  scope: string,
+  employeeDeptName: string | null
+): Promise<{ email: string; name: string }[]> {
+  try {
+    const where: any = { tenantId, orgRoleId: roleId, isActive: true }
+    const users = await superadminDb.tenantUser.findMany({ where, select: { email: true, name: true } })
 
-    // Find all admin users (role = 'admin' means allowedModules = 'all')
-    // We notify via email lookup — get all active users for this tenant
-    // Since we don't have a direct link to TenantUser from here, we create
-    // a notification with userEmail = '__admin__' as a sentinel that the
-    // notifications API will expand to all admin users
-    // For now: create a notification for each user who has 'all' access
-    // We store it with a special marker and the admin panel polls for it
-
-    const typeLabel = requestType === 'advance_payment' ? 'Advance Payment Request' : 'General Request'
-    const title = `New ${typeLabel}`
-    const message = `${empName} submitted: "${subject}"`
-
-    // Create a broadcast notification (userEmail = '' means all admins see it)
-    await db.notification.create({
-      data: {
-        userId: employeeId,
-        userEmail: '__admin_broadcast__',
-        title,
-        message,
-        type: 'info',
-        link: '/system/requests',
-        entityType,
-        entityId,
-        updatedAt: new Date(),
-      },
-    })
-  } catch (e) {
-    console.error('Failed to send notification:', e)
+    // If scope is same_department, filter by users whose linked employee is in the same dept
+    // We can't join across DBs, so we use the role's departments field as a proxy
+    // The role itself has a departments field — if it's set, only users in that dept qualify
+    // For now return all users with that role (dept scoping is enforced at role definition level)
+    return users
+  } catch {
+    return []
   }
 }
 
-// GET: list requests
-// ?mine=true&employeeId=X  → employee's own requests
-// ?pending=true            → all pending (for admin/approver)
-// ?all=true                → all requests (admin)
+// ── Create notifications for a list of approvers ─────────────────
+async function notifyUsers(
+  db: any,
+  recipients: { email: string }[],
+  title: string,
+  message: string,
+  entityId: number,
+  entityType: string,
+  link: string
+) {
+  for (const r of recipients) {
+    await db.notification.create({
+      data: {
+        userId: 0,
+        userEmail: r.email,
+        title,
+        message,
+        type: 'info',
+        link,
+        entityType,
+        entityId,
+      },
+    }).catch(() => {})
+  }
+}
+
+// ── GET: list requests ────────────────────────────────────────────
 export async function GET(request: NextRequest) {
   const db = getDbForRequest(request)
+  const tenantId = getTenantId(request)
   try {
     const { searchParams } = new URL(request.url)
     const employeeId = searchParams.get('employeeId')
@@ -75,6 +85,41 @@ export async function GET(request: NextRequest) {
     if (pending) where.status = 'pending'
     if (status) where.status = status
     if (requestType) where.requestType = requestType
+
+    // Resolve caller's identity for self-exclusion and level check
+    let callerEmployeeId: number | null = null
+    let callerRoleLevel: number | null = null
+    let callerIsAdmin = false
+    const callerEmail = request.cookies.get('erp_user_email')?.value
+    const callerRole = request.cookies.get('erp_user_role')?.value // 'admin' | 'demo'
+
+    if (callerEmail && tenantId && !employeeId) {
+      const callerUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId, email: callerEmail, isActive: true },
+        select: { employeeId: true, orgRoleId: true, allowedModules: true },
+      }).catch(() => null)
+
+      if (callerUser?.employeeId) callerEmployeeId = callerUser.employeeId
+
+      if (callerUser?.orgRoleId) {
+        const role = await superadminDb.orgRole.findUnique({
+          where: { id: callerUser.orgRoleId },
+          select: { level: true },
+        }).catch(() => null)
+        if (role) callerRoleLevel = role.level
+      }
+
+      // Only treat as admin if they genuinely have full access
+      callerIsAdmin = callerRole === 'admin' && !callerUser?.orgRoleId
+    } else if (!employeeId && callerRole === 'admin') {
+      // Superadmin or admin without tenant context
+      callerIsAdmin = true
+    }
+
+    // Exclude the caller's own requests from the approver view
+    if (callerEmployeeId && !employeeId) {
+      where.employeeId = { not: callerEmployeeId }
+    }
 
     const requests = await db.employeeRequest.findMany({
       where,
@@ -90,16 +135,102 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ success: true, data: requests })
+    // For each request, resolve the requester's role level and tag canApprove
+    let enriched: any[] = requests
+    if (!employeeId) {
+      if (tenantId && callerRoleLevel !== null) {
+        // Caller has an orgRole — only show requests where they are the designated approver
+        // in the chain for the requester's role
+        const requesterEmployeeIds = [...new Set(requests.map(r => r.employeeId))]
+        const requesterUsers = await superadminDb.tenantUser.findMany({
+          where: { tenantId, employeeId: { in: requesterEmployeeIds }, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => [])
+
+        const roleIds = [...new Set(requesterUsers.map(u => u.orgRoleId).filter(Boolean))] as string[]
+        const roles = roleIds.length > 0
+          ? await superadminDb.orgRole.findMany({
+              where: { id: { in: roleIds } },
+              select: { id: true, level: true },
+            }).catch(() => [])
+          : []
+
+        const roleLevelMap = new Map<string, number>(roles.map(r => [r.id, r.level] as [string, number]))
+        const empRoleLevelMap = new Map<number, number>(
+          requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ? (roleLevelMap.get(u.orgRoleId) ?? 0) : 0] as [number, number])
+        )
+
+        // Get the caller's orgRoleId to check if they are in the chain
+        const callerUser = await superadminDb.tenantUser.findFirst({
+          where: { tenantId, email: callerEmail || '', isActive: true },
+          select: { orgRoleId: true },
+        }).catch(() => null)
+        const callerOrgRoleId = callerUser?.orgRoleId
+
+        // For each unique requester role, build a map of roleId -> chain steps
+        const chainStepsMap = new Map<string, any[]>()
+        for (const roleId of roleIds) {
+          const chain = await getChainForRole(tenantId, roleId)
+          chainStepsMap.set(roleId, chain?.steps || [])
+        }
+
+        const empOrgRoleMap = new Map<number, string | null>(
+          requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ?? null] as [number, string | null])
+        )
+
+        enriched = requests
+          .filter(r => {
+            const reqOrgRoleId = empOrgRoleMap.get(r.employeeId)
+            const reqLevel = empRoleLevelMap.get(r.employeeId) ?? 0
+            if (reqLevel <= 1) return false // level-1 goes to admin only
+            if (!reqOrgRoleId) return false
+            const steps = chainStepsMap.get(reqOrgRoleId) || []
+            // Only show if caller is the approver for the CURRENT step
+            const currentStepNum = r.currentStep || 1
+            const currentStepDef = steps.find((s: any) => s.stepNumber === currentStepNum)
+            return currentStepDef?.approverRoleId === callerOrgRoleId
+          })
+          .map(r => ({ ...r, canApprove: true }))
+
+      } else if (callerIsAdmin) {
+        // Admin sees ALL requests (full visibility for audit/management)
+        // but can only action level-1 ones
+        const requesterEmployeeIds = [...new Set(requests.map(r => r.employeeId))]
+        const requesterUsers = await superadminDb.tenantUser.findMany({
+          where: { tenantId: tenantId || '', employeeId: { in: requesterEmployeeIds }, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => [])
+
+        const roleIds = [...new Set(requesterUsers.map(u => u.orgRoleId).filter(Boolean))] as string[]
+        const roles = roleIds.length > 0
+          ? await superadminDb.orgRole.findMany({ where: { id: { in: roleIds } }, select: { id: true, level: true } }).catch(() => [])
+          : []
+        const roleLevelMap = new Map<string, number>(roles.map(r => [r.id, r.level] as [string, number]))
+        const empRoleLevelMap = new Map<number, number>(
+          requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ? (roleLevelMap.get(u.orgRoleId) ?? 0) : 0] as [number, number])
+        )
+
+        // Return all requests — canApprove only for level-1
+        enriched = requests
+          .filter(r => r.employeeId !== callerEmployeeId)
+          .map(r => ({ ...r, canApprove: (empRoleLevelMap.get(r.employeeId) ?? 0) <= 1 }))
+      } else {
+        enriched = []
+      }
+    }
+
+    return NextResponse.json({ success: true, data: enriched })
   } catch (e) {
     console.error('GET employee-requests error:', e)
     return NextResponse.json({ success: false, error: 'Failed to fetch requests' }, { status: 500 })
   }
 }
 
-// POST: create a new request
+// ── POST: create a new request ────────────────────────────────────
 export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
+  const tenantId = getTenantId(request)
+
   try {
     const body = await request.json()
     const { employeeId, requestType, subject, description, amount } = body
@@ -110,9 +241,32 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-
     if (!['general', 'advance_payment'].includes(requestType)) {
       return NextResponse.json({ success: false, error: 'Invalid requestType' }, { status: 400 })
+    }
+
+    // ── Pre-check: non-level-1 users must have a chain defined ────
+    if (tenantId) {
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId, employeeId: parseInt(employeeId), isActive: true },
+        select: { orgRoleId: true },
+      }).catch(() => null)
+
+      const requesterRole = requesterUser?.orgRoleId
+        ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+        : null
+
+      const isLevel1 = !requesterRole || requesterRole.level === 1
+
+      if (!isLevel1) {
+        const chain = await getChainForRole(tenantId, requesterUser?.orgRoleId)
+        if (!chain || chain.steps.length === 0) {
+          return NextResponse.json({
+            success: false,
+            error: 'No approval chain is configured for your role. Contact your system administrator to set up approval workflows.',
+          }, { status: 422 })
+        }
+      }
     }
 
     const req = await db.employeeRequest.create({
@@ -123,15 +277,69 @@ export async function POST(request: NextRequest) {
         description,
         amount: amount ? parseFloat(amount) : null,
         status: 'pending',
+        currentStep: 1,
         updatedAt: new Date(),
       },
       include: {
-        Employee: { select: { firstName: true, lastName: true } },
+        Employee: {
+          select: {
+            firstName: true, lastName: true,
+            Department: { select: { name: true } },
+          },
+        },
       },
     })
 
-    // Notify admins
-    await notifyApprovers(db, parseInt(employeeId), 'request', req.id, subject, requestType)
+    const empName = `${req.Employee.firstName} ${req.Employee.lastName}`
+    const deptName = req.Employee.Department?.name || null
+    const typeLabel = requestType === 'advance_payment' ? 'Advance Payment' : 'General Request'
+
+    // Determine approval routing based on requester's role level
+    if (tenantId) {
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId, employeeId: parseInt(employeeId), isActive: true },
+        select: { orgRoleId: true },
+      }).catch(() => null)
+
+      const requesterRole = requesterUser?.orgRoleId
+        ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+        : null
+
+      const isLevel1 = !requesterRole || requesterRole.level === 1
+
+      if (isLevel1) {
+        // Level-1 → admin approves directly
+        await db.notification.create({
+          data: { userId: parseInt(employeeId), userEmail: '__admin_broadcast__',
+            title: `New ${typeLabel} — Admin Approval Required`,
+            message: `${empName} submitted: "${subject}"`,
+            type: 'info', link: '', entityType: 'request', entityId: req.id },
+        }).catch(() => {})
+      } else {
+        // Non-level-1 → chain is guaranteed to exist (pre-checked above)
+        const chain = await getChainForRole(tenantId, requesterUser?.orgRoleId)
+        const step1 = chain!.steps[0]
+        const approvers = await findApproversForRole(tenantId, step1.approverRoleId, step1.scope, deptName)
+        if (approvers.length > 0) {
+          await notifyUsers(db, approvers, `New ${typeLabel} — Step 1 Approval`,
+            `${empName} submitted: "${subject}"${deptName ? ` (${deptName})` : ''}`,
+            req.id, 'request', '')
+        } else {
+          await db.notification.create({
+            data: { userId: parseInt(employeeId), userEmail: '__admin_broadcast__',
+              title: `New ${typeLabel} — No Approver Found`,
+              message: `${empName} submitted: "${subject}". No users found for step-1 approver role.`,
+              type: 'warning', link: '', entityType: 'request', entityId: req.id },
+          }).catch(() => {})
+        }
+      }
+    } else {
+      await db.notification.create({
+        data: { userId: parseInt(employeeId), userEmail: '__admin_broadcast__',
+          title: `New ${typeLabel}`, message: `${empName} submitted: "${subject}"`,
+          type: 'info', link: '', entityType: 'request', entityId: req.id },
+      }).catch(() => {})
+    }
 
     return NextResponse.json({ success: true, data: req }, { status: 201 })
   } catch (e) {
@@ -140,9 +348,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH: approve or reject a request (admin only)
+// ── PATCH: approve or reject (chain-aware) ────────────────────────
 export async function PATCH(request: NextRequest) {
   const db = getDbForRequest(request)
+  const tenantId = getTenantId(request)
+
   try {
     const body = await request.json()
     const { id, action, rejectionNote, approvedBy } = body
@@ -151,61 +361,258 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'id and action required' }, { status: 400 })
     }
 
-    const existing = await db.employeeRequest.findUnique({ where: { id: parseInt(id) } })
+    const existing = await db.employeeRequest.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        Employee: {
+          select: {
+            email: true, firstName: true, lastName: true,
+            Department: { select: { name: true } },
+          },
+        },
+      },
+    })
     if (!existing) return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 })
 
-    const updateData: any = { updatedAt: new Date() }
-    if (action === 'approve') {
-      updateData.status = 'approved'
-      updateData.approvedBy = approvedBy ? parseInt(approvedBy) : null
-      updateData.approvedDate = new Date()
-    } else if (action === 'reject') {
-      updateData.status = 'rejected'
-      updateData.rejectedBy = approvedBy ? parseInt(approvedBy) : null
-      updateData.rejectedDate = new Date()
-      updateData.rejectionNote = rejectionNote || ''
-    } else {
+    // ── Guard: only pending requests can be actioned ──────────────
+    if (existing.status !== 'pending') {
+      return NextResponse.json(
+        { success: false, error: `This request has already been ${existing.status}. No further action is possible.` },
+        { status: 409 }
+      )
+    }
+
+    // ── Guard: caller must be the approver for the CURRENT step ──
+    const callerEmail = request.cookies.get('erp_user_email')?.value
+    if (callerEmail && tenantId) {
+      const callerUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId, email: callerEmail, isActive: true },
+        select: { employeeId: true, orgRoleId: true },
+      }).catch(() => null)
+
+      // Block self-approval
+      if (callerUser?.employeeId && callerUser.employeeId === existing.employeeId) {
+        return NextResponse.json(
+          { success: false, error: 'You cannot approve or reject your own request.' },
+          { status: 403 }
+        )
+      }
+
+      if (callerUser?.orgRoleId) {
+        const requesterUser = await superadminDb.tenantUser.findFirst({
+          where: { tenantId, employeeId: existing.employeeId, isActive: true },
+          select: { orgRoleId: true },
+        }).catch(() => null)
+
+        const requesterRole = requesterUser?.orgRoleId
+          ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+          : null
+
+        const isLevel1Requester = !requesterRole || requesterRole.level === 1
+
+        if (!isLevel1Requester) {
+          const chain = await getChainForRole(tenantId, requesterUser?.orgRoleId)
+          // Check caller is the approver for the CURRENT step specifically
+          const currentStepDef = chain?.steps.find(s => s.stepNumber === (existing.currentStep || 1))
+          if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
+            return NextResponse.json(
+              { success: false, error: 'It is not your turn to approve this request. Please wait for the previous step to be completed.' },
+              { status: 403 }
+            )
+          }
+        } else {
+          return NextResponse.json(
+            { success: false, error: 'Level-1 requests require admin approval.' },
+            { status: 403 }
+          )
+        }
+      }
+    }
+
+    const empName = `${existing.Employee.firstName} ${existing.Employee.lastName}`
+    const deptName = existing.Employee.Department?.name || null
+
+    // ── REJECT: always final ──────────────────────────────────────
+    if (action === 'reject') {
+      const updated = await db.employeeRequest.update({
+        where: { id: parseInt(id) },
+        data: {
+          status: 'rejected',
+          rejectedBy: approvedBy ? parseInt(approvedBy) : null,
+          rejectedDate: new Date(),
+          rejectionNote: rejectionNote || '',
+          updatedAt: new Date(),
+        },
+      })
+
+      // Notify the employee
+      await db.notification.create({
+        data: {
+          userId: existing.employeeId,
+          userEmail: existing.Employee.email,
+          title: 'Request Rejected',
+          message: `Your request "${existing.subject}" was rejected.${rejectionNote ? ` Reason: ${rejectionNote}` : ''}`,
+          type: 'error',
+          link: '',
+          entityType: 'request',
+          entityId: existing.id,
+        },
+      }).catch(() => {})
+
+      return NextResponse.json({ success: true, data: updated })
+    }
+
+    // ── APPROVE ───────────────────────────────────────────────────
+    if (action !== 'approve') {
       return NextResponse.json({ success: false, error: 'action must be approve or reject' }, { status: 400 })
     }
 
+    // Try to load the approval chain
+    let chain: Awaited<ReturnType<typeof getChainForRole>> = null
+    let requesterRoleId: string | null = null
+    if (tenantId) {
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId, employeeId: existing.employeeId, isActive: true },
+        select: { orgRoleId: true },
+      }).catch(() => null)
+      requesterRoleId = requesterUser?.orgRoleId || null
+      chain = await getChainForRole(tenantId, requesterRoleId)
+    }
+
+    const currentStep = existing.currentStep || 1
+    const totalSteps = chain?.steps.length || 1
+
+    // ── Determine if this approval is final ───────────────────────
+    // Rule: Admin approval is only REQUIRED for level-1 employees.
+    // For employees at level 2+, the approval of their direct manager
+    // (the role one level above them) is sufficient — admin is optional.
+    //
+    // Implementation: after approving step N, check if the NEXT step's
+    // role is the highest-level role (admin). If the requester's own
+    // role level is > 1, skip the admin step and mark as fully approved.
+
+    let skipAdminStep = false
+    if (chain && currentStep < totalSteps && tenantId) {
+      const nextStepDef = chain.steps.find(s => s.stepNumber === currentStep + 1)
+      if (nextStepDef) {
+        const requesterRoleLevel = requesterRoleId
+          ? (await superadminDb.orgRole.findUnique({ where: { id: requesterRoleId }, select: { level: true } }).catch(() => null))?.level ?? 1
+          : 1
+
+        const nextRole = await superadminDb.orgRole.findUnique({
+          where: { id: nextStepDef.approverRoleId },
+          select: { level: true },
+        }).catch(() => null)
+
+        const highestRole = await superadminDb.orgRole.findFirst({
+          where: { tenantId },
+          orderBy: { level: 'desc' },
+          select: { level: true },
+        }).catch(() => null)
+
+        const isNextStepAdmin = nextRole && highestRole && nextRole.level >= highestRole.level
+        if (isNextStepAdmin && requesterRoleLevel > 1) {
+          skipAdminStep = true
+        }
+      }
+    }
+
+    const isLastStep = !chain || currentStep >= totalSteps || skipAdminStep
+
+    if (isLastStep) {
+      // Final approval — mark as approved
+      const updated = await db.employeeRequest.update({
+        where: { id: parseInt(id) },
+        data: {
+          status: 'approved',
+          approvedBy: approvedBy ? parseInt(approvedBy) : null,
+          approvedDate: new Date(),
+          updatedAt: new Date(),
+        },
+      })
+
+      // Notify the employee
+      await db.notification.create({
+        data: {
+          userId: existing.employeeId,
+          userEmail: existing.Employee.email,
+          title: 'Request Approved ✓',
+          message: `Your request "${existing.subject}" has been fully approved.`,
+          type: 'success',
+          link: '',
+          entityType: 'request',
+          entityId: existing.id,
+        },
+      }).catch(() => {})
+
+      return NextResponse.json({ success: true, data: updated, fullyApproved: true })
+    }
+
+    // Intermediate approval — advance to next step
+    const nextStep = currentStep + 1
     const updated = await db.employeeRequest.update({
       where: { id: parseInt(id) },
-      data: updateData,
+      data: {
+        currentStep: nextStep,
+        updatedAt: new Date(),
+        // Keep status as 'pending' — still needs more approvals
+      },
     })
 
-    // Notify the employee
-    try {
-      const emp = await db.employee.findUnique({
-        where: { id: existing.employeeId },
-        select: { email: true, firstName: true },
-      })
-      if (emp) {
-        await db.notification.create({
-          data: {
-            userId: existing.employeeId,
-            userEmail: emp.email,
-            title: action === 'approve' ? 'Request Approved' : 'Request Rejected',
-            message: action === 'approve'
-              ? `Your request "${existing.subject}" has been approved.`
-              : `Your request "${existing.subject}" was rejected. ${rejectionNote ? `Reason: ${rejectionNote}` : ''}`,
-            type: action === 'approve' ? 'success' : 'error',
-            link: '/system/my-requests',
-            entityType: 'request',
-            entityId: existing.id,
-            updatedAt: new Date(),
-          },
-        })
-      }
-    } catch (e) { console.error('Notification error:', e) }
+    // Notify the employee that step N was approved
+    await db.notification.create({
+      data: {
+        userId: existing.employeeId,
+        userEmail: existing.Employee.email,
+        title: `Request — Step ${currentStep} Approved`,
+        message: `Your request "${existing.subject}" passed step ${currentStep} of ${totalSteps}. Awaiting step ${nextStep} approval.`,
+        type: 'info',
+        link: '',
+        entityType: 'request',
+        entityId: existing.id,
+      },
+    }).catch(() => {})
 
-    return NextResponse.json({ success: true, data: updated })
+    // Notify the next-level approvers
+    if (chain) {
+      const nextStepDef = chain.steps.find(s => s.stepNumber === nextStep)
+      if (nextStepDef) {
+        const nextApprovers = await findApproversForRole(
+          tenantId!, nextStepDef.approverRoleId, nextStepDef.scope, deptName
+        )
+        if (nextApprovers.length > 0) {
+          await notifyUsers(
+            db, nextApprovers,
+            `Request Needs Your Approval — Step ${nextStep}`,
+            `${empName}'s request "${existing.subject}" has been approved at step ${currentStep} and now requires your approval.${deptName ? ` (${deptName})` : ''}`,
+            existing.id, 'request', ''
+          )
+        } else {
+          // No users found for next role — fallback to admin broadcast
+          await db.notification.create({
+            data: {
+              userId: 0,
+              userEmail: '__admin_broadcast__',
+              title: `Request Escalated — Step ${nextStep}`,
+              message: `${empName}'s request "${existing.subject}" needs step ${nextStep} approval. No users found for the required role.`,
+              type: 'warning',
+              link: '',
+              entityType: 'request',
+              entityId: existing.id,
+            },
+          }).catch(() => {})
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, data: updated, fullyApproved: false, nextStep })
   } catch (e) {
     console.error('PATCH employee-requests error:', e)
     return NextResponse.json({ success: false, error: 'Failed to update request' }, { status: 500 })
   }
 }
 
-// DELETE: soft delete
+// ── DELETE: soft delete ───────────────────────────────────────────
 export async function DELETE(request: NextRequest) {
   const db = getDbForRequest(request)
   try {

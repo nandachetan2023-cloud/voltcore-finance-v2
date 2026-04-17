@@ -17,6 +17,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   late:     { label: 'Late',     color: '#f5a623', bg: 'rgba(245,166,35,0.12)' },
   absent:   { label: 'Absent',   color: '#ff3d3d', bg: 'rgba(255,61,61,0.12)' },
   half_day: { label: 'Half Day', color: '#00d4ff', bg: 'rgba(0,212,255,0.12)' },
+  'half-day': { label: 'Half Day', color: '#00d4ff', bg: 'rgba(0,212,255,0.12)' },
 };
 
 function fmt(dt: string | null): string {

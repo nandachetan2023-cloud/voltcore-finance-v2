@@ -8,13 +8,15 @@ export interface AuthUser {
   name: string
   email: string
   role: UserRole
-  tenantId: string        // superadmin DB tenant id
-  tenantSlug: string      // e.g. "voltcore", "upasana"
-  tenantName: string      // e.g. "Voltcore"
-  dbUrl: string           // the tenant's postgres connection string
-  allowedModules: string  // "all" or "organization,hrms"
+  tenantId: string
+  tenantSlug: string
+  tenantName: string
+  dbUrl: string
+  allowedModules: string
+  orgRoleName?: string   // the assigned OrgRole name e.g. "HR Manager"
   phone?: string
-  employeeId?: number     // linked employee record in the tenant DB
+  employeeId?: number
+  employeeCode?: string  // the employee's code e.g. "EMP001"
 }
 
 // ── Authenticate against superadmin DB ──────────────────────────
@@ -53,7 +55,10 @@ export async function authenticateUser(email: string, password: string): Promise
   try {
     const tenantUser = await superadminDb.tenantUser.findFirst({
       where: { email, isActive: true },
-      include: { tenant: true },
+      include: {
+        tenant: true,
+        // Include the assigned OrgRole to get its moduleAccess
+      },
     })
 
     if (tenantUser && tenantUser.tenant.status === 'active') {
@@ -65,8 +70,38 @@ export async function authenticateUser(email: string, password: string): Promise
           data: { lastActiveAt: new Date() },
         })
 
-        const modules = tenantUser.allowedModules
-        // Determine role: "all" = admin, anything else = demo
+        // Resolve allowedModules:
+        // 1. If user has an orgRoleId, the role's moduleAccess is authoritative
+        // 2. Otherwise fall back to the user's own allowedModules field
+        let modules = tenantUser.allowedModules
+        let orgRoleName: string | undefined
+        if (tenantUser.orgRoleId) {
+          const orgRole = await superadminDb.orgRole.findUnique({
+            where: { id: tenantUser.orgRoleId },
+            select: { moduleAccess: true, name: true },
+          })
+          if (orgRole) {
+            modules = orgRole.moduleAccess
+            orgRoleName = orgRole.name
+          }
+        }
+
+        // Fetch employee code if linked
+        let employeeCode: string | undefined
+        if (tenantUser.employeeId && tenantUser.tenant.dbUrl) {
+          try {
+            const { PrismaClient } = await import('@prisma/client')
+            const tenantDb = new PrismaClient({ datasources: { db: { url: tenantUser.tenant.dbUrl } } })
+            const emp = await tenantDb.employee.findUnique({
+              where: { id: tenantUser.employeeId },
+              select: { employeeCode: true },
+            }).catch(() => null)
+            await tenantDb.$disconnect()
+            if (emp) employeeCode = emp.employeeCode
+          } catch {}
+        }
+
+        // Determine role: "all" = admin, anything else = restricted user
         const role: UserRole = modules === 'all' ? 'admin' : 'demo'
 
         return {
@@ -80,8 +115,10 @@ export async function authenticateUser(email: string, password: string): Promise
             tenantName: tenantUser.tenant.name,
             dbUrl: tenantUser.tenant.dbUrl,
             allowedModules: modules,
+            orgRoleName,
             phone: tenantUser.phone || undefined,
             employeeId: tenantUser.employeeId || undefined,
+            employeeCode,
           },
         }
       }

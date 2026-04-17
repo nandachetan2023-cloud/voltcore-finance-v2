@@ -103,28 +103,32 @@ model OrgRole {
 
   approvalSteps     ApprovalStep[] @relation("ApproverRole")
   escalationSteps   ApprovalStep[] @relation("EscalationRole")
+  requesterChains   ApprovalChain[] @relation("RequesterRole")
 
   @@unique([tenantId, name])
   @@index([tenantId])
 }
 
-// ── ApprovalChain: one chain per request type per tenant ─────────
-// requestType: "leave" | "expense" | "attendance" | "payroll" | "custom"
+// ── ApprovalChain: one universal chain per requester role per tenant ─
+// Each role has exactly one chain that applies to ALL request types.
+// Level-1 roles don't need a chain — admin always approves them directly.
+// requesterRoleId: null = fallback chain (rarely used)
 model ApprovalChain {
-  id          String   @id @default(cuid())
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  requestType String                          // "leave", "expense", etc.
-  name        String                          // display name e.g. "Leave Approval"
-  description String   @default("")
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  requesterRoleId   String?                         // the role this chain applies to
+  requesterRole     OrgRole? @relation("RequesterRole", fields: [requesterRoleId], references: [id])
+  name              String                          // display name e.g. "Employee Approval Chain"
+  description       String   @default("")
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  steps       ApprovalStep[]
+  steps             ApprovalStep[]
 
-  @@unique([tenantId, requestType])
+  @@unique([tenantId, requesterRoleId])
   @@index([tenantId])
 }
 

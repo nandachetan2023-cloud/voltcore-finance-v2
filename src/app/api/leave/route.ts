@@ -1,12 +1,40 @@
 import { getDbForRequest } from '@/lib/db'
+import { superadminDb } from '@/lib/superadmin-db'
 import { NextRequest, NextResponse } from 'next/server'
 import { getHolidaysInRange, calculateWorkingDays } from '@/lib/services/holiday-service'
 
 export const dynamic = 'force-dynamic'
 
+// ── Resolve tenant ID from cookie ─────────────────────────────────
+function getTenantId(request: NextRequest): string | null {
+  return request.cookies.get('erp_tenant_id')?.value || null
+}
+
+// ── Fetch approval chain for leave from superadmin DB ─────────────
+async function getLeaveApprovalChain(tenantId: string, requesterRoleId?: string | null) {
+  if (!requesterRoleId) return null
+  try {
+    return await superadminDb.approvalChain.findFirst({
+      where: { tenantId, requesterRoleId, isActive: true },
+      include: { steps: { include: { approverRole: true }, orderBy: { stepNumber: 'asc' } } },
+    })
+  } catch { return null }
+}
+
+// ── Find TenantUsers with a given OrgRole ─────────────────────────
+async function findUsersForRole(tenantId: string, roleId: string): Promise<{ email: string }[]> {
+  try {
+    return await superadminDb.tenantUser.findMany({
+      where: { tenantId, orgRoleId: roleId, isActive: true },
+      select: { email: true },
+    })
+  } catch { return [] }
+}
+
 // GET: List all leave requests
 export async function GET(request: NextRequest) {
   const db = getDbForRequest(request)
+  const tenantId = getTenantId(request)
   try {
     const { searchParams } = new URL(request.url)
     const employeeId = searchParams.get('employeeId')
@@ -18,6 +46,33 @@ export async function GET(request: NextRequest) {
     if (employeeId) where.employeeId = parseInt(employeeId)
     if (status) where.status = status.toLowerCase()
 
+    // Resolve caller's role level for canApprove tagging (admin/approver view only)
+    let callerEmployeeId: number | null = null
+    let callerRoleLevel: number | null = null
+    let callerIsAdmin = false
+    const callerEmail = request.cookies.get('erp_user_email')?.value
+    const callerRole = request.cookies.get('erp_user_role')?.value
+
+    if (callerEmail && tenantId && !employeeId) {
+      const callerUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId, email: callerEmail, isActive: true },
+        select: { employeeId: true, orgRoleId: true },
+      }).catch(() => null)
+
+      if (callerUser?.employeeId) callerEmployeeId = callerUser.employeeId
+      if (callerUser?.orgRoleId) {
+        const role = await superadminDb.orgRole.findUnique({
+          where: { id: callerUser.orgRoleId },
+          select: { level: true },
+        }).catch(() => null)
+        if (role) callerRoleLevel = role.level
+      }
+      // Only true admin if role cookie is 'admin' AND no orgRole assigned
+      callerIsAdmin = callerRole === 'admin' && !callerUser?.orgRoleId
+    } else if (!employeeId && callerRole === 'admin') {
+      callerIsAdmin = true
+    }
+
     const [leaveRequests, total] = await Promise.all([
       db.leaveRequest.findMany({
         where,
@@ -28,11 +83,7 @@ export async function GET(request: NextRequest) {
               employeeCode: true,
               firstName: true,
               lastName: true,
-              Branch: {
-                select: {
-                  name: true,
-                },
-              },
+              Branch: { select: { name: true } },
             },
           },
         },
@@ -43,15 +94,85 @@ export async function GET(request: NextRequest) {
       db.leaveRequest.count({ where }),
     ])
 
+    // Enrich with canApprove for the approver view — hard filter at API level
+    let enriched: any[] = leaveRequests
+    if (tenantId && !employeeId) {
+      if (callerRoleLevel !== null) {
+        // Caller has an orgRole — only show leaves where they are a designated approver
+        const requesterEmpIds = [...new Set(leaveRequests.map(r => r.employeeId))]
+        const requesterUsers = await superadminDb.tenantUser.findMany({
+          where: { tenantId, employeeId: { in: requesterEmpIds }, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => [])
+
+        const roleIds = [...new Set(requesterUsers.map(u => u.orgRoleId).filter(Boolean))] as string[]
+        const roles = roleIds.length > 0
+          ? await superadminDb.orgRole.findMany({ where: { id: { in: roleIds } }, select: { id: true, level: true } }).catch(() => [])
+          : []
+        const roleLevelMap = new Map<string, number>(roles.map(r => [r.id, r.level] as [string, number]))
+        const empRoleLevelMap = new Map<number, number>(
+          requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ? (roleLevelMap.get(u.orgRoleId) ?? 0) : 0] as [number, number])
+        )
+
+        // Get caller's orgRoleId
+        const callerUser = await superadminDb.tenantUser.findFirst({
+          where: { tenantId, email: callerEmail || '', isActive: true },
+          select: { orgRoleId: true },
+        }).catch(() => null)
+        const callerOrgRoleId = callerUser?.orgRoleId
+
+        // Build chain steps map per requester role
+        const chainStepsMap2 = new Map<string, any[]>()
+        for (const roleId of roleIds) {
+          const chain = await getLeaveApprovalChain(tenantId, roleId)
+          chainStepsMap2.set(roleId, chain?.steps || [])
+        }
+
+        const empOrgRoleMap = new Map<number, string | null>(
+          requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ?? null] as [number, string | null])
+        )
+
+        enriched = leaveRequests
+          .filter(r => {
+            const reqOrgRoleId = empOrgRoleMap.get(r.employeeId)
+            const reqLevel = empRoleLevelMap.get(r.employeeId) ?? 0
+            if (reqLevel <= 1) return false
+            if (!reqOrgRoleId) return false
+            const steps = chainStepsMap2.get(reqOrgRoleId) || []
+            // Only show if caller is the approver for the CURRENT step
+            const currentStepNum = (r as any).currentStep || 1
+            const currentStepDef = steps.find((s: any) => s.stepNumber === currentStepNum)
+            return currentStepDef?.approverRoleId === callerOrgRoleId
+          })
+          .map(r => ({ ...r, canApprove: true }))
+
+      } else if (callerIsAdmin) {
+        // Admin sees ALL leaves (full visibility), can only approve level-1 ones
+        const requesterEmpIds2 = [...new Set(leaveRequests.map(r => r.employeeId))]
+        const requesterUsers2 = await superadminDb.tenantUser.findMany({
+          where: { tenantId, employeeId: { in: requesterEmpIds2 }, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => [])
+        const roleIds2 = [...new Set(requesterUsers2.map(u => u.orgRoleId).filter(Boolean))] as string[]
+        const roles2 = roleIds2.length > 0
+          ? await superadminDb.orgRole.findMany({ where: { id: { in: roleIds2 } }, select: { id: true, level: true } }).catch(() => [])
+          : []
+        const roleLevelMap2 = new Map<string, number>(roles2.map(r => [r.id, r.level] as [string, number]))
+        const empRoleLevelMap2 = new Map<number, number>(
+          requesterUsers2.map(u => [u.employeeId as number, u.orgRoleId ? (roleLevelMap2.get(u.orgRoleId) ?? 0) : 0] as [number, number])
+        )
+        enriched = leaveRequests
+          .filter(r => r.employeeId !== callerEmployeeId)
+          .map(r => ({ ...r, canApprove: (empRoleLevelMap2.get(r.employeeId) ?? 0) <= 1 }))
+      } else {
+        enriched = []
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      data: leaveRequests,
-      pagination: {
-        total,
-        limit,
-        offset,
-        hasMore: offset + limit < total,
-      },
+      data: enriched,
+      pagination: { total, limit, offset, hasMore: offset + limit < total },
     })
   } catch (error) {
     console.error('Error fetching leave requests:', error)
@@ -144,12 +265,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ── Pre-check: non-level-1 users must have an approval chain ──
+    const tenantIdPreCheck = getTenantId(request)
+    if (tenantIdPreCheck) {
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId: tenantIdPreCheck, employeeId: parseInt(employeeId), isActive: true },
+        select: { orgRoleId: true },
+      }).catch(() => null)
+
+      const requesterRole = requesterUser?.orgRoleId
+        ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+        : null
+
+      const isLevel1 = !requesterRole || requesterRole.level === 1
+
+      if (!isLevel1) {
+        const chain = await getLeaveApprovalChain(tenantIdPreCheck, requesterUser?.orgRoleId)
+        if (!chain || chain.steps.length === 0) {
+          return NextResponse.json({
+            success: false,
+            error: 'No approval chain is configured for your role. Contact your system administrator to set up approval workflows.',
+          }, { status: 422 })
+        }
+      }
+    }
+
     // Use calculated working days (holidays and shift off days are automatically excluded)
     const leaveDays = days || workingDays
     
     // Prepare message about holidays and off days if any exist in the range
     let responseMessage = 'Leave request created successfully'
-    let holidayInfo = null
+    let holidayInfo: { count: number; holidays: { name: string; date: string }[]; workingDays: number; offDays: number } | null = null
     if (holidays.length > 0) {
       const holidayNames = holidays.map(h => h.name).join(', ')
       const totalDays = Math.ceil((new Date(toDate).getTime() - new Date(fromDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
@@ -195,6 +341,7 @@ export async function POST(request: NextRequest) {
         days: leaveDays,
         reason: reason || '',
         status: 'pending',
+        currentStep: 1,
         appliedDate: new Date(),
         updatedAt: new Date(),
       },
@@ -209,6 +356,60 @@ export async function POST(request: NextRequest) {
         },
       },
     })
+
+    // Notify approvers via chain, or broadcast to admins as fallback
+    const empName = `${leaveRequest.Employee.firstName} ${leaveRequest.Employee.lastName}`
+    const fromStr = new Date(fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    const toStr   = new Date(toDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    const notifMsg = `${empName} applied for ${leaveType} leave (${fromStr} – ${toStr}, ${leaveDays} day${leaveDays !== 1 ? 's' : ''})`
+
+    const tenantId = getTenantId(request)
+    if (tenantId) {
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId, employeeId: parseInt(employeeId), isActive: true },
+        select: { orgRoleId: true },
+      }).catch(() => null)
+
+      const requesterRole = requesterUser?.orgRoleId
+        ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+        : null
+
+      const isLevel1 = !requesterRole || requesterRole.level === 1
+
+      if (isLevel1) {
+        await db.notification.create({
+          data: { userId: 0, userEmail: '__admin_broadcast__',
+            title: 'New Leave Request — Admin Approval Required', message: notifMsg,
+            type: 'info', link: '', entityType: 'leave', entityId: leaveRequest.id },
+        }).catch(() => {})
+      } else {
+        // Non-level-1 → chain is guaranteed to exist (pre-checked above)
+        const chain = await getLeaveApprovalChain(tenantId, requesterUser?.orgRoleId)
+        const step1 = chain!.steps[0]
+        const approvers = await findUsersForRole(tenantId, step1.approverRoleId)
+        if (approvers.length > 0) {
+          for (const approver of approvers) {
+            await db.notification.create({
+              data: { userId: 0, userEmail: approver.email,
+                title: 'New Leave Request — Approval Needed', message: notifMsg,
+                type: 'info', link: '', entityType: 'leave', entityId: leaveRequest.id },
+            }).catch(() => {})
+          }
+        } else {
+          await db.notification.create({
+            data: { userId: 0, userEmail: '__admin_broadcast__',
+              title: 'New Leave Request — No Approver Found', message: notifMsg,
+              type: 'warning', link: '', entityType: 'leave', entityId: leaveRequest.id },
+          }).catch(() => {})
+        }
+      }
+    } else {
+      await db.notification.create({
+        data: { userId: 0, userEmail: '__admin_broadcast__',
+          title: 'New Leave Request', message: notifMsg,
+          type: 'info', link: '', entityType: 'leave', entityId: leaveRequest.id },
+      }).catch(() => {})
+    }
 
     return NextResponse.json({ 
       success: true, 
@@ -228,6 +429,7 @@ export async function POST(request: NextRequest) {
 // PATCH: Update leave request status (approve/reject)
 export async function PATCH(request: NextRequest) {
   const db = getDbForRequest(request)
+  const tenantId = getTenantId(request)
   try {
     const body = await request.json()
     const { id, status, rejectionReason, approvedBy, rejectedBy } = body
@@ -247,33 +449,210 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const existing = await db.leaveRequest.findUnique({ where: { id: leaveId } })
+    const existing = await db.leaveRequest.findUnique({
+      where: { id: leaveId },
+      include: {
+        Employee: {
+          select: { email: true, firstName: true, lastName: true, Department: { select: { name: true } } },
+        },
+      },
+    })
     if (!existing) {
+      return NextResponse.json({ success: false, error: 'Leave request not found' }, { status: 404 })
+    }
+
+    // ── Guard: only pending leaves can be actioned ───────────────
+    if (existing.status !== 'pending') {
       return NextResponse.json(
-        { success: false, error: 'Leave request not found' },
-        { status: 404 }
+        { success: false, error: `This leave request has already been ${existing.status}. No further action is possible.` },
+        { status: 409 }
       )
     }
 
-    const updateData: any = {
-      status: status.toLowerCase(),
+    // ── Self-approval guard + current-step check ──────────────────
+    const callerEmail = request.cookies.get('erp_user_email')?.value
+    if (callerEmail && tenantId) {
+      const callerUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId, email: callerEmail, isActive: true },
+        select: { employeeId: true, orgRoleId: true },
+      }).catch(() => null)
+
+      if (callerUser?.employeeId && callerUser.employeeId === existing.employeeId) {
+        return NextResponse.json(
+          { success: false, error: 'You cannot approve or reject your own leave request.' },
+          { status: 403 }
+        )
+      }
+
+      if (callerUser?.orgRoleId) {
+        const requesterUser = await superadminDb.tenantUser.findFirst({
+          where: { tenantId, employeeId: existing.employeeId, isActive: true },
+          select: { orgRoleId: true },
+        }).catch(() => null)
+
+        const requesterRole = requesterUser?.orgRoleId
+          ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+          : null
+
+        const isLevel1Requester = !requesterRole || requesterRole.level === 1
+
+        if (!isLevel1Requester) {
+          const chain = await getLeaveApprovalChain(tenantId, requesterUser?.orgRoleId)
+          // Must be the approver for the CURRENT step specifically
+          const currentStepDef = chain?.steps.find(s => s.stepNumber === ((existing as any).currentStep || 1))
+          if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
+            return NextResponse.json(
+              { success: false, error: 'It is not your turn to approve this leave request. Please wait for the previous step to be completed.' },
+              { status: 403 }
+            )
+          }
+        } else {
+          return NextResponse.json(
+            { success: false, error: 'Level-1 leave requests require admin approval.' },
+            { status: 403 }
+          )
+        }
+      }
     }
 
-    if (status.toLowerCase() === 'approved') {
-      updateData.approvedDate = new Date()
-      if (approvedBy) updateData.approvedBy = parseInt(approvedBy)
-    } else if (status.toLowerCase() === 'rejected') {
-      updateData.rejectedDate = new Date()
-      if (rejectedBy) updateData.rejectedBy = parseInt(rejectedBy)
-      if (rejectionReason) updateData.rejectionReason = rejectionReason
+    const empName = `${existing.Employee.firstName} ${existing.Employee.lastName}`
+    const fromStr = existing.fromDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    const toStr   = existing.toDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+
+    // ── REJECT ────────────────────────────────────────────────────
+    if (status.toLowerCase() === 'rejected') {
+      const leaveRequest = await db.leaveRequest.update({
+        where: { id: leaveId },
+        data: {
+          status: 'rejected',
+          rejectedDate: new Date(),
+          ...(rejectedBy ? { rejectedBy: parseInt(rejectedBy) } : {}),
+          ...(rejectionReason ? { rejectionReason } : {}),
+        },
+      })
+      await db.notification.create({
+        data: {
+          userId: 0,
+          userEmail: existing.Employee.email,
+          title: 'Leave Rejected',
+          message: `Your ${existing.leaveType} leave (${fromStr} – ${toStr}) was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
+          type: 'error',
+          link: '',
+          entityType: 'leave',
+          entityId: leaveId,
+        },
+      }).catch(() => {})
+      return NextResponse.json({ success: true, data: leaveRequest })
     }
 
+    // ── APPROVE ───────────────────────────────────────────────────
+    if (status.toLowerCase() !== 'approved') {
+      return NextResponse.json({ success: false, error: 'status must be approved or rejected' }, { status: 400 })
+    }
+
+    // Load chain to check if multi-step
+    let chain: Awaited<ReturnType<typeof getLeaveApprovalChain>> = null
+    let requesterRoleId: string | null = null
+    if (tenantId) {
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId, employeeId: existing.employeeId, isActive: true },
+        select: { orgRoleId: true },
+      }).catch(() => null)
+      requesterRoleId = requesterUser?.orgRoleId || null
+      chain = await getLeaveApprovalChain(tenantId, requesterRoleId)
+    }
+
+    const currentStep = (existing as any).currentStep || 1
+    const totalSteps = chain?.steps.length || 1
+    const isLastStep = !chain || currentStep >= totalSteps
+
+    if (isLastStep) {
+      // Final approval
+      const leaveRequest = await db.leaveRequest.update({
+        where: { id: leaveId },
+        data: {
+          status: 'approved',
+          approvedDate: new Date(),
+          ...(approvedBy ? { approvedBy: parseInt(approvedBy) } : {}),
+        },
+      })
+      await db.notification.create({
+        data: {
+          userId: 0,
+          userEmail: existing.Employee.email,
+          title: 'Leave Approved ✓',
+          message: `Your ${existing.leaveType} leave (${fromStr} – ${toStr}) has been fully approved.`,
+          type: 'success',
+          link: '',
+          entityType: 'leave',
+          entityId: leaveId,
+        },
+      }).catch(() => {})
+      return NextResponse.json({ success: true, data: leaveRequest, fullyApproved: true })
+    }
+
+    // Intermediate step — advance to next
+    const nextStep = currentStep + 1
     const leaveRequest = await db.leaveRequest.update({
       where: { id: leaveId },
-      data: updateData,
+      data: {
+        currentStep: nextStep,
+        ...(approvedBy ? { approvedBy: parseInt(approvedBy) } : {}),
+      },
     })
 
-    return NextResponse.json({ success: true, data: leaveRequest })
+    // Notify employee of partial approval
+    await db.notification.create({
+      data: {
+        userId: 0,
+        userEmail: existing.Employee.email,
+        title: `Leave — Step ${currentStep} Approved`,
+        message: `Your ${existing.leaveType} leave (${fromStr} – ${toStr}) passed step ${currentStep} of ${totalSteps}. Awaiting step ${nextStep} approval.`,
+        type: 'info',
+        link: '',
+        entityType: 'leave',
+        entityId: leaveId,
+      },
+    }).catch(() => {})
+
+    // Notify next-level approvers
+    if (chain && tenantId) {
+      const nextStepDef = chain.steps.find(s => s.stepNumber === nextStep)
+      if (nextStepDef) {
+        const nextApprovers = await findUsersForRole(tenantId, nextStepDef.approverRoleId)
+        for (const approver of nextApprovers) {
+          await db.notification.create({
+            data: {
+              userId: 0,
+              userEmail: approver.email,
+              title: `Leave Request — Step ${nextStep} Approval Needed`,
+              message: `${empName}'s ${existing.leaveType} leave (${fromStr} – ${toStr}) passed step ${currentStep} and now requires your approval.`,
+              type: 'info',
+              link: '',
+              entityType: 'leave',
+              entityId: leaveId,
+            },
+          }).catch(() => {})
+        }
+        if (nextApprovers.length === 0) {
+          // No users for next role — fallback to admin broadcast
+          await db.notification.create({
+            data: {
+              userId: 0,
+              userEmail: '__admin_broadcast__',
+              title: `Leave Escalated — Step ${nextStep}`,
+              message: `${empName}'s ${existing.leaveType} leave needs step ${nextStep} approval. No users found for the required role.`,
+              type: 'warning',
+              link: '',
+              entityType: 'leave',
+              entityId: leaveId,
+            },
+          }).catch(() => {})
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, data: leaveRequest, fullyApproved: false, nextStep })
   } catch (error) {
     console.error('Error updating leave request:', error)
     return NextResponse.json(

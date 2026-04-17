@@ -269,6 +269,7 @@ model LeaveRequest {
   days            Decimal   @default(1.0) @db.Decimal(5, 1)
   reason          String?
   status          String    @default("pending")
+  currentStep     Int       @default(1)
   appliedDate     DateTime  @default(now())
   approvedBy      Int?
   approvedDate    DateTime?
@@ -806,6 +807,7 @@ model EmployeeRequest {
   description   String
   amount        Decimal? @db.Decimal(15, 2)   // only for advance_payment
   status        String   @default("pending")  // pending | approved | rejected
+  currentStep   Int      @default(1)          // which approval step we're waiting on
   approvedBy    Int?
   approvedDate  DateTime?
   rejectedBy    Int?

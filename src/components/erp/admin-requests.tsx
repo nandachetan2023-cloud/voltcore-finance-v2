@@ -33,6 +33,18 @@ export default function AdminRequests() {
   const [actionTarget, setActionTarget] = useState<{ request: any; action: 'approve' | 'reject' } | null>(null);
   const [rejectionNote, setRejectionNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [myEmployeeId, setMyEmployeeId] = useState<number | null>(null);
+
+  // Get current user's employeeId to prevent self-approval in the UI
+  useEffect(() => {
+    try {
+      const u = localStorage.getItem('erp_auth_user');
+      if (u) {
+        const p = JSON.parse(u);
+        if (p.employeeId) setMyEmployeeId(Number(p.employeeId));
+      }
+    } catch {}
+  }, []);
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -189,6 +201,10 @@ export default function AdminRequests() {
                         <span className="font-medium text-[#e2e8f0]">{empName}</span>
                         {dept && <><span>·</span><span>{dept}</span></>}
                         {r.Employee?.employeeCode && <><span>·</span><span className="font-mono">{r.Employee.employeeCode}</span></>}
+                        {r.status === 'pending' && r.currentStep > 1 && (
+                          <><span>·</span>
+                          <span className="text-[#f5a623] font-semibold">Step {r.currentStep} of approval</span></>
+                        )}
                       </div>
                       <p className="text-[11px] text-[#8899aa] mt-1 line-clamp-2">{r.description}</p>
                       {r.amount && (
@@ -210,12 +226,17 @@ export default function AdminRequests() {
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button onClick={() => setActionTarget({ request: r, action: 'approve' })}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-[#00e676]/10 text-[#00e676] hover:bg-[#00e676]/20 border border-[#00e676]/20 transition-all">
-                        <CheckCircle2 size={12} /> Approve
+                        <CheckCircle2 size={12} /> {r.currentStep > 1 ? `Approve (Step ${r.currentStep})` : 'Approve'}
                       </button>
                       <button onClick={() => { setActionTarget({ request: r, action: 'reject' }); setRejectionNote(''); }}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-[#ff3d3d]/10 text-[#ff3d3d] hover:bg-[#ff3d3d]/20 border border-[#ff3d3d]/20 transition-all">
                         <XCircle size={12} /> Reject
                       </button>
+                    </div>
+                  )}
+                  {r.status === 'pending' && r.Employee?.id !== myEmployeeId && r.canApprove === false && (
+                    <div className="px-3 py-1.5 bg-[#5a6878]/10 border border-[#5a6878]/20 rounded-lg text-[10px] text-[#5a6878] font-semibold">
+                      Insufficient level
                     </div>
                   )}
                 </div>

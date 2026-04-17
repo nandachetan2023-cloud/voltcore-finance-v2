@@ -142,9 +142,25 @@ export default function ShiftRosterModule() {
         fetch('/api/shift-assignments?active=true'),
       ]);
 
-      const shiftsJson = await shiftsRes.json();
-      const employeesJson = await employeesRes.json();
-      const assignmentsJson = await assignmentsRes.json();
+      // Safe JSON parse — guard against empty or non-JSON responses
+      const safeJson = async (res: Response, label: string) => {
+        const text = await res.text();
+        if (!text || !text.trim()) {
+          console.warn(`[ShiftRoster] Empty response from ${label} (${res.status})`);
+          return { success: false, data: [] };
+        }
+        try { return JSON.parse(text); }
+        catch (e) {
+          console.warn(`[ShiftRoster] Invalid JSON from ${label}:`, text.slice(0, 200));
+          return { success: false, data: [] };
+        }
+      };
+
+      const [shiftsJson, employeesJson, assignmentsJson] = await Promise.all([
+        safeJson(shiftsRes, '/api/shifts'),
+        safeJson(employeesRes, '/api/employees'),
+        safeJson(assignmentsRes, '/api/shift-assignments'),
+      ]);
 
       if (shiftsJson.success) {
         setShifts(shiftsJson.data);

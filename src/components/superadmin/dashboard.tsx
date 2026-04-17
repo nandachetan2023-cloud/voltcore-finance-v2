@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Users, Fingerprint, Shield, LogOut, Plus, Pencil, Trash2,
   X, Eye, EyeOff, RefreshCw, Wifi, WifiOff,
-  AlertTriangle, Database, GitBranch
+  AlertTriangle, Database, GitBranch, Layers
 } from 'lucide-react';
 import { toast } from 'sonner';
 import HierarchyTab from './hierarchy-tab';
@@ -324,15 +324,68 @@ function TenantsTab({ tenants, onRefresh, onOpenHierarchy }: { tenants: Tenant[]
 
 /* ── Users Tab ───────────────────────────────────────────────── */
 function UsersTab({ users, tenants, onRefresh }: { users: TenantUser[]; tenants: Tenant[]; onRefresh: () => void }) {
-  const empty = { tenantId: '', name: '', email: '', password: '', phone: '', allowedModules: 'all' };
+  const empty = { tenantId: '', name: '', email: '', password: '', phone: '', allowedModules: 'all', employeeId: null as number | null };
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [saving, setSaving] = useState(false);
   const [filterTenant, setFilterTenant] = useState('');
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false);
 
   const filtered = filterTenant ? users.filter(u => u.tenantId === filterTenant) : users;
+
+  // Fetch employees when tenant changes or search changes
+  useEffect(() => {
+    if (!form.tenantId || !showForm) {
+      setEmployees([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setLoadingEmployees(true);
+      try {
+        // Pass excludeEditId when editing so the current employee stays available
+        const excludeParam = editId && form.employeeId ? `&excludeEditId=${form.employeeId}` : '';
+        const res = await fetch(`/api/superadmin/tenant-employees?tenantId=${form.tenantId}&search=${employeeSearch}${excludeParam}`);
+        const data = await res.json();
+        if (data.success) setEmployees(data.data || []);
+      } catch (e) {
+        console.error('Failed to fetch employees:', e);
+      } finally {
+        setLoadingEmployees(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [form.tenantId, employeeSearch, showForm, editId, form.employeeId]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!showEmployeeDropdown) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.employee-search-container')) {
+        setShowEmployeeDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showEmployeeDropdown]);
+
+  const selectEmployee = (emp: any) => {
+    const fullName = `${emp.firstName} ${emp.middleName || ''} ${emp.lastName}`.trim();
+    setForm(f => ({
+      ...f,
+      employeeId: emp.id,
+      name: fullName,
+      email: emp.email,
+      phone: emp.phone || '',
+    }));
+    setEmployeeSearch(fullName);
+    setShowEmployeeDropdown(false);
+  };
 
   const save = async () => {
     if (!form.tenantId || !form.name || !form.email) { toast.error('Tenant, name and email are required'); return; }
@@ -380,7 +433,7 @@ function UsersTab({ users, tenants, onRefresh }: { users: TenantUser[]; tenants:
             <option value="">All Tenants</option>
             {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-          <button onClick={() => { setShowForm(true); setForm(empty); setEditId(null); }}
+          <button onClick={() => { setShowForm(true); setForm(empty); setEditId(null); setEmployeeSearch(''); setEmployees([]); setShowEmployeeDropdown(false); }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] transition-colors">
             <Plus size={13} /> Add User
           </button>
@@ -395,14 +448,111 @@ function UsersTab({ users, tenants, onRefresh }: { users: TenantUser[]; tenants:
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Tenant *">
-              <select className={inp} value={form.tenantId} onChange={e => setForm(f => ({ ...f, tenantId: e.target.value }))} disabled={!!editId}>
+              <select className={inp} value={form.tenantId} onChange={e => {
+                setForm(f => ({ ...f, tenantId: e.target.value }));
+                setEmployeeSearch('');
+                setEmployees([]);
+              }} disabled={!!editId}>
                 <option value="">Select tenant...</option>
                 {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </Field>
-            <Field label="Full Name *"><input className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="John Doe" /></Field>
-            <Field label="Email *"><input className={inp} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="user@company.com" /></Field>
-            <Field label="Phone"><input className={inp} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210" /></Field>
+            {form.tenantId && (
+              <div className="col-span-2">
+                <Field label="Link to Employee (Optional)">
+                  <div className="relative employee-search-container">
+                    <input
+                      className={inp}
+                      value={employeeSearch}
+                      onChange={e => {
+                        setEmployeeSearch(e.target.value);
+                        // Clear the linked employee if user types manually
+                        if (form.employeeId) setForm(f => ({ ...f, employeeId: null, name: '', email: '', phone: '' }));
+                        setShowEmployeeDropdown(true);
+                      }}
+                      onFocus={() => setShowEmployeeDropdown(true)}
+                      placeholder="Search by name, code, or email..."
+                    />
+                    {/* Clear button */}
+                    {form.employeeId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm(f => ({ ...f, employeeId: null, name: '', email: '', phone: '' }));
+                          setEmployeeSearch('');
+                          setEmployees([]);
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a6878] hover:text-[#ff3d3d] transition-colors"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                    {showEmployeeDropdown && employees.length > 0 && !form.employeeId && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#161c24] border border-[#252e3a] rounded-lg shadow-2xl max-h-[200px] overflow-y-auto">
+                        {employees.map(emp => {
+                          const fullName = `${emp.firstName} ${emp.middleName || ''} ${emp.lastName}`.trim();
+                          return (
+                            <button
+                              key={emp.id}
+                              type="button"
+                              onClick={() => selectEmployee(emp)}
+                              className="w-full text-left px-3 py-2 hover:bg-[#1a2028] transition-colors border-b border-[#1e252e] last:border-0"
+                            >
+                              <div className="text-[11px] font-semibold text-[#e2e8f0]">{fullName}</div>
+                              <div className="text-[10px] text-[#5a6878] flex items-center gap-2">
+                                <span>{emp.employeeCode}</span>
+                                <span>•</span>
+                                <span>{emp.email}</span>
+                                {emp.Designation && <><span>•</span><span>{emp.Designation.name}</span></>}
+                                {emp.Department && <><span>•</span><span>{emp.Department.name}</span></>}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {loadingEmployees && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <RefreshCw size={12} className="text-[#5a6878] animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  {form.employeeId ? (
+                    <p className="text-[10px] text-[#00e676] mt-1 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#00e676] inline-block" />
+                      Employee linked — details auto-filled from DB. Click × to unlink.
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-[#5a6878] mt-1">
+                      Select an employee to auto-fill details. Only unassigned employees are shown.
+                    </p>
+                  )}
+                </Field>
+              </div>
+            )}
+
+            {/* Name, Email, Phone — read-only when employee is linked */}
+            <Field label="Full Name *">
+              {form.employeeId ? (
+                <div className={inp + ' bg-[#0a0d12] text-[#8899aa] cursor-not-allowed'}>{form.name}</div>
+              ) : (
+                <input className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="John Doe" />
+              )}
+            </Field>
+            <Field label="Email *">
+              {form.employeeId ? (
+                <div className={inp + ' bg-[#0a0d12] text-[#8899aa] cursor-not-allowed'}>{form.email}</div>
+              ) : (
+                <input className={inp} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="user@company.com" />
+              )}
+            </Field>
+            <Field label="Phone">
+              {form.employeeId ? (
+                <div className={inp + ' bg-[#0a0d12] text-[#8899aa] cursor-not-allowed'}>{form.phone || '—'}</div>
+              ) : (
+                <input className={inp} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210" />
+              )}
+            </Field>
             <div className="col-span-2">
               <Field label={editId ? 'New Password (leave blank to keep)' : 'Password *'}>
                 <div className="relative">
@@ -426,7 +576,12 @@ function UsersTab({ users, tenants, onRefresh }: { users: TenantUser[]; tenants:
             <button onClick={save} disabled={saving} className="px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50 transition-colors">
               {saving ? 'Saving...' : 'Save'}
             </button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 text-[12px] text-[#8899aa] border border-[#252e3a] rounded-lg hover:border-[#f5a623] transition-colors">Cancel</button>
+            <button onClick={() => {
+              setShowForm(false);
+              setEmployeeSearch('');
+              setEmployees([]);
+              setShowEmployeeDropdown(false);
+            }} className="px-4 py-2 text-[12px] text-[#8899aa] border border-[#252e3a] rounded-lg hover:border-[#f5a623] transition-colors">Cancel</button>
           </div>
         </div>
       )}

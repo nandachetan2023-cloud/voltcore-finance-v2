@@ -24,8 +24,9 @@ interface ApprovalStep {
 }
 
 interface ApprovalChain {
-  id: string; tenantId: string; requestType: string; name: string;
+  id: string; tenantId: string; name: string;
   description: string; isActive: boolean; steps: ApprovalStep[];
+  requesterRoleId?: string | null; requesterRole?: OrgRole | null;
 }
 
 interface TenantData {
@@ -35,11 +36,13 @@ interface TenantData {
 
 /* ── Constants ─────────────────────────────────────────────────── */
 const REQUEST_TYPES = [
-  { value: 'leave', label: 'Leave Request' },
-  { value: 'expense', label: 'Expense Claim' },
-  { value: 'attendance', label: 'Attendance Correction' },
-  { value: 'payroll', label: 'Payroll Approval' },
-  { value: 'custom', label: 'Custom' },
+  { value: 'leave',           label: 'Leave Request' },
+  { value: 'general',         label: 'General Request' },
+  { value: 'advance_payment', label: 'Advance Payment' },
+  { value: 'expense',         label: 'Expense Claim' },
+  { value: 'attendance',      label: 'Attendance Correction' },
+  { value: 'payroll',         label: 'Payroll Approval' },
+  { value: 'custom',          label: 'Custom' },
 ];
 
 const SCOPE_OPTIONS = [
@@ -364,31 +367,58 @@ function RolesPanel({ roles, tenantId, departments, designations, onRefresh }: {
   );
 }
 
-/* ── Chains Panel ────────────────────────────────────────────── */
+/* ── Chains Panel — Role Tree Builder ───────────────────────── */
 function ChainsPanel({ chains, roles, tenantId, onRefresh }: {
   chains: ApprovalChain[]; roles: OrgRole[]; tenantId: string; onRefresh: () => void;
 }) {
-  const emptyChain = { requestType: 'leave', name: '', description: '' };
-  const emptyStep = { approverRoleId: '', scope: 'universal', selfEscalateToRoleId: '', isRequired: true };
-
+  const emptyChain = { name: '', description: '', requesterRoleId: '' };
   const [form, setForm] = useState(emptyChain);
-  const [steps, setSteps] = useState<typeof emptyStep[]>([]);
+  // steps are now built from the role tree: ordered list of role IDs (lowest→highest)
+  const [treeSteps, setTreeSteps] = useState<{ roleId: string; scope: string; isRequired: boolean }[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expandedChain, setExpandedChain] = useState<string | null>(null);
 
-  const addStep = () => setSteps(s => [...s, { ...emptyStep }]);
-  const removeStep = (i: number) => setSteps(s => s.filter((_, idx) => idx !== i));
-  const updateStep = (i: number, field: string, value: any) =>
-    setSteps(s => s.map((step, idx) => idx === i ? { ...step, [field]: value } : step));
+  // Roles sorted lowest→highest level
+  const sortedRoles = [...roles].sort((a, b) => a.level - b.level);
+
+  const addRoleToTree = (roleId: string) => {
+    if (treeSteps.find(s => s.roleId === roleId)) return; // already in tree
+    setTreeSteps(prev => [...prev, { roleId, scope: 'universal', isRequired: true }]);
+  };
+
+  const removeFromTree = (roleId: string) => {
+    setTreeSteps(prev => prev.filter(s => s.roleId !== roleId));
+  };
+
+  const updateTreeStep = (roleId: string, field: string, value: any) => {
+    setTreeSteps(prev => prev.map(s => s.roleId === roleId ? { ...s, [field]: value } : s));
+  };
+
+  const moveUp = (idx: number) => {
+    if (idx === 0) return;
+    setTreeSteps(prev => {
+      const next = [...prev];
+      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+      return next;
+    });
+  };
+
+  const moveDown = (idx: number) => {
+    setTreeSteps(prev => {
+      if (idx >= prev.length - 1) return prev;
+      const next = [...prev];
+      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+      return next;
+    });
+  };
 
   const openEdit = (chain: ApprovalChain) => {
-    setForm({ requestType: chain.requestType, name: chain.name, description: chain.description });
-    setSteps(chain.steps.map(s => ({
-      approverRoleId: s.approverRoleId,
+    setForm({ name: chain.name, description: chain.description, requesterRoleId: chain.requesterRoleId || '' });
+    setTreeSteps(chain.steps.map(s => ({
+      roleId: s.approverRoleId,
       scope: s.scope,
-      selfEscalateToRoleId: s.selfEscalateToRoleId || '',
       isRequired: s.isRequired,
     })));
     setEditId(chain.id);
@@ -396,16 +426,19 @@ function ChainsPanel({ chains, roles, tenantId, onRefresh }: {
   };
 
   const save = async () => {
-    if (!form.name || !form.requestType) { toast.error('Request type and name are required'); return; }
-    if (steps.some(s => !s.approverRoleId)) { toast.error('All steps must have an approver role'); return; }
+    if (!form.name) { toast.error('Chain name is required'); return; }
+    if (treeSteps.length === 0) { toast.error('Add at least one approver role to the chain'); return; }
     setSaving(true);
     try {
       const payload = {
         ...(editId ? { id: editId } : { tenantId }),
         ...form,
-        steps: steps.map(s => ({
-          ...s,
-          selfEscalateToRoleId: s.selfEscalateToRoleId || null,
+        requesterRoleId: form.requesterRoleId || null,
+        steps: treeSteps.map(s => ({
+          approverRoleId: s.roleId,
+          scope: s.scope,
+          selfEscalateToRoleId: null,
+          isRequired: s.isRequired,
         })),
       };
       const res = await fetch('/api/superadmin/approval-chains', {
@@ -414,8 +447,10 @@ function ChainsPanel({ chains, roles, tenantId, onRefresh }: {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (data.success) { toast.success(editId ? 'Chain updated' : 'Chain created'); onRefresh(); setShowForm(false); setForm(emptyChain); setSteps([]); setEditId(null); }
-      else toast.error(data.error);
+      if (data.success) {
+        toast.success(editId ? 'Chain updated' : 'Chain created');
+        onRefresh(); setShowForm(false); setForm(emptyChain); setTreeSteps([]); setEditId(null);
+      } else toast.error(data.error);
     } finally { setSaving(false); }
   };
 
@@ -432,8 +467,10 @@ function ChainsPanel({ chains, roles, tenantId, onRefresh }: {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] text-[#5a6878]">Define multi-step approval chains per request type. Self-approval is automatically escalated.</p>
-        <button onClick={() => { setShowForm(true); setForm(emptyChain); setSteps([{ ...emptyStep }]); setEditId(null); }}
+        <p className="text-[11px] text-[#5a6878]">
+          Build approval chains by selecting roles from the hierarchy tree. Requests flow bottom→top.
+        </p>
+        <button onClick={() => { setShowForm(true); setForm(emptyChain); setTreeSteps([]); setEditId(null); }}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f5a623] text-black text-[11px] font-bold rounded-lg hover:bg-[#e8891a] transition-colors">
           <Plus size={12} /> Add Chain
         </button>
@@ -447,116 +484,157 @@ function ChainsPanel({ chains, roles, tenantId, onRefresh }: {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Request Type *">
-              <select className={inp} value={form.requestType} onChange={e => setForm(f => ({ ...f, requestType: e.target.value }))}>
-                {REQUEST_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            <Field label="Applies to Role * (required for non-level-1 roles)">
+              <select className={inp} value={form.requesterRoleId} onChange={e => setForm(f => ({ ...f, requesterRoleId: e.target.value }))}>
+                <option value="">Select role...</option>
+                {sortedRoles.map(r => (
+                  <option key={r.id} value={r.id}>{r.name} — Level {r.level}</option>
+                ))}
               </select>
+              <p className="text-[10px] text-[#5a6878] mt-1">
+                Level-1 roles go directly to admin. All other roles need a chain defined here.
+              </p>
             </Field>
             <Field label="Chain Name *">
-              <input className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Leave Approval" />
+              <input className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Employee Approval Chain" />
             </Field>
             <Field label="Description" span2>
               <input className={inp} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional description" />
             </Field>
           </div>
 
-          {/* Steps builder */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className={lbl + ' mb-0'}>Approval Steps</label>
-              <button onClick={addStep} className="flex items-center gap-1 text-[10px] text-[#f5a623] hover:text-[#e8891a] font-semibold transition-colors">
-                <Plus size={11} /> Add Step
-              </button>
-            </div>
-
-            {steps.length === 0 && (
-              <div className="text-center py-4 text-[#5a6878] text-[11px] border border-dashed border-[#252e3a] rounded-lg">
-                No steps yet. Click "Add Step" to build the chain.
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {steps.map((step, i) => (
-                <div key={i} className="bg-[#161c24] border border-[#252e3a] rounded-xl p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-[#f5a623]/20 text-[#f5a623] text-[10px] font-black flex items-center justify-center">
-                        {i + 1}
-                      </div>
-                      <span className="text-[11px] font-semibold text-[#e2e8f0]">Step {i + 1}</span>
-                      {i > 0 && <ArrowRight size={12} className="text-[#2e3a48]" />}
-                    </div>
-                    <button onClick={() => removeStep(i)} className="text-[#5a6878] hover:text-[#ff3d3d] transition-colors">
-                      <X size={13} />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className={lbl}>Approver Role *</label>
-                      <select className={inp} value={step.approverRoleId} onChange={e => updateStep(i, 'approverRoleId', e.target.value)}>
-                        <option value="">Select role...</option>
-                        {[...roles].sort((a, b) => b.level - a.level).map(r => (
-                          <option key={r.id} value={r.id}>{r.name} (Level {r.level})</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={lbl}>Scope</label>
-                      <select className={inp} value={step.scope} onChange={e => updateStep(i, 'scope', e.target.value)}>
-                        {SCOPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={lbl}>If Self-Approving, Escalate To</label>
-                      <select className={inp} value={step.selfEscalateToRoleId} onChange={e => updateStep(i, 'selfEscalateToRoleId', e.target.value)}>
-                        <option value="">No escalation</option>
-                        {[...roles].sort((a, b) => b.level - a.level).map(r => (
-                          <option key={r.id} value={r.id}>{r.name} (Level {r.level})</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex items-end pb-1">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={step.isRequired} onChange={e => updateStep(i, 'isRequired', e.target.checked)} className="accent-[#f5a623]" />
-                        <span className="text-[11px] text-[#8899aa]">Required step</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Visual chain preview */}
-            {steps.length > 0 && (
-              <div className="mt-3 p-3 bg-[#161c24] border border-[#252e3a] rounded-xl">
-                <p className="text-[10px] text-[#5a6878] font-semibold uppercase tracking-wider mb-2">Chain Preview</p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="px-2 py-1 rounded-md bg-[#252e3a] text-[10px] text-[#8899aa]">Requester</div>
-                  {steps.map((s, i) => {
-                    const role = roleById(s.approverRoleId);
-                    const escalate = s.selfEscalateToRoleId ? roleById(s.selfEscalateToRoleId) : null;
-                    return (
-                      <div key={i} className="flex items-center gap-2">
-                        <ArrowRight size={12} className="text-[#2e3a48]" />
-                        <div className="flex flex-col items-center">
-                          <div className="px-2 py-1 rounded-md text-[10px] font-semibold border"
-                            style={role ? { background: `${role.color}15`, color: role.color, borderColor: `${role.color}40` } : { background: '#252e3a', color: '#5a6878', borderColor: '#2e3a48' }}>
-                            {role?.name || 'Select role'}
+          {/* Two-column: role tree picker + chain builder */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Left: role hierarchy to pick from */}
+            <div>
+              <label className={lbl}>Role Hierarchy — click to add to chain</label>
+              <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-3 space-y-1.5 max-h-[280px] overflow-y-auto">
+                {sortedRoles.length === 0 && (
+                  <p className="text-[10px] text-[#5a6878] text-center py-4">No roles defined yet. Add roles first.</p>
+                )}
+                {sortedRoles.map((role, i) => {
+                  const inChain = treeSteps.some(s => s.roleId === role.id);
+                  return (
+                    <div key={role.id} className="flex items-center gap-2">
+                      {/* Connector line */}
+                      {i < sortedRoles.length - 1 && (
+                        <div className="absolute ml-3 mt-6 w-[2px] h-4 bg-[#252e3a]" />
+                      )}
+                      <button
+                        onClick={() => inChain ? removeFromTree(role.id) : addRoleToTree(role.id)}
+                        className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-all ${
+                          inChain
+                            ? 'border-[#f5a623]/50 bg-[#f5a623]/10'
+                            : 'border-[#252e3a] hover:border-[#f5a623]/30 hover:bg-[#1a2028]'
+                        }`}
+                      >
+                        <div className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-black shrink-0"
+                          style={{ background: `${role.color}20`, color: role.color }}>
+                          {role.level}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[11px] font-semibold truncate" style={{ color: inChain ? role.color : '#e2e8f0' }}>
+                            {role.name}
                           </div>
-                          {escalate && (
-                            <div className="text-[9px] text-[#5a6878] mt-0.5 flex items-center gap-1">
-                              <AlertTriangle size={8} className="text-[#f5a623]" />
-                              self→{escalate.name}
-                            </div>
+                          {role.departments && (
+                            <div className="text-[9px] text-[#5a6878] truncate">{role.departments}</div>
                           )}
-                          <div className="text-[9px] text-[#5a6878]">{s.scope === 'universal' ? 'any dept' : s.scope.replace('same_', '')}</div>
+                        </div>
+                        {inChain && <Check size={11} className="text-[#f5a623] shrink-0" />}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-[#5a6878] mt-1.5">
+                Admin (highest level) always has final authority. Lower levels approve first.
+              </p>
+            </div>
+
+            {/* Right: chain order builder */}
+            <div>
+              <label className={lbl}>Approval Order (drag to reorder)</label>
+              {treeSteps.length === 0 ? (
+                <div className="bg-[#161c24] border border-dashed border-[#252e3a] rounded-xl p-6 text-center">
+                  <GitBranch size={20} className="mx-auto text-[#2e3a48] mb-2" />
+                  <p className="text-[10px] text-[#5a6878]">Click roles on the left to add them to the chain</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {/* Requester node */}
+                  <div className="flex items-center gap-2 px-3 py-2 bg-[#161c24] border border-[#252e3a] rounded-lg">
+                    <div className="w-5 h-5 rounded bg-[#252e3a] flex items-center justify-center text-[9px] text-[#5a6878]">R</div>
+                    <span className="text-[10px] text-[#5a6878]">Requester (submits)</span>
+                  </div>
+
+                  {treeSteps.map((step, idx) => {
+                    const role = roleById(step.roleId);
+                    if (!role) return null;
+                    return (
+                      <div key={step.roleId}>
+                        {/* Arrow connector */}
+                        <div className="flex justify-center py-0.5">
+                          <ArrowRight size={12} className="text-[#2e3a48] rotate-90" />
+                        </div>
+                        <div className="border rounded-xl p-2.5 space-y-2"
+                          style={{ borderColor: `${role.color}40`, background: `${role.color}08` }}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-black shrink-0"
+                              style={{ background: `${role.color}20`, color: role.color }}>
+                              {idx + 1}
+                            </div>
+                            <span className="text-[11px] font-semibold flex-1" style={{ color: role.color }}>{role.name}</span>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => moveUp(idx)} disabled={idx === 0}
+                                className="p-0.5 text-[#5a6878] hover:text-[#e2e8f0] disabled:opacity-30 transition-colors">
+                                <ChevronUp size={11} />
+                              </button>
+                              <button onClick={() => moveDown(idx)} disabled={idx === treeSteps.length - 1}
+                                className="p-0.5 text-[#5a6878] hover:text-[#e2e8f0] disabled:opacity-30 transition-colors">
+                                <ChevronDown size={11} />
+                              </button>
+                              <button onClick={() => removeFromTree(step.roleId)}
+                                className="p-0.5 text-[#5a6878] hover:text-[#ff3d3d] transition-colors">
+                                <X size={11} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider block mb-1">Scope</label>
+                              <select
+                                value={step.scope}
+                                onChange={e => updateTreeStep(step.roleId, 'scope', e.target.value)}
+                                className="w-full bg-[#0d1117] border border-[#2e3a48] rounded-md px-2 py-1 text-[10px] text-[#e2e8f0] outline-none"
+                              >
+                                {SCOPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                              </select>
+                            </div>
+                            <div className="flex items-end pb-1">
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" checked={step.isRequired}
+                                  onChange={e => updateTreeStep(step.roleId, 'isRequired', e.target.checked)}
+                                  className="accent-[#f5a623]" />
+                                <span className="text-[10px] text-[#8899aa]">Required</span>
+                              </label>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );
                   })}
+
+                  {/* Final approved node */}
+                  <div className="flex justify-center py-0.5">
+                    <ArrowRight size={12} className="text-[#2e3a48] rotate-90" />
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-[#00e676]/8 border border-[#00e676]/20 rounded-lg">
+                    <Check size={12} className="text-[#00e676]" />
+                    <span className="text-[10px] text-[#00e676] font-semibold">Approved</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           <div className="flex gap-2 pt-1">
@@ -581,9 +659,14 @@ function ChainsPanel({ chains, roles, tenantId, onRefresh }: {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-[12px] font-semibold text-[#e2e8f0]">{chain.name}</span>
-                    <span className="text-[9px] font-bold px-2 py-[2px] rounded-full bg-[#f5a623]/10 text-[#f5a623]">
-                      {REQUEST_TYPES.find(t => t.value === chain.requestType)?.label || chain.requestType}
-                    </span>
+                    {chain.requesterRole ? (
+                      <span className="text-[9px] font-bold px-2 py-[2px] rounded-full border"
+                        style={{ background: `${chain.requesterRole.color}15`, color: chain.requesterRole.color, borderColor: `${chain.requesterRole.color}40` }}>
+                        {chain.requesterRole.name} · Lv.{chain.requesterRole.level}
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold px-2 py-[2px] rounded-full bg-[#252e3a] text-[#8899aa]">All Roles</span>
+                    )}
                     <span className="text-[9px] text-[#5a6878]">{chain.steps.length} step{chain.steps.length !== 1 ? 's' : ''}</span>
                   </div>
                   {chain.description && <p className="text-[10px] text-[#5a6878] mt-0.5">{chain.description}</p>}
@@ -597,25 +680,21 @@ function ChainsPanel({ chains, roles, tenantId, onRefresh }: {
             </div>
 
             {expandedChain === chain.id && (
-              <div className="border-t border-[#252e3a] p-3 bg-[#161c24]">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="px-2 py-1 rounded-md bg-[#252e3a] text-[10px] text-[#8899aa]">Requester</div>
+              <div className="border-t border-[#252e3a] p-4 bg-[#161c24]">
+                <div className="flex items-start gap-3 flex-wrap">
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="px-3 py-1.5 rounded-lg bg-[#252e3a] text-[10px] text-[#8899aa]">Requester</div>
+                  </div>
                   {chain.steps.map((step, i) => {
                     const role = step.approverRole;
                     return (
                       <div key={step.id || i} className="flex items-center gap-2">
                         <ArrowRight size={12} className="text-[#2e3a48]" />
-                        <div className="flex flex-col items-center">
-                          <div className="px-2 py-1.5 rounded-lg text-[10px] font-semibold border"
-                            style={role ? { background: `${role.color}15`, color: role.color, borderColor: `${role.color}40` } : {}}>
-                            Step {step.stepNumber}: {role?.name || '?'}
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="px-3 py-1.5 rounded-lg text-[10px] font-semibold border"
+                            style={role ? { background: `${role.color}15`, color: role.color, borderColor: `${role.color}40` } : { background: '#252e3a', color: '#5a6878', borderColor: '#2e3a48' }}>
+                            {step.stepNumber}. {role?.name || '?'}
                           </div>
-                          {step.selfEscalateTo && (
-                            <div className="text-[9px] text-[#f5a623] mt-0.5 flex items-center gap-1">
-                              <AlertTriangle size={8} />
-                              self → {step.selfEscalateTo.name}
-                            </div>
-                          )}
                           <div className="text-[9px] text-[#5a6878]">
                             {step.scope === 'universal' ? 'any dept' : step.scope.replace('same_', '')}
                             {!step.isRequired && ' · optional'}
@@ -624,6 +703,12 @@ function ChainsPanel({ chains, roles, tenantId, onRefresh }: {
                       </div>
                     );
                   })}
+                  <div className="flex items-center gap-2">
+                    <ArrowRight size={12} className="text-[#2e3a48]" />
+                    <div className="px-3 py-1.5 rounded-lg bg-[#00e676]/10 border border-[#00e676]/20 text-[10px] text-[#00e676] font-semibold flex items-center gap-1">
+                      <Check size={10} /> Approved
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

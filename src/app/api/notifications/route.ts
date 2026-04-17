@@ -3,24 +3,27 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-// Helper: get caller's email from cookie (set at login via erp_auth_user in localStorage,
-// but we use the erp_user_role cookie + a separate user-email cookie we'll set)
 function getCallerEmail(request: NextRequest): string | null {
+  // Try cookie first, then parse from erp_auth_user if available
   return request.cookies.get('erp_user_email')?.value || null
+}
+
+function getCallerRole(request: NextRequest): string {
+  return request.cookies.get('erp_user_role')?.value || 'admin'
 }
 
 // GET: Fetch notifications for the current user
 export async function GET(request: NextRequest) {
   const db = getDbForRequest(request)
   const userEmail = getCallerEmail(request)
+  const role = getCallerRole(request)
+  const isAdmin = role === 'admin'
 
   try {
-    // If we have a user email, fetch their personal notifications
-    if (userEmail) {
-      const role = request.cookies.get('erp_user_role')?.value
-      const isAdmin = role === 'admin'
+    const dbNotifications: any[] = []
 
-      // Build query: personal notifications + admin broadcast if admin
+    if (userEmail) {
+      // Personal notifications + admin broadcast
       const whereClause: any = {
         isRead: false,
         OR: [{ userEmail }],
@@ -29,51 +32,90 @@ export async function GET(request: NextRequest) {
         whereClause.OR.push({ userEmail: '__admin_broadcast__' })
       }
 
-      const notifications = await db.notification.findMany({
+      const rows = await db.notification.findMany({
         where: whereClause,
         orderBy: { createdAt: 'desc' },
         take: 50,
       })
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          notifications: notifications.map(n => ({
-            id: String(n.id),
-            title: n.title,
-            message: n.message,
-            time: formatTime(n.createdAt),
-            type: n.type,
-            link: n.link,
-            isRead: n.isRead,
-            entityType: n.entityType,
-            entityId: n.entityId,
-          })),
-          count: notifications.length,
-        },
+      dbNotifications.push(...rows.map(n => ({
+        id: String(n.id),
+        title: n.title,
+        message: n.message,
+        time: formatTime(n.createdAt),
+        type: n.type,
+        link: n.link,
+        isRead: n.isRead,
+        entityType: n.entityType,
+        entityId: n.entityId,
+      })))
+    } else if (isAdmin) {
+      // No email cookie — fetch admin broadcast notifications
+      const rows = await db.notification.findMany({
+        where: { userEmail: '__admin_broadcast__', isRead: false },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
       })
+      dbNotifications.push(...rows.map(n => ({
+        id: String(n.id),
+        title: n.title,
+        message: n.message,
+        time: formatTime(n.createdAt),
+        type: n.type,
+        link: n.link,
+        isRead: n.isRead,
+        entityType: n.entityType,
+        entityId: n.entityId,
+      })))
     }
 
-    // Fallback: system-wide notifications (biometric, etc.)
-    const unprocessedBiometricCount = await db.biometricRawLog.count({
-      where: { processed: false },
-    }).catch(() => 0)
+    // Always append live system checks for admins
+    const systemNotifications: any[] = []
+    if (isAdmin) {
+      // Pending leave requests
+      const pendingLeaves = await db.leaveRequest.count({
+        where: { status: 'pending', isDeleted: false },
+      }).catch(() => 0)
+      if (pendingLeaves > 0) {
+        systemNotifications.push({
+          id: 'sys-pending-leaves',
+          title: 'Pending Leave Approvals',
+          message: `${pendingLeaves} leave request${pendingLeaves !== 1 ? 's' : ''} awaiting approval`,
+          time: 'Now',
+          type: 'warning',
+          link: '',
+          isRead: false,
+          entityType: 'leave',
+        })
+      }
 
-    const notifications: any[] = []
-    if (unprocessedBiometricCount > 0) {
-      notifications.push({
-        id: 'biometric-unprocessed',
-        title: 'Unprocessed Biometric Logs',
-        message: `${unprocessedBiometricCount} biometric logs need processing`,
-        time: 'Just now',
-        type: 'warning',
-        link: '/hrms/biometric',
-      })
+      // Unprocessed biometric logs
+      const unprocessedBiometric = await db.biometricRawLog.count({
+        where: { processed: false },
+      }).catch(() => 0)
+      if (unprocessedBiometric > 0) {
+        systemNotifications.push({
+          id: 'sys-biometric',
+          title: 'Unprocessed Biometric Logs',
+          message: `${unprocessedBiometric} biometric log${unprocessedBiometric !== 1 ? 's' : ''} need processing`,
+          time: 'Now',
+          type: 'warning',
+          link: '',
+          isRead: false,
+          entityType: 'biometric',
+        })
+      }
     }
+
+    // Merge: db notifications first, then system checks (dedup by id)
+    const allIds = new Set(dbNotifications.map(n => n.id))
+    const merged = [
+      ...dbNotifications,
+      ...systemNotifications.filter(n => !allIds.has(n.id)),
+    ]
 
     return NextResponse.json({
       success: true,
-      data: { notifications, count: notifications.length },
+      data: { notifications: merged, count: merged.length },
     })
   } catch (error) {
     console.error('Error fetching notifications:', error)

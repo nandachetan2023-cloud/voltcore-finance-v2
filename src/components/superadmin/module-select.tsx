@@ -198,29 +198,50 @@ export default function ModuleSelect({ value, onChange, placeholder = 'Select mo
   };
 
   const toggleGroupAccess = (group: typeof FULL_MODULE_TREE[0]) => {
-    const next = new Set(selected);
     const state = getGroupState(group);
 
     if (state === 'all') {
-      // Deselect: remove group key and all sub-module keys
-      next.delete(group.key);
-      group.subModules.forEach(s => next.delete(s.key));
+      // If currently "all modules", expand to all groups then deselect this one
+      if (isAll) {
+        const next = new Set<string>();
+        FULL_MODULE_TREE.forEach(g => {
+          if (g.key !== group.key) next.add(g.key);
+        });
+        onChange(serializeValue(next));
+      } else {
+        // Deselect: remove group key and all sub-module keys
+        const next = new Set(selected);
+        next.delete(group.key);
+        group.subModules.forEach(s => next.delete(s.key));
+        onChange(serializeValue(next));
+      }
     } else {
       // Select all: use group key (shorthand for all subs)
+      const next = new Set(selected);
       next.delete(group.key);
       group.subModules.forEach(s => next.delete(s.key));
-      if (group.subModules.length === 0) {
-        next.add(group.key);
-      } else {
-        next.add(group.key); // group key = all subs
-      }
+      next.add(group.key);
+      onChange(serializeValue(next));
     }
-    onChange(serializeValue(next));
   };
 
   const toggleSubModule = (groupKey: string, subKey: string) => {
-    const next = new Set(selected);
     const group = FULL_MODULE_TREE.find(g => g.key === groupKey)!;
+
+    // If currently "all modules", expand to all groups first
+    if (isAll) {
+      const next = new Set<string>();
+      FULL_MODULE_TREE.forEach(g => next.add(g.key));
+      // Now expand the clicked group to sub-modules and toggle the sub
+      next.delete(groupKey);
+      group.subModules.forEach(s => {
+        if (s.key !== subKey) next.add(s.key);
+      });
+      onChange(serializeValue(next));
+      return;
+    }
+
+    const next = new Set(selected);
 
     // If group key is selected, expand it to individual sub-modules first
     if (next.has(groupKey)) {

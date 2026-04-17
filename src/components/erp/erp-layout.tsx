@@ -221,11 +221,11 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
           <button className="ml-auto lg:hidden text-[#5a6878] hover:text-[#e2e8f0]" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
         </div>
 
-        {/* Demo mode banner */}
-        {isDemo && (
+        {/* Restricted access banner */}
+        {!isDemo && userRole !== 'admin' && (
           <div className="mx-3 mt-2 px-3 py-2 bg-[#f5a623]/10 border border-[#f5a623]/30 rounded-lg flex items-center gap-2">
             <Shield size={12} className="text-[#f5a623] shrink-0" />
-            <span className="text-[10px] text-[#f5a623] font-semibold tracking-wide">DEMO ACCESS</span>
+            <span className="text-[10px] text-[#f5a623] font-semibold tracking-wide">LIMITED ACCESS</span>
           </div>
         )}
 
@@ -271,13 +271,13 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="w-full flex items-center gap-2 p-2 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors cursor-pointer"
           >
-            <div className={`w-[30px] h-[30px] rounded-full flex items-center justify-center text-[11px] font-bold text-black ${isDemo ? 'bg-gradient-to-br from-[#4a9eff] to-[#2563eb]' : 'bg-gradient-to-br from-[#f5a623] to-[#e8891a]'}`} style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-              {userData ? getInitials(userData.name) : isDemo ? 'DM' : 'AD'}
+            <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-[11px] font-bold text-black bg-gradient-to-br from-[#f5a623] to-[#e8891a]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+              {userData ? getInitials(userData.name) : 'AD'}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-semibold truncate">{userData?.name || (isDemo ? 'Demo User' : 'Admin')}</div>
-              <div className={`text-[10px] ${isDemo ? 'text-[#4a9eff]' : 'text-[#5a6878]'}`}>
-                {isDemo ? 'Demo Account' : 'Administrator'}
+              <div className="text-[11px] font-semibold truncate">{userData?.name || 'User'}</div>
+              <div className="text-[10px] text-[#5a6878] truncate font-mono">
+                {userData?.employeeCode || (userData?.role === 'admin' ? 'Administrator' : userData?.email?.split('@')[0] || '—')}
               </div>
             </div>
             <ChevronDown size={14} className={`text-[#5a6878] shrink-0 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
@@ -286,10 +286,10 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
           {showUserMenu && (
             <div className="absolute bottom-full left-3 right-3 mb-2 bg-[#161c24] border border-[#252e3a] rounded-lg shadow-lg overflow-hidden z-50">
               <div className="p-3 border-b border-[#252e3a]">
-                <div className="text-[11px] font-semibold text-[#e2e8f0]">{userData?.name || (isDemo ? 'Demo User' : 'Admin')}</div>
-                <div className="text-[10px] text-[#5a6878]">{userData?.email || 'admin@voltcore.com'}</div>
-                <div className={`inline-flex items-center gap-1 mt-1 px-2 py-[2px] rounded-full text-[9px] font-bold ${isDemo ? 'bg-[#4a9eff]/15 text-[#4a9eff]' : 'bg-[#f5a623]/15 text-[#f5a623]'}`}>
-                  {isDemo ? <><Shield size={9} /> DEMO</> : <><Zap size={9} /> ADMIN</>}
+                <div className="text-[11px] font-semibold text-[#e2e8f0]">{userData?.name || 'User'}</div>
+                <div className="text-[10px] text-[#5a6878]">{userData?.email || ''}</div>
+                <div className="inline-flex items-center gap-1 mt-1 px-2 py-[2px] rounded-full text-[9px] font-bold bg-[#f5a623]/15 text-[#f5a623]">
+                  <Zap size={9} /> {userData?.orgRoleName || (userData?.role === 'admin' ? 'ADMIN' : userData?.role?.toUpperCase() || 'USER')}
                 </div>
               </div>
               <button
@@ -311,7 +311,6 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
 function Topbar({ onLogout }: { onLogout?: () => void }) {
   const { activeModule, setSidebarOpen } = useERPStore();
   const config = MODULE_CONFIG[activeModule];
-  const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
 
@@ -374,10 +373,6 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
         <p className="text-[10px] text-[#5a6878]">{config?.breadcrumb || ''}</p>
       </div>
       <div className="ml-auto flex items-center gap-2">
-        <div className="hidden sm:flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-[5px] w-[190px]">
-          <Search size={14} className="text-[#5a6878] shrink-0" />
-          <input type="text" placeholder="Quick search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-transparent border-none text-[#e2e8f0] outline-none text-[12px] w-full" />
-        </div>
         
         {/* Notifications Bell */}
         <div className="relative notifications-container">

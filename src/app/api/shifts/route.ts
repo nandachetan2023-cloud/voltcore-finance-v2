@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 
 // GET: List all shifts
-export async function GET() {
+export async function GET(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
     const shifts = await db.shift.findMany({

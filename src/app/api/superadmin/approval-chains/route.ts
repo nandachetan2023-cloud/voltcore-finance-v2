@@ -11,15 +11,13 @@ export async function GET(request: NextRequest) {
       where: tenantId ? { tenantId } : {},
       include: {
         tenant: { select: { name: true, slug: true } },
+        requesterRole: { select: { id: true, name: true, color: true, level: true } },
         steps: {
-          include: {
-            approverRole: true,
-            selfEscalateTo: true,
-          },
+          include: { approverRole: true },
           orderBy: { stepNumber: 'asc' },
         },
       },
-      orderBy: { requestType: 'asc' },
+      orderBy: { createdAt: 'asc' },
     })
     return NextResponse.json({ success: true, data: chains })
   } catch (e) {
@@ -30,14 +28,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { tenantId, requestType, name, description, steps } = body
-    if (!tenantId || !requestType || !name) {
-      return NextResponse.json({ success: false, error: 'tenantId, requestType and name are required' }, { status: 400 })
+    const { tenantId, requesterRoleId, name, description, steps } = body
+    if (!tenantId || !name) {
+      return NextResponse.json({ success: false, error: 'tenantId and name are required' }, { status: 400 })
     }
 
     const chain = await superadminDb.approvalChain.create({
       data: {
-        tenantId, requestType, name,
+        tenantId,
+        requesterRoleId: requesterRoleId || null,
+        name,
         description: description || '',
         isActive: true,
         steps: steps?.length ? {
@@ -50,11 +50,14 @@ export async function POST(request: NextRequest) {
           })),
         } : undefined,
       },
-      include: { steps: { include: { approverRole: true, selfEscalateTo: true }, orderBy: { stepNumber: 'asc' } } },
+      include: {
+        requesterRole: { select: { id: true, name: true, color: true, level: true } },
+        steps: { include: { approverRole: true }, orderBy: { stepNumber: 'asc' } },
+      },
     })
     return NextResponse.json({ success: true, data: chain }, { status: 201 })
   } catch (e: any) {
-    if (e.code === 'P2002') return NextResponse.json({ success: false, error: 'A chain for this request type already exists' }, { status: 409 })
+    if (e.code === 'P2002') return NextResponse.json({ success: false, error: 'A chain for this role already exists' }, { status: 409 })
     return NextResponse.json({ success: false, error: 'Failed to create chain' }, { status: 500 })
   }
 }
@@ -62,13 +65,14 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, steps, ...data } = body
+    const { id, steps, requesterRoleId, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 })
 
-    // Update chain metadata
-    await superadminDb.approvalChain.update({ where: { id }, data })
+    await superadminDb.approvalChain.update({
+      where: { id },
+      data: { ...data, requesterRoleId: requesterRoleId || null },
+    })
 
-    // If steps provided, replace all steps
     if (steps !== undefined) {
       await superadminDb.approvalStep.deleteMany({ where: { chainId: id } })
       if (steps.length > 0) {
@@ -87,7 +91,10 @@ export async function PUT(request: NextRequest) {
 
     const updated = await superadminDb.approvalChain.findUnique({
       where: { id },
-      include: { steps: { include: { approverRole: true, selfEscalateTo: true }, orderBy: { stepNumber: 'asc' } } },
+      include: {
+        requesterRole: { select: { id: true, name: true, color: true, level: true } },
+        steps: { include: { approverRole: true }, orderBy: { stepNumber: 'asc' } },
+      },
     })
     return NextResponse.json({ success: true, data: updated })
   } catch (e) {
@@ -100,7 +107,7 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json()
     const { id } = body
     if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 })
-    await superadminDb.approvalChain.delete({ where: { id } }) // steps cascade
+    await superadminDb.approvalChain.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (e) {
     return NextResponse.json({ success: false, error: 'Failed to delete chain' }, { status: 500 })

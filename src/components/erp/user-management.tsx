@@ -64,14 +64,41 @@ export default function UserManagement() {
 
   const emptyForm = { name: '', email: '', password: '', phone: '', orgRoleId: '', employeeId: '' };
   const [form, setForm] = useState(emptyForm);
+  const [empSearch, setEmpSearch] = useState('');
+  const [showEmpDropdown, setShowEmpDropdown] = useState(false);
 
-  const fetchData = useCallback(async () => {
+  // Employees filtered by search
+  const filteredEmployees = employees.filter(e => {
+    if (!empSearch) return true;
+    const q = empSearch.toLowerCase();
+    return e.name.toLowerCase().includes(q) ||
+      e.employeeCode.toLowerCase().includes(q) ||
+      e.email.toLowerCase().includes(q);
+  });
+
+  const selectedEmployee = form.employeeId ? employees.find(e => String(e.id) === form.employeeId) : null;
+
+  const selectEmployee = (emp: typeof employees[0]) => {
+    setForm(f => ({ ...f, employeeId: String(emp.id), name: emp.name, email: emp.email, phone: emp.phone }));
+    setEmpSearch(emp.name);
+    setShowEmpDropdown(false);
+  };
+
+  const clearEmployee = () => {
+    setForm(f => ({ ...f, employeeId: '', name: '', email: '', phone: '' }));
+    setEmpSearch('');
+  };
+
+  const fetchData = useCallback(async (excludeUserId?: string) => {
     setLoading(true);
     try {
+      const empUrl = excludeUserId
+        ? `/api/tenant/employees?excludeUserId=${excludeUserId}`
+        : '/api/tenant/employees';
       const [ur, rr, er] = await Promise.all([
         fetch('/api/tenant/users').then(r => r.json()),
         fetch('/api/tenant/roles').then(r => r.json()),
-        fetch('/api/tenant/employees').then(r => r.json()),
+        fetch(empUrl).then(r => r.json()),
       ]);
       if (ur.success) setUsers(ur.data);
       if (rr.success) setRoles(rr.data);
@@ -85,7 +112,8 @@ export default function UserManagement() {
   const selectedRole = roles.find(r => r.id === form.orgRoleId);
 
   const save = async () => {
-    if (!form.name || !form.email) { toast.error('Name and email are required'); return; }
+    if (!form.employeeId) { toast.error('Please select an employee'); return; }
+    if (!form.name || !form.email) { toast.error('Employee details are missing — please re-select'); return; }
     if (!editId && !form.password) { toast.error('Password is required for new users'); return; }
     if (!form.orgRoleId) { toast.error('A role must be assigned'); return; }
     setSaving(true);
@@ -98,7 +126,7 @@ export default function UserManagement() {
       const data = await res.json();
       if (data.success) {
         toast.success(editId ? 'User updated' : 'User created');
-        fetchData(); setShowForm(false); setForm(emptyForm); setEditId(null);
+        fetchData(); setShowForm(false); setForm(emptyForm); setEditId(null); setEmpSearch('');
       } else toast.error(data.error);
     } finally { setSaving(false); }
   };
@@ -125,7 +153,12 @@ export default function UserManagement() {
 
   const openEdit = (u: TenantUser) => {
     setForm({ name: u.name, email: u.email, password: '', phone: u.phone, orgRoleId: u.orgRoleId || '', employeeId: u.employeeId ? String(u.employeeId) : '' });
-    setEditId(u.id); setShowForm(true);
+    const linkedEmp = employees.find(e => e.id === u.employeeId);
+    setEmpSearch(linkedEmp?.name || u.name);
+    setEditId(u.id);
+    setShowForm(true);
+    // Reload employees excluding this user's current link
+    fetchData(u.id);
   };
 
   if (loading) {
@@ -153,7 +186,7 @@ export default function UserManagement() {
           <button onClick={fetchData} className="p-1.5 text-[#5a6878] hover:text-[#e2e8f0] transition-colors">
             <RefreshCw size={14} />
           </button>
-          <button onClick={() => { setShowForm(true); setForm(emptyForm); setEditId(null); }}
+          <button onClick={() => { setShowForm(true); setForm(emptyForm); setEditId(null); setEmpSearch(''); setShowEmpDropdown(false); }}
             disabled={roles.length === 0}
             className="flex items-center gap-1.5 px-3 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             title={roles.length === 0 ? 'No roles defined — contact system administrator' : ''}>
@@ -209,15 +242,68 @@ export default function UserManagement() {
             <button onClick={() => setShowForm(false)}><X size={15} className="text-[#5a6878]" /></button>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Full Name *">
-              <input className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="John Doe" />
+            {/* Employee search — primary field */}
+            <Field label="Select Employee *" span2>
+              <div className="relative">
+                <input
+                  className={inp + (selectedEmployee ? ' pr-8' : '')}
+                  value={empSearch}
+                  onChange={e => {
+                    setEmpSearch(e.target.value);
+                    if (selectedEmployee) clearEmployee();
+                    setShowEmpDropdown(true);
+                  }}
+                  onFocus={() => setShowEmpDropdown(true)}
+                  placeholder="Search by name, code or email..."
+                />
+                {selectedEmployee && (
+                  <button type="button" onClick={clearEmployee}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a6878] hover:text-[#ff3d3d]">
+                    <X size={13} />
+                  </button>
+                )}
+                {showEmpDropdown && !selectedEmployee && filteredEmployees.length > 0 && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#161c24] border border-[#252e3a] rounded-lg shadow-2xl max-h-[220px] overflow-y-auto">
+                    {filteredEmployees.map(emp => (
+                      <button key={emp.id} type="button" onClick={() => selectEmployee(emp)}
+                        className="w-full text-left px-3 py-2.5 hover:bg-[#1a2028] transition-colors border-b border-[#1e252e] last:border-0">
+                        <div className="text-[11px] font-semibold text-[#e2e8f0]">{emp.name}</div>
+                        <div className="text-[10px] text-[#5a6878] flex items-center gap-2 mt-0.5">
+                          <span>{emp.employeeCode}</span>
+                          <span>·</span>
+                          <span>{emp.email}</span>
+                          {emp.designation && <><span>·</span><span>{emp.designation}</span></>}
+                          {emp.department && <><span>·</span><span>{emp.department}</span></>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {selectedEmployee ? (
+                <div className="mt-1.5 px-3 py-2 bg-[#00e676]/8 border border-[#00e676]/20 rounded-lg flex items-center gap-2">
+                  <Check size={12} className="text-[#00e676] shrink-0" />
+                  <div className="text-[10px] text-[#00e676]">
+                    <span className="font-semibold">{selectedEmployee.name}</span>
+                    <span className="text-[#00e676]/70"> · {selectedEmployee.email} · {selectedEmployee.phone || 'no phone'}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[10px] text-[#5a6878] mt-1">Only unassigned employees are shown. Select to auto-fill details.</p>
+              )}
             </Field>
-            <Field label="Email *">
-              <input className={inp} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="user@company.com" />
+
+            {/* Auto-filled read-only fields */}
+            <Field label="Name">
+              <div className={inp + ' bg-[#0a0d12] text-[#8899aa] cursor-not-allowed'}>{form.name || '—'}</div>
+            </Field>
+            <Field label="Email">
+              <div className={inp + ' bg-[#0a0d12] text-[#8899aa] cursor-not-allowed'}>{form.email || '—'}</div>
             </Field>
             <Field label="Phone">
-              <input className={inp} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210" />
+              <div className={inp + ' bg-[#0a0d12] text-[#8899aa] cursor-not-allowed'}>{form.phone || '—'}</div>
             </Field>
+
             <Field label={editId ? 'New Password (blank = keep)' : 'Password *'}>
               <div className="relative">
                 <input className={inp + ' pr-10'} type={showPw ? 'text' : 'password'} value={form.password}
@@ -275,26 +361,13 @@ export default function UserManagement() {
                 </div>
               )}
             </Field>
-            <Field label="Link to Employee Record" span2>
-              <select className={inp} value={form.employeeId} onChange={e => setForm(f => ({ ...f, employeeId: e.target.value }))}>
-                <option value="">Not linked (admin/manager account)</option>
-                {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.employeeCode} — {emp.name}{emp.department ? ` · ${emp.department}` : ''}{emp.designation ? ` · ${emp.designation}` : ''}
-                  </option>
-                ))}
-              </select>
-              <p className="text-[10px] text-[#5a6878] mt-1">
-                Link this login to an employee record so they can access their attendance, leave, and personal data in My Portal.
-              </p>
-            </Field>
           </div>
           <div className="flex gap-2 mt-4">
             <button onClick={save} disabled={saving}
               className="px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50 transition-colors">
               {saving ? 'Saving...' : 'Save User'}
             </button>
-            <button onClick={() => setShowForm(false)}
+            <button onClick={() => { setShowForm(false); setEmpSearch(''); setShowEmpDropdown(false); }}
               className="px-4 py-2 text-[12px] text-[#8899aa] border border-[#252e3a] rounded-lg hover:border-[#f5a623] transition-colors">
               Cancel
             </button>

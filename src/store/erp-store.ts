@@ -21,14 +21,31 @@ export const MODULE_TREE: Record<string, string[]> = {
   downloads: ['downloads'],
 }
 
+// Build a reverse map: sub-module key → parent key
+const SUB_TO_PARENT: Record<string, string> = {}
+Object.entries(MODULE_TREE).forEach(([parent, children]) => {
+  children.forEach(child => {
+    if (!SUB_TO_PARENT[child]) SUB_TO_PARENT[child] = parent
+  })
+})
+
 // Check if a module is accessible given an allowedModules string
 export function isModuleAllowed(moduleId: string, allowedModules: string): boolean {
   if (!allowedModules || allowedModules === 'all') return true
   const allowed = allowedModules.split(',').map(s => s.trim()).filter(Boolean)
+
   for (const key of allowed) {
+    // Exact match
+    if (key === moduleId) return true
+
+    // key is a parent group that contains moduleId (e.g. key='hrms', moduleId='employees')
     const tree = MODULE_TREE[key]
     if (tree && tree.includes(moduleId)) return true
-    if (key === moduleId) return true
+
+    // moduleId is a parent group and key is one of its children
+    // e.g. moduleId='hrms', key='employees' → hrms should be visible
+    const parentTree = MODULE_TREE[moduleId]
+    if (parentTree && parentTree.includes(key)) return true
   }
   return false
 }
@@ -260,7 +277,7 @@ const PARENT_MAP: Record<string, string> = {};
 });
 
 // Expandable modules that show their own sub-module grid (instead of auto-redirecting to first child)
-export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'projects', 'inventory', 'sales', 'crm', 'support', 'knowledgebase', 'self-service'];
+export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'projects', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};
@@ -275,10 +292,16 @@ function resolveParent(module: ModuleId): ModuleId {
   return 'dashboard';
 }
 
-function resolveInitialSubModule(parent: ModuleId): ModuleId {
+function resolveInitialSubModule(parent: ModuleId, allowedModules: string, userRole: UserRole): ModuleId {
   const subs = SUB_MODULES[parent];
-  if (subs && subs.length > 0) return subs[0].id;
-  return parent;
+  if (!subs || subs.length === 0) return parent;
+  
+  // If admin, return first sub-module
+  if (userRole === 'admin') return subs[0].id;
+  
+  // For restricted users, find the first allowed sub-module
+  const allowedSub = subs.find(sub => isModuleAllowed(sub.id, allowedModules));
+  return allowedSub ? allowedSub.id : parent;
 }
 
 interface ERPStore {
@@ -298,13 +321,19 @@ interface ERPStore {
 export const useERPStore = create<ERPStore>((set) => ({
   activeModule: 'dashboard',
   setActiveModule: (module) => set((s) => {
+    // Guard: non-admin users cannot navigate to modules they don't have access to
+    if (s.userRole !== 'admin' && module !== 'dashboard' && !isModuleAllowed(module, s.allowedModules)) {
+      console.warn(`[ERPStore] Access denied to module: ${module}`);
+      return s; // No state change — stay where they are
+    }
+
     const parent = resolveParent(module);
     const finalModule = (
       EXPANDABLE_MODULES.includes(module) &&
       !EXPANDABLE_WITH_PAGE.includes(module) &&
       SUB_MODULES[module] &&
       SUB_MODULES[module].length > 0
-    ) ? resolveInitialSubModule(module) : module;
+    ) ? resolveInitialSubModule(module, s.allowedModules, s.userRole) : module;
     return {
       activeModule: finalModule,
       activeParentModule: parent,
