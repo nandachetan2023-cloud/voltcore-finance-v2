@@ -229,7 +229,6 @@ export default function UserManagement() {
             </Field>
             <Field label="Role * (sets module access automatically)" span2>
               {roles.length > 0 ? (
-              {roles.length > 0 ? (
                 <div className="space-y-2">
                   <select className={inp} value={form.orgRoleId} onChange={e => setForm(f => ({ ...f, orgRoleId: e.target.value }))}>
                     <option value="">Select a role...</option>
