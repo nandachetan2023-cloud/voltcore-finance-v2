@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
       gender: true,
       employmentType: true,
       employmentStatus: true,
+      isActive: true,
       dateOfJoining: true,
       Department: {
         select: {
@@ -162,7 +163,8 @@ export async function POST(request: NextRequest) {
         branchId: parseInt(branchId),
         dateOfJoining: new Date(dateOfJoining),
         employmentType: employmentType || 'permanent',
-        employmentStatus: employmentStatus || 'active',
+        employmentStatus: employmentStatus || 'inactive', // inactive until shift is assigned
+        isActive: false, // will be set to true when a shift is assigned
         updatedAt: new Date(),
       },
       include: {

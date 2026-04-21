@@ -54,6 +54,11 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   'my-leave': () => import('@/components/erp/my-leave'),
   'my-requests': () => import('@/components/erp/my-requests'),
   'requests': () => import('@/components/erp/admin-requests'),
+  'checklist-templates': () => import('@/components/erp/checklist-templates'),
+  'onboarding': () => import('@/components/erp/onboarding'),
+  'offboarding': () => import('@/components/erp/offboarding'),
+  'exit-management': () => import('@/components/erp/exit-management'),
+  'employee-documents': () => import('@/components/erp/employee-documents'),
 };
 
 function LoadingFallback() {

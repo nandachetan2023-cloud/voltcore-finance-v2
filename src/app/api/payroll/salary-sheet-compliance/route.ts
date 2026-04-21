@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
     
     // Column headers (Row 10)
     sheetData.push([
+      'Employee ID',
       'Sl. No.',
       'Name of the workman',
       'Site',
@@ -126,6 +127,7 @@ export async function POST(request: NextRequest) {
       const totalWagesForESI = basicSalary + dearnessAllowance + otAmount + otherCashPayment;
 
       sheetData.push([
+        employee.employeeCode, // Employee ID
         index + 1, // Sl. No.
         fullName, // Name
         employee.Branch?.name || 'N/A', // Site
@@ -158,6 +160,7 @@ export async function POST(request: NextRequest) {
 
     // Set column widths for better readability
     const colWidths = [
+      { wch: 14 }, // Employee ID  ← NEW
       { wch: 8 },  // Sl. No.
       { wch: 25 }, // Name
       { wch: 15 }, // Site

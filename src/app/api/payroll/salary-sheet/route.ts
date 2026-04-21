@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
 
     // Header row - EXACT format from jan_non_compliance_salary_sheet.xlsx (68 columns)
     sheetData.push([
+      'EMPLOYEE ID',
       'SL NO.',
       'WORKMEN SL. NO.',
       'TOKEN NO.',
@@ -172,6 +173,7 @@ export async function POST(request: NextRequest) {
       const nettPayableAfterDeduction = totalNettPayable - totalDeduction;
 
       sheetData.push([
+        employee.employeeCode, // EMPLOYEE ID  ← NEW
         index + 1, // SL NO
         index + 1, // WORKMEN SL NO
         employee.employeeCode, // TOKEN NO
@@ -248,6 +250,7 @@ export async function POST(request: NextRequest) {
 
     // Set column widths for better readability
     const colWidths = [
+      { wch: 14 }, // EMPLOYEE ID  ← NEW
       { wch: 8 },  // SL NO
       { wch: 12 }, // WORKMEN SL NO
       { wch: 12 }, // TOKEN NO

@@ -151,12 +151,13 @@ export async function POST(request: NextRequest) {
       const rowNumber = dataStartIndex + i + 1;
 
       try {
-        // Skip empty rows
-        if (!row || row.length === 0 || !row[1]) continue;
+        // Skip empty rows — check name at col 2 (col 0 = Employee ID, col 1 = Sl. No.)
+        if (!row || row.length === 0 || (!row[0] && !row[2])) continue;
 
-        const nameOfWorkman = String(row[1] || '').trim();
-        if (!nameOfWorkman) {
-          errors.push({ row: rowNumber, error: 'Missing employee name' });
+        const employeeIdCol = String(row[0] || '').trim(); // Employee ID column
+        const nameOfWorkman = String(row[2] || '').trim(); // Name of workman column
+        if (!nameOfWorkman && !employeeIdCol) {
+          errors.push({ row: rowNumber, error: 'Missing employee name and ID' });
           failed++;
           continue;
         }
@@ -170,73 +171,66 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Determine which employee to use
+        // Determine which employee to use — prefer Employee ID col, fall back to name
         let employee = null;
         
         if (manualMapping && manualMapping.action === 'map' && manualMapping.mappedEmployeeCode) {
-          // Use manually mapped employee code
           employee = await db.employee.findFirst({
             where: { employeeCode: manualMapping.mappedEmployeeCode },
           });
-        } else {
-          // Try to find employee by name
-          const allEmployees = await db.employee.findMany({
-            select: {
-              id: true,
-              employeeCode: true,
-              firstName: true,
-              middleName: true,
-              lastName: true,
-            },
+        } else if (employeeIdCol) {
+          // Try direct Employee ID lookup first
+          employee = await db.employee.findFirst({
+            where: { employeeCode: employeeIdCol },
           });
+        }
 
-          // Try exact match first
+        // Fall back to name matching if ID lookup failed
+        if (!employee && nameOfWorkman) {
+          const allEmployees = await db.employee.findMany({
+            select: { id: true, employeeCode: true, firstName: true, middleName: true, lastName: true },
+          });
           employee = allEmployees.find(emp => {
             const fullName = `${emp.firstName} ${emp.middleName || ''} ${emp.lastName}`.trim().toLowerCase();
             return fullName === nameOfWorkman.toLowerCase();
+          }) || allEmployees.find(emp => {
+            const fullName = `${emp.firstName} ${emp.middleName || ''} ${emp.lastName}`.trim().toLowerCase();
+            return fullName.includes(nameOfWorkman.toLowerCase()) || nameOfWorkman.toLowerCase().includes(fullName);
           });
-
-          // Try partial match
-          if (!employee) {
-            employee = allEmployees.find(emp => {
-              const fullName = `${emp.firstName} ${emp.middleName || ''} ${emp.lastName}`.trim().toLowerCase();
-              return fullName.includes(nameOfWorkman.toLowerCase()) || nameOfWorkman.toLowerCase().includes(fullName);
-            });
-          }
         }
 
         if (!employee) {
-          errors.push({ row: rowNumber, error: `Employee not found: ${nameOfWorkman}` });
+          errors.push({ row: rowNumber, error: `Employee not found: ${employeeIdCol || tokenNo || nameOfWorkman}` });
           failed++;
           continue;
         }
 
-        // Parse data - 24 columns compliance format
+        // Parse data - col 0 = Employee ID, then 24-column compliance format
         const salaryData: SalaryComplianceRow = {
-          slNo: Number(row[0]) || 0,
-          nameOfWorkman,
-          site: String(row[2] || ''),
-          uan: String(row[3] || ''),
-          ipNo: String(row[4] || ''),
-          designation: String(row[5] || ''),
-          totalDaysWorked: Number(row[6]) || 0,
-          otHours: Number(row[7]) || 0,
-          workDone: String(row[8] || ''),
-          dailyRate: Number(row[9]) || 0,
-          basicWages: Number(row[10]) || 0,
-          da: Number(row[11]) || 0,
-          overtime: Number(row[12]) || 0,
-          otherPayment: Number(row[13]) || 0,
-          totalWagesForESI: Number(row[14]) || 0,
-          epf: Number(row[15]) || 0,
-          esi: Number(row[16]) || 0,
-          houseRent: Number(row[17]) || 0,
-          otherDeduction: Number(row[18]) || 0,
-          totalDeduction: Number(row[19]) || 0,
-          netAmount: Number(row[20]) || 0,
-          timeDate: String(row[21] || ''),
-          place: String(row[22] || ''),
-          signature: String(row[23] || ''),
+          slNo: Number(row[1]) || 0,           // col 1: Sl. No.
+          nameOfWorkman,                         // col 2: Name (already read above)
+          site: String(row[3] || ''),            // col 3: Site
+          uan: String(row[4] || ''),             // col 4: UAN
+          ipNo: String(row[5] || ''),            // col 5: IP NO.
+          designation: String(row[6] || ''),     // col 6: Designation
+          totalDaysWorked: Number(row[7]) || 0,  // col 7: Total days worked
+          otHours: Number(row[8]) || 0,          // col 8: OT hours
+          workDone: String(row[9] || ''),        // col 9: Work done
+          dailyRate: Number(row[10]) || 0,       // col 10: Daily rate
+          basicWages: Number(row[11]) || 0,      // col 11: Basic wages
+          da: Number(row[12]) || 0,              // col 12: DA
+          overtime: Number(row[13]) || 0,        // col 13: Overtime
+          otherPayment: Number(row[14]) || 0,    // col 14: Other cash payment
+          totalWagesForESI: Number(row[15]) || 0,// col 15: Total wages for ESI
+          epf: Number(row[16]) || 0,             // col 16: EPF
+          esi: Number(row[17]) || 0,             // col 17: ESI
+          houseRent: Number(row[18]) || 0,       // col 18: House rent
+          otherDeduction: Number(row[19]) || 0,  // col 19: PT
+          totalDeduction: Number(row[20]) || 0,  // col 20: Total deduction
+          netAmount: Number(row[21]) || 0,       // col 21: Net amount paid
+          timeDate: String(row[22] || ''),       // col 22: Time & date
+          place: String(row[23] || ''),          // col 23: Place
+          signature: String(row[24] || ''),      // col 24: Signature
         };
 
         // Check if payroll item already exists

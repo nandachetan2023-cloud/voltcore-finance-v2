@@ -13,12 +13,9 @@ interface Employee {
   employeeCode: string;
   firstName: string;
   lastName: string;
-  department?: {
-    name: string;
-  };
-  branch?: {
-    name: string;
-  };
+  isActive?: boolean;
+  department?: { name: string };
+  branch?: { name: string };
   employmentStatus: string;
 }
 
@@ -30,6 +27,8 @@ interface AttendanceRecord {
   punchOut: string | null;
   status: string;
   biometricDeviceId: string | null;
+  lateMinutes?: number;
+  fineAmount?: number;
   Employee: {
     employeeCode: string;
     firstName: string;
@@ -90,15 +89,14 @@ function calcHours(punchIn: string | null, punchOut: string | null): number {
     const outTime = new Date(punchOut);
     const diff = outTime.getTime() - inTime.getTime();
     if (diff < 0) return 0;
-    return Math.round((diff / (1000 * 60 * 60)) * 10) / 10;
+    return Math.round((diff / (1000 * 60 * 60)) * 100) / 100;
   } catch {
     return 0;
   }
 }
 
 function calcOtHours(totalHours: number): number {
-  // OT is hours worked beyond 8 hours
-  return Math.max(0, Math.round((totalHours - 8) * 10) / 10);
+  return Math.round(Math.max(0, totalHours - 8) * 100) / 100;
 }
 
 function getStatusStyle(status: string) {
@@ -232,7 +230,8 @@ export default function TimesheetModule() {
   }, [employees]);
 
   const filteredEmployees = useMemo(() => {
-    let result = employees.filter(e => e.employmentStatus === 'active');
+    // Only include active employees with a shift assignment
+    let result = employees.filter(e => e.employmentStatus === 'active' && e.isActive !== false);
     if (siteFilter) result = result.filter(e => e.branch?.name === siteFilter);
     
     // Deduplicate by employeeCode (keep the first occurrence)
@@ -259,25 +258,26 @@ export default function TimesheetModule() {
     });
 
     const present = rangeRecords.filter(a => a.status.toLowerCase() === 'present').length;
+    const late = rangeRecords.filter(a => a.status.toLowerCase() === 'late').length;
     const absent = rangeRecords.filter(a => a.status.toLowerCase() === 'absent').length;
     const onLeave = rangeRecords.filter(a => a.status.toLowerCase() === 'leave').length;
+    const totalFines = rangeRecords.reduce((s, a) => s + Number(a.fineAmount || 0), 0);
     
     let totalOt = 0;
     rangeRecords.forEach(a => {
-      if (a.status.toLowerCase() === 'present' && a.punchIn && a.punchOut) {
+      if (['present', 'late'].includes(a.status.toLowerCase()) && a.punchIn && a.punchOut) {
         const hours = calcHours(a.punchIn, a.punchOut);
         totalOt += calcOtHours(hours);
       }
     });
     
-    // Count unique employees who were present in this range
     const uniquePresent = new Set(
       rangeRecords
-        .filter(a => a.status.toLowerCase() === 'present')
+        .filter(a => ['present', 'late'].includes(a.status.toLowerCase()))
         .map(a => a.employeeId)
     ).size;
 
-    return { present, absent, onLeave, totalOt: Math.round(totalOt * 10) / 10, uniquePresent };
+    return { present, late, absent, onLeave, totalOt: Math.round(totalOt * 10) / 10, uniquePresent, totalFines: Math.round(totalFines) };
   }, [attendance, dateRange]);
 
   const fetchData = useCallback(async () => {
@@ -373,7 +373,7 @@ export default function TimesheetModule() {
           daysPresent++;
           const timeIn = formatTime(record.punchIn);
           const timeOut = formatTime(record.punchOut);
-          cells.push(`${timeIn}-${timeOut} (${hrs}h)`);
+          cells.push(`${timeIn}-${timeOut} (${hrs.toFixed(2)}h)`);
         } else if (record) {
           cells.push(getStatusLabel(record.status));
         } else {
@@ -381,7 +381,7 @@ export default function TimesheetModule() {
         }
       });
       
-      cells.push(`${totalHrs}h`, `${totalOt}h`, `${daysPresent}/${dates.length}`);
+      cells.push(`${totalHrs.toFixed(2)}h`, `${totalOt.toFixed(2)}h`, `${daysPresent}/${dates.length}`);
       return cells.join(',');
     });
     
@@ -522,8 +522,8 @@ export default function TimesheetModule() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { icon: UserCheck, label: 'Present Entries', value: stats.present, sub: `${stats.uniquePresent} unique employees`, color: '#00e676' },
+          { icon: AlertCircle, label: 'Late Entries', value: (stats as any).late || 0, sub: `₹${(stats as any).totalFines || 0} in fines`, color: '#f5a623' },
           { icon: AlertCircle, label: 'Absent Entries', value: stats.absent, sub: `This ${viewMode === 'daily' ? 'day' : viewMode === 'weekly' ? 'week' : 'month'}`, color: '#ff3d3d' },
-          { icon: Clock, label: 'On Leave', value: stats.onLeave, sub: 'Approved leaves', color: '#ffab40' },
           { icon: TimerReset, label: 'Total OT Hours', value: `${stats.totalOt}h`, sub: `Overtime this ${viewMode === 'daily' ? 'day' : viewMode === 'weekly' ? 'week' : 'month'}`, color: '#00d4ff' },
         ].map((stat, i) => {
           const Icon = stat.icon;
@@ -631,12 +631,12 @@ export default function TimesheetModule() {
                           </td>
                           <td className="py-2.5 px-2 text-center">
                             <span className="text-[12px] font-bold text-[#00e676] font-mono">
-                              {record.punchIn && record.punchOut ? `${calcHours(record.punchIn, record.punchOut)}h` : '—'}
+                              {record.punchIn && record.punchOut ? `${calcHours(record.punchIn, record.punchOut).toFixed(2)}h` : '—'}
                             </span>
                           </td>
                           <td className="py-2.5 px-2 text-center">
                             <span className="text-[12px] font-bold text-[#00d4ff] font-mono">
-                              {record.punchIn && record.punchOut ? `${calcOtHours(calcHours(record.punchIn, record.punchOut))}h` : '—'}
+                              {record.punchIn && record.punchOut ? `${calcOtHours(calcHours(record.punchIn, record.punchOut)).toFixed(2)}h` : '—'}
                             </span>
                           </td>
                           <td className="py-2.5 px-2 text-center">
@@ -699,9 +699,9 @@ export default function TimesheetModule() {
                               <span className="text-[10px] text-[#8899aa] font-mono">
                                 {formatTime(record.punchIn)}–{formatTime(record.punchOut)}
                               </span>
-                              <span className="text-[11px] font-bold text-[#e2e8f0] font-mono">{hrs}h</span>
+                              <span className="text-[11px] font-bold text-[#e2e8f0] font-mono">{hrs.toFixed(2)}h</span>
                               {ot > 0 && (
-                                <span className="text-[9px] text-[#00d4ff] font-mono">+{ot}h OT</span>
+                                <span className="text-[9px] text-[#00d4ff] font-mono">+{ot.toFixed(2)}h OT</span>
                               )}
                             </div>
                           </td>
@@ -757,10 +757,10 @@ export default function TimesheetModule() {
                       );
                     })}
                     <td className="py-2.5 px-2 text-center">
-                      <span className="text-[13px] font-bold text-[#00e676] font-mono">{totalHrs > 0 ? `${totalHrs}h` : '—'}</span>
+                      <span className="text-[13px] font-bold text-[#00e676] font-mono">{totalHrs > 0 ? `${totalHrs.toFixed(2)}h` : '—'}</span>
                     </td>
                     <td className="py-2.5 px-2 text-center">
-                      <span className="text-[13px] font-bold text-[#00d4ff] font-mono">{totalOt > 0 ? `${totalOt}h` : '—'}</span>
+                      <span className="text-[13px] font-bold text-[#00d4ff] font-mono">{totalOt > 0 ? `${totalOt.toFixed(2)}h` : '—'}</span>
                     </td>
                     <td className="py-2.5 px-2 text-center">
                       <span className="text-[13px] font-bold text-[#f5a623] font-mono">{daysPresent}/{dateRange.dates.length}</span>

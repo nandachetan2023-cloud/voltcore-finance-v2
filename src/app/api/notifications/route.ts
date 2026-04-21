@@ -68,54 +68,12 @@ export async function GET(request: NextRequest) {
       })))
     }
 
-    // Always append live system checks for admins
-    const systemNotifications: any[] = []
-    if (isAdmin) {
-      // Pending leave requests
-      const pendingLeaves = await db.leaveRequest.count({
-        where: { status: 'pending', isDeleted: false },
-      }).catch(() => 0)
-      if (pendingLeaves > 0) {
-        systemNotifications.push({
-          id: 'sys-pending-leaves',
-          title: 'Pending Leave Approvals',
-          message: `${pendingLeaves} leave request${pendingLeaves !== 1 ? 's' : ''} awaiting approval`,
-          time: 'Now',
-          type: 'warning',
-          link: '',
-          isRead: false,
-          entityType: 'leave',
-        })
-      }
-
-      // Unprocessed biometric logs
-      const unprocessedBiometric = await db.biometricRawLog.count({
-        where: { processed: false },
-      }).catch(() => 0)
-      if (unprocessedBiometric > 0) {
-        systemNotifications.push({
-          id: 'sys-biometric',
-          title: 'Unprocessed Biometric Logs',
-          message: `${unprocessedBiometric} biometric log${unprocessedBiometric !== 1 ? 's' : ''} need processing`,
-          time: 'Now',
-          type: 'warning',
-          link: '',
-          isRead: false,
-          entityType: 'biometric',
-        })
-      }
-    }
-
-    // Merge: db notifications first, then system checks (dedup by id)
-    const allIds = new Set(dbNotifications.map(n => n.id))
-    const merged = [
-      ...dbNotifications,
-      ...systemNotifications.filter(n => !allIds.has(n.id)),
-    ]
-
+    // Merge: db notifications only — live system checks removed.
+    // Notifications are created in the DB when events happen (leave submitted,
+    // request approved, etc.) and cleared when marked as read.
     return NextResponse.json({
       success: true,
-      data: { notifications: merged, count: merged.length },
+      data: { notifications: dbNotifications, count: dbNotifications.length },
     })
   } catch (error) {
     console.error('Error fetching notifications:', error)
@@ -131,8 +89,14 @@ export async function POST(request: NextRequest) {
     const { notificationId, markAllRead, userEmail } = body
 
     if (markAllRead && userEmail) {
+      // Mark personal notifications as read
       await db.notification.updateMany({
         where: { userEmail, isRead: false },
+        data: { isRead: true },
+      })
+      // Also mark admin broadcast notifications as read
+      await db.notification.updateMany({
+        where: { userEmail: '__admin_broadcast__', isRead: false },
         data: { isRead: true },
       })
     } else if (notificationId) {

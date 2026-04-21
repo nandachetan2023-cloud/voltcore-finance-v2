@@ -2,6 +2,8 @@
 import { db as defaultDb } from './db'
 import { superadminDb } from './superadmin-db'
 import { PrismaClient } from '@prisma/client'
+import { classifyAttendance } from './services/attendance-rule-service'
+import { getActiveShiftAssignment } from './services/attendance-rule-service'
 
 type DbClient = PrismaClient
 
@@ -339,16 +341,48 @@ export class BiometricService {
           },
         })
 
+        const punchIn = new Date(firstPunch.punchDate)
+        const punchOut = sortedLogs.length > 1 ? new Date(lastPunch.punchDate) : null
+
+        // ── Shift guard: skip employees without an active shift ──
+        const shiftAssignment = await getActiveShiftAssignment(employee.id, logDate, this.db)
+        if (!shiftAssignment) {
+          console.log(`Skipping ${empCode} for ${dateStr}: no active shift assignment — marking employee inactive`)
+          // Deactivate the employee since they have no shift
+          await this.db.employee.update({
+            where: { id: employee.id },
+            data: { isActive: false, employmentStatus: 'inactive', updatedAt: new Date() },
+          }).catch(() => {})
+          // Mark logs as processed so they don't keep retrying
+          await this.db.biometricRawLog.updateMany({
+            where: { id: { in: logs.map(l => l.id) } },
+            data: { processed: true, processedAt: new Date() },
+          })
+          continue
+        }
+
+        // Apply attendance rules to classify the record
+        const classification = await classifyAttendance(
+          employee.id,
+          logDate,
+          punchIn,
+          punchOut,
+          this.db
+        )
+
         if (existingAttendance) {
           // Update existing
           await this.db.attendanceLog.update({
             where: { id: existingAttendance.id },
             data: {
-              punchIn: new Date(firstPunch.punchDate),
-              punchOut: sortedLogs.length > 1 ? new Date(lastPunch.punchDate) : null,
+              punchIn,
+              punchOut,
               biometricDeviceId: firstPunch.deviceId,
               source: 'biometric',
-              status: 'present',
+              status: classification.status,
+              lateMinutes: classification.lateMinutes,
+              fineAmount: classification.fineAmount,
+              updatedAt: new Date(),
             },
           })
         } else {
@@ -356,12 +390,14 @@ export class BiometricService {
           await this.db.attendanceLog.create({
             data: {
               employeeId: employee.id,
-              logDate: logDate,
-              punchIn: new Date(firstPunch.punchDate),
-              punchOut: sortedLogs.length > 1 ? new Date(lastPunch.punchDate) : null,
+              logDate,
+              punchIn,
+              punchOut,
               biometricDeviceId: firstPunch.deviceId,
               source: 'biometric',
-              status: 'present',
+              status: classification.status,
+              lateMinutes: classification.lateMinutes,
+              fineAmount: classification.fineAmount,
               updatedAt: new Date(),
             },
           })

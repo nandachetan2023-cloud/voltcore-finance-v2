@@ -43,23 +43,72 @@ interface Employee {
 }
 
 interface EmployeeFormData {
+  // Identity
   empId: string;
-  name: string;
+  firstName: string;
+  middleName: string;
+  lastName: string;
   email: string;
   phone: string;
-  trade: string;
-  role: string;
-  site: string;
-  type: string;
-  status: string;
-  joiningDate: string;
-  certifications: string;
+  alternatePhone: string;
+  personalEmail: string;
+  // Personal
+  dateOfBirth: string;
+  gender: string;
+  maritalStatus: string;
+  bloodGroup: string;
+  fatherName: string;
+  // Address
+  currentAddress: string;
+  currentCity: string;
+  currentState: string;
+  currentPincode: string;
+  permanentAddress: string;
+  permanentCity: string;
+  permanentState: string;
+  permanentPincode: string;
+  // Organisation
+  departmentId: string;
+  designationId: string;
+  branchId: string;
+  gradeId: string;
+  reportingManagerId: string;
+  // Employment
+  dateOfJoining: string;
+  confirmationDate: string;
+  employmentType: string;
+  employmentStatus: string;
+  probationMonths: string;
+  noticePeriodDays: string;
+  // Statutory
+  panNumber: string;
+  aadharNumber: string;
+  uanNumber: string;
+  esicNumber: string;
+  // Bank
+  bankName: string;
+  bankAccount: string;
+  bankIfsc: string;
+  // Emergency
+  emergencyContactName: string;
+  emergencyContactRelation: string;
+  emergencyContactPhone: string;
 }
 
-const TRADES = ['Electrical', 'Mechanical', 'Civil', 'Welding', 'Instrumentation', 'Safety', 'Rigging', 'Administration'];
 const emptyForm: EmployeeFormData = {
-  empId: '', name: '', email: '', phone: '', trade: 'Electrical', role: '', site: '',
-  type: 'Staff', status: 'Active', joiningDate: '', certifications: '',
+  empId: '', firstName: '', middleName: '', lastName: '',
+  email: '', phone: '', alternatePhone: '', personalEmail: '',
+  dateOfBirth: '', gender: 'male', maritalStatus: '', bloodGroup: '',
+  fatherName: '',
+  currentAddress: '', currentCity: '', currentState: '', currentPincode: '',
+  permanentAddress: '', permanentCity: '', permanentState: '', permanentPincode: '',
+  departmentId: '', designationId: '', branchId: '', gradeId: '', reportingManagerId: '',
+  dateOfJoining: '', confirmationDate: '',
+  employmentType: 'permanent', employmentStatus: 'active',
+  probationMonths: '6', noticePeriodDays: '30',
+  panNumber: '', aadharNumber: '', uanNumber: '', esicNumber: '',
+  bankName: '', bankAccount: '', bankIfsc: '',
+  emergencyContactName: '', emergencyContactRelation: '', emergencyContactPhone: '',
 };
 
 const AVATAR_COLORS: Record<string, { bg: string; text: string }> = {
@@ -171,11 +220,14 @@ export default function EmployeesModule() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<EmployeeFormData>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [formTab, setFormTab] = useState<'identity' | 'personal' | 'address' | 'org' | 'employment' | 'statutory' | 'bank' | 'emergency'>('identity');
   const { triggerCreate } = useERPStore();
 
   // Fetch designations for dropdown
   const [designations, setDesignations] = useState<Array<{ id: number; name: string }>>([]);
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
+  const [branches, setBranches] = useState<Array<{ id: number; name: string }>>([]);
+  const [grades, setGrades] = useState<Array<{ id: number; name: string; code: string }>>([]);
 
   useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
 
@@ -214,6 +266,9 @@ export default function EmployeesModule() {
     fetchData(); 
     fetchDesignations();
     fetchDepartments();
+    // Fetch branches and grades
+    fetch('/api/branches').then(r => r.json()).then(d => { if (d.success) setBranches(d.data); });
+    fetch('/api/grades').then(r => r.json()).then(d => { if (d.success) setGrades(d.data); });
   }, [fetchData, fetchDesignations, fetchDepartments]);
 
   const sites = useMemo(() => Array.from(new Set(employees.map(e => e.Branch?.name).filter(Boolean))).sort(), [employees]);
@@ -251,35 +306,62 @@ export default function EmployeesModule() {
   useEffect(() => { setPage(1); }, [search, siteFilter, tradeFilter, statusFilter]);
 
   const openCreate = () => { 
-    // Suggest next available employee ID
     const existingCodes = employees.map(e => e.employeeCode).filter(code => /^EMP\d{4}$/.test(code));
     const numbers = existingCodes.map(code => parseInt(code.substring(3)));
     const maxNumber = numbers.length > 0 ? Math.max(...numbers) : 0;
     const nextNumber = maxNumber + 1;
     const suggestedId = nextNumber <= 9999 ? `EMP${nextNumber.toString().padStart(4, '0')}` : '';
-    
     setForm({ ...emptyForm, empId: suggestedId }); 
+    setFormTab('identity');
     setCreateOpen(true); 
   };
-  const openEdit = (emp: Employee) => {
-    // Convert ISO date to YYYY-MM-DD format for date input
-    const joiningDate = emp.dateOfJoining ? emp.dateOfJoining.split('T')[0] : '';
-    
-    const formData = {
-      empId: emp.employeeCode,
-      name: getFullName(emp),
+  const openEdit = (emp: any) => {
+    setForm({
+      empId: emp.employeeCode || '',
+      firstName: emp.firstName || '',
+      middleName: emp.middleName || '',
+      lastName: emp.lastName || '',
       email: emp.email || '',
       phone: emp.phone || '',
-      trade: emp.Department?.name || 'Electrical',
-      role: emp.Designation?.name || '',
-      site: emp.Branch?.name || '',
-      type: emp.employmentType === 'permanent' ? 'Staff' : 'Contract',
-      status: emp.employmentStatus.charAt(0).toUpperCase() + emp.employmentStatus.slice(1).replace('_', ' '),
-      joiningDate: joiningDate,
-      certifications: '',
-    };
-    setForm(formData);
+      alternatePhone: emp.alternatePhone || '',
+      personalEmail: emp.personalEmail || '',
+      dateOfBirth: emp.dateOfBirth ? emp.dateOfBirth.split('T')[0] : '',
+      gender: emp.gender || 'male',
+      maritalStatus: emp.maritalStatus || '',
+      bloodGroup: emp.bloodGroup || '',
+      fatherName: emp.fatherName || '',
+      currentAddress: emp.currentAddress || '',
+      currentCity: emp.currentCity || '',
+      currentState: emp.currentState || '',
+      currentPincode: emp.currentPincode || '',
+      permanentAddress: emp.permanentAddress || '',
+      permanentCity: emp.permanentCity || '',
+      permanentState: emp.permanentState || '',
+      permanentPincode: emp.permanentPincode || '',
+      departmentId: emp.departmentId?.toString() || emp.Department?.id?.toString() || '',
+      designationId: emp.designationId?.toString() || emp.Designation?.id?.toString() || '',
+      branchId: emp.branchId?.toString() || emp.Branch?.id?.toString() || '',
+      gradeId: emp.gradeId?.toString() || '',
+      reportingManagerId: emp.reportingManagerId?.toString() || '',
+      dateOfJoining: emp.dateOfJoining ? emp.dateOfJoining.split('T')[0] : '',
+      confirmationDate: emp.confirmationDate ? emp.confirmationDate.split('T')[0] : '',
+      employmentType: emp.employmentType || 'permanent',
+      employmentStatus: emp.employmentStatus || 'active',
+      probationMonths: emp.probationMonths?.toString() || '6',
+      noticePeriodDays: emp.noticePeriodDays?.toString() || '30',
+      panNumber: emp.panNumber || '',
+      aadharNumber: emp.aadharNumber || '',
+      uanNumber: emp.uanNumber || '',
+      esicNumber: emp.esicNumber || '',
+      bankName: emp.bankName || '',
+      bankAccount: emp.bankAccount || '',
+      bankIfsc: emp.bankIfsc || '',
+      emergencyContactName: emp.emergencyContactName || '',
+      emergencyContactRelation: emp.emergencyContactRelation || '',
+      emergencyContactPhone: emp.emergencyContactPhone || '',
+    });
     setSelectedId(emp.id.toString());
+    setFormTab('identity');
     setEditOpen(true);
   };
   const openDelete = (id: number) => { setSelectedId(id.toString()); setDeleteOpen(true); };
@@ -287,196 +369,97 @@ export default function EmployeesModule() {
   const handleSubmit = async (mode: 'create' | 'edit') => {
     setSubmitting(true);
     try {
-      // Validate required fields
       const errors: string[] = [];
-      
       if (!form.empId.trim()) errors.push('Employee ID is required');
-      if (!form.name.trim()) errors.push('Full Name is required');
+      if (!form.firstName.trim()) errors.push('First Name is required');
+      if (!form.lastName.trim()) errors.push('Last Name is required');
       if (!form.email.trim()) errors.push('Email is required');
       if (!form.phone.trim()) errors.push('Phone is required');
-      if (!form.trade) errors.push('Trade/Department is required');
-      if (!form.role.trim()) errors.push('Role/Designation is required');
-      if (!form.site) errors.push('Site/Branch is required');
-      if (!form.joiningDate) errors.push('Joining Date is required');
-      
+      if (!form.dateOfBirth) errors.push('Date of Birth is required');
+      if (!form.currentAddress.trim()) errors.push('Current Address is required');
+      if (!form.currentCity.trim()) errors.push('Current City is required');
+      if (!form.currentState.trim()) errors.push('Current State is required');
+      if (!form.currentPincode.trim()) errors.push('Current Pincode is required');
+      if (!form.departmentId) errors.push('Department is required');
+      if (!form.designationId) errors.push('Designation is required');
+      if (!form.branchId) errors.push('Branch is required');
+      if (!form.dateOfJoining) errors.push('Date of Joining is required');
+
       if (errors.length > 0) {
-        toast.error(
-          <div>
-            <div className="font-semibold mb-1">Please fix the following errors:</div>
-            <ul className="list-disc list-inside text-xs">
-              {errors.map((err, i) => <li key={i}>{err}</li>)}
-            </ul>
-          </div>,
-          { duration: 5000 }
-        );
+        toast.error(<div><div className="font-semibold mb-1">Please fix the following errors:</div><ul className="list-disc list-inside text-xs">{errors.map((e, i) => <li key={i}>{e}</li>)}</ul></div>, { duration: 5000 });
         setSubmitting(false);
         return;
       }
 
-      // Validate employee ID format (EMP0001 to EMP9999)
-      const empIdPattern = /^EMP\d{4}$/;
       let employeeCode = form.empId.trim().toUpperCase();
-      
-      // Auto-format if user entered just numbers
-      if (/^\d{1,4}$/.test(employeeCode)) {
-        employeeCode = `EMP${employeeCode.padStart(4, '0')}`;
-      }
-      
-      if (!empIdPattern.test(employeeCode)) {
-        toast.error(
-          <div>
-            <div className="font-semibold mb-1">Invalid Employee ID Format</div>
-            <div className="text-xs">Employee ID must be in format: EMP0001 to EMP9999</div>
-            <div className="text-xs mt-1">Examples: EMP0001, EMP0123, EMP9999</div>
-          </div>,
-          { duration: 5000 }
-        );
+      if (/^\d{1,4}$/.test(employeeCode)) employeeCode = `EMP${employeeCode.padStart(4, '0')}`;
+      if (!/^EMP\d{4}$/.test(employeeCode)) {
+        toast.error('Employee ID must be in format EMP0001 to EMP9999');
         setSubmitting(false);
         return;
       }
 
-      // Validate email format
-      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailPattern.test(form.email)) {
-        toast.error('Please enter a valid email address');
-        setSubmitting(false);
-        return;
-      }
-
-      // Validate phone format (basic check)
-      const phonePattern = /^[0-9+\-\s()]{10,}$/;
-      if (!phonePattern.test(form.phone)) {
-        toast.error('Please enter a valid phone number (at least 10 digits)');
-        setSubmitting(false);
-        return;
-      }
-
-      // Check for duplicate employee ID (only for create mode)
-      if (mode === 'create') {
-        const existingEmployee = employees.find(e => e.employeeCode === employeeCode);
-        if (existingEmployee) {
-          toast.error(
-            <div>
-              <div className="font-semibold mb-1">Duplicate Employee ID</div>
-              <div className="text-xs">Employee ID {employeeCode} is already assigned to:</div>
-              <div className="text-xs font-semibold mt-1">{getFullName(existingEmployee)}</div>
-              <div className="text-xs mt-1">Please use a different Employee ID</div>
-            </div>,
-            { duration: 6000 }
-          );
-          setSubmitting(false);
-          return;
-        }
-      }
-
-      // Transform form data to match API expectations
-      const nameParts = form.name.trim().split(/\s+/);
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : nameParts[0] || '';
-      const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : null;
-
-      // Fetch department, designation, and branch data
-      const [deptRes, desigRes, branchRes] = await Promise.all([
-        fetch('/api/departments'),
-        fetch('/api/designations'),
-        fetch('/api/branches'),
-      ]);
-      
-      if (!deptRes.ok || !desigRes.ok || !branchRes.ok) {
-        toast.error(
-          <div>
-            <div className="font-semibold mb-1">System Configuration Error</div>
-            <div className="text-xs">Failed to load departments, designations, or branches.</div>
-            <div className="text-xs mt-1">Please contact your system administrator.</div>
-          </div>,
-          { duration: 5000 }
-        );
-        setSubmitting(false);
-        return;
-      }
-      
-      const deptData = await deptRes.json();
-      const desigData = await desigRes.json();
-      const branchData = await branchRes.json();
-
-      // Find matching department, designation, and branch by name
-      const department = deptData.data?.find((d: any) => d.name === form.trade);
-      const designation = desigData.data?.find((d: any) => d.name === form.role);
-      const branch = branchData.data?.find((b: any) => b.name === form.site);
-
-      // Use found IDs or default to first available
-      const departmentId = department?.id || deptData.data?.[0]?.id;
-      const designationId = designation?.id || desigData.data?.[0]?.id;
-      const branchId = branch?.id || branchData.data?.[0]?.id;
-
-      if (!departmentId || !designationId || !branchId) {
-        toast.error('System configuration error: Missing department, designation, or branch data. Please contact administrator.');
-        setSubmitting(false);
-        return;
-      }
-
-      const apiBody = {
+      const apiBody: any = {
         employeeCode,
-        firstName,
-        middleName,
-        lastName,
+        firstName: form.firstName.trim(),
+        middleName: form.middleName.trim() || null,
+        lastName: form.lastName.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
-        dateOfBirth: new Date('1990-01-01').toISOString(),
-        gender: 'male',
-        currentAddress: 'Address',
-        currentCity: 'City',
-        currentState: 'State',
-        currentPincode: '000000',
-        departmentId,
-        designationId,
-        branchId,
-        dateOfJoining: form.joiningDate,
-        employmentType: form.type.toLowerCase() === 'staff' ? 'permanent' : 'contract',
-        employmentStatus: form.status.toLowerCase().replace(' ', '_'),
+        alternatePhone: form.alternatePhone.trim() || null,
+        personalEmail: form.personalEmail.trim() || null,
+        dateOfBirth: new Date(form.dateOfBirth).toISOString(),
+        gender: form.gender,
+        maritalStatus: form.maritalStatus || null,
+        bloodGroup: form.bloodGroup || null,
+        fatherName: form.fatherName.trim() || null,
+        currentAddress: form.currentAddress.trim(),
+        currentCity: form.currentCity.trim(),
+        currentState: form.currentState.trim(),
+        currentPincode: form.currentPincode.trim(),
+        permanentAddress: form.permanentAddress.trim() || null,
+        permanentCity: form.permanentCity.trim() || null,
+        permanentState: form.permanentState.trim() || null,
+        permanentPincode: form.permanentPincode.trim() || null,
+        departmentId: parseInt(form.departmentId),
+        designationId: parseInt(form.designationId),
+        branchId: parseInt(form.branchId),
+        gradeId: form.gradeId ? parseInt(form.gradeId) : null,
+        reportingManagerId: form.reportingManagerId ? parseInt(form.reportingManagerId) : null,
+        dateOfJoining: new Date(form.dateOfJoining).toISOString(),
+        confirmationDate: form.confirmationDate ? new Date(form.confirmationDate).toISOString() : null,
+        employmentType: form.employmentType,
+        employmentStatus: form.employmentStatus,
+        probationMonths: parseInt(form.probationMonths) || 6,
+        noticePeriodDays: parseInt(form.noticePeriodDays) || 30,
+        panNumber: form.panNumber.trim() || null,
+        aadharNumber: form.aadharNumber.trim() || null,
+        uanNumber: form.uanNumber.trim() || null,
+        esicNumber: form.esicNumber.trim() || null,
+        bankName: form.bankName.trim() || null,
+        bankAccount: form.bankAccount.trim() || null,
+        bankIfsc: form.bankIfsc.trim() || null,
+        emergencyContactName: form.emergencyContactName.trim() || null,
+        emergencyContactRelation: form.emergencyContactRelation.trim() || null,
+        emergencyContactPhone: form.emergencyContactPhone.trim() || null,
       };
 
       const body = mode === 'edit' ? { id: parseInt(selectedId || '0'), ...apiBody } : apiBody;
-      
-      const res = await fetch('/api/employees', { 
-        method: mode === 'create' ? 'POST' : 'PUT', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(body) 
-      });
-      
+      const res = await fetch('/api/employees', { method: mode === 'create' ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
-      
+
       if (json.success) {
-        toast.success(
-          <div>
-            <div className="font-semibold">{mode === 'create' ? 'Employee Created!' : 'Employee Updated!'}</div>
-            <div className="text-xs mt-1">{employeeCode} - {form.name}</div>
-          </div>,
-          { duration: 3000 }
-        );
+        toast.success(<div><div className="font-semibold">{mode === 'create' ? 'Employee Created!' : 'Employee Updated!'}</div><div className="text-xs mt-1">{employeeCode} - {form.firstName} {form.lastName}</div></div>, { duration: 3000 });
         if (mode === 'create') setCreateOpen(false); else setEditOpen(false);
-        setForm(emptyForm); // Reset form
-        await fetchData(); // Wait for data to refresh
-      } else { 
-        toast.error(
-          <div>
-            <div className="font-semibold mb-1">Failed to {mode} employee</div>
-            <div className="text-xs">{json.error || 'Unknown error occurred'}</div>
-          </div>,
-          { duration: 5000 }
-        );
+        setForm(emptyForm);
+        await fetchData();
+      } else {
+        toast.error(<div><div className="font-semibold mb-1">Failed to {mode} employee</div><div className="text-xs">{json.error || 'Unknown error'}</div></div>, { duration: 5000 });
       }
-    } catch (error) { 
-      toast.error(
-        <div>
-          <div className="font-semibold mb-1">System Error</div>
-          <div className="text-xs">{error instanceof Error ? error.message : 'Failed to process request'}</div>
-        </div>,
-        { duration: 5000 }
-      );
-      console.error('Submit error:', error);
-    } finally { 
-      setSubmitting(false); 
+    } catch (error) {
+      toast.error('An unexpected error occurred');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -515,113 +498,197 @@ export default function EmployeesModule() {
     );
   }
 
+  const inp = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]/60 transition-colors placeholder:text-[#5a6878]';
+  const sel = inp + ' appearance-none cursor-pointer';
+  const lbl = 'block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5';
+  const F = ({ label, children, req, span2 }: { label: string; children: React.ReactNode; req?: boolean; span2?: boolean }) => (
+    <div className={span2 ? 'col-span-2' : ''}>
+      <label className={lbl}>{label}{req && <span className="text-[#ff3d3d] ml-0.5">*</span>}</label>
+      {children}
+    </div>
+  );
+
+  const FORM_TABS = [
+    { id: 'identity', label: 'Identity' },
+    { id: 'personal', label: 'Personal' },
+    { id: 'address', label: 'Address' },
+    { id: 'org', label: 'Organisation' },
+    { id: 'employment', label: 'Employment' },
+    { id: 'statutory', label: 'Statutory' },
+    { id: 'bank', label: 'Bank' },
+    { id: 'emergency', label: 'Emergency' },
+  ] as const;
+
   const dialogContent = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto pr-1">
-      <FormField label="Employee ID" required>
-        <input 
-          className={inputCls} 
-          value={form.empId} 
-          onChange={e => setForm(f => ({ ...f, empId: e.target.value.toUpperCase() }))} 
-          placeholder="EMP0001" 
-          maxLength={7}
-        />
-        <p className="text-[9px] text-[#5a6878] mt-1">Format: EMP0001 to EMP9999</p>
-      </FormField>
-      <FormField label="Full Name" required>
-        <input 
-          className={inputCls} 
-          value={form.name} 
-          onChange={e => setForm(f => ({ ...f, name: e.target.value }))} 
-          placeholder="Rajesh Kumar" 
-        />
-      </FormField>
-      <FormField label="Email" required>
-        <input 
-          className={inputCls} 
-          type="email" 
-          value={form.email} 
-          onChange={e => setForm(f => ({ ...f, email: e.target.value }))} 
-          placeholder="rajesh@voltcore.com" 
-        />
-      </FormField>
-      <FormField label="Phone" required>
-        <input 
-          className={inputCls} 
-          value={form.phone} 
-          onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} 
-          placeholder="+91 98765 43210" 
-        />
-      </FormField>
-      <FormField label="Trade / Department" required>
-        <select 
-          className={selectCls} 
-          value={form.trade} 
-          onChange={e => setForm(f => ({ ...f, trade: e.target.value }))}
-        >
-          <option value="">Select department</option>
-          {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-        </select>
-      </FormField>
-      <FormField label="Role / Designation" required>
-        <select 
-          className={selectCls} 
-          value={form.role} 
-          onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-        >
-          <option value="">Select designation</option>
-          {designations.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-        </select>
-      </FormField>
-      <FormField label="Site / Branch" required>
-        <select 
-          className={selectCls} 
-          value={form.site} 
-          onChange={e => setForm(f => ({ ...f, site: e.target.value }))}
-        >
-          <option value="">Select site</option>
-          {sites.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-      </FormField>
-      <FormField label="Employment Type" required>
-        <select 
-          className={selectCls} 
-          value={form.type} 
-          onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-        >
-          <option value="Staff">Staff (Permanent)</option>
-          <option value="Contract">Contract</option>
-        </select>
-      </FormField>
-      <FormField label="Employment Status" required>
-        <select 
-          className={selectCls} 
-          value={form.status} 
-          onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-        >
-          <option value="Active">Active</option>
-          <option value="Inactive">Inactive</option>
-          <option value="On Leave">On Leave</option>
-          <option value="Notice Period">Notice Period</option>
-          <option value="Separated">Separated</option>
-        </select>
-      </FormField>
-      <FormField label="Joining Date" required>
-        <input 
-          className={inputCls} 
-          type="date" 
-          value={form.joiningDate} 
-          onChange={e => setForm(f => ({ ...f, joiningDate: e.target.value }))} 
-        />
-      </FormField>
-      <FormField label="Certifications (comma separated)" span>
-        <input 
-          className={inputCls} 
-          value={form.certifications} 
-          onChange={e => setForm(f => ({ ...f, certifications: e.target.value }))} 
-          placeholder="First Aid, Confined Space, Working at Height" 
-        />
-        <p className="text-[9px] text-[#5a6878] mt-1">Optional: Separate multiple certifications with commas</p>
-      </FormField>
+    <div className="space-y-3">
+      {/* Tab bar */}
+      <div className="flex gap-1 flex-wrap border-b border-[#252e3a] pb-2">
+        {FORM_TABS.map(t => (
+          <button key={t.id} type="button" onClick={() => setFormTab(t.id)}
+            className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${formTab === t.id ? 'bg-[#f5a623] text-black' : 'text-[#8899aa] hover:text-[#e2e8f0] hover:bg-[#141920]'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 max-h-[55vh] overflow-y-auto pr-1">
+        {/* ── Identity ── */}
+        {formTab === 'identity' && <>
+          <F label="Employee ID" req><input className={inp} value={form.empId} onChange={e => setForm(f => ({ ...f, empId: e.target.value.toUpperCase() }))} placeholder="EMP0001" maxLength={7} /></F>
+          <F label="First Name" req><input className={inp} value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} placeholder="Rajesh" /></F>
+          <F label="Middle Name"><input className={inp} value={form.middleName} onChange={e => setForm(f => ({ ...f, middleName: e.target.value }))} placeholder="Kumar" /></F>
+          <F label="Last Name" req><input className={inp} value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} placeholder="Sharma" /></F>
+          <F label="Work Email" req><input className={inp} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="rajesh@company.com" /></F>
+          <F label="Personal Email"><input className={inp} type="email" value={form.personalEmail} onChange={e => setForm(f => ({ ...f, personalEmail: e.target.value }))} placeholder="rajesh@gmail.com" /></F>
+          <F label="Phone" req><input className={inp} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210" /></F>
+          <F label="Alternate Phone"><input className={inp} value={form.alternatePhone} onChange={e => setForm(f => ({ ...f, alternatePhone: e.target.value }))} placeholder="+91 98765 43211" /></F>
+        </>}
+
+        {/* ── Personal ── */}
+        {formTab === 'personal' && <>
+          <F label="Date of Birth" req><input className={inp} type="date" value={form.dateOfBirth} onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))} /></F>
+          <F label="Gender" req>
+            <select className={sel} value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
+          </F>
+          <F label="Marital Status">
+            <select className={sel} value={form.maritalStatus} onChange={e => setForm(f => ({ ...f, maritalStatus: e.target.value }))}>
+              <option value="">Select...</option>
+              <option value="single">Single</option>
+              <option value="married">Married</option>
+              <option value="divorced">Divorced</option>
+              <option value="widowed">Widowed</option>
+            </select>
+          </F>
+          <F label="Blood Group">
+            <select className={sel} value={form.bloodGroup} onChange={e => setForm(f => ({ ...f, bloodGroup: e.target.value }))}>
+              <option value="">Select...</option>
+              {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </F>
+          <F label="Father's Name" span2><input className={inp} value={form.fatherName} onChange={e => setForm(f => ({ ...f, fatherName: e.target.value }))} placeholder="Father's full name" /></F>
+        </>}
+
+        {/* ── Address ── */}
+        {formTab === 'address' && <>
+          <F label="Current Address" req span2><input className={inp} value={form.currentAddress} onChange={e => setForm(f => ({ ...f, currentAddress: e.target.value }))} placeholder="House No, Street, Area" /></F>
+          <F label="Current City" req><input className={inp} value={form.currentCity} onChange={e => setForm(f => ({ ...f, currentCity: e.target.value }))} placeholder="Mumbai" /></F>
+          <F label="Current State" req><input className={inp} value={form.currentState} onChange={e => setForm(f => ({ ...f, currentState: e.target.value }))} placeholder="Maharashtra" /></F>
+          <F label="Current Pincode" req><input className={inp} value={form.currentPincode} onChange={e => setForm(f => ({ ...f, currentPincode: e.target.value }))} placeholder="400001" maxLength={6} /></F>
+          <div className="col-span-2 border-t border-[#252e3a] pt-2 mt-1">
+            <p className="text-[10px] text-[#5a6878] mb-2">Permanent Address (if different)</p>
+          </div>
+          <F label="Permanent Address" span2><input className={inp} value={form.permanentAddress} onChange={e => setForm(f => ({ ...f, permanentAddress: e.target.value }))} placeholder="House No, Street, Area" /></F>
+          <F label="Permanent City"><input className={inp} value={form.permanentCity} onChange={e => setForm(f => ({ ...f, permanentCity: e.target.value }))} placeholder="Delhi" /></F>
+          <F label="Permanent State"><input className={inp} value={form.permanentState} onChange={e => setForm(f => ({ ...f, permanentState: e.target.value }))} placeholder="Delhi" /></F>
+          <F label="Permanent Pincode"><input className={inp} value={form.permanentPincode} onChange={e => setForm(f => ({ ...f, permanentPincode: e.target.value }))} placeholder="110001" maxLength={6} /></F>
+        </>}
+
+        {/* ── Organisation ── */}
+        {formTab === 'org' && <>
+          <F label="Department" req>
+            <select className={sel} value={form.departmentId} onChange={e => setForm(f => ({ ...f, departmentId: e.target.value }))}>
+              <option value="">Select department...</option>
+              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </F>
+          <F label="Designation" req>
+            <select className={sel} value={form.designationId} onChange={e => setForm(f => ({ ...f, designationId: e.target.value }))}>
+              <option value="">Select designation...</option>
+              {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </F>
+          <F label="Branch / Site" req>
+            <select className={sel} value={form.branchId} onChange={e => setForm(f => ({ ...f, branchId: e.target.value }))}>
+              <option value="">Select branch...</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </F>
+          <F label="Grade">
+            <select className={sel} value={form.gradeId} onChange={e => setForm(f => ({ ...f, gradeId: e.target.value }))}>
+              <option value="">Select grade...</option>
+              {grades.map(g => <option key={g.id} value={g.id}>{g.name} ({g.code})</option>)}
+            </select>
+          </F>
+          <F label="Reporting Manager" span2>
+            <select className={sel} value={form.reportingManagerId} onChange={e => setForm(f => ({ ...f, reportingManagerId: e.target.value }))}>
+              <option value="">None</option>
+              {employees.filter(e => e.id.toString() !== selectedId).map(e => (
+                <option key={e.id} value={e.id}>{e.employeeCode} — {getFullName(e)}</option>
+              ))}
+            </select>
+          </F>
+        </>}
+
+        {/* ── Employment ── */}
+        {formTab === 'employment' && <>
+          <F label="Date of Joining" req><input className={inp} type="date" value={form.dateOfJoining} onChange={e => setForm(f => ({ ...f, dateOfJoining: e.target.value }))} /></F>
+          <F label="Confirmation Date"><input className={inp} type="date" value={form.confirmationDate} onChange={e => setForm(f => ({ ...f, confirmationDate: e.target.value }))} /></F>
+          <F label="Employment Type" req>
+            <select className={sel} value={form.employmentType} onChange={e => setForm(f => ({ ...f, employmentType: e.target.value }))}>
+              <option value="permanent">Permanent</option>
+              <option value="contract">Contract</option>
+              <option value="probation">Probation</option>
+              <option value="intern">Intern</option>
+              <option value="part_time">Part Time</option>
+            </select>
+          </F>
+          <F label="Employment Status" req>
+            <select className={sel} value={form.employmentStatus} onChange={e => setForm(f => ({ ...f, employmentStatus: e.target.value }))}>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="notice_period">Notice Period</option>
+              <option value="separated">Separated</option>
+            </select>
+          </F>
+          <F label="Probation Months"><input className={inp} type="number" min="0" value={form.probationMonths} onChange={e => setForm(f => ({ ...f, probationMonths: e.target.value }))} /></F>
+          <F label="Notice Period Days"><input className={inp} type="number" min="0" value={form.noticePeriodDays} onChange={e => setForm(f => ({ ...f, noticePeriodDays: e.target.value }))} /></F>
+        </>}
+
+        {/* ── Statutory ── */}
+        {formTab === 'statutory' && <>
+          <F label="PAN Number"><input className={inp} value={form.panNumber} onChange={e => setForm(f => ({ ...f, panNumber: e.target.value.toUpperCase() }))} placeholder="ABCDE1234F" maxLength={10} /></F>
+          <F label="Aadhar Number"><input className={inp} value={form.aadharNumber} onChange={e => setForm(f => ({ ...f, aadharNumber: e.target.value }))} placeholder="1234 5678 9012" maxLength={14} /></F>
+          <F label="UAN Number"><input className={inp} value={form.uanNumber} onChange={e => setForm(f => ({ ...f, uanNumber: e.target.value }))} placeholder="100123456789" maxLength={12} /></F>
+          <F label="ESIC IP Number"><input className={inp} value={form.esicNumber} onChange={e => setForm(f => ({ ...f, esicNumber: e.target.value }))} placeholder="1234567890" /></F>
+        </>}
+
+        {/* ── Bank ── */}
+        {formTab === 'bank' && <>
+          <F label="Bank Name" span2><input className={inp} value={form.bankName} onChange={e => setForm(f => ({ ...f, bankName: e.target.value }))} placeholder="State Bank of India" /></F>
+          <F label="Account Number"><input className={inp} value={form.bankAccount} onChange={e => setForm(f => ({ ...f, bankAccount: e.target.value }))} placeholder="1234567890123" /></F>
+          <F label="IFSC Code"><input className={inp} value={form.bankIfsc} onChange={e => setForm(f => ({ ...f, bankIfsc: e.target.value.toUpperCase() }))} placeholder="SBIN0001234" maxLength={11} /></F>
+        </>}
+
+        {/* ── Emergency ── */}
+        {formTab === 'emergency' && <>
+          <F label="Contact Name" span2><input className={inp} value={form.emergencyContactName} onChange={e => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} placeholder="Spouse / Parent name" /></F>
+          <F label="Relation"><input className={inp} value={form.emergencyContactRelation} onChange={e => setForm(f => ({ ...f, emergencyContactRelation: e.target.value }))} placeholder="Spouse / Father / Mother" /></F>
+          <F label="Phone"><input className={inp} value={form.emergencyContactPhone} onChange={e => setForm(f => ({ ...f, emergencyContactPhone: e.target.value }))} placeholder="+91 98765 43210" /></F>
+        </>}
+      </div>
+
+      {/* Tab navigation */}
+      <div className="flex justify-between pt-1 border-t border-[#252e3a]">
+        <button type="button" onClick={() => {
+          const idx = FORM_TABS.findIndex(t => t.id === formTab);
+          if (idx > 0) setFormTab(FORM_TABS[idx - 1].id);
+        }} disabled={formTab === 'identity'} className="text-[11px] text-[#8899aa] hover:text-[#e2e8f0] disabled:opacity-30 px-3 py-1.5 border border-[#252e3a] rounded-lg hover:border-[#f5a623] transition-colors">
+          ← Previous
+        </button>
+        <span className="text-[10px] text-[#5a6878] self-center">
+          {FORM_TABS.findIndex(t => t.id === formTab) + 1} / {FORM_TABS.length}
+        </span>
+        <button type="button" onClick={() => {
+          const idx = FORM_TABS.findIndex(t => t.id === formTab);
+          if (idx < FORM_TABS.length - 1) setFormTab(FORM_TABS[idx + 1].id);
+        }} disabled={formTab === 'emergency'} className="text-[11px] text-[#8899aa] hover:text-[#e2e8f0] disabled:opacity-30 px-3 py-1.5 border border-[#252e3a] rounded-lg hover:border-[#f5a623] transition-colors">
+          Next →
+        </button>
+      </div>
     </div>
   );
 
@@ -733,7 +800,7 @@ export default function EmployeesModule() {
         <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl" aria-describedby="create-employee-description">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">Add New Employee</DialogTitle>
-            <p id="create-employee-description" className="text-[11px] text-[#5a6878] mt-1">Fill in the employee details below to add a new employee to the system.</p>
+            <p id="create-employee-description" className="text-[11px] text-[#5a6878] mt-1">Fill in all employee details across the tabs below.</p>
           </DialogHeader>
           {dialogContent()}
           <DialogFooter className="gap-2">

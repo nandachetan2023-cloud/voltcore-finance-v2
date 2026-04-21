@@ -8,8 +8,9 @@ export async function GET() {
     // Create workbook
     const workbook = XLSX.utils.book_new();
 
-    // Define headers matching the EXACT compliance format from compliance_example.xlsx (FORM XVII/XIII - 24 columns)
+    // Define headers — Employee ID first, then the 24-column FORM XVII/XIII format
     const headers = [
+      'Employee ID',
       'Sl. No.',
       'Name of the workman',
       'Site',
@@ -42,12 +43,13 @@ export async function GET() {
 
     // Set column widths for compliance format
     const colWidths = headers.map((h, i) => {
-      if (i === 0) return { wch: 8 }; // Sl. No.
-      if (i === 1) return { wch: 25 }; // Name of the workman
-      if (i === 2) return { wch: 15 }; // Site
-      if (i === 3 || i === 4) return { wch: 15 }; // UAN, IP NO
-      if (i === 5) return { wch: 20 }; // Designation
-      return { wch: 12 }; // Default for numeric columns
+      if (i === 0) return { wch: 14 }; // Employee ID
+      if (i === 1) return { wch: 8 };  // Sl. No.
+      if (i === 2) return { wch: 25 }; // Name of the workman
+      if (i === 3) return { wch: 15 }; // Site
+      if (i === 4 || i === 5) return { wch: 15 }; // UAN, IP NO
+      if (i === 6) return { wch: 20 }; // Designation
+      return { wch: 12 };
     });
     worksheet['!cols'] = colWidths;
 
@@ -63,8 +65,9 @@ export async function GET() {
       ['5. Save the file and upload it through the Bulk Import feature'],
       [''],
       ['Required Fields:'],
+      ['- Employee ID (unique employee code from your system, e.g. EMP001)'],
       ['- Sl. No. (Serial number starting from 1)'],
-      ['- Name of the workman (Employee name - system will try to match)'],
+      ['- Name of the workman (Employee name — system will try to match if Employee ID is blank)'],
       ['- TOTAL NO OF DAYS WORKED (Number of days attended)'],
       ['- Basic wages in Rs (Basic salary amount)'],
       ['- Net amount paid in Rs (Final net pay)'],

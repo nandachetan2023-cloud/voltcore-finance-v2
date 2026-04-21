@@ -4,8 +4,8 @@ export type UserRole = 'superadmin' | 'admin' | 'demo';
 
 // All top-level modules and their sub-modules for access checking
 export const MODULE_TREE: Record<string, string[]> = {
-  organization: ['organization', 'departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules'],
-  hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'shift', 'timesheet', 'payroll', 'training', 'recruitment'],
+  organization: ['organization', 'departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents'],
+  hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
   procurement: ['procurement', 'purchases', 'expenses'],
   finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
   projects: ['projects', 'project-list', 'sites'],
@@ -56,6 +56,7 @@ export type ModuleId =
   | 'system' | 'support' | 'knowledgebase'
   // Sub-modules
   | 'employees' | 'attendance' | 'leave' | 'shift' | 'training' | 'recruitment'
+  | 'onboarding' | 'offboarding' | 'exit-management' | 'checklist-templates'
   | 'purchases' | 'expenses' | 'invoices'
   | 'sites' | 'permits' | 'safety' | 'subcontractors'
   | 'reports' | 'settings'
@@ -72,6 +73,7 @@ export type ModuleId =
   | 'downloads'
   // Organization sub-modules
   | 'departments' | 'designations' | 'holidays' | 'leave-policies' | 'attendance-rules'
+  | 'employee-documents'
   // Biometric
   | 'biometric'
   // Admin
@@ -139,6 +141,8 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'holidays', icon: 'CalendarDays', label: 'Holidays' },
     { id: 'leave-policies', icon: 'FileText', label: 'Leave Policies' },
     { id: 'attendance-rules', icon: 'Shield', label: 'Attendance Rules' },
+    { id: 'checklist-templates', icon: 'ClipboardList', label: 'Checklist Templates' },
+    { id: 'employee-documents', icon: 'FolderOpen', label: 'Employee Documents' },
   ],
   hrms: [
     { id: 'employee-analytics', icon: 'BarChart3', label: 'Employee Analytics', section: 'HRMS' },
@@ -151,6 +155,9 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'payroll', icon: 'IndianRupee', label: 'Payroll', section: 'HRMS' },
     { id: 'training', icon: 'GraduationCap', label: 'Training & Certs', section: 'HRMS' },
     { id: 'recruitment', icon: 'Search', label: 'Recruitment', section: 'HRMS' },
+    { id: 'onboarding', icon: 'UserCheck', label: 'Onboarding', section: 'Lifecycle' },
+    { id: 'offboarding', icon: 'UserX', label: 'Offboarding', section: 'Lifecycle' },
+    { id: 'exit-management', icon: 'ArrowLeft', label: 'Exit Management', section: 'Lifecycle' },
   ],
   procurement: [
     { id: 'purchases', icon: 'ShoppingBag', label: 'Purchase Orders', section: 'Procurement' },
@@ -231,6 +238,11 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   shift: { title: 'Shift Roster', breadcrumb: 'HRMS › Shift Planning' },
   training: { title: 'Training & Certifications', breadcrumb: 'HRMS › Competency Management' },
   recruitment: { title: 'Recruitment', breadcrumb: 'HRMS › Talent Acquisition' },
+  onboarding: { title: 'Onboarding', breadcrumb: 'HRMS › Employee Lifecycle › Onboarding' },
+  offboarding: { title: 'Offboarding', breadcrumb: 'HRMS › Employee Lifecycle › Offboarding' },
+  'exit-management': { title: 'Exit Management', breadcrumb: 'HRMS › Employee Lifecycle › Exit' },
+  'checklist-templates': { title: 'Checklist Templates', breadcrumb: 'Organization › Checklist Templates' },
+  'employee-documents': { title: 'Employee Documents', breadcrumb: 'Organization › Employee Documents' },
   purchases: { title: 'Purchase Orders', breadcrumb: 'Finance › Procurement' },
   expenses: { title: 'Expense Claims', breadcrumb: 'Finance › Expense Management' },
   payroll: { title: 'Payroll', breadcrumb: 'HRMS › Payroll Processing' },

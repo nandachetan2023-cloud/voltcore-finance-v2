@@ -12,7 +12,7 @@ import {
   ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileEdit, Landmark, Scale, Target, PieChart,
   Wallet, FileSpreadsheet, ReceiptIndianRupee, BadgeIndianRupee, CircleDollarSign, Undo2,
   ArrowRightLeft, HandCoins, RefreshCw, AlertTriangle, Award, Download, Fingerprint, Shield, Trash2,
-  UserCircle
+  UserCircle, UserCheck, UserX, FolderOpen
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -23,7 +23,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   BarChart3, ShoppingBag, TimerReset, ArrowDownCircle, ArrowUpCircle, FileEdit,
   Landmark, Scale, Target, PieChart, Wallet, FileSpreadsheet, ReceiptIndianRupee,
   BadgeIndianRupee, CircleDollarSign, Undo2, ArrowRightLeft, HandCoins, Award, Download,
-  Fingerprint, Shield, Trash2, UserCircle,
+  Fingerprint, Shield, Trash2, UserCircle, UserCheck, UserX, FolderOpen,
 };
 
 const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'financial-reports', 'trash'];

@@ -3,6 +3,34 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
+// ── Sync employee isActive based on whether they have an active shift ──
+// Called after any shift assignment change.
+async function syncEmployeeActiveStatus(db: any, employeeId: number) {
+  const now = new Date()
+  const activeAssignment = await db.shiftAssignment.findFirst({
+    where: {
+      employeeId,
+      effectiveFrom: { lte: now },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+    },
+  })
+
+  const shouldBeActive = !!activeAssignment
+  await db.employee.update({
+    where: { id: employeeId },
+    data: {
+      isActive: shouldBeActive,
+      // Also update employmentStatus: active ↔ inactive (but don't override notice_period/resigned)
+      ...(shouldBeActive
+        ? { employmentStatus: 'active' }
+        : { employmentStatus: 'inactive' }),
+      updatedAt: new Date(),
+    },
+  })
+
+  return shouldBeActive
+}
+
 // GET: List all shift assignments
 export async function GET(request: NextRequest) {
   const db = getDbForRequest(request)
@@ -15,8 +43,6 @@ export async function GET(request: NextRequest) {
     const where: any = {}
     if (employeeId) where.employeeId = parseInt(employeeId)
     if (shiftId) where.shiftId = parseInt(shiftId)
-    
-    // Filter for active assignments (no end date or end date in future)
     if (active) {
       where.OR = [
         { effectiveTo: null },
@@ -28,23 +54,10 @@ export async function GET(request: NextRequest) {
       where,
       include: {
         Employee: {
-          select: {
-            id: true,
-            employeeCode: true,
-            firstName: true,
-            lastName: true,
-          },
+          select: { id: true, employeeCode: true, firstName: true, lastName: true, isActive: true },
         },
         Shift: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            startTime: true,
-            endTime: true,
-            crossesMidnight: true,
-            graceMinutes: true,
-          },
+          select: { id: true, name: true, type: true, startTime: true, endTime: true, crossesMidnight: true, graceMinutes: true },
         },
       },
       orderBy: { effectiveFrom: 'desc' },
@@ -53,14 +66,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: assignments })
   } catch (error) {
     console.error('Error fetching shift assignments:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch shift assignments' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: 'Failed to fetch shift assignments' }, { status: 500 })
   }
 }
 
-// POST: Create shift assignment
+// POST: Create shift assignment → activates employee
 export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
@@ -74,40 +84,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate employee exists
     const employee = await db.employee.findUnique({ where: { id: parseInt(employeeId) } })
-    if (!employee) {
-      return NextResponse.json(
-        { success: false, error: 'Employee not found' },
-        { status: 400 }
-      )
-    }
+    if (!employee) return NextResponse.json({ success: false, error: 'Employee not found' }, { status: 400 })
 
-    // Validate shift exists
     const shift = await db.shift.findUnique({ where: { id: parseInt(shiftId) } })
-    if (!shift) {
-      return NextResponse.json(
-        { success: false, error: 'Shift not found' },
-        { status: 400 }
-      )
-    }
+    if (!shift) return NextResponse.json({ success: false, error: 'Shift not found' }, { status: 400 })
 
-    // End any existing active assignments for this employee
+    // End any existing active assignments
     await db.shiftAssignment.updateMany({
       where: {
         employeeId: parseInt(employeeId),
-        OR: [
-          { effectiveTo: null },
-          { effectiveTo: { gte: new Date(effectiveFrom) } },
-        ],
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date(effectiveFrom) } }],
       },
-      data: {
-        effectiveTo: new Date(effectiveFrom),
-        updatedAt: new Date(),
-      },
+      data: { effectiveTo: new Date(effectiveFrom), updatedAt: new Date() },
     })
 
-    // Create new assignment
     const assignment = await db.shiftAssignment.create({
       data: {
         employeeId: parseInt(employeeId),
@@ -117,57 +108,35 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       },
       include: {
-        Employee: {
-          select: {
-            id: true,
-            employeeCode: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
+        Employee: { select: { id: true, employeeCode: true, firstName: true, lastName: true } },
         Shift: true,
       },
     })
 
-    return NextResponse.json({ success: true, data: assignment }, { status: 201 })
+    // Sync employee active status
+    const isNowActive = await syncEmployeeActiveStatus(db, parseInt(employeeId))
+
+    return NextResponse.json({ success: true, data: assignment, employeeActivated: isNowActive }, { status: 201 })
   } catch (error) {
     console.error('Error creating shift assignment:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to create shift assignment' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: 'Failed to create shift assignment' }, { status: 500 })
   }
 }
 
-// PUT: Update shift assignment
+// PUT: Update shift assignment → re-sync employee status
 export async function PUT(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id, ...data } = body
 
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'id is required' },
-        { status: 400 }
-      )
-    }
+    if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
 
     const assignmentId = parseInt(id.toString())
-    if (isNaN(assignmentId)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid id format' },
-        { status: 400 }
-      )
-    }
+    if (isNaN(assignmentId)) return NextResponse.json({ success: false, error: 'Invalid id format' }, { status: 400 })
 
     const existing = await db.shiftAssignment.findUnique({ where: { id: assignmentId } })
-    if (!existing) {
-      return NextResponse.json(
-        { success: false, error: 'Shift assignment not found' },
-        { status: 404 }
-      )
-    }
+    if (!existing) return NextResponse.json({ success: false, error: 'Shift assignment not found' }, { status: 404 })
 
     const updateData: any = { ...data }
     if (updateData.effectiveFrom) updateData.effectiveFrom = new Date(updateData.effectiveFrom)
@@ -177,60 +146,42 @@ export async function PUT(request: NextRequest) {
 
     const assignment = await db.shiftAssignment.update({
       where: { id: assignmentId },
-      data: {
-        ...updateData,
-        updatedAt: new Date(),
-      },
+      data: { ...updateData, updatedAt: new Date() },
     })
+
+    // Re-sync: setting an effectiveTo in the past deactivates the employee
+    await syncEmployeeActiveStatus(db, existing.employeeId)
 
     return NextResponse.json({ success: true, data: assignment })
   } catch (error) {
     console.error('Error updating shift assignment:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to update shift assignment' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: 'Failed to update shift assignment' }, { status: 500 })
   }
 }
 
-// DELETE: Delete shift assignment
+// DELETE: Remove shift assignment → deactivates employee if no other active shift
 export async function DELETE(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
     const body = await request.json()
     const { id } = body
 
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'id is required' },
-        { status: 400 }
-      )
-    }
+    if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
 
     const assignmentId = parseInt(id.toString())
-    if (isNaN(assignmentId)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid id format' },
-        { status: 400 }
-      )
-    }
+    if (isNaN(assignmentId)) return NextResponse.json({ success: false, error: 'Invalid id format' }, { status: 400 })
 
     const existing = await db.shiftAssignment.findUnique({ where: { id: assignmentId } })
-    if (!existing) {
-      return NextResponse.json(
-        { success: false, error: 'Shift assignment not found' },
-        { status: 404 }
-      )
-    }
+    if (!existing) return NextResponse.json({ success: false, error: 'Shift assignment not found' }, { status: 404 })
 
     await db.shiftAssignment.delete({ where: { id: assignmentId } })
 
-    return NextResponse.json({ success: true, data: { id: assignmentId } })
+    // Sync: if no other active shift, deactivate employee
+    const isNowActive = await syncEmployeeActiveStatus(db, existing.employeeId)
+
+    return NextResponse.json({ success: true, data: { id: assignmentId }, employeeDeactivated: !isNowActive })
   } catch (error) {
     console.error('Error deleting shift assignment:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to delete shift assignment' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: 'Failed to delete shift assignment' }, { status: 500 })
   }
 }

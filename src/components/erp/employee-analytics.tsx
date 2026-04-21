@@ -318,12 +318,14 @@ export default function EmployeeAnalytics() {
           id: a.id?.toString() || '',
           empId: a.employeeId?.toString() || '',
           date: new Date(a.logDate).toISOString().split('T')[0],
-          status: a.status === 'present' ? 'Present' : a.status === 'absent' ? 'Absent' : 'Leave',
+          status: a.status === 'present' ? 'Present' : a.status === 'late' ? 'Late' : a.status === 'absent' ? 'Absent' : a.status === 'half_day' ? 'Half Day' : 'Leave',
           site: a.biometricDeviceId || '',
           shift: '',
           timeIn: a.punchIn ? new Date(a.punchIn).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '',
           timeOut: a.punchOut ? new Date(a.punchOut).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '',
           otHours: a.punchIn && a.punchOut ? Math.max(0, (new Date(a.punchOut).getTime() - new Date(a.punchIn).getTime()) / (1000 * 60 * 60) - 8) : 0,
+          lateMinutes: a.lateMinutes || 0,
+          fineAmount: Number(a.fineAmount || 0),
           employee: a.Employee ? {
             name: `${a.Employee.firstName} ${a.Employee.lastName}`,
             empId: a.Employee.employeeCode,
@@ -357,10 +359,11 @@ export default function EmployeeAnalytics() {
   // Today's attendance (or selected date)
   const todayAtt = attendance.filter(a => a.date === selectedDate);
   const presentToday = todayAtt.filter(a => a.status === 'Present').length;
+  const lateToday = todayAtt.filter(a => a.status === 'Late').length;
   const leaveToday = todayAtt.filter(a => a.status === 'Leave').length;
-  // Calculate absent as: active employees who are not present and not on leave
-  const absentToday = Math.max(0, activeEmployees - presentToday - leaveToday);
+  const absentToday = Math.max(0, activeEmployees - presentToday - lateToday - leaveToday);
   const totalTodayAtt = todayAtt.length;
+  const totalFinesMonth = attendance.reduce((s, a) => s + ((a as any).fineAmount || 0), 0);
 
   // Department / Role distribution
   const deptMap: Record<string, number> = {};
@@ -382,8 +385,9 @@ export default function EmployeeAnalytics() {
   // Attendance bars
   const attBarData = [
     { name: 'Present', value: presentToday, color: '#00e676' },
+    { name: 'Late', value: lateToday, color: '#f5a623' },
     { name: 'Absent', value: absentToday, color: '#ff3d3d' },
-    { name: 'On Leave', value: leaveToday, color: '#f5a623' },
+    { name: 'On Leave', value: leaveToday, color: '#ffab40' },
   ];
 
   // Project status
@@ -519,12 +523,12 @@ export default function EmployeeAnalytics() {
       trend: pendingExpenses > 0 ? 'up' : 'neutral',
     },
     {
-      label: 'Projects',
-      value: projects.length,
-      sub: `${projects.filter(p => p.status === 'On Track').length} On Track`,
+      label: 'Late Today',
+      value: lateToday,
+      sub: `₹${totalFinesMonth.toFixed(0)} total fines`,
       icon: Award,
-      color: '#ffab40',
-      trend: projects.length > 0 ? 'up' : 'neutral',
+      color: '#f5a623',
+      trend: lateToday > 0 ? 'down' : 'neutral',
     },
   ];
 

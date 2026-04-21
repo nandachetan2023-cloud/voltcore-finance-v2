@@ -17,6 +17,25 @@ export interface AttendanceRuleResult {
   };
 }
 
+// ── Get the active shift for an employee on a given date ──────────
+export async function getEmployeeShiftForDate(
+  employeeId: number,
+  date: Date,
+  dbClient?: DbClient
+) {
+  const db = dbClient ?? defaultDb
+  const assignment = await db.shiftAssignment.findFirst({
+    where: {
+      employeeId,
+      effectiveFrom: { lte: date },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: date } }],
+    },
+    include: { Shift: true },
+    orderBy: { effectiveFrom: 'desc' },
+  })
+  return assignment?.Shift ?? null
+}
+
 export async function getApplicableRule(
   employeeId: number,
   ruleType: string = 'late',
@@ -30,17 +49,24 @@ export async function getApplicableRule(
       id: true,
       departmentId: true,
       branchId: true,
-      ShiftAssignment: {
-        where: { isActive: true },
-        select: { shiftId: true },
-        take: 1,
-      },
     },
   });
 
   if (!employee) return null;
 
-  const shiftId = employee.ShiftAssignment[0]?.shiftId;
+  // Get active shift assignment by date
+  const today = new Date()
+  const shiftAssignment = await db.shiftAssignment.findFirst({
+    where: {
+      employeeId,
+      effectiveFrom: { lte: today },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+    },
+    select: { shiftId: true },
+    orderBy: { effectiveFrom: 'desc' },
+  })
+
+  const shiftId = shiftAssignment?.shiftId;
   const departmentId = employee.departmentId;
   const branchId = employee.branchId;
 
@@ -188,4 +214,101 @@ export async function calculateFinesForPeriod(
   }
 
   return { totalFine, details };
+}
+
+// ── Main classification function ──────────────────────────────────
+// Given an employee, date, punchIn and optional punchOut,
+// returns the rule-based status, lateMinutes, and fineAmount.
+// This is the single source of truth used by both manual attendance
+// creation and biometric log processing.
+export async function classifyAttendance(
+  employeeId: number,
+  logDate: Date,
+  punchIn: Date | null,
+  punchOut: Date | null,
+  dbClient?: DbClient
+): Promise<{
+  status: 'present' | 'late' | 'half_day' | 'absent';
+  lateMinutes: number;
+  fineAmount: number;
+  appliedRule?: { id: number; name: string; ruleType: string };
+}> {
+  const db = dbClient ?? defaultDb
+
+  // No punch-in → absent
+  if (!punchIn) {
+    return { status: 'absent', lateMinutes: 0, fineAmount: 0 }
+  }
+
+  // Get the employee's shift for this date
+  const shift = await getEmployeeShiftForDate(employeeId, logDate, db)
+
+  if (!shift) {
+    // No shift assigned — just mark present, no rule to apply
+    return { status: 'present', lateMinutes: 0, fineAmount: 0 }
+  }
+
+  // Build scheduled punch-in time from shift start
+  const [shiftHour, shiftMin] = shift.startTime.split(':').map(Number)
+  const scheduledPunchIn = new Date(logDate)
+  scheduledPunchIn.setHours(shiftHour, shiftMin, 0, 0)
+
+  // Apply the rule
+  const result = await applyAttendanceRules(
+    employeeId,
+    scheduledPunchIn,
+    punchIn,
+    'late',
+    db
+  )
+
+  // If punchOut is provided, also check early departure / half-day by hours worked
+  if (punchOut && !result.isAbsent) {
+    const [endHour, endMin] = shift.endTime.split(':').map(Number)
+    const scheduledPunchOut = new Date(logDate)
+    scheduledPunchOut.setHours(endHour, endMin, 0, 0)
+    if (shift.crossesMidnight) scheduledPunchOut.setDate(scheduledPunchOut.getDate() + 1)
+
+    const totalShiftMinutes = (scheduledPunchOut.getTime() - scheduledPunchIn.getTime()) / 60000
+    const workedMinutes = (punchOut.getTime() - punchIn.getTime()) / 60000
+    const halfDayThreshold = totalShiftMinutes / 2
+
+    // If worked less than half the shift and not already marked half_day/absent
+    if (workedMinutes < halfDayThreshold && result.status === 'present') {
+      return {
+        status: 'half_day',
+        lateMinutes: result.lateMinutes,
+        fineAmount: result.fineAmount,
+        appliedRule: result.appliedRule,
+      }
+    }
+  }
+
+  return {
+    status: result.status,
+    lateMinutes: result.lateMinutes,
+    fineAmount: result.fineAmount,
+    appliedRule: result.appliedRule,
+  }
+}
+
+// ── Check if an employee has an active shift assignment ───────────
+// Returns the shift if assigned, null if not.
+// Used as a gate: employees without a shift are excluded from
+// attendance, timesheet, and payroll processing.
+export async function getActiveShiftAssignment(
+  employeeId: number,
+  date: Date = new Date(),
+  dbClient?: DbClient
+) {
+  const db = dbClient ?? defaultDb
+  return db.shiftAssignment.findFirst({
+    where: {
+      employeeId,
+      effectiveFrom: { lte: date },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: date } }],
+    },
+    include: { Shift: true },
+    orderBy: { effectiveFrom: 'desc' },
+  })
 }

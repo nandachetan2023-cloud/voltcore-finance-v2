@@ -1,7 +1,7 @@
 import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { isHoliday } from '@/lib/services/holiday-service'
-import { applyAttendanceRules } from '@/lib/services/attendance-rule-service'
+import { classifyAttendance, getActiveShiftAssignment } from '@/lib/services/attendance-rule-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
               employeeCode: true,
               firstName: true,
               lastName: true,
+              isActive: true,
             },
           },
         },
@@ -60,15 +61,31 @@ export async function GET(request: NextRequest) {
       db.attendanceLog.count({ where }),
     ])
 
+    // Enrich each record with hasShift flag — check if the employee
+    // had an active shift on the log date (used by UI to flag unshifted records)
+    const today = new Date()
+    const uniqueEmpIds = [...new Set(attendance.map(a => a.employeeId))]
+    const shiftMap = new Map<number, boolean>()
+    for (const empId of uniqueEmpIds) {
+      const shift = await db.shiftAssignment.findFirst({
+        where: {
+          employeeId: empId,
+          effectiveFrom: { lte: today },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+        },
+      })
+      shiftMap.set(empId, !!shift)
+    }
+
+    const enriched = attendance.map(a => ({
+      ...a,
+      hasShift: shiftMap.get(a.employeeId) ?? false,
+    }))
+
     return NextResponse.json({ 
       success: true, 
-      data: attendance,
-      pagination: {
-        total,
-        limit,
-        offset,
-        hasMore: offset + limit < total,
-      },
+      data: enriched,
+      pagination: { total, limit, offset, hasMore: offset + limit < total },
     })
   } catch (error) {
     console.error('Error fetching attendance:', error)
@@ -99,19 +116,21 @@ export async function POST(request: NextRequest) {
       select: {
         id: true,
         branchId: true,
-        ShiftAssignment: {
-          where: { isActive: true },
-          include: {
-            Shift: true,
-          },
-          take: 1,
-        },
       }
     })
     if (!employee) {
       return NextResponse.json(
         { success: false, error: 'Employee not found' },
         { status: 400 }
+      )
+    }
+
+    // ── Shift guard: employee must have an active shift assignment ──
+    const shiftAssignment = await getActiveShiftAssignment(employee.id, new Date(logDate), db)
+    if (!shiftAssignment) {
+      return NextResponse.json(
+        { success: false, error: 'Employee has no active shift assignment. Assign a shift before recording attendance.' },
+        { status: 422 }
       )
     }
 
@@ -125,36 +144,22 @@ export async function POST(request: NextRequest) {
 
     // Apply attendance rules if punch-in time is provided
     let calculatedStatus = status || 'present'
+    let lateMinutes = 0
+    let fineAmount = 0
     let ruleResult = null
     
-    if (punchIn && employee.ShiftAssignment[0]?.Shift) {
-      const shift = employee.ShiftAssignment[0].Shift
-      
-      // Parse shift start time
-      const [hours, minutes] = shift.startTime.split(':').map(Number)
-      const scheduledTime = new Date(logDate)
-      scheduledTime.setHours(hours, minutes, 0, 0)
-      
-      // Apply attendance rules
-      ruleResult = await applyAttendanceRules(
+    if (punchIn) {
+      const classification = await classifyAttendance(
         parseInt(employeeId),
-        scheduledTime,
+        new Date(logDate),
         new Date(punchIn),
-        'late',
+        punchOut ? new Date(punchOut) : null,
         db
       )
-      
-      // Use rule-calculated status if not explicitly provided
-      if (!status) {
-        calculatedStatus = ruleResult.status
-      }
-      
-      console.log('Attendance rule applied:', {
-        employee: employeeId,
-        scheduledTime: scheduledTime.toISOString(),
-        actualTime: punchIn,
-        result: ruleResult,
-      })
+      if (!status) calculatedStatus = classification.status
+      lateMinutes = classification.lateMinutes
+      fineAmount = classification.fineAmount
+      ruleResult = classification
     }
 
     const record = await db.attendanceLog.create({
@@ -164,6 +169,9 @@ export async function POST(request: NextRequest) {
         punchIn: punchIn ? new Date(punchIn) : null,
         punchOut: punchOut ? new Date(punchOut) : null,
         status: calculatedStatus,
+        lateMinutes,
+        fineAmount,
+        updatedAt: new Date(),
       },
       include: {
         Employee: {

@@ -175,24 +175,176 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
   };
 
   const downloadTemplate = () => {
-    // Create a link to download the template file
-    const link = document.createElement('a');
-    link.href = '/employee-import-template.xlsx';
-    link.download = 'employee-import-template.xlsx';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success('Template download started');
+    // Generate template dynamically with all Employee model fields
+    const XLSX = require('xlsx');
+    const headers = [
+      'Employee ID*',
+      'First Name*', 'Middle Name', 'Last Name*',
+      'Work Email*', 'Personal Email', 'Phone*', 'Alternate Phone',
+      'Date of Birth* (YYYY-MM-DD)', 'Gender* (male/female/other)',
+      'Marital Status (single/married/divorced/widowed)', 'Blood Group (A+/A-/B+/B-/AB+/AB-/O+/O-)',
+      "Father's Name",
+      'Current Address*', 'Current City*', 'Current State*', 'Current Pincode*',
+      'Permanent Address', 'Permanent City', 'Permanent State', 'Permanent Pincode',
+      'Department* (exact name from system)', 'Designation* (exact name from system)', 'Branch*', 'Grade',
+      'Reporting Manager (Employee Code)',
+      'Date of Joining* (YYYY-MM-DD)', 'Confirmation Date (YYYY-MM-DD)',
+      'Employment Type* (permanent/contract/probation/intern/part_time)',
+      'Employment Status* (active/inactive)',
+      'Probation Months', 'Notice Period Days',
+      'PAN Number', 'Aadhar Number', 'UAN Number', 'ESIC Number',
+      'Bank Name', 'Bank Account Number', 'Bank IFSC Code',
+      'Emergency Contact Name', 'Emergency Contact Relation', 'Emergency Contact Phone',
+    ];
+
+    const sampleRow = [
+      'EMP001',
+      'John', '', 'Doe',
+      'john.doe@company.com', 'john.personal@email.com', '9876543210', '',
+      '1990-01-15', 'male',
+      'single', 'O+',
+      'Parent Name',
+      '123 Main Street', 'City Name', 'State Name', '400001',
+      '', '', '', '',
+      'Engineering', 'Engineer', 'Main Office', 'L1',
+      '',
+      '2024-01-01', '',
+      'permanent', 'active',
+      '6', '30',
+      'ABCDE1234F', '123456789012', '100123456789', '1234567890',
+      'Bank Name', '1234567890123', 'BANK0001234',
+      'Emergency Contact Name', 'Relation', '9876543210',
+    ];
+
+    const instructionsData = [
+      ['Employee Bulk Import Template — Instructions'],
+      [''],
+      ['COLUMN 1 — Employee ID*'],
+      ['  Enter the unique employee code exactly as you want it stored (e.g. EMP001, EMP002).'],
+      ['  This is the permanent unique identifier for the employee. Must not already exist in the system.'],
+      [''],
+      ['DEPARTMENT & DESIGNATION ASSIGNMENT'],
+      ['  Simply type the department and designation name you want.'],
+      ['  If it does not exist in the system it will be AUTOMATICALLY CREATED during import.'],
+      ['  Names are case-insensitive — "engineering", "Engineering", "ENGINEERING" are all treated the same.'],
+      [''],
+      ['REQUIRED FIELDS (marked with *)'],
+      ['  Employee ID, First Name, Last Name, Work Email, Phone,'],
+      ['  Date of Birth, Date of Joining, Current Address, Current City, Current State, Current Pincode,'],
+      ['  Department, Designation, Branch, Employment Type, Employment Status'],
+      [''],
+      ['DATE FORMAT'],
+      ['  All dates must be in YYYY-MM-DD format (e.g. 2024-01-15)'],
+      [''],
+      ['GENDER'],
+      ['  Use: male / female / other'],
+      [''],
+      ['EMPLOYMENT TYPE'],
+      ['  Use: permanent / contract / probation / intern / part_time'],
+    ];
+
+    const instructionsSheet = XLSX.utils.aoa_to_sheet(instructionsData);
+    instructionsSheet['!cols'] = [{ wch: 90 }];
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
+    ws['!cols'] = headers.map((h: string, i: number) => ({ wch: i === 0 ? 14 : 22 }));
+
+    // Style header row
+    headers.forEach((_: any, i: number) => {
+      const cell = XLSX.utils.encode_cell({ r: 0, c: i });
+      if (!ws[cell]) ws[cell] = {};
+      ws[cell].s = { font: { bold: true }, fill: { fgColor: { rgb: 'F5A623' } } };
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, instructionsSheet, 'Instructions');
+    XLSX.utils.book_append_sheet(wb, ws, 'Employee Import Template');
+    XLSX.writeFile(wb, 'employee-import-template.xlsx');
+  };
+
+  const exportEmployees = async () => {
+    try {
+      const res = await fetch('/api/employees?limit=10000');
+      const json = await res.json();
+      if (!json.success) { toast.error('Failed to fetch employees'); return; }
+
+      const XLSX = require('xlsx');
+      const headers = [
+        'Employee ID*',
+        'First Name*', 'Middle Name', 'Last Name*',
+        'Work Email*', 'Personal Email', 'Phone*', 'Alternate Phone',
+        'Date of Birth* (YYYY-MM-DD)', 'Gender* (male/female/other)',
+        'Marital Status (single/married/divorced/widowed)', 'Blood Group (A+/A-/B+/B-/AB+/AB-/O+/O-)',
+        "Father's Name",
+        'Current Address*', 'Current City*', 'Current State*', 'Current Pincode*',
+        'Permanent Address', 'Permanent City', 'Permanent State', 'Permanent Pincode',
+        'Department* (exact name from system)', 'Designation* (exact name from system)', 'Branch*', 'Grade',
+        'Reporting Manager (Employee Code)',
+        'Date of Joining* (YYYY-MM-DD)', 'Confirmation Date (YYYY-MM-DD)',
+        'Employment Type* (permanent/contract/probation/intern/part_time)',
+        'Employment Status* (active/inactive)',
+        'Probation Months', 'Notice Period Days',
+        'PAN Number', 'Aadhar Number', 'UAN Number', 'ESIC Number',
+        'Bank Name', 'Bank Account Number', 'Bank IFSC Code',
+        'Emergency Contact Name', 'Emergency Contact Relation', 'Emergency Contact Phone',
+      ];
+
+      const fmt = (d: any) => d ? new Date(d).toISOString().split('T')[0] : '';
+
+      const rows = json.data.map((e: any) => [
+        e.employeeCode || '',
+        e.firstName || '', e.middleName || '', e.lastName || '',
+        e.email || '', e.personalEmail || '', e.phone || '', e.alternatePhone || '',
+        fmt(e.dateOfBirth), e.gender || '',
+        e.maritalStatus || '', e.bloodGroup || '',
+        e.fatherName || '',
+        e.currentAddress || '', e.currentCity || '', e.currentState || '', e.currentPincode || '',
+        e.permanentAddress || '', e.permanentCity || '', e.permanentState || '', e.permanentPincode || '',
+        e.Department?.name || '', e.Designation?.name || '', e.Branch?.name || '', e.Grade?.name || '',
+        e.reportingManager?.employeeCode || '',
+        fmt(e.dateOfJoining), fmt(e.confirmationDate),
+        e.employmentType || '', e.employmentStatus || '',
+        e.probationMonths ?? '', e.noticePeriodDays ?? '',
+        e.panNumber || '', e.aadharNumber || '', e.uanNumber || '', e.esicNumber || '',
+        e.bankName || '', e.bankAccount || '', e.bankIfsc || '',
+        e.emergencyContactName || '', e.emergencyContactRelation || '', e.emergencyContactPhone || '',
+      ]);
+
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      ws['!cols'] = headers.map((_: string, i: number) => ({ wch: i === 0 ? 14 : 22 }));
+      headers.forEach((_: any, i: number) => {
+        const cell = XLSX.utils.encode_cell({ r: 0, c: i });
+        if (!ws[cell]) ws[cell] = {};
+        ws[cell].s = { font: { bold: true }, fill: { fgColor: { rgb: 'F5A623' } } };
+      });
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Employee Export');
+      XLSX.writeFile(wb, `employee-export-${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success(`Exported ${rows.length} employees`);
+    } catch (e) {
+      toast.error('Export failed');
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="bg-[#f5a623] hover:bg-[#f5a623]/90">
-          <Upload className="w-4 h-4 mr-2" />
-          Bulk Import
-        </Button>
-      </DialogTrigger>
+    <>
+      <Button
+        variant="outline"
+        onClick={exportEmployees}
+        className="border-[#30363d] text-[#e2e8f0]"
+      >
+        <Download className="w-4 h-4 mr-2" />
+        Export All
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button className="bg-[#f5a623] hover:bg-[#f5a623]/90">
+            <Upload className="w-4 h-4 mr-2" />
+            Bulk Import
+          </Button>
+        </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-[#0d1117] border-[#30363d]">
         <DialogHeader>
           <DialogTitle className="text-white">Bulk Import Employees</DialogTitle>
@@ -436,5 +588,6 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

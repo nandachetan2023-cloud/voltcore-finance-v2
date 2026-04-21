@@ -136,161 +136,122 @@ async function validateAndImport(
 
   console.log('[Validation] Starting validation for', rows.length, 'rows')
 
-  // Get existing data for validation
   const existingEmployees = await db.employee.findMany({
     select: { employeeCode: true, email: true },
   })
   const existingCodes = new Set(existingEmployees.map(e => e.employeeCode))
   const existingEmails = new Set(existingEmployees.map(e => e.email))
 
-  const departments = await db.department.findMany()
-  const designations = await db.designation.findMany()
+  // Load existing departments, designations, branches (case-insensitive lookup cache)
+  let departments = await db.department.findMany()
+  let designations = await db.designation.findMany()
   const branches = await db.branch.findMany()
 
-  console.log('[Validation] Found:', departments.length, 'departments,', designations.length, 'designations,', branches.length, 'branches')
+  // In-memory caches so we don't re-create within the same import run
+  const deptCache = new Map<string, number>() // normalised name → id
+  const desigCache = new Map<string, number>()
+  departments.forEach(d => deptCache.set(d.name.toLowerCase().trim(), d.id))
+  designations.forEach(d => desigCache.set(d.name.toLowerCase().trim(), d.id))
 
-  // Default IDs if not found
-  const defaultDepartmentId = departments[0]?.id
-  const defaultDesignationId = designations[0]?.id
   const defaultBranchId = branches[0]?.id
+
+  // Helper: get or create department (case-insensitive, auto-create if missing)
+  const getOrCreateDept = async (name: string): Promise<number> => {
+    const key = name.toLowerCase().trim()
+    if (deptCache.has(key)) return deptCache.get(key)!
+    if (!dryRun) {
+      // Auto-generate a code from the name: take first 3 uppercase letters + id suffix
+      const baseCode = name.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase().substring(0, 6) || 'DEPT'
+      // Ensure code uniqueness by appending a timestamp fragment
+      const code = `${baseCode}-${Date.now().toString(36).toUpperCase().slice(-4)}`
+      const created = await db.department.create({
+        data: { name: name.trim(), code, updatedAt: new Date() },
+      })
+      deptCache.set(key, created.id)
+      return created.id
+    }
+    deptCache.set(key, -1)
+    return -1
+  }
+
+  // Helper: get or create designation (case-insensitive, auto-create if missing)
+  const getOrCreateDesig = async (name: string): Promise<number> => {
+    const key = name.toLowerCase().trim()
+    if (desigCache.has(key)) return desigCache.get(key)!
+    if (!dryRun) {
+      const created = await db.designation.create({
+        data: { name: name.trim(), updatedAt: new Date() },
+      })
+      desigCache.set(key, created.id)
+      return created.id
+    }
+    desigCache.set(key, -1)
+    return -1
+  }
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
-    const rowNum = i + 2 // Excel row number (1-indexed + header)
+    const rowNum = i + 2
 
-    console.log(`[Validation] Row ${rowNum}:`, {
-      employeeId: row['Employee ID'],
-      name: row['Name of Employee'],
-      email: row['Email'],
-    })
-
-    // Skip empty rows
-    if (!row['Employee ID'] && !row['Name of Employee']) {
-      console.log(`[Validation] Row ${rowNum}: Skipped (empty)`)
-      continue
-    }
+    if (!row['Employee ID'] && !row['Name of Employee']) continue
 
     const rowErrors: string[] = []
     const rowWarnings: string[] = []
 
-    // Validate required fields
-    if (!row['Employee ID']) {
-      rowErrors.push('Employee ID is required')
-    }
-    if (!row['Name of Employee']) {
-      rowErrors.push('Name of Employee is required')
-    }
-    if (!row['Email']) {
-      rowErrors.push('Email is required')
-    }
-    if (!row['Mobile No.']) {
-      rowErrors.push('Mobile No. is required')
-    }
-    if (!row['Date of Birth']) {
-      rowErrors.push('Date of Birth is required')
-    }
-    if (!row['Date of Joining']) {
-      rowErrors.push('Date of Joining is required')
-    }
-    if (!row['Present Address']) {
-      rowErrors.push('Present Address is required')
-    }
-    if (!row['Zip code']) {
-      rowErrors.push('Zip code is required')
-    }
-    if (!row['Department']) {
-      rowErrors.push('Department is required')
-    }
-    if (!row['Designation']) {
-      rowErrors.push('Designation is required')
-    }
+    if (!row['Employee ID']) rowErrors.push('Employee ID is required')
+    if (!row['Name of Employee']) rowErrors.push('Name of Employee is required')
+    if (!row['Email']) rowErrors.push('Email is required')
+    if (!row['Mobile No.']) rowErrors.push('Mobile No. is required')
+    if (!row['Date of Birth']) rowErrors.push('Date of Birth is required')
+    if (!row['Date of Joining']) rowErrors.push('Date of Joining is required')
+    if (!row['Present Address']) rowErrors.push('Present Address is required')
+    if (!row['Zip code']) rowErrors.push('Zip code is required')
+    if (!row['Department']) rowErrors.push('Department is required')
+    if (!row['Designation']) rowErrors.push('Designation is required')
 
-    // Check duplicates
-    if (row['Employee ID'] && existingCodes.has(`EMP${row['Employee ID']}`)) {
+    if (row['Employee ID'] && existingCodes.has(row['Employee ID'])) {
       rowErrors.push('Employee ID already exists')
     }
     if (row['Email'] && existingEmails.has(row['Email'])) {
       rowErrors.push('Email already exists')
     }
-
-    // Validate email format
     if (row['Email'] && !isValidEmail(row['Email'])) {
       rowErrors.push('Email is invalid')
     }
 
-    // Parse name
     const nameParts = parseName(row['Name of Employee'] || '')
     if (!nameParts.firstName || !nameParts.lastName) {
       rowErrors.push('Name must have at least first and last name')
     }
 
-    // Validate gender
     const gender = row['Sex']
     if (gender && !['Male', 'Female', 'male', 'female', 'M', 'F', 'Other'].includes(gender)) {
       rowWarnings.push('Sex should be Male/Female/Other, defaulting to Male')
     }
 
-    // If there are errors, skip this row
     if (rowErrors.length > 0) {
-      rowErrors.forEach(msg => {
-        errors.push({
-          row: rowNum,
-          employeeCode: row['Employee ID'] || 'N/A',
-          field: '',
-          message: msg,
-        })
-      })
+      rowErrors.forEach(msg => errors.push({ row: rowNum, employeeCode: row['Employee ID'] || 'N/A', field: '', message: msg }))
       continue
     }
 
-    // Add warnings
-    rowWarnings.forEach(msg => {
-      warnings.push({
-        row: rowNum,
-        employeeCode: row['Employee ID'],
-        field: '',
-        message: msg,
-      })
-    })
+    rowWarnings.forEach(msg => warnings.push({ row: rowNum, employeeCode: row['Employee ID'], field: '', message: msg }))
 
-    // Find department, designation, branch
-    let departmentId = defaultDepartmentId
-    let designationId = defaultDesignationId
+    // Resolve department — auto-create if not found (case-insensitive)
+    const departmentId = await getOrCreateDept(row['Department'])
+
+    // Resolve designation — auto-create if not found (case-insensitive)
+    const designationId = await getOrCreateDesig(row['Designation'])
+
+    // Resolve branch
     let branchId = defaultBranchId
-
-    if (row['Department']) {
-      const dept = departments.find(d => 
-        d.name.toLowerCase() === row['Department'].toLowerCase() ||
-        d.code?.toLowerCase() === row['Department'].toLowerCase()
-      )
-      if (dept) departmentId = dept.id
-      else rowWarnings.push(`Department '${row['Department']}' not found, using default`)
-    }
-
-    if (row['Designation']) {
-      const desig = designations.find(d => 
-        d.name.toLowerCase() === row['Designation'].toLowerCase()
-      )
-      if (desig) designationId = desig.id
-      else rowWarnings.push(`Designation '${row['Designation']}' not found, using default`)
-    }
-
     if (row['Company'] || row['Location']) {
-      const branchIdentifier = row['Company'] || row['Location']
-      const branch = branches.find(b => 
-        b.name.toLowerCase() === branchIdentifier?.toLowerCase()
-      )
+      const branchIdentifier = (row['Company'] || row['Location'] || '').toLowerCase()
+      const branch = branches.find(b => b.name.toLowerCase() === branchIdentifier)
       if (branch) branchId = branch.id
-      else rowWarnings.push(`Branch '${branchIdentifier}' not found, using default`)
     }
 
-    if (!departmentId || !designationId || !branchId) {
-      errors.push({
-        row: rowNum,
-        employeeCode: row['Employee ID'],
-        field: 'department/designation/branch',
-        message: 'No default department, designation, or branch found. Please create at least one of each.',
-      })
+    if (!branchId) {
+      errors.push({ row: rowNum, employeeCode: row['Employee ID'], field: 'branch', message: 'No branch found. Please create at least one branch first.' })
       continue
     }
 
@@ -305,7 +266,7 @@ async function validateAndImport(
 
     // Prepare employee data
     const employeeData = {
-      employeeCode: `EMP${row['Employee ID']}`, // Add EMP prefix
+      employeeCode: row['Employee ID'], // Use as-is — no prefix added
       firstName: nameParts.firstName,
       middleName: nameParts.middleName || null,
       lastName: nameParts.lastName,

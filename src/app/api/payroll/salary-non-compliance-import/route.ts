@@ -154,12 +154,13 @@ export async function POST(request: NextRequest) {
       const rowNumber = i + 2; // +2 because of header and 0-index
 
       try {
-        // Skip empty rows
-        if (!row || row.length === 0 || !row[2]) continue;
+        // Skip empty rows — col 0 = EMPLOYEE ID, col 3 = TOKEN NO (employee code), col 4 = NAME
+        if (!row || row.length === 0 || (!row[0] && !row[3])) continue;
 
-        const tokenNo = String(row[2] || '').trim();
-        if (!tokenNo) {
-          errors.push({ row: rowNumber, error: 'Missing TOKEN NO.' });
+        const employeeIdCol = String(row[0] || '').trim(); // EMPLOYEE ID
+        const tokenNo = String(row[3] || '').trim();       // TOKEN NO (col 3, was col 2 before Employee ID added)
+        if (!tokenNo && !employeeIdCol) {
+          errors.push({ row: rowNumber, error: 'Missing TOKEN NO. and Employee ID' });
           failed++;
           continue;
         }
@@ -167,14 +168,13 @@ export async function POST(request: NextRequest) {
         // Check if this row has a manual mapping
         const manualMapping = manualMappings.get(rowNumber);
         
-        // If manually skipped, skip this row
         if (manualMapping && manualMapping.action === 'skip') {
           skipped++;
           continue;
         }
 
-        // Determine which employee code to use
-        let employeeCodeToUse = tokenNo;
+        // Prefer Employee ID col, then TOKEN NO, then manual mapping
+        let employeeCodeToUse = employeeIdCol || tokenNo;
         if (manualMapping && manualMapping.action === 'map' && manualMapping.mappedEmployeeCode) {
           employeeCodeToUse = manualMapping.mappedEmployeeCode;
         }
@@ -190,59 +190,59 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Parse data - Column indices based on 68-column format
+        // Parse data — col 0 = EMPLOYEE ID, then original 68-col format starts at col 1
         const salaryData: SalaryNonComplianceRow = {
-          slNo: Number(row[0]) || 0,
-          tokenNo,
-          employeeName: String(row[3] || ''),
-          fatherName: String(row[4] || ''),
-          doj: String(row[5] || ''),
-          dob: String(row[6] || ''),
-          bankName: String(row[7] || ''),
-          accountNo: String(row[8] || ''),
-          ifscCode: String(row[9] || ''),
-          // Column 10 is empty
-          uanNo: String(row[11] || ''),
-          esicNo: String(row[12] || ''),
-          designation: String(row[13] || ''),
-          department: String(row[14] || ''),
-          natureOfDesignation: String(row[15] || ''),
-          monthlyGrossSalary: Number(row[16]) || 0,
-          actualAttendance: Number(row[17]) || 0,
-          extraDays: Number(row[18]) || 0,
-          phDays: Number(row[19]) || 0,
-          actualEarnWages: Number(row[20]) || 0,
-          actualOtHrs: Number(row[21]) || 0,
-          actualOtAmount: Number(row[22]) || 0,
-          grossEarnWages: Number(row[23]) || 0,
-          basicWagesPerDay: Number(row[24]) || 0,
-          monthlyWorkingDays: Number(row[25]) || 26,
-          otHrs: Number(row[26]) || 0,
-          attendance: Number(row[27]) || 0,
-          ph: Number(row[28]) || 0,
-          wagesPerMonth: Number(row[29]) || 0,
-          earnWages: Number(row[30]) || 0,
-          phAmount: Number(row[31]) || 0,
-          totalEarnWages: Number(row[32]) || 0,
-          otHrsPayment: Number(row[33]) || 0,
-          totalNettPayable: Number(row[34]) || 0,
-          epf: Number(row[35]) || 0,
-          esic: Number(row[36]) || 0,
-          pt: Number(row[37]) || 0,
-          totalDeduction: Number(row[38]) || 0,
-          nettPayable: Number(row[39]) || 0,
-          // Columns 40-42 are signature/empty
-          advance: Number(row[44]) || 0,
-          arrears: Number(row[45]) || 0,
-          // Column 48 is empty
-          monthlyBasicSalary: Number(row[54]) || 0,
-          monthlyHRA: Number(row[58]) || 0,
-          monthlySiteAllow: Number(row[59]) || 0,
-          monthlyLTA: Number(row[60]) || 0,
-          monthlySpecialAllow: Number(row[61]) || 0,
-          monthlyAttendanceAllow: Number(row[62]) || 0,
-          totalSalary: Number(row[63]) || 0,
-          tds: Number(row[66]) || 0,
+          slNo: Number(row[1]) || 0,                    // col 1: SL NO.
+          tokenNo,                                        // col 3: TOKEN NO. (already read)
+          employeeName: String(row[4] || ''),            // col 4: NAME OF EMPLOYEE
+          fatherName: String(row[5] || ''),              // col 5: FATHER'S NAME
+          doj: String(row[6] || ''),                     // col 6: DOJ
+          dob: String(row[7] || ''),                     // col 7: DOB
+          bankName: String(row[8] || ''),                // col 8: BANK NAME
+          accountNo: String(row[9] || ''),               // col 9: ACCOUNT NO.
+          ifscCode: String(row[10] || ''),               // col 10: IFSC CODE NO.
+          // col 11 is empty
+          uanNo: String(row[12] || ''),                  // col 12: UAN NO.
+          esicNo: String(row[13] || ''),                 // col 13: ESIC IP NO
+          designation: String(row[14] || ''),            // col 14: DESIGNATION
+          department: String(row[15] || ''),             // col 15: DEPARTMENT
+          natureOfDesignation: String(row[16] || ''),    // col 16: NATURE OF DESIGNATION
+          monthlyGrossSalary: Number(row[17]) || 0,      // col 17: MONTHLY GROSS SALARY
+          actualAttendance: Number(row[18]) || 0,        // col 18: ACTUAL ATTENDANCE
+          extraDays: Number(row[19]) || 0,               // col 19: EXTRA DAYS
+          phDays: Number(row[20]) || 0,                  // col 20: PH DAYS
+          actualEarnWages: Number(row[21]) || 0,         // col 21: ACTUAL EARN WAGES
+          actualOtHrs: Number(row[22]) || 0,             // col 22: ACTUAL OT HRS
+          actualOtAmount: Number(row[23]) || 0,          // col 23: ACTUAL OT AMOUNT
+          grossEarnWages: Number(row[24]) || 0,          // col 24: GROSS EARN WAGES
+          basicWagesPerDay: Number(row[25]) || 0,        // col 25: BASIC WAGES/DAY
+          monthlyWorkingDays: Number(row[26]) || 26,     // col 26: MONTHLY WORKING DAYS
+          otHrs: Number(row[27]) || 0,                   // col 27: OT. HRS
+          attendance: Number(row[28]) || 0,              // col 28: ATTENDANCE
+          ph: Number(row[29]) || 0,                      // col 29: PH
+          wagesPerMonth: Number(row[30]) || 0,           // col 30: WAGES/MONTH
+          earnWages: Number(row[31]) || 0,               // col 31: EARN WAGES
+          phAmount: Number(row[32]) || 0,                // col 32: PH AMOUNT
+          totalEarnWages: Number(row[33]) || 0,          // col 33: TOTAL EARN WAGES
+          otHrsPayment: Number(row[34]) || 0,            // col 34: OT HRS PAYMENT
+          totalNettPayable: Number(row[35]) || 0,        // col 35: TOTAL NETT PAYBLE
+          epf: Number(row[36]) || 0,                     // col 36: EPF
+          esic: Number(row[37]) || 0,                    // col 37: ESIC
+          pt: Number(row[38]) || 0,                      // col 38: PT
+          totalDeduction: Number(row[39]) || 0,          // col 39: TOTAL DEDUCTION
+          nettPayable: Number(row[40]) || 0,             // col 40: NETT PAYBLE
+          // cols 41-43 = signature/empty
+          advance: Number(row[45]) || 0,                 // col 45: ADVANCE
+          arrears: Number(row[46]) || 0,                 // col 46: ARREARS
+          // col 49 empty, col 50 LEAVE, col 51 BONUS, cols 52-54 empty
+          monthlyBasicSalary: Number(row[55]) || 0,      // col 55: MONTHLY BASIC SALARY
+          monthlyHRA: Number(row[59]) || 0,              // col 59: MONTHLY House Rent Allow.
+          monthlySiteAllow: Number(row[60]) || 0,        // col 60: Monthly Site Allow.
+          monthlyLTA: Number(row[61]) || 0,              // col 61: Monthly Leave Travel Allow.
+          monthlySpecialAllow: Number(row[62]) || 0,     // col 62: Monthly Special Allow.
+          monthlyAttendanceAllow: Number(row[63]) || 0,  // col 63: MonthlyAttendence Allow.
+          totalSalary: Number(row[64]) || 0,             // col 64: TOTAL SALARY
+          tds: Number(row[67]) || 0,                     // col 67: TDS
         };
 
         // Check if payroll item already exists

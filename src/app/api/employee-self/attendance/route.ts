@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       orderBy: { logDate: 'desc' },
       select: {
         id: true, logDate: true, punchIn: true, punchOut: true,
-        status: true, source: true,
+        status: true, source: true, lateMinutes: true, fineAmount: true,
       },
     })
 
@@ -50,11 +50,13 @@ export async function GET(request: NextRequest) {
     const late = records.filter(r => r.status === 'late').length
     const absent = records.filter(r => r.status === 'absent').length
     const halfDay = records.filter(r => r.status === 'half_day').length
+    const totalFines = records.reduce((sum, r) => sum + Number(r.fineAmount || 0), 0)
+    const totalLateMinutes = records.reduce((sum, r) => sum + (r.lateMinutes || 0), 0)
 
     return NextResponse.json({
       success: true,
       data: records,
-      summary: { present, late, absent, halfDay, total: records.length },
+      summary: { present, late, absent, halfDay, total: records.length, totalFines, totalLateMinutes },
     })
   } catch (e) {
     console.error('Employee self attendance error:', e)

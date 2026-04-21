@@ -14,6 +14,8 @@ model AttendanceLog {
   punchIn           DateTime?
   punchOut          DateTime?
   status            String    @default("present")
+  lateMinutes       Int       @default(0)
+  fineAmount        Decimal   @default(0) @db.Decimal(10, 2)
   biometricDeviceId String?
   biometricLogId    String?
   source            String    @default("manual")
@@ -88,6 +90,7 @@ model Department {
   Employee       Employee[]
   AttendanceRule AttendanceRule[]
   LeavePolicy    LeavePolicy[]
+  ChecklistTemplate ChecklistTemplate[]
 }
 
 model Designation {
@@ -95,6 +98,7 @@ model Designation {
   name        String        @unique
   Employee    Employee[]
   LeavePolicy LeavePolicy[]
+  ChecklistTemplate ChecklistTemplate[]
 }
 
 model Employee {
@@ -162,6 +166,8 @@ model Employee {
   SalaryStructureAssignment SalaryStructureAssignment[]
   ShiftAssignment           ShiftAssignment[]
   EmployeeRequest           EmployeeRequest[]
+  OnboardingChecklist       OnboardingChecklist[]
+  Resignation               Resignation[]
 }
 
 model Invoice {
@@ -839,4 +845,132 @@ model Notification {
 
   @@index([userEmail, isRead])
   @@index([createdAt])
+}
+
+// ── Onboarding Checklist Templates (defined in Organization) ─────
+model ChecklistTemplate {
+  id            Int                      @id @default(autoincrement())
+  name          String
+  description   String?
+  departmentId  Int?
+  designationId Int?
+  isActive      Boolean                  @default(true)
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime
+  Department    Department?              @relation(fields: [departmentId], references: [id])
+  Designation   Designation?             @relation(fields: [designationId], references: [id])
+  tasks         ChecklistTemplateTask[]
+  instances     OnboardingChecklist[]
+
+  @@index([departmentId])
+  @@index([designationId])
+}
+
+model ChecklistTemplateTask {
+  id                  Int                @id @default(autoincrement())
+  templateId          Int
+  title               String
+  description         String?
+  assignedRole        String             @default("hr")   // hr | it | manager | finance | admin
+  dueDayOffset        Int                @default(1)       // days after joining
+  dependsOnTaskId     Int?               // dependency
+  requiresDocument    Boolean            @default(false)
+  order               Int                @default(0)
+  template            ChecklistTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  dependsOn           ChecklistTemplateTask? @relation("TaskDependency", fields: [dependsOnTaskId], references: [id])
+  dependents          ChecklistTemplateTask[] @relation("TaskDependency")
+  instanceTasks       OnboardingTask[]
+
+  @@index([templateId])
+}
+
+// ── Onboarding Checklist Instances (per employee, in HRMS) ────────
+model OnboardingChecklist {
+  id           Int                @id @default(autoincrement())
+  employeeId   Int
+  templateId   Int
+  status       String             @default("in_progress") // in_progress | completed | cancelled
+  startedAt    DateTime           @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime
+  Employee     Employee           @relation(fields: [employeeId], references: [id])
+  template     ChecklistTemplate  @relation(fields: [templateId], references: [id])
+  tasks        OnboardingTask[]
+
+  @@index([employeeId])
+}
+
+model OnboardingTask {
+  id               Int                    @id @default(autoincrement())
+  checklistId      Int
+  templateTaskId   Int
+  status           String                 @default("pending") // pending | in_progress | completed | skipped
+  completedBy      Int?
+  completedAt      DateTime?
+  notes            String?
+  documentPath     String?                // filename for display
+  documentData     Bytes?                 // file content stored in DB (Option 1)
+  documentMimeType String?                // e.g. "application/pdf", "image/jpeg"
+  dueDate          DateTime?
+  checklist        OnboardingChecklist    @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  templateTask     ChecklistTemplateTask  @relation(fields: [templateTaskId], references: [id])
+
+  @@index([checklistId])
+}
+
+// ── Resignation & Offboarding ─────────────────────────────────────
+model Resignation {
+  id                Int       @id @default(autoincrement())
+  employeeId        Int
+  submittedAt       DateTime  @default(now())
+  reason            String
+  requestedLwd      DateTime  // Last Working Day requested by employee
+  calculatedLwd     DateTime? // System-calculated LWD
+  noticePeriodDays  Int       @default(30)
+  buyoutDays        Int       @default(0)  // days bought out
+  status            String    @default("pending") // pending | approved | rejected | withdrawn
+  currentStep       Int       @default(1)
+  managerApprovedAt DateTime?
+  hrApprovedAt      DateTime?
+  rejectionReason   String?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime
+  Employee          Employee  @relation(fields: [employeeId], references: [id])
+  exitInterview     ExitInterview?
+  clearances        ExitClearance[]
+
+  @@index([employeeId, status])
+}
+
+// ── Exit Interview & Clearance ────────────────────────────────────
+model ExitInterview {
+  id              Int         @id @default(autoincrement())
+  resignationId   Int         @unique
+  conductedAt     DateTime?
+  primaryReason   String?     // compensation | growth | culture | personal | relocation | other
+  cultureFeedback String?
+  managementFeedback String?
+  suggestions     String?
+  wouldRejoin     Boolean?
+  rating          Int?        // 1-5 overall company rating
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime
+  resignation     Resignation @relation(fields: [resignationId], references: [id])
+}
+
+model ExitClearance {
+  id            Int         @id @default(autoincrement())
+  resignationId Int
+  department    String      // it | finance | admin | hr | manager
+  status        String      @default("pending") // pending | cleared | flagged
+  clearedBy     Int?
+  clearedAt     DateTime?
+  remarks       String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime
+  resignation   Resignation @relation(fields: [resignationId], references: [id])
+
+  @@index([resignationId])
 }

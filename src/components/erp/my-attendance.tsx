@@ -8,9 +8,10 @@ interface AttendanceRecord {
   id: number; logDate: string;
   punchIn: string | null; punchOut: string | null;
   status: string; source: string;
+  lateMinutes?: number; fineAmount?: number;
 }
 
-interface Summary { present: number; late: number; absent: number; halfDay: number; total: number; }
+interface Summary { present: number; late: number; absent: number; halfDay: number; total: number; totalFines?: number; totalLateMinutes?: number; }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   present:  { label: 'Present',  color: '#00e676', bg: 'rgba(0,230,118,0.12)' },
@@ -125,7 +126,7 @@ export default function MyAttendance() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         {[
           { label: 'Present', value: summary.present, color: '#00e676' },
           { label: 'Late', value: summary.late, color: '#f5a623' },
@@ -138,6 +139,23 @@ export default function MyAttendance() {
           </div>
         ))}
       </div>
+
+      {/* Fine / Late summary */}
+      {((summary.totalFines ?? 0) > 0 || (summary.totalLateMinutes ?? 0) > 0) && (
+        <div className="flex items-center gap-3 mb-4 px-3 py-2.5 bg-[#f5a623]/8 border border-[#f5a623]/20 rounded-xl">
+          <div className="text-[11px] text-[#f5a623] font-semibold">This month:</div>
+          {(summary.totalLateMinutes ?? 0) > 0 && (
+            <div className="text-[11px] text-[#8899aa]">
+              <span className="text-[#f5a623] font-bold">{summary.totalLateMinutes} min</span> total late
+            </div>
+          )}
+          {(summary.totalFines ?? 0) > 0 && (
+            <div className="text-[11px] text-[#8899aa]">
+              <span className="text-[#ff3d3d] font-bold">₹{Number(summary.totalFines).toFixed(0)}</span> in fines
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Records */}
       {loading ? (
@@ -154,7 +172,7 @@ export default function MyAttendance() {
           <table className="w-full text-[12px]">
             <thead>
               <tr className="border-b border-[#252e3a] bg-[#141920]">
-                {['Date', 'Punch In', 'Punch Out', 'Hours', 'Status'].map(h => (
+                {['Date', 'Punch In', 'Punch Out', 'Hours', 'Late', 'Fine', 'Status'].map(h => (
                   <th key={h} className="text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#5a6878]">{h}</th>
                 ))}
               </tr>
@@ -178,6 +196,16 @@ export default function MyAttendance() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-[#8899aa]">{calcHours(r.punchIn, r.punchOut)}</td>
+                    <td className="px-4 py-3">
+                      {(r.lateMinutes ?? 0) > 0
+                        ? <span className="text-[10px] font-semibold text-[#f5a623]">{r.lateMinutes}m</span>
+                        : <span className="text-[#5a6878]">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(r.fineAmount ?? 0) > 0
+                        ? <span className="text-[10px] font-semibold text-[#ff3d3d]">₹{Number(r.fineAmount).toFixed(0)}</span>
+                        : <span className="text-[#5a6878]">—</span>}
+                    </td>
                     <td className="px-4 py-3">
                       <span className="text-[10px] font-semibold px-2 py-[3px] rounded-full"
                         style={{ background: cfg.bg, color: cfg.color }}>

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PayrollCalculator } from '@/lib/services/payroll-calculator';
 import { getHolidaysInRange } from '@/lib/services/holiday-service';
 import { calculateTotalOvertimeHours } from '@/lib/services/overtime-calculator';
+import { getActiveShiftAssignment } from '@/lib/services/attendance-rule-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,6 +112,19 @@ export async function POST(request: NextRequest) {
     // Process each employee
     for (const employee of employees) {
       try {
+        // ── Shift guard: skip + deactivate employees without an active shift ──
+        const payrollDate = new Date(year, month - 1, 1)
+        const shiftAssignment = await getActiveShiftAssignment(employee.id, payrollDate, db)
+        if (!shiftAssignment) {
+          // Deactivate the employee — no shift means not eligible for payroll
+          await db.employee.update({
+            where: { id: employee.id },
+            data: { isActive: false, employmentStatus: 'inactive', updatedAt: new Date() },
+          }).catch(() => {})
+          errors.push({ employeeId: employee.id, error: 'Skipped: no active shift assignment — employee marked inactive' })
+          continue
+        }
+
         // Check for duplicate
         const existing = await db.payrollItem.findFirst({
           where: {
@@ -146,7 +160,14 @@ export async function POST(request: NextRequest) {
         });
 
         // Calculate attendance (excluding holidays)
-        const presentDays = attendanceLogs.filter(log => log.status === 'present').length;
+        const presentDays = attendanceLogs.filter(log =>
+          ['present', 'late', 'half_day'].includes(log.status)
+        ).length;
+
+        // Sum attendance fines for the period
+        const totalAttendanceFines = attendanceLogs.reduce(
+          (sum, log) => sum + Number(log.fineAmount || 0), 0
+        );
         
         // Get paid leave days
         const leaveRequests = await db.leaveRequest.findMany({
@@ -207,7 +228,7 @@ export async function POST(request: NextRequest) {
           year,
           totalOTHours,
           0, // TDS
-          0  // Other deductions
+          totalAttendanceFines  // Attendance rule fines as other deductions
         );
 
         // Create payroll item
