@@ -342,7 +342,7 @@ async function validateAndImport(
   return {
     success: true,
     summary: {
-      totalRows: rows.filter(r => r.employee_id || r.full_name).length,
+      totalRows: rows.filter(r => r['Employee ID'] || r['Name of Employee']).length,
       validRows: validRows.length,
       importedRows: dryRun ? 0 : imported.length,
       skippedRows: errors.length,

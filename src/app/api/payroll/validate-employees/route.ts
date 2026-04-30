@@ -37,7 +37,12 @@ export async function POST(request: NextRequest) {
           name.toLowerCase().includes('form')
         ) || workbook.SheetNames[0];
       } else {
-        targetSheet = workbook.SheetNames.find(name => name === 'COMBINED SALARY SHEET') || workbook.SheetNames[0];
+        targetSheet = workbook.SheetNames.find(name =>
+          name === 'NON-COMPLIANCE SALARY SHEET' ||
+          name === 'COMBINED SALARY SHEET' ||
+          name.toLowerCase().includes('non-compliance') ||
+          name.toLowerCase().includes('salary')
+        ) || workbook.SheetNames[0];
       }
     }
     
@@ -136,32 +141,41 @@ export async function POST(request: NextRequest) {
       let employee = null;
 
       if (formatType === 'compliance') {
-        // Compliance format: Column 2 (index 1) = "Name of the workman"
-        nameInSheet = String(row[1] || '').trim();
-        if (!nameInSheet) continue;
-        
-        identifier = nameInSheet;
-        
-        // Try to match by name first
-        employee = employeeByNameMap.get(nameInSheet.toLowerCase());
-        
-        // If not found, try partial matching
-        if (!employee) {
-          for (const [fullName, emp] of employeeByNameMap.entries()) {
-            if (fullName.includes(nameInSheet.toLowerCase()) || nameInSheet.toLowerCase().includes(fullName)) {
-              employee = emp;
-              break;
+        // Compliance format (26-col): col 0 = Sl. No., col 1 = EMPLOYEE ID, col 2 = Name of workman
+        const employeeId = String(row[1] || '').trim(); // EMPLOYEE ID (primary)
+        nameInSheet     = String(row[2] || '').trim(); // Name of workman
+        if (!nameInSheet && !employeeId) continue;
+
+        identifier = employeeId || nameInSheet;
+
+        // Try EMPLOYEE ID first (exact code match), then fall back to name
+        employee = employeeByCodeMap.get(employeeId.toLowerCase());
+
+        if (!employee && nameInSheet) {
+          employee = employeeByNameMap.get(nameInSheet.toLowerCase());
+          // Partial name match fallback
+          if (!employee) {
+            for (const [fullName, emp] of employeeByNameMap.entries()) {
+              if (fullName.includes(nameInSheet.toLowerCase()) || nameInSheet.toLowerCase().includes(fullName)) {
+                employee = emp;
+                break;
+              }
             }
           }
         }
       } else {
-        // Non-compliance format: Column 3 (index 2) = "TOKEN NO."
-        identifier = String(row[2] || '').trim();
-        nameInSheet = String(row[3] || '').trim();
+        // Non-compliance format (69-col):
+        // col 0 = SL NO., col 1 = EMPLOYEE ID, col 2 = WORKMEN SL. NO., col 3 = TOKEN NO., col 4 = NAME
+        const employeeId = String(row[1] || '').trim(); // EMPLOYEE ID (primary)
+        const tokenNo    = String(row[3] || '').trim(); // TOKEN NO. (fallback)
+        nameInSheet      = String(row[4] || '').trim(); // NAME OF EMPLOYEE
+
+        identifier = employeeId || tokenNo;
         if (!identifier) continue;
-        
-        // Match by employee code
-        employee = employeeByCodeMap.get(identifier.toLowerCase());
+
+        // Match by EMPLOYEE ID first, then TOKEN NO.
+        employee = employeeByCodeMap.get(employeeId.toLowerCase()) ||
+                   employeeByCodeMap.get(tokenNo.toLowerCase());
       }
 
       if (employee) {

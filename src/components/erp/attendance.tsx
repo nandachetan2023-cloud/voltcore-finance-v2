@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Users, UserX, CalendarOff, Clock, Plus, Pencil, Trash2,
-  AlertTriangle, Loader2, Search, Info
+  AlertTriangle, Loader2, Search, Info, X
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -48,11 +48,10 @@ interface AttendanceFormData {
   status: string;
 }
 
-const SHIFTS = ['Day A', 'Day B', 'Night B', 'General'];
 const STATUSES = ['Present', 'Absent', 'Late', 'On Leave', 'Half Day'];
 
 const emptyForm: AttendanceFormData = {
-  empId: '', site: '', date: '', timeIn: '', timeOut: '', otHours: 0, shift: 'Day A', status: 'Present',
+  empId: '', site: '', date: '', timeIn: '', timeOut: '', otHours: 0, shift: '', status: 'Present',
 };
 
 const statusColor = (record: AttendanceRecord) => {
@@ -121,6 +120,114 @@ function StatCard({ icon: Icon, label, value, color }: {
 const inputCls = "w-full bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-2 text-[12px] text-[#e2e8f0] outline-none transition-colors focus:border-[#f5a623]";
 const selectCls = "w-full bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-2 text-[12px] text-[#e2e8f0] outline-none transition-colors focus:border-[#f5a623] appearance-none cursor-pointer";
 
+/* ------------------------------------------------------------------ */
+/*  Searchable Employee Select                                         */
+/* ------------------------------------------------------------------ */
+
+function EmployeeSearchSelect({
+  employees,
+  value,
+  onChange,
+}: {
+  employees: EmployeeInfo[]
+  value: string
+  onChange: (id: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const selected = employees.find(e => e.id === value)
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return employees
+    const q = query.toLowerCase()
+    return employees.filter(e =>
+      e.empId.toLowerCase().includes(q) ||
+      e.name.toLowerCase().includes(q)
+    )
+  }, [employees, query])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleSelect = (emp: EmployeeInfo) => {
+    onChange(emp.id)
+    setQuery('')
+    setOpen(false)
+  }
+
+  const handleClear = () => {
+    onChange('')
+    setQuery('')
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        className={selectCls + ' flex items-center gap-2 cursor-text !py-[7px]'}
+        onClick={() => setOpen(true)}
+      >
+        <Search size={12} className="text-[#5a6878] shrink-0" />
+        {open ? (
+          <input
+            autoFocus
+            className="flex-1 bg-transparent outline-none text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878]"
+            placeholder="Search by name or code..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
+        ) : (
+          <span className={`flex-1 text-[12px] truncate ${selected ? 'text-[#e2e8f0]' : 'text-[#5a6878]'}`}>
+            {selected ? `${selected.name} (${selected.empId})` : 'Select employee'}
+          </span>
+        )}
+        {selected && !open && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); handleClear() }}
+            className="text-[#5a6878] hover:text-[#ff3d3d] transition-colors shrink-0"
+          >
+            <X size={12} />
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#0d1117] border border-[#2e3a48] rounded-lg shadow-xl max-h-48 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-4 text-center text-[10px] text-[#5a6878]">
+              No employees found
+            </div>
+          ) : (
+            filtered.map(emp => (
+              <button
+                key={emp.id}
+                type="button"
+                onClick={() => handleSelect(emp)}
+                className={`w-full text-left px-3 py-2 text-[11px] hover:bg-[#141920] transition-colors border-b border-[#1e252e] last:border-0 ${value === emp.id ? 'bg-[#f5a623]/10 text-[#f5a623]' : 'text-[#e2e8f0]'}`}
+              >
+                <span className="font-semibold" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+                  {emp.empId}
+                </span>
+                <span className="text-[#8899aa] mx-1">–</span>
+                {emp.name}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AttendanceModule() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,6 +241,9 @@ export default function AttendanceModule() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<AttendanceFormData>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [shifts, setShifts] = useState<{ id: number; name: string; startTime: string; endTime: string }[]>([]);
+  const [biometricSites, setBiometricSites] = useState<{ id: number; siteId: string; siteName: string }[]>([]);
+  const [customSiteMode, setCustomSiteMode] = useState(false);
   const { triggerCreate } = useERPStore();
 
   useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
@@ -195,7 +305,49 @@ export default function AttendanceModule() {
     } catch { /* silent */ }
   }, []);
 
-  useEffect(() => { fetchData(); fetchEmployees(); }, [fetchData, fetchEmployees]);
+  const fetchShifts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/shifts');
+      const json = await res.json();
+      if (json.success) setShifts(json.data);
+    } catch { /* silent */ }
+  }, []);
+
+  const fetchBiometricSites = useCallback(async () => {
+    try {
+      const res = await fetch('/api/biometric/sites-list');
+      const json = await res.json();
+      console.log('🔍 Biometric sites API response:', json);
+      if (json.success) {
+        console.log('✅ Active biometric sites loaded:', json.data.length, json.data);
+        setBiometricSites(json.data);
+      } else {
+        console.error('❌ Failed to fetch biometric sites:', json.error);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching biometric sites:', error);
+    }
+  }, []);
+
+  // When employee changes in the form, auto-populate their active shift assignment
+  const handleEmployeeChange = useCallback(async (empId: string) => {
+    setForm(f => ({ ...f, empId, shift: '' }));
+    if (!empId) return;
+    try {
+      // Find the employee's numeric ID from the list
+      const emp = employeeList.find(e => e.empId === empId);
+      if (!emp) return;
+      const res = await fetch(`/api/shift-assignments?employeeId=${emp.id}&active=true`);
+      const json = await res.json();
+      if (json.success && json.data?.length > 0) {
+        const activeAssignment = json.data[0];
+        const shiftName = activeAssignment.Shift?.name || activeAssignment.shift?.name || '';
+        if (shiftName) setForm(f => ({ ...f, shift: shiftName }));
+      }
+    } catch { /* silent — shift stays blank */ }
+  }, [employeeList]);
+
+  useEffect(() => { fetchData(); fetchEmployees(); fetchShifts(); fetchBiometricSites(); }, [fetchData, fetchEmployees, fetchShifts, fetchBiometricSites]);
 
   const filteredRecords = useMemo(() => {
     if (!dateFilter) return records;
@@ -257,7 +409,11 @@ export default function AttendanceModule() {
 
   const { presentToday, absent, onLeave, otWorkers } = stats;
 
-  const openCreate = () => { setForm({ ...emptyForm, date: dateFilter || new Date().toISOString().split('T')[0] }); setCreateOpen(true); };
+  const openCreate = () => { 
+    setForm({ ...emptyForm, date: dateFilter || new Date().toISOString().split('T')[0] }); 
+    setCustomSiteMode(false);
+    setCreateOpen(true); 
+  };
   const openEdit = (r: AttendanceRecord) => {
     const formData = { 
       empId: r.employee.id, 
@@ -271,6 +427,9 @@ export default function AttendanceModule() {
     };
     setForm(formData);
     setSelectedId(r.id);
+    // Check if the site value matches any biometric site
+    const matchesBiometricSite = biometricSites.some(site => site.siteId === r.site);
+    setCustomSiteMode(!matchesBiometricSite);
     setEditOpen(true);
   };
   const openDelete = (id: string) => { setSelectedId(id); setDeleteOpen(true); };
@@ -438,10 +597,11 @@ export default function AttendanceModule() {
         <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">
           Employee <span className="text-[#ff3d3d]">*</span>
         </label>
-        <select className={selectCls} value={form.empId} onChange={e => setForm(f => ({ ...f, empId: e.target.value }))}>
-          <option value="">Select employee</option>
-          {employeeList.map(e => <option key={e.id} value={e.id}>{e.name} ({e.empId})</option>)}
-        </select>
+        <EmployeeSearchSelect
+          employees={employeeList}
+          value={form.empId}
+          onChange={handleEmployeeChange}
+        />
       </div>
       <div>
         <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">
@@ -459,7 +619,74 @@ export default function AttendanceModule() {
       </div>
       <div>
         <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">Site</label>
-        <input className={inputCls} value={form.site} onChange={e => setForm(f => ({ ...f, site: e.target.value }))} placeholder="Site name (optional)" />
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCustomSiteMode(false)}
+              className={`flex-1 px-3 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
+                !customSiteMode
+                  ? 'bg-[#f5a623] text-black'
+                  : 'bg-[#141920] text-[#8899aa] border border-[#2e3a48] hover:border-[#f5a623]'
+              }`}
+            >
+              Select Site
+            </button>
+            <button
+              type="button"
+              onClick={() => setCustomSiteMode(true)}
+              className={`flex-1 px-3 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
+                customSiteMode
+                  ? 'bg-[#f5a623] text-black'
+                  : 'bg-[#141920] text-[#8899aa] border border-[#2e3a48] hover:border-[#f5a623]'
+              }`}
+            >
+              Custom Value
+            </button>
+          </div>
+          {!customSiteMode ? (
+            <>
+              <select 
+                className={selectCls} 
+                value={form.site} 
+                onChange={e => setForm(f => ({ ...f, site: e.target.value }))}
+                disabled={biometricSites.length === 0}
+              >
+                <option value="">
+                  {biometricSites.length === 0 ? 'No biometric sites configured' : 'Select biometric site'}
+                </option>
+                {biometricSites.map(site => (
+                  <option key={site.id} value={site.siteId}>
+                    {site.siteName} ({site.siteId})
+                  </option>
+                ))}
+              </select>
+              {biometricSites.length === 0 && (
+                <div className="bg-[#ffab40]/10 border border-[#ffab40]/30 rounded-md p-2 flex items-start gap-2">
+                  <Info size={14} className="text-[#ffab40] mt-0.5 shrink-0" />
+                  <div className="text-[9px] text-[#ffab40]">
+                    No biometric sites found. Configure sites in <span className="font-semibold">Biometric Settings</span> or use Custom Value mode.
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <input 
+              className={inputCls} 
+              value={form.site} 
+              onChange={e => setForm(f => ({ ...f, site: e.target.value }))} 
+              placeholder="Enter custom site name" 
+            />
+          )}
+          <p className="text-[9px] text-[#5a6878]">
+            {!customSiteMode 
+              ? biometricSites.length > 0 
+                ? `${biometricSites.length} biometric site(s) available. Switch to custom for manual entry.`
+                : 'Switch to Custom Value to enter a site manually.'
+              : 'Enter any custom site identifier'
+            }
+          </p>
+        </div>
       </div>
       <div>
         <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">Time In</label>
@@ -479,8 +706,19 @@ export default function AttendanceModule() {
       <div>
         <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">Shift</label>
         <select className={selectCls} value={form.shift} onChange={e => setForm(f => ({ ...f, shift: e.target.value }))}>
-          {SHIFTS.map(s => <option key={s} value={s}>{s}</option>)}
+          <option value="">Select shift</option>
+          {shifts.map(s => (
+            <option key={s.id} value={s.name}>
+              {s.name}{s.startTime && s.endTime ? ` (${s.startTime}–${s.endTime})` : ''}
+            </option>
+          ))}
         </select>
+        {form.empId && form.shift && (
+          <p className="text-[9px] text-[#00e676] mt-1">Auto-filled from shift assignment</p>
+        )}
+        {form.empId && !form.shift && shifts.length > 0 && (
+          <p className="text-[9px] text-[#ffab40] mt-1">No active shift assignment found</p>
+        )}
       </div>
     </div>
   );

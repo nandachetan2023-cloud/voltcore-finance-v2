@@ -214,9 +214,27 @@ export default function MyRequests() {
                       </div>
                       <p className="text-[11px] text-[#8899aa] mt-1 line-clamp-2">{r.description}</p>
                       {r.amount && (
-                        <div className="flex items-center gap-1 mt-1 text-[11px] text-[#f5a623] font-semibold">
-                          <IndianRupee size={11} />
-                          {Number(r.amount).toLocaleString('en-IN')}
+                        <div className="flex items-center gap-2 mt-1 text-[11px] font-semibold flex-wrap">
+                          <span className="flex items-center gap-1 text-[#f5a623]">
+                            <IndianRupee size={11} />
+                            {Number(r.amount).toLocaleString('en-IN')}
+                            <span className="text-[10px] font-normal text-[#8899aa]">requested</span>
+                          </span>
+                          {r.approvedAmount !== null && r.approvedAmount !== undefined && r.status === 'approved' && (
+                            <>
+                              <span className="text-[#5a6878]">→</span>
+                              <span className="flex items-center gap-1 text-[#00e676]">
+                                <IndianRupee size={11} />
+                                {Number(r.approvedAmount).toLocaleString('en-IN')}
+                                <span className="text-[10px] font-normal text-[#8899aa]">approved</span>
+                              </span>
+                              {Number(r.approvedAmount) < Number(r.amount) && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#ffab40]/15 text-[#ffab40] font-semibold">
+                                  Partially Approved
+                                </span>
+                              )}
+                            </>
+                          )}
                         </div>
                       )}
                       {r.status === 'rejected' && r.rejectionNote && (

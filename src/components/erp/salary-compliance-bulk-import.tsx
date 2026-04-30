@@ -10,9 +10,30 @@ import * as XLSX from 'xlsx';
 interface ImportResult {
   success: boolean;
   imported: number;
+  updated?: number;
   failed: number;
   skipped: number;
   errors: Array<{ row: number; error: string }>;
+}
+
+interface DuplicateRecord {
+  row: number;
+  employeeId: number;
+  employeeCode: string;
+  employeeName: string;
+  month: number;
+  year: number;
+  existingData: {
+    payrollItemId: number;
+    netPay: number;
+    grossEarning: number;
+    createdAt: string;
+    updatedAt: string;
+  };
+  newData: {
+    netPay: number;
+    grossEarning: number;
+  };
 }
 
 interface ValidationResult {
@@ -78,6 +99,15 @@ export default function SalaryComplianceBulkImport({ onImportComplete }: { onImp
   const [selectedSheet, setSelectedSheet] = useState<string | null>(null);
   const [showSheetSelector, setShowSheetSelector] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Duplicate handling states
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [duplicates, setDuplicates] = useState<DuplicateRecord[]>([]);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [duplicateActions, setDuplicateActions] = useState<Map<number, 'update' | 'keep'>>(new Map());
+  const [sessionData, setSessionData] = useState<string | null>(null);
+  const [duplicateMonth, setDuplicateMonth] = useState<number>(0);
+  const [duplicateYear, setDuplicateYear] = useState<number>(0);
 
   const downloadTemplate = async () => {
     try {
@@ -269,6 +299,49 @@ export default function SalaryComplianceBulkImport({ onImportComplete }: { onImp
   const handleImport = async () => {
     if (!selectedFile || !selectedSheet) return;
 
+    // Check for duplicates first
+    setCheckingDuplicates(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('sheetName', selectedSheet);
+      formData.append('formatType', 'compliance');
+
+      const res = await fetch('/api/payroll/check-compliance-duplicates', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const json = await res.json();
+
+      if (json.success && json.data.hasDuplicates) {
+        setDuplicates(json.data.duplicates);
+        setSessionData(json.data.sessionData);
+        setDuplicateMonth(json.data.month);
+        setDuplicateYear(json.data.year);
+        setShowDuplicateDialog(true);
+        setCheckingDuplicates(false);
+        toast.info(
+          <div>
+            <div className="font-semibold">Duplicate Records Found</div>
+            <div className="text-xs mt-1">{json.data.duplicateCount} employees already have compliance salary data for this period</div>
+          </div>
+        );
+        return;
+      }
+
+      setCheckingDuplicates(false);
+      await proceedWithImport();
+    } catch (error) {
+      setCheckingDuplicates(false);
+      toast.error('Failed to check for duplicates');
+      console.error(error);
+    }
+  };
+
+  const proceedWithImport = async () => {
+    if (!selectedFile || !selectedSheet) return;
+
     setUploading(true);
     setResult(null);
 
@@ -276,11 +349,9 @@ export default function SalaryComplianceBulkImport({ onImportComplete }: { onImp
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('sheetName', selectedSheet);
-      
-      // Add manual mappings if any
+
       if (manualMappings.size > 0) {
-        const mappingsArray = Array.from(manualMappings.values());
-        formData.append('manualMappings', JSON.stringify(mappingsArray));
+        formData.append('manualMappings', JSON.stringify(Array.from(manualMappings.values())));
       }
 
       const res = await fetch('/api/payroll/salary-compliance-import', {
@@ -291,60 +362,75 @@ export default function SalaryComplianceBulkImport({ onImportComplete }: { onImp
       const json = await res.json();
 
       if (json.success) {
-        setResult({
-          success: true,
-          imported: json.data.imported,
-          failed: json.data.failed,
-          skipped: json.data.skipped || 0,
-          errors: json.data.errors || [],
-        });
-
+        setResult({ success: true, imported: json.data.imported, failed: json.data.failed, skipped: json.data.skipped || 0, errors: json.data.errors || [] });
         if (json.data.failed === 0) {
-          toast.success(
-            <div>
-              <div className="font-semibold">Import Successful!</div>
-              <div className="text-xs mt-1">
-                {json.data.imported} imported, {json.data.skipped || 0} skipped
-              </div>
-            </div>
-          );
-          setTimeout(() => {
-            setOpen(false);
-            onImportComplete();
-          }, 2000);
+          toast.success(<div><div className="font-semibold">Import Successful!</div><div className="text-xs mt-1">{json.data.imported} imported, {json.data.skipped || 0} skipped</div></div>);
+          setTimeout(() => { setOpen(false); onImportComplete(); }, 2000);
         } else {
-          toast.warning(
-            <div>
-              <div className="font-semibold">Partial Import</div>
-              <div className="text-xs mt-1">
-                {json.data.imported} imported, {json.data.failed} failed, {json.data.skipped || 0} skipped
-              </div>
-            </div>
-          );
+          toast.warning(<div><div className="font-semibold">Partial Import</div><div className="text-xs mt-1">{json.data.imported} imported, {json.data.failed} failed</div></div>);
         }
       } else {
         toast.error(json.error || 'Import failed');
-        setResult({
-          success: false,
-          imported: 0,
-          failed: 0,
-          skipped: 0,
-          errors: [{ row: 0, error: json.error || 'Unknown error' }],
-        });
+        setResult({ success: false, imported: 0, failed: 0, skipped: 0, errors: [{ row: 0, error: json.error || 'Unknown error' }] });
       }
     } catch (error) {
       toast.error('Failed to upload file');
-      console.error(error);
-      setResult({
-        success: false,
-        imported: 0,
-        failed: 0,
-        skipped: 0,
-        errors: [{ row: 0, error: 'Network error' }],
-      });
+      setResult({ success: false, imported: 0, failed: 0, skipped: 0, errors: [{ row: 0, error: 'Network error' }] });
     } finally {
       setUploading(false);
       setShowMappingUI(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDuplicateAction = (employeeId: number, action: 'update' | 'keep') => {
+    const newActions = new Map(duplicateActions);
+    newActions.set(employeeId, action);
+    setDuplicateActions(newActions);
+  };
+
+  const handleUpdateAll = () => {
+    const newActions = new Map<number, 'update' | 'keep'>();
+    duplicates.forEach(d => newActions.set(d.employeeId, 'update'));
+    setDuplicateActions(newActions);
+  };
+
+  const handleKeepAll = () => {
+    const newActions = new Map<number, 'update' | 'keep'>();
+    duplicates.forEach(d => newActions.set(d.employeeId, 'keep'));
+    setDuplicateActions(newActions);
+  };
+
+  const handleProceedWithDuplicates = async () => {
+    if (!sessionData) return;
+    setUploading(true);
+    setShowDuplicateDialog(false);
+
+    try {
+      const actionsObj: Record<number, 'update' | 'keep'> = {};
+      duplicateActions.forEach((action, id) => { actionsObj[id] = action; });
+
+      const res = await fetch('/api/payroll/import-compliance-with-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionData, duplicateActions: actionsObj, month: duplicateMonth, year: duplicateYear }),
+      });
+
+      const json = await res.json();
+
+      if (json.success) {
+        setResult({ success: true, imported: json.data.imported, updated: json.data.updated, failed: json.data.failed, skipped: json.data.skipped, errors: json.data.errors || [] });
+        toast.success(<div><div className="font-semibold">Import Complete!</div><div className="text-xs mt-1">{json.data.imported} new, {json.data.updated} updated, {json.data.skipped} skipped</div></div>);
+        setTimeout(() => { setOpen(false); onImportComplete(); }, 2000);
+      } else {
+        toast.error(json.error || 'Import failed');
+        setResult({ success: false, imported: 0, failed: 0, skipped: 0, errors: [{ row: 0, error: json.error || 'Unknown error' }] });
+      }
+    } catch (error) {
+      toast.error('Failed to import with duplicates');
+      setResult({ success: false, imported: 0, failed: 0, skipped: 0, errors: [{ row: 0, error: 'Network error' }] });
+    } finally {
+      setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -704,11 +790,13 @@ export default function SalaryComplianceBulkImport({ onImportComplete }: { onImp
             )}
 
             {/* Upload Progress */}
-            {uploading && (
+            {(uploading || checkingDuplicates) && (
               <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-4">
                 <div className="flex items-center gap-3">
                   <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#f5a623] border-t-transparent" />
-                  <span className="text-[12px] text-[#e2e8f0]">Importing salary data...</span>
+                  <span className="text-[12px] text-[#e2e8f0]">
+                    {checkingDuplicates ? 'Checking for duplicates...' : 'Importing salary data...'}
+                  </span>
                 </div>
               </div>
             )}
@@ -739,9 +827,19 @@ export default function SalaryComplianceBulkImport({ onImportComplete }: { onImp
                         <span className="text-[#5a6878]">Imported:</span>{' '}
                         <span className="text-[#00e676] font-semibold">{result.imported}</span>
                       </div>
+                      {result.updated !== undefined && (
+                        <div>
+                          <span className="text-[#5a6878]">Updated:</span>{' '}
+                          <span className="text-[#00d4ff] font-semibold">{result.updated}</span>
+                        </div>
+                      )}
                       <div>
                         <span className="text-[#5a6878]">Failed:</span>{' '}
                         <span className="text-[#ff3d3d] font-semibold">{result.failed}</span>
+                      </div>
+                      <div>
+                        <span className="text-[#5a6878]">Skipped:</span>{' '}
+                        <span className="text-[#ffab40] font-semibold">{result.skipped}</span>
                       </div>
                     </div>
 
@@ -808,6 +906,93 @@ export default function SalaryComplianceBulkImport({ onImportComplete }: { onImp
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Duplicate Handling Dialog */}
+      <Dialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base">Duplicate Records Found</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-[#ffab40]/10 border border-[#ffab40]/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={20} className="text-[#ffab40] shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-[12px] font-semibold text-[#e2e8f0] mb-1">
+                    {duplicates.length} employees already have compliance salary data for {getMonthName(duplicateMonth)} {duplicateYear}
+                  </div>
+                  <div className="text-[10px] text-[#8899aa]">Choose whether to update existing records or keep them.</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#2e3a48]">
+              <div className="text-[11px] text-[#8899aa]">Apply to all {duplicates.length} records:</div>
+              <div className="flex gap-2">
+                <button onClick={handleUpdateAll} className="px-3 py-1.5 text-[10px] font-semibold bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/30 rounded hover:bg-[#00d4ff]/20 transition-colors">Update All</button>
+                <button onClick={handleKeepAll} className="px-3 py-1.5 text-[10px] font-semibold bg-[#ff3d3d]/10 text-[#ff3d3d] border border-[#ff3d3d]/30 rounded hover:bg-[#ff3d3d]/20 transition-colors">Keep All</button>
+              </div>
+            </div>
+
+            <div className="max-h-96 overflow-y-auto space-y-3">
+              {duplicates.map(dup => {
+                const action = duplicateActions.get(dup.employeeId);
+                return (
+                  <div key={dup.employeeId} className={`border rounded-lg p-3 transition-colors ${action === 'update' ? 'border-[#00d4ff]/30 bg-[#00d4ff]/5' : action === 'keep' ? 'border-[#ff3d3d]/30 bg-[#ff3d3d]/5' : 'border-[#2e3a48] bg-[#0d1117]'}`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="text-[12px] font-semibold text-[#e2e8f0]">{dup.employeeCode} - {dup.employeeName}</div>
+                        <div className="text-[10px] text-[#5a6878] mt-0.5">Row {dup.row}</div>
+                      </div>
+                      {action === 'update' && <div className="px-2 py-0.5 rounded bg-[#00d4ff]/20 text-[#00d4ff] text-[9px] font-semibold">WILL UPDATE</div>}
+                      {action === 'keep' && <div className="px-2 py-0.5 rounded bg-[#ff3d3d]/20 text-[#ff3d3d] text-[9px] font-semibold">WILL KEEP</div>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div className="bg-[#141920] border border-[#2e3a48] rounded p-2">
+                        <div className="text-[9px] text-[#5a6878] uppercase font-semibold mb-2">Existing</div>
+                        <div className="space-y-1 text-[10px]">
+                          <div className="flex justify-between"><span className="text-[#8899aa]">Net Pay:</span><span className="text-[#e2e8f0] font-mono">₹{dup.existingData.netPay.toLocaleString('en-IN')}</span></div>
+                          <div className="flex justify-between"><span className="text-[#8899aa]">Gross:</span><span className="text-[#e2e8f0] font-mono">₹{dup.existingData.grossEarning.toLocaleString('en-IN')}</span></div>
+                          <div className="text-[9px] text-[#5a6878] mt-1">Updated: {new Date(dup.existingData.updatedAt).toLocaleString()}</div>
+                        </div>
+                      </div>
+                      <div className="bg-[#141920] border border-[#00d4ff]/30 rounded p-2">
+                        <div className="text-[9px] text-[#00d4ff] uppercase font-semibold mb-2">New</div>
+                        <div className="space-y-1 text-[10px]">
+                          <div className="flex justify-between"><span className="text-[#8899aa]">Net Pay:</span><span className="text-[#e2e8f0] font-mono">₹{dup.newData.netPay.toLocaleString('en-IN')}</span></div>
+                          <div className="flex justify-between"><span className="text-[#8899aa]">Gross:</span><span className="text-[#e2e8f0] font-mono">₹{dup.newData.grossEarning.toLocaleString('en-IN')}</span></div>
+                          <div className="text-[9px] text-[#5a6878] mt-1">From uploaded file</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleDuplicateAction(dup.employeeId, 'update')} className={`flex-1 px-3 py-2 text-[11px] font-semibold rounded border transition-colors ${action === 'update' ? 'bg-[#00d4ff]/20 text-[#00d4ff] border-[#00d4ff]' : 'bg-[#0d1117] text-[#8899aa] border-[#2e3a48] hover:border-[#00d4ff]/50'}`}>Update with New Data</button>
+                      <button onClick={() => handleDuplicateAction(dup.employeeId, 'keep')} className={`flex-1 px-3 py-2 text-[11px] font-semibold rounded border transition-colors ${action === 'keep' ? 'bg-[#ff3d3d]/20 text-[#ff3d3d] border-[#ff3d3d]' : 'bg-[#0d1117] text-[#8899aa] border-[#2e3a48] hover:border-[#ff3d3d]/50'}`}>Keep Existing</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-3 flex gap-4 text-[11px]">
+              <div><span className="text-[#5a6878]">Will Update:</span> <span className="text-[#00d4ff] font-semibold">{Array.from(duplicateActions.values()).filter(a => a === 'update').length}</span></div>
+              <div><span className="text-[#5a6878]">Will Keep:</span> <span className="text-[#ff3d3d] font-semibold">{Array.from(duplicateActions.values()).filter(a => a === 'keep').length}</span></div>
+              <div><span className="text-[#5a6878]">Not Selected:</span> <span className="text-[#ffab40] font-semibold">{duplicates.length - duplicateActions.size}</span></div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => { setShowDuplicateDialog(false); setDuplicateActions(new Map()); }}>Cancel</Button>
+            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={uploading || duplicateActions.size === 0} onClick={handleProceedWithDuplicates}>
+              {uploading ? 'Processing...' : `Proceed with ${duplicateActions.size} Actions`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
+}
+
+function getMonthName(month: number): string {
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return months[month - 1] || 'Unknown';
 }

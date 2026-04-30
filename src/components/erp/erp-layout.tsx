@@ -12,7 +12,7 @@ import {
   ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileEdit, Landmark, Scale, Target, PieChart,
   Wallet, FileSpreadsheet, ReceiptIndianRupee, BadgeIndianRupee, CircleDollarSign, Undo2,
   ArrowRightLeft, HandCoins, RefreshCw, AlertTriangle, Award, Download, Fingerprint, Shield, Trash2,
-  UserCircle, UserCheck, UserX, FolderOpen
+  UserCircle, UserCheck, UserX, FolderOpen, Megaphone, User, Send
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -23,7 +23,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   BarChart3, ShoppingBag, TimerReset, ArrowDownCircle, ArrowUpCircle, FileEdit,
   Landmark, Scale, Target, PieChart, Wallet, FileSpreadsheet, ReceiptIndianRupee,
   BadgeIndianRupee, CircleDollarSign, Undo2, ArrowRightLeft, HandCoins, Award, Download,
-  Fingerprint, Shield, Trash2, UserCircle, UserCheck, UserX, FolderOpen,
+  Fingerprint, Shield, Trash2, UserCircle, UserCheck, UserX, FolderOpen, Megaphone, Bell, User,
+  AlertTriangle, Send,
 };
 
 const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'financial-reports', 'trash'];
@@ -160,6 +161,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
   const { activeModule, activeParentModule, setActiveModule, sidebarOpen, setSidebarOpen, userRole, allowedModules } = useERPStore();
   const isSubNav = EXPANDABLE_MODULES.includes(activeParentModule) && activeParentModule !== 'dashboard';
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [unreadNotices, setUnreadNotices] = useState(0);
   const [userData, setUserData] = useState<{
     name: string;
     email: string;
@@ -191,6 +193,19 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [showUserMenu]);
+
+  // Poll unread notice count every 60s (only when employee is linked)
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch('/api/notices/unread-count').then(r => r.json());
+        if (res.success) setUnreadNotices(res.count || 0);
+      } catch {}
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const getInitials = (name: string) => {
     const parts = name.split(' ');
@@ -239,12 +254,13 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
               <div className="text-[9px] tracking-[2px] uppercase text-[#f5a623] font-bold px-4 py-2">{MODULE_CONFIG[isSubNav ? activeParentModule : activeModule]?.title || activeModule}</div>
               {isSubNav ? subModules.map(item => {
                 const Icon = ICON_MAP[item.icon] || Zap;
+                const badge = item.id === 'my-notices' ? (unreadNotices > 0 ? unreadNotices : null) : item.badge;
                 return (
                   <button key={item.id} onClick={() => { setActiveModule(item.id as any); setSidebarOpen(false); }}
                     className={`w-full flex items-center gap-2 px-4 py-[7px] text-left text-[12px] font-medium transition-all duration-150 border-l-[3px] ${activeModule === item.id ? 'text-[#f5a623] border-l-[#f5a623] bg-[#f5a623]/7' : 'text-[#8899aa] border-l-transparent hover:text-[#e2e8f0] hover:bg-[#141920]'}`}>
                     <Icon size={14} className="w-4 text-center shrink-0" />
                     <span className="flex-1">{item.label}</span>
-                    {item.badge && <span className="bg-[#ff3d3d] text-white text-[9px] font-bold px-[5px] py-[1px] rounded-full">{item.badge}</span>}
+                    {badge && <span className="bg-[#ff3d3d] text-white text-[9px] font-bold px-[5px] py-[1px] rounded-full">{badge > 99 ? '99+' : badge}</span>}
                   </button>
                 );
               }) : (() => {

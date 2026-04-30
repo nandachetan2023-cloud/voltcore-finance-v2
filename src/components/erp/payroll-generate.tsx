@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   FileSpreadsheet, Download, Filter, Calendar, Users, Building2,
-  Briefcase, Loader2, CheckCircle2, AlertTriangle
+  Briefcase, Loader2, CheckCircle2, AlertTriangle, Upload
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -58,6 +58,20 @@ export default function PayrollGenerateModule() {
   const [designations, setDesignations] = useState<Designation[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+
+  // 2-step process states — Non-Compliance
+  const [uploadCalculateOpen, setUploadCalculateOpen] = useState(false);
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [calculating, setCalculating] = useState(false);
+  const templateFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [filtersLocked, setFiltersLocked] = useState(false);
+
+  // 2-step process states — Compliance
+  const [complianceUploadOpen, setComplianceUploadOpen] = useState(false);
+  const [complianceTemplateFile, setComplianceTemplateFile] = useState<File | null>(null);
+  const [complianceCalculating, setComplianceCalculating] = useState(false);
+  const complianceFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [complianceFiltersLocked, setComplianceFiltersLocked] = useState(false);
 
   const [filters, setFilters] = useState({
     format: 'non-compliance' as 'compliance' | 'non-compliance',
@@ -163,6 +177,262 @@ export default function PayrollGenerateModule() {
       employeeId: '',
       includeInactive: false,
     });
+    setFiltersLocked(false);
+    setComplianceFiltersLocked(false);
+    setTemplateFile(null);
+    setComplianceTemplateFile(null);
+    if (templateFileInputRef.current) templateFileInputRef.current.value = '';
+    if (complianceFileInputRef.current) complianceFileInputRef.current.value = '';
+  };
+
+  // 2-Step Process Handlers
+  const handleDownloadTemplate = async () => {
+    setGenerating(true);
+    try {
+      toast.info('Generating payroll template...');
+      
+      const params = new URLSearchParams({
+        month: filters.month.toString(),
+        year: filters.year.toString(),
+      });
+
+      if (filters.employeeId) {
+        params.append('employeeId', filters.employeeId);
+      }
+      if (filters.departmentId) {
+        params.append('departmentId', filters.departmentId);
+      }
+      if (filters.branchId) {
+        params.append('branchId', filters.branchId);
+      }
+      if (filters.designationId) {
+        params.append('designationId', filters.designationId);
+      }
+      if (filters.includeInactive) {
+        params.append('includeInactive', 'true');
+      }
+
+      const res = await fetch(`/api/payroll/generate-template?${params.toString()}`);
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Payroll_Template_${MONTHS[filters.month - 1].label}_${filters.year}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        // Lock filters after successful download
+        setFiltersLocked(true);
+        
+        toast.success('Template downloaded successfully! Fill in the highlighted columns and upload for calculation.');
+        // Open upload dialog after download
+        setTimeout(() => setUploadCalculateOpen(true), 500);
+      } else {
+        const json = await res.json();
+        toast.error(json.error || 'Failed to generate template');
+      }
+    } catch (error) {
+      toast.error('Failed to download template');
+      console.error(error);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleTemplateFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) setTemplateFile(file);
+  };
+
+  // Compliance 2-Step Handlers
+  const handleDownloadComplianceTemplate = async () => {
+    setGenerating(true);
+    try {
+      toast.info('Generating compliance template...');
+
+      const params = new URLSearchParams({
+        month: filters.month.toString(),
+        year: filters.year.toString(),
+      });
+      if (filters.employeeId)   params.append('employeeId',   filters.employeeId);
+      if (filters.departmentId) params.append('departmentId', filters.departmentId);
+      if (filters.designationId) params.append('designationId', filters.designationId);
+      if (filters.branchId)     params.append('branchId',     filters.branchId);
+      if (filters.includeInactive) params.append('includeInactive', 'true');
+
+      const res = await fetch(`/api/payroll/generate-compliance-template?${params.toString()}`);
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Compliance_Template_${MONTHS[filters.month - 1].label}_${filters.year}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        setComplianceFiltersLocked(true);
+        toast.success('Compliance template downloaded! Fill in the yellow columns and upload for calculation.');
+        setTimeout(() => setComplianceUploadOpen(true), 500);
+      } else {
+        const json = await res.json();
+        toast.error(json.error || 'Failed to generate compliance template');
+      }
+    } catch (error) {
+      toast.error('Failed to download compliance template');
+      console.error(error);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleComplianceFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) setComplianceTemplateFile(file);
+  };
+
+  const handleComplianceUploadAndCalculate = async () => {
+    if (!complianceTemplateFile) {
+      toast.error('Please select a file to upload');
+      return;
+    }
+    setComplianceCalculating(true);
+    try {
+      toast.info('Calculating compliance payroll...');
+
+      const formData = new FormData();
+      formData.append('file', complianceTemplateFile);
+
+      const res = await fetch('/api/payroll/calculate-from-compliance-template', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Compliance_Calculated_${Date.now()}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        const rows = res.headers.get('X-Calculated-Rows') || '0';
+        toast.success(
+          <div>
+            <div className="font-semibold">Calculation Complete!</div>
+            <div className="text-xs mt-1">{rows} employees processed. Upload this file to "Compliance Bulk Import" to save to database.</div>
+          </div>,
+          { duration: 6000 }
+        );
+
+        setComplianceUploadOpen(false);
+        setComplianceTemplateFile(null);
+        if (complianceFileInputRef.current) complianceFileInputRef.current.value = '';
+        setComplianceFiltersLocked(false);
+      } else {
+        const json = await res.json();
+        toast.error(
+          <div>
+            <div className="font-semibold">Calculation Failed</div>
+            <div className="text-xs mt-1">{json.error || 'Unknown error'}</div>
+            {json.details?.length > 0 && (
+              <div className="text-xs mt-2 max-h-32 overflow-y-auto">
+                {json.details.slice(0, 5).map((e: string, i: number) => <div key={i}>• {e}</div>)}
+                {json.details.length > 5 && <div>... and {json.details.length - 5} more</div>}
+              </div>
+            )}
+          </div>,
+          { duration: 8000 }
+        );
+      }
+    } catch (error) {
+      toast.error('Failed to calculate compliance payroll');
+      console.error(error);
+    } finally {
+      setComplianceCalculating(false);
+    }
+  };
+
+  const handleUploadAndCalculate = async () => {
+    if (!templateFile) {
+      toast.error('Please select a file to upload');
+      return;
+    }
+
+    setCalculating(true);
+    try {
+      toast.info('Calculating payroll from template...');
+      
+      const formData = new FormData();
+      formData.append('file', templateFile);
+
+      const res = await fetch('/api/payroll/calculate-from-template', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const timestamp = Date.now();
+        a.download = `Payroll_Calculated_${timestamp}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        const calculatedRows = res.headers.get('X-Calculated-Rows') || '0';
+        toast.success(
+          <div>
+            <div className="font-semibold">Calculation Complete!</div>
+            <div className="text-xs mt-1">{calculatedRows} employees processed. Upload this file to "Non-Compliance Bulk Import" to save to database.</div>
+          </div>,
+          { duration: 6000 }
+        );
+        
+        setUploadCalculateOpen(false);
+        setTemplateFile(null);
+        if (templateFileInputRef.current) {
+          templateFileInputRef.current.value = '';
+        }
+        
+        // Unlock filters after successful calculation
+        setFiltersLocked(false);
+      } else {
+        const json = await res.json();
+        toast.error(
+          <div>
+            <div className="font-semibold">Calculation Failed</div>
+            <div className="text-xs mt-1">{json.error || 'Unknown error'}</div>
+            {json.details && json.details.length > 0 && (
+              <div className="text-xs mt-2 max-h-32 overflow-y-auto">
+                {json.details.slice(0, 5).map((err: string, idx: number) => (
+                  <div key={idx}>• {err}</div>
+                ))}
+                {json.details.length > 5 && <div>... and {json.details.length - 5} more errors</div>}
+              </div>
+            )}
+          </div>,
+          { duration: 8000 }
+        );
+      }
+    } catch (error) {
+      toast.error('Failed to calculate payroll');
+      console.error(error);
+    } finally {
+      setCalculating(false);
+    }
   };
 
   return (
@@ -183,9 +453,21 @@ export default function PayrollGenerateModule() {
                   Generate Payroll Excel Sheets
                 </div>
                 <div className="text-[11px] text-[#8899aa] leading-relaxed">
-                  Generate comprehensive payroll Excel sheets in compliance or non-compliance format. 
-                  Apply filters to generate reports for specific departments, designations, branches, or individual employees.
-                  The system will fetch all existing payroll data for the selected period and filters.
+                  {filters.format === 'non-compliance' ? (
+                    <>
+                      <strong>Step 1:</strong> Download template with auto-filled employee data and attendance. 
+                      <strong> Step 2:</strong> Fill in highlighted user input columns offline. 
+                      <strong> Step 3:</strong> Upload for automatic calculation. 
+                      <strong> Step 4:</strong> Import final sheet to database via "Non-Compliance Bulk Import".
+                    </>
+                  ) : (
+                    <>
+                      <strong>Step 1:</strong> Download compliance template with auto-filled employee data and attendance.
+                      <strong> Step 2:</strong> Fill in highlighted columns (Days Worked, OT Hours, etc.) offline.
+                      <strong> Step 3:</strong> Upload for automatic calculation of wages, EPF, ESI, PT.
+                      <strong> Step 4:</strong> Import final sheet to database via "Compliance Bulk Import".
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -198,8 +480,11 @@ export default function PayrollGenerateModule() {
             </label>
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => setFilters(f => ({ ...f, format: 'non-compliance' }))}
+                onClick={() => !filtersLocked && setFilters(f => ({ ...f, format: 'non-compliance' }))}
+                disabled={filtersLocked || complianceFiltersLocked}
                 className={`p-4 rounded-lg border-2 transition-all ${
+                  (filtersLocked || complianceFiltersLocked) ? 'opacity-50 cursor-not-allowed' : ''
+                } ${
                   filters.format === 'non-compliance'
                     ? 'border-[#f5a623] bg-[#f5a623]/10'
                     : 'border-[#2e3a48] bg-[#1a2332] hover:border-[#3a4858]'
@@ -215,14 +500,17 @@ export default function PayrollGenerateModule() {
                   </div>
                   <div className="text-left">
                     <div className="text-[13px] font-semibold text-[#e2e8f0]">Non-Compliance</div>
-                    <div className="text-[10px] text-[#5a6878] mt-0.5">Standard format with 68 columns</div>
+                    <div className="text-[10px] text-[#5a6878] mt-0.5">2-Step Template Process</div>
                   </div>
                 </div>
               </button>
 
               <button
-                onClick={() => setFilters(f => ({ ...f, format: 'compliance' }))}
+                onClick={() => !complianceFiltersLocked && setFilters(f => ({ ...f, format: 'compliance' }))}
+                disabled={filtersLocked || complianceFiltersLocked}
                 className={`p-4 rounded-lg border-2 transition-all ${
+                  (filtersLocked || complianceFiltersLocked) ? 'opacity-50 cursor-not-allowed' : ''
+                } ${
                   filters.format === 'compliance'
                     ? 'border-[#00e676] bg-[#00e676]/10'
                     : 'border-[#2e3a48] bg-[#1a2332] hover:border-[#3a4858]'
@@ -238,11 +526,17 @@ export default function PayrollGenerateModule() {
                   </div>
                   <div className="text-left">
                     <div className="text-[13px] font-semibold text-[#e2e8f0]">Compliance</div>
-                    <div className="text-[10px] text-[#5a6878] mt-0.5">Statutory compliant format</div>
+                    <div className="text-[10px] text-[#5a6878] mt-0.5">2-Step Template Process</div>
                   </div>
                 </div>
               </button>
             </div>
+            {(filtersLocked || complianceFiltersLocked) && (
+              <div className="mt-2 text-[10px] text-[#ffab40] flex items-center gap-1">
+                <AlertTriangle size={12} />
+                Filters locked. Upload & calculate or reset to change settings.
+              </div>
+            )}
           </div>
 
           {/* Period Selection */}
@@ -258,6 +552,7 @@ export default function PayrollGenerateModule() {
                   className={selectCls}
                   value={filters.month}
                   onChange={e => setFilters(f => ({ ...f, month: parseInt(e.target.value) }))}
+                  disabled={filtersLocked || complianceFiltersLocked}
                 >
                   {MONTHS.map(m => (
                     <option key={m.value} value={m.value}>{m.label}</option>
@@ -270,6 +565,7 @@ export default function PayrollGenerateModule() {
                   className={selectCls}
                   value={filters.year}
                   onChange={e => setFilters(f => ({ ...f, year: parseInt(e.target.value) }))}
+                  disabled={filtersLocked || complianceFiltersLocked}
                 >
                   {YEARS.map(y => (
                     <option key={y} value={y}>{y}</option>
@@ -295,6 +591,7 @@ export default function PayrollGenerateModule() {
                   className={selectCls}
                   value={filters.departmentId}
                   onChange={e => setFilters(f => ({ ...f, departmentId: e.target.value }))}
+                  disabled={filtersLocked || complianceFiltersLocked}
                 >
                   <option value="">All Departments</option>
                   {departments.map(d => (
@@ -312,6 +609,7 @@ export default function PayrollGenerateModule() {
                   className={selectCls}
                   value={filters.designationId}
                   onChange={e => setFilters(f => ({ ...f, designationId: e.target.value }))}
+                  disabled={filtersLocked || complianceFiltersLocked}
                 >
                   <option value="">All Designations</option>
                   {designations.map(d => (
@@ -329,6 +627,7 @@ export default function PayrollGenerateModule() {
                   className={selectCls}
                   value={filters.branchId}
                   onChange={e => setFilters(f => ({ ...f, branchId: e.target.value }))}
+                  disabled={filtersLocked || complianceFiltersLocked}
                 >
                   <option value="">All Branches</option>
                   {branches.map(b => (
@@ -346,6 +645,7 @@ export default function PayrollGenerateModule() {
                   className={selectCls}
                   value={filters.employeeId}
                   onChange={e => setFilters(f => ({ ...f, employeeId: e.target.value }))}
+                  disabled={filtersLocked || complianceFiltersLocked}
                 >
                   <option value="">All Employees</option>
                   {employees.map(e => (
@@ -365,36 +665,55 @@ export default function PayrollGenerateModule() {
               id="includeInactive"
               checked={filters.includeInactive}
               onChange={e => setFilters(f => ({ ...f, includeInactive: e.target.checked }))}
-              className="w-4 h-4 rounded border-[#2e3a48] bg-[#1a2332] text-[#f5a623] focus:ring-[#f5a623] focus:ring-offset-0"
+              disabled={filtersLocked || complianceFiltersLocked}
+              className="w-4 h-4 rounded border-[#2e3a48] bg-[#1a2332] text-[#f5a623] focus:ring-[#f5a623] focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <label htmlFor="includeInactive" className="text-[12px] text-[#e2e8f0] cursor-pointer">
+            <label htmlFor="includeInactive" className={`text-[12px] text-[#e2e8f0] cursor-pointer ${(filtersLocked || complianceFiltersLocked) ? 'opacity-50' : ''}`}>
               Include inactive employees
             </label>
           </div>
 
           {/* Action Buttons */}
           <div className="flex items-center gap-3 pt-4 border-t border-[#2e3a48]">
-            <button
-              onClick={handleGenerate}
-              disabled={generating}
-              className="flex-1 vc-btn-primary flex items-center justify-center gap-2 py-3"
-            >
-              {generating ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Download size={16} />
-                  Generate Excel
-                </>
-              )}
-            </button>
+            {filters.format === 'non-compliance' ? (
+              <>
+                <button
+                  onClick={handleDownloadTemplate}
+                  disabled={generating || filtersLocked}
+                  className="flex-1 bg-[#00d4ff] text-black hover:bg-[#00b8e6] font-semibold rounded-lg py-3 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generating ? <><Loader2 size={16} className="animate-spin" />Generating...</> : <><Download size={16} />Download Template</>}
+                </button>
+                <button
+                  onClick={() => setUploadCalculateOpen(true)}
+                  disabled={!filtersLocked}
+                  className="flex-1 bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold rounded-lg py-3 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Upload size={16} />Upload & Calculate
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleDownloadComplianceTemplate}
+                  disabled={generating || complianceFiltersLocked}
+                  className="flex-1 bg-[#00d4ff] text-black hover:bg-[#00b8e6] font-semibold rounded-lg py-3 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generating ? <><Loader2 size={16} className="animate-spin" />Generating...</> : <><Download size={16} />Download Template</>}
+                </button>
+                <button
+                  onClick={() => setComplianceUploadOpen(true)}
+                  disabled={!complianceFiltersLocked}
+                  className="flex-1 bg-[#00e676] text-black hover:bg-[#00c060] font-semibold rounded-lg py-3 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Upload size={16} />Upload & Calculate
+                </button>
+              </>
+            )}
             <button
               onClick={handleReset}
               disabled={generating}
-              className="px-6 py-3 rounded-lg bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#3a4858] transition-colors text-[13px] font-semibold"
+              className="px-6 py-3 rounded-lg bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#3a4858] transition-colors text-[13px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Reset
             </button>
@@ -436,6 +755,163 @@ export default function PayrollGenerateModule() {
           </div>
         </div>
       </div>
+
+      {/* Non-Compliance Upload & Calculate Dialog */}
+      <Dialog open={uploadCalculateOpen} onOpenChange={setUploadCalculateOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base">Upload & Calculate - Step 2</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-3">
+              <div className="text-[10px] text-[#8899aa] space-y-2">
+                <p className="font-semibold text-[#e2e8f0]">Instructions:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Upload the template you filled offline</li>
+                  <li>System will validate and calculate all formulas</li>
+                  <li>Download the final calculated sheet</li>
+                  <li>Upload final sheet to "Non-Compliance Bulk Import"</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Upload Section */}
+            <div className="border-2 border-dashed border-[#2e3a48] rounded-lg p-6 text-center">
+              <input
+                ref={templateFileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleTemplateFileSelect}
+                className="hidden"
+                id="template-file-upload"
+              />
+              <label
+                htmlFor="template-file-upload"
+                className="cursor-pointer flex flex-col items-center gap-2"
+              >
+                <div className="w-12 h-12 rounded-full bg-[#f5a623]/10 flex items-center justify-center">
+                  <FileSpreadsheet size={24} className="text-[#f5a623]" />
+                </div>
+                <div>
+                  <div className="text-[12px] font-semibold text-[#e2e8f0] mb-1">
+                    {templateFile ? templateFile.name : 'Click to upload filled template'}
+                  </div>
+                  <div className="text-[10px] text-[#5a6878]">
+                    Excel file (.xlsx, .xls)
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {calculating && (
+              <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-3">
+                <div className="flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#f5a623] border-t-transparent" />
+                  <span className="text-[11px] text-[#e2e8f0]">Calculating payroll...</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="ghost" 
+              className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" 
+              onClick={() => {
+                setUploadCalculateOpen(false);
+                setTemplateFile(null);
+                if (templateFileInputRef.current) {
+                  templateFileInputRef.current.value = '';
+                }
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" 
+              disabled={!templateFile || calculating}
+              onClick={handleUploadAndCalculate}
+            >
+              {calculating ? 'Calculating...' : 'Upload & Calculate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Compliance Upload & Calculate Dialog */}
+      <Dialog open={complianceUploadOpen} onOpenChange={setComplianceUploadOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base">Compliance Upload & Calculate - Step 2</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-3">
+              <div className="text-[10px] text-[#8899aa] space-y-2">
+                <p className="font-semibold text-[#e2e8f0]">Instructions:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Upload the compliance template you filled offline</li>
+                  <li>System calculates Daily Rate, Basic Wages, DA, OT, EPF, ESI, PT, Net Pay</li>
+                  <li>Download the final calculated sheet</li>
+                  <li>Upload final sheet to "Compliance Bulk Import" to save to database</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="border-2 border-dashed border-[#2e3a48] rounded-lg p-6 text-center">
+              <input
+                ref={complianceFileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleComplianceFileSelect}
+                className="hidden"
+                id="compliance-file-upload"
+              />
+              <label
+                htmlFor="compliance-file-upload"
+                className="cursor-pointer flex flex-col items-center gap-2"
+              >
+                <div className="w-12 h-12 rounded-full bg-[#00e676]/10 flex items-center justify-center">
+                  <FileSpreadsheet size={24} className="text-[#00e676]" />
+                </div>
+                <div>
+                  <div className="text-[12px] font-semibold text-[#e2e8f0] mb-1">
+                    {complianceTemplateFile ? complianceTemplateFile.name : 'Click to upload filled compliance template'}
+                  </div>
+                  <div className="text-[10px] text-[#5a6878]">Excel file (.xlsx, .xls)</div>
+                </div>
+              </label>
+            </div>
+
+            {complianceCalculating && (
+              <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-3">
+                <div className="flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#00e676] border-t-transparent" />
+                  <span className="text-[11px] text-[#e2e8f0]">Calculating compliance payroll...</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]"
+              onClick={() => {
+                setComplianceUploadOpen(false);
+                setComplianceTemplateFile(null);
+                if (complianceFileInputRef.current) complianceFileInputRef.current.value = '';
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#00e676] text-black hover:bg-[#00c060] font-semibold"
+              disabled={!complianceTemplateFile || complianceCalculating}
+              onClick={handleComplianceUploadAndCalculate}
+            >
+              {complianceCalculating ? 'Calculating...' : 'Upload & Calculate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

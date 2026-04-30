@@ -73,7 +73,7 @@ interface SyncState {
   stats: SyncStats;
 }
 
-type ModuleKey = 'employees' | 'inventory' | 'sales' | 'projects' | 'finance' | 'equipment';
+type ModuleKey = 'employees' | 'projects' | 'finance' | 'equipment';
 
 /* ------------------------------------------------------------------ */
 /*  Module definitions                                                  */
@@ -85,18 +85,6 @@ const MODULE_DEFS: Record<ModuleKey, { name: string; icon: React.ElementType; co
     icon: Users,
     color: '#f5a623',
     description: 'HRMS module',
-  },
-  inventory: {
-    name: 'Inventory',
-    icon: Package,
-    color: '#00d4ff',
-    description: 'Stock & warehouse',
-  },
-  sales: {
-    name: 'Sales',
-    icon: TrendingUp,
-    color: '#00e676',
-    description: 'Orders & customers',
   },
   projects: {
     name: 'Projects',
@@ -118,7 +106,7 @@ const MODULE_DEFS: Record<ModuleKey, { name: string; icon: React.ElementType; co
   },
 };
 
-const MODULE_KEYS: ModuleKey[] = ['employees', 'inventory', 'sales', 'projects', 'finance', 'equipment'];
+const MODULE_KEYS: ModuleKey[] = ['employees', 'projects', 'finance', 'equipment'];
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */

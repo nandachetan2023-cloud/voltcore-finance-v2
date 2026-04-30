@@ -9,16 +9,11 @@ export const MODULE_TREE: Record<string, string[]> = {
   procurement: ['procurement', 'purchases', 'expenses'],
   finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
   projects: ['projects', 'project-list', 'sites'],
-  inventory: ['inventory'],
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
-  sales: ['sales'],
-  crm: ['crm'],
   // A dedicated "self-service" group for employees
-  'self-service': ['my-attendance', 'my-leave', 'my-requests'],
-  system: ['system', 'reports', 'settings', 'user-management', 'requests'],
-  support: ['support'],
-  knowledgebase: ['knowledgebase'],
-  downloads: ['downloads'],
+  'self-service': ['my-attendance', 'my-leave', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
+  system: ['system', 'reports', 'settings', 'user-management', 'requests', 'notice-board'],
+  reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
 }
 
 // Build a reverse map: sub-module key → parent key
@@ -52,14 +47,17 @@ export function isModuleAllowed(moduleId: string, allowedModules: string): boole
 
 export type ModuleId =
   | 'dashboard' | 'organization' | 'hrms' | 'procurement' | 'finance'
-  | 'projects' | 'inventory' | 'assets' | 'sales' | 'crm'
-  | 'system' | 'support' | 'knowledgebase'
+  | 'projects' | 'assets'
+  | 'system'
   // Sub-modules
   | 'employees' | 'attendance' | 'leave' | 'shift' | 'training' | 'recruitment'
   | 'onboarding' | 'offboarding' | 'exit-management' | 'checklist-templates'
   | 'purchases' | 'expenses' | 'invoices'
   | 'sites' | 'permits' | 'safety' | 'subcontractors'
   | 'reports' | 'settings'
+  | 'report-manpower' | 'report-attendance' | 'report-payroll' | 'report-leave'
+  | 'report-late-fine' | 'report-onboarding' | 'report-turnover' | 'report-training'
+  | 'report-notices' | 'report-dispatch'
   // Analytics pages
   | 'employee-analytics'
   // Timesheet
@@ -69,8 +67,6 @@ export type ModuleId =
   | 'journal-entries' | 'bank-cash' | 'taxation' | 'budget' | 'financial-reports'
   // Projects sub-modules
   | 'project-list'
-  // Downloads
-  | 'downloads'
   // Organization sub-modules
   | 'departments' | 'designations' | 'holidays' | 'leave-policies' | 'attendance-rules'
   | 'employee-documents'
@@ -84,8 +80,14 @@ export type ModuleId =
   | 'my-attendance'
   | 'my-leave'
   | 'my-requests'
+  | 'my-profile'
+  | 'my-notices'
+  | 'my-payslips'
+  | 'my-documents'
+  | 'my-shifts'
   // Admin requests view
-  | 'requests';
+  | 'requests'
+  | 'notice-board';
 
 interface NavItem {
   id: ModuleId;
@@ -123,14 +125,8 @@ export const MAIN_MODULES: NavItem[] = [
   { id: 'procurement', icon: 'ShoppingCart', label: 'Procurement' },
   { id: 'finance', icon: 'CreditCard', label: 'Finance' },
   { id: 'projects', icon: 'FolderKanban', label: 'Projects' },
-  { id: 'inventory', icon: 'Package', label: 'Inventory' },
   { id: 'assets', icon: 'Wrench', label: 'Assets' },
-  { id: 'sales', icon: 'TrendingUp', label: 'Sales' },
-  { id: 'crm', icon: 'Briefcase', label: 'CRM' },
   { id: 'system', icon: 'Settings', label: 'System' },
-  { id: 'support', icon: 'MessageSquare', label: 'Support' },
-  { id: 'knowledgebase', icon: 'BookOpen', label: 'Knowledgebase' },
-  { id: 'downloads', icon: 'Download', label: 'Downloads' },
   { id: 'self-service', icon: 'UserCircle', label: 'My Portal' },
 ];
 
@@ -153,7 +149,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'shift', icon: 'RotateCcw', label: 'Shift Roster', section: 'HRMS' },
     { id: 'timesheet', icon: 'TimerReset', label: 'Timesheet', section: 'HRMS' },
     { id: 'payroll', icon: 'IndianRupee', label: 'Payroll', section: 'HRMS' },
-    { id: 'training', icon: 'GraduationCap', label: 'Training & Certs', section: 'HRMS' },
+    { id: 'training', icon: 'GraduationCap', label: 'Certificates', section: 'HRMS' },
     { id: 'recruitment', icon: 'Search', label: 'Recruitment', section: 'HRMS' },
     { id: 'onboarding', icon: 'UserCheck', label: 'Onboarding', section: 'Lifecycle' },
     { id: 'offboarding', icon: 'UserX', label: 'Offboarding', section: 'Lifecycle' },
@@ -178,28 +174,41 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'project-list', icon: 'FolderKanban', label: 'All Projects', section: 'Projects' },
     { id: 'sites', icon: 'MapPin', label: 'Site Map', section: 'Projects' },
   ],
-  inventory: [],
   assets: [
     { id: 'equipment', icon: 'Wrench', label: 'Equipment', section: 'Assets' },
     { id: 'permits', icon: 'ShieldAlert', label: 'Work Permits', badge: 2, section: 'Operations' },
     { id: 'safety', icon: 'HardHat', label: 'Safety & HSE', section: 'Operations' },
     { id: 'subcontractors', icon: 'Handshake', label: 'Subcontractors', section: 'Operations' },
   ],
-  sales: [],
-  crm: [],
   system: [
     { id: 'reports', icon: 'BarChart3', label: 'Reports', section: 'System' },
     { id: 'settings', icon: 'Settings', label: 'Settings', section: 'System' },
     { id: 'user-management', icon: 'UserCog', label: 'User Management', section: 'System' },
     { id: 'requests', icon: 'ClipboardList', label: 'Employee Requests', section: 'System' },
+    { id: 'notice-board', icon: 'Megaphone', label: 'Notice Board', section: 'System' },
+  ],
+  reports: [
+    { id: 'report-manpower',   icon: 'Users',         label: 'Manpower',         section: 'Reports' },
+    { id: 'report-attendance', icon: 'ClipboardList',  label: 'Attendance',       section: 'Reports' },
+    { id: 'report-payroll',    icon: 'IndianRupee',    label: 'Payroll',          section: 'Reports' },
+    { id: 'report-leave',      icon: 'CalendarDays',   label: 'Leave',            section: 'Reports' },
+    { id: 'report-late-fine',  icon: 'AlertTriangle',  label: 'Late & Fines',     section: 'Reports' },
+    { id: 'report-onboarding', icon: 'UserCheck',      label: 'Onboarding',       section: 'Reports' },
+    { id: 'report-turnover',   icon: 'UserX',          label: 'Turnover / Exit',  section: 'Reports' },
+    { id: 'report-training',   icon: 'GraduationCap',  label: 'Training & Certs', section: 'Reports' },
+    { id: 'report-notices',    icon: 'Bell',           label: 'Notice Read Rate', section: 'Reports' },
+    { id: 'report-dispatch',   icon: 'Send',           label: 'Payslip Dispatch', section: 'Reports' },
   ],
   'self-service': [
     { id: 'my-attendance', icon: 'ClipboardList', label: 'My Attendance', section: 'My Portal' },
     { id: 'my-leave', icon: 'CalendarDays', label: 'Apply Leave', section: 'My Portal' },
     { id: 'my-requests', icon: 'FileText', label: 'My Requests', section: 'My Portal' },
+    { id: 'my-profile', icon: 'User', label: 'My Profile', section: 'My Portal' },
+    { id: 'my-notices', icon: 'Bell', label: 'My Notices', section: 'My Portal' },
+    { id: 'my-payslips', icon: 'IndianRupee', label: 'My Payslips', section: 'My Portal' },
+    { id: 'my-documents', icon: 'FolderOpen', label: 'My Documents', section: 'My Portal' },
+    { id: 'my-shifts', icon: 'RotateCcw', label: 'My Shifts', section: 'My Portal' },
   ],
-  support: [],
-  knowledgebase: [],
 };
 
 export interface ModuleConfig {
@@ -215,13 +224,8 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   procurement: { title: 'Procurement', breadcrumb: 'VoltCore ERP › Procurement' },
   finance: { title: 'Finance', breadcrumb: 'VoltCore ERP › Finance' },
   projects: { title: 'Projects', breadcrumb: 'VoltCore ERP › Projects' },
-  inventory: { title: 'Inventory', breadcrumb: 'VoltCore ERP › Inventory' },
   assets: { title: 'Assets', breadcrumb: 'VoltCore ERP › Assets & Operations' },
-  sales: { title: 'Sales', breadcrumb: 'VoltCore ERP › Sales' },
-  crm: { title: 'CRM', breadcrumb: 'VoltCore ERP › CRM' },
   system: { title: 'System', breadcrumb: 'VoltCore ERP › System' },
-  support: { title: 'Support', breadcrumb: 'VoltCore ERP › Support' },
-  knowledgebase: { title: 'Knowledgebase', breadcrumb: 'VoltCore ERP › Knowledgebase' },
   // Organization sub-modules
   departments: { title: 'Departments', breadcrumb: 'Organization › Departments' },
   designations: { title: 'Designations', breadcrumb: 'Organization › Designations' },
@@ -236,7 +240,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   biometric: { title: 'Biometric Sync', breadcrumb: 'HRMS › Biometric Integration' },
   leave: { title: 'Leave Management', breadcrumb: 'HRMS › Leave Requests' },
   shift: { title: 'Shift Roster', breadcrumb: 'HRMS › Shift Planning' },
-  training: { title: 'Training & Certifications', breadcrumb: 'HRMS › Competency Management' },
+  training: { title: 'Certificates', breadcrumb: 'HRMS › Certificates' },
   recruitment: { title: 'Recruitment', breadcrumb: 'HRMS › Talent Acquisition' },
   onboarding: { title: 'Onboarding', breadcrumb: 'HRMS › Employee Lifecycle › Onboarding' },
   offboarding: { title: 'Offboarding', breadcrumb: 'HRMS › Employee Lifecycle › Offboarding' },
@@ -262,9 +266,18 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   safety: { title: 'Safety & HSE', breadcrumb: 'Operations › HSE Management' },
   equipment: { title: 'Equipment', breadcrumb: 'Operations › Asset Management' },
   subcontractors: { title: 'Subcontractors', breadcrumb: 'Operations › Subcontractor Management' },
-  reports: { title: 'Reports', breadcrumb: 'VoltCore ERP › Analytics' },
+  reports: { title: 'Reports', breadcrumb: 'System › Reports' },
+  'report-manpower':   { title: 'Manpower Report',         breadcrumb: 'Reports › Manpower' },
+  'report-attendance': { title: 'Attendance Report',        breadcrumb: 'Reports › Attendance' },
+  'report-payroll':    { title: 'Payroll Report',           breadcrumb: 'Reports › Payroll' },
+  'report-leave':      { title: 'Leave Report',             breadcrumb: 'Reports › Leave' },
+  'report-late-fine':  { title: 'Late & Fine Report',       breadcrumb: 'Reports › Late & Fines' },
+  'report-onboarding': { title: 'Onboarding Status Report', breadcrumb: 'Reports › Onboarding' },
+  'report-turnover':   { title: 'Turnover / Exit Report',   breadcrumb: 'Reports › Turnover' },
+  'report-training':   { title: 'Certificate Report',   breadcrumb: 'Reports › Certificates' },
+  'report-notices':    { title: 'Notice Read Rate Report',  breadcrumb: 'Reports › Notices' },
+  'report-dispatch':   { title: 'Payslip Dispatch Report',  breadcrumb: 'Reports › Dispatch' },
   settings: { title: 'Settings', breadcrumb: 'VoltCore ERP › System Settings' },
-  downloads: { title: 'Downloads', breadcrumb: 'VoltCore ERP › Project Downloads' },
   trash: { title: 'Recycle Bin', breadcrumb: 'Admin › Deleted Items' },
   'user-management': { title: 'User Management', breadcrumb: 'System › User Management' },
   'requests': { title: 'Employee Requests', breadcrumb: 'System › Employee Requests' },
@@ -272,13 +285,19 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'my-attendance': { title: 'My Attendance', breadcrumb: 'My Portal › Attendance' },
   'my-leave': { title: 'Apply for Leave', breadcrumb: 'My Portal › Leave Application' },
   'my-requests': { title: 'My Requests', breadcrumb: 'My Portal › Requests' },
+  'my-profile':   { title: 'My Profile',   breadcrumb: 'My Portal › Profile' },
+  'my-notices':   { title: 'My Notices',   breadcrumb: 'My Portal › Notices' },
+  'my-payslips':  { title: 'My Payslips',  breadcrumb: 'My Portal › Payslips' },
+  'my-documents': { title: 'My Documents', breadcrumb: 'My Portal › Documents' },
+  'my-shifts':    { title: 'My Shifts',    breadcrumb: 'My Portal › Shifts' },
+  'notice-board': { title: 'Notice Board', breadcrumb: 'System › Notice Board' },
 };
 
 // Modules with sub-modules (clicking them shows sub-nav instead of a page)
-export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finance', 'projects', 'assets', 'system', 'self-service'];
+export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finance', 'projects', 'assets', 'system', 'self-service', 'reports'];
 
 // Main modules that have their own page (no sub-nav)
-export const PAGE_MODULES = ['dashboard', 'inventory', 'sales', 'crm', 'support', 'knowledgebase', 'downloads'];
+export const PAGE_MODULES = ['dashboard'];
 
 // Reverse lookup: given a sub-module id, find its parent module
 const PARENT_MAP: Record<string, string> = {};
@@ -289,7 +308,7 @@ const PARENT_MAP: Record<string, string> = {};
 });
 
 // Expandable modules that show their own sub-module grid (instead of auto-redirecting to first child)
-export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'projects', 'inventory', 'sales', 'crm', 'support', 'knowledgebase'];
+export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'projects', 'reports'];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};

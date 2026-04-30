@@ -10,9 +10,34 @@ import * as XLSX from 'xlsx';
 interface ImportResult {
   success: boolean;
   imported: number;
+  updated?: number;
   failed: number;
   skipped: number;
   errors: Array<{ row: number; error: string }>;
+}
+
+interface DuplicateRecord {
+  row: number;
+  employeeId: number;
+  employeeCode: string;
+  employeeName: string;
+  month: number;
+  year: number;
+  existingData: {
+    payrollItemId: number;
+    netPay: number;
+    grossEarning: number;
+    advance: number;
+    arrears: number;
+    createdAt: string;
+    updatedAt: string;
+  };
+  newData: {
+    netPay: number;
+    grossEarning: number;
+    advance: number;
+    arrears: number;
+  };
 }
 
 interface ValidationResult {
@@ -78,9 +103,143 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
   const [selectedSheet, setSelectedSheet] = useState<string | null>(null);
   const [showSheetSelector, setShowSheetSelector] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Duplicate handling states
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [duplicates, setDuplicates] = useState<DuplicateRecord[]>([]);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [duplicateActions, setDuplicateActions] = useState<Map<number, 'update' | 'keep'>>(new Map());
+  const [sessionData, setSessionData] = useState<string | null>(null);
+  const [duplicateMonth, setDuplicateMonth] = useState<number>(0);
+  const [duplicateYear, setDuplicateYear] = useState<number>(0);
 
-  const downloadTemplate = async () => {
-    toast.info('For non-compliance format, please use your existing 68-column salary sheet (COMBINED SALARY SHEET format with TOKEN NO. in column 3)');
+  const downloadTemplate = () => {
+    try {
+      const XLSX = require('xlsx');
+
+      // 69-column non-compliance format: SL NO. first, then EMPLOYEE ID, then original 67 columns
+      const headers = [
+        'SL NO.',
+        'EMPLOYEE ID',
+        'WORKMEN SL. NO.',
+        'TOKEN NO.',
+        'NAME OF EMPLOYEE',
+        "FATHER'S NAME",
+        'DOJ',
+        'DOB',
+        'BANK NAME',
+        'ACCOUNT NO.',
+        'IFSC CODE NO.',
+        '',           // col 11 empty
+        'UAN NO.',
+        'ESIC IP NO',
+        'DESIGNATION',
+        'DEPARTMENT',
+        'NATURE OF DESIGNATION',
+        'MONTHLY GROSS SALARY',
+        'ACTUAL ATTENDANCE',
+        'EXTRA DAYS',
+        'PH DAYS',
+        'ACTUAL EARN WAGES',
+        'ACTUAL OT HRS',
+        'ACTUAL OT AMOUNT',
+        'GROSS EARN WAGES',
+        'BASIC WAGES/DAY',
+        'MONTHLY WORKING DAYS',
+        'OT. HRS',
+        'ATTENDANCE',
+        'PH',
+        'WAGES/MONTH',
+        'EARN WAGES',
+        'PH AMOUNT',
+        'TOTAL EARN WAGES',
+        'OT HRS PAYMENT',
+        'TOTAL NETT PAYBLE',
+        'EPF',
+        'ESIC',
+        'PT',
+        'TOTAL DEDUCTION',
+        'NETT PAYBLE',
+        'EMPLOYEE SIGNATURE/THUMB IMPRESSION',
+        '',           // col 42 empty
+        '',           // col 43 empty
+        'TOTAL NON COMPLIANCE AMOUNT',
+        'ADVANCE',
+        'ARREARS',
+        'NETT PAYBLE NON COMPLIANCE',
+        'GRAND TOTAL NETT PAYBLE SALARY',
+        '',           // col 49 empty
+        'LEAVE',
+        'BONUS',
+        '',           // col 52 empty
+        '',           // col 53 empty
+        '',           // col 54 empty
+        'MONTHLY BASIC SALARY',
+        'PH AMOUNT',
+        'OT AMOUNT',
+        'EARN SALARY',
+        'MONTHLY House Rent Allow.',
+        'Monthly Site Allow.',
+        'Monthly Leave Travel Allow.',
+        'Monthly Special Allow.',
+        'MonthlyAttendence Allow.',
+        'TOTAL SALARY',
+        'EPF',
+        'ESIC',
+        'TDS',
+        'ADVANCE',
+      ];
+
+      const instructionsData = [
+        ['Non-Compliance Salary Sheet — Import Template'],
+        [''],
+        ['COLUMN 1 — SL NO.'],
+        ['  Auto-generated row number. Leave blank or fill sequentially.'],
+        [''],
+        ['COLUMN 2 — EMPLOYEE ID'],
+        ['  Enter the unique employee code (e.g. EMP001). Used for direct lookup.'],
+        ['  If blank, TOKEN NO. (col 4) will be used as fallback.'],
+        [''],
+        ['KEY COLUMNS FOR IMPORT'],
+        ['  Col 1:  SL NO. — row number (auto-generated)'],
+        ['  Col 2:  EMPLOYEE ID — unique employee code'],
+        ['  Col 4:  TOKEN NO. — employee code (fallback if col 2 is blank)'],
+        ['  Col 5:  NAME OF EMPLOYEE'],
+        ['  Col 18: MONTHLY GROSS SALARY'],
+        ['  Col 19: ACTUAL ATTENDANCE (days present)'],
+        ['  Col 23: ACTUAL OT HRS'],
+        ['  Col 24: ACTUAL OT AMOUNT'],
+        ['  Col 37: EPF deduction'],
+        ['  Col 38: ESIC deduction'],
+        ['  Col 39: PT deduction'],
+        ['  Col 40: TOTAL DEDUCTION'],
+        ['  Col 41: NETT PAYBLE'],
+        ['  Col 56: MONTHLY BASIC SALARY'],
+        ['  Col 60: MONTHLY House Rent Allow.'],
+        ['  Col 68: TDS'],
+        [''],
+        ['NOTES'],
+        ['  - Do NOT modify the header row'],
+        ['  - All numeric fields: numbers only, no currency symbols'],
+        ['  - Sheet name should be "NON-COMPLIANCE SALARY SHEET" or will auto-detect'],
+      ];
+
+      const instructionsSheet = XLSX.utils.aoa_to_sheet(instructionsData);
+      instructionsSheet['!cols'] = [{ wch: 80 }];
+
+      const ws = XLSX.utils.aoa_to_sheet([headers]);
+      ws['!cols'] = headers.map((_: string, i: number) => ({
+        wch: i === 0 ? 14 : i === 4 ? 25 : i === 5 ? 20 : 13,
+      }));
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, instructionsSheet, 'Instructions');
+      XLSX.utils.book_append_sheet(wb, ws, 'NON-COMPLIANCE SALARY SHEET');
+      XLSX.writeFile(wb, 'Non_Compliance_Salary_Template.xlsx');
+      toast.success('Template downloaded');
+    } catch (e) {
+      toast.error('Failed to generate template');
+    }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -250,6 +409,53 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
   const handleImport = async () => {
     if (!selectedFile || !selectedSheet) return;
 
+    // First, check for duplicates
+    setCheckingDuplicates(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('sheetName', selectedSheet);
+
+      const res = await fetch('/api/payroll/check-duplicates', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const json = await res.json();
+
+      if (json.success && json.data.hasDuplicates) {
+        // Store duplicate data and show dialog
+        setDuplicates(json.data.duplicates);
+        setSessionData(json.data.sessionData);
+        setDuplicateMonth(json.data.month);
+        setDuplicateYear(json.data.year);
+        setShowDuplicateDialog(true);
+        setCheckingDuplicates(false);
+        
+        toast.info(
+          <div>
+            <div className="font-semibold">Duplicate Records Found</div>
+            <div className="text-xs mt-1">
+              {json.data.duplicateCount} employees already have salary data for this period
+            </div>
+          </div>
+        );
+        return;
+      }
+
+      // No duplicates, proceed with normal import
+      setCheckingDuplicates(false);
+      await proceedWithImport();
+    } catch (error) {
+      setCheckingDuplicates(false);
+      toast.error('Failed to check for duplicates');
+      console.error(error);
+    }
+  };
+
+  const proceedWithImport = async () => {
+    if (!selectedFile || !selectedSheet) return;
+
     setUploading(true);
     setResult(null);
 
@@ -326,6 +532,98 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
     } finally {
       setUploading(false);
       setShowMappingUI(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDuplicateAction = (employeeId: number, action: 'update' | 'keep') => {
+    const newActions = new Map(duplicateActions);
+    newActions.set(employeeId, action);
+    setDuplicateActions(newActions);
+  };
+
+  const handleUpdateAll = () => {
+    const newActions = new Map<number, 'update' | 'keep'>();
+    duplicates.forEach(dup => newActions.set(dup.employeeId, 'update'));
+    setDuplicateActions(newActions);
+  };
+
+  const handleKeepAll = () => {
+    const newActions = new Map<number, 'update' | 'keep'>();
+    duplicates.forEach(dup => newActions.set(dup.employeeId, 'keep'));
+    setDuplicateActions(newActions);
+  };
+
+  const handleProceedWithDuplicates = async () => {
+    if (!sessionData) return;
+
+    setUploading(true);
+    setShowDuplicateDialog(false);
+
+    try {
+      const duplicateActionsObj: Record<number, 'update' | 'keep'> = {};
+      duplicateActions.forEach((action, employeeId) => {
+        duplicateActionsObj[employeeId] = action;
+      });
+
+      const res = await fetch('/api/payroll/import-with-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionData,
+          duplicateActions: duplicateActionsObj,
+          month: duplicateMonth,
+          year: duplicateYear,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (json.success) {
+        setResult({
+          success: true,
+          imported: json.data.imported,
+          updated: json.data.updated,
+          failed: json.data.failed,
+          skipped: json.data.skipped,
+          errors: json.data.errors || [],
+        });
+
+        toast.success(
+          <div>
+            <div className="font-semibold">Import Complete!</div>
+            <div className="text-xs mt-1">
+              {json.data.imported} new, {json.data.updated} updated, {json.data.skipped} skipped
+            </div>
+          </div>
+        );
+
+        setTimeout(() => {
+          setOpen(false);
+          onImportComplete();
+        }, 2000);
+      } else {
+        toast.error(json.error || 'Import failed');
+        setResult({
+          success: false,
+          imported: 0,
+          failed: 0,
+          skipped: 0,
+          errors: [{ row: 0, error: json.error || 'Unknown error' }],
+        });
+      }
+    } catch (error) {
+      toast.error('Failed to import with duplicates');
+      console.error(error);
+      setResult({
+        success: false,
+        imported: 0,
+        failed: 0,
+        skipped: 0,
+        errors: [{ row: 0, error: 'Network error' }],
+      });
+    } finally {
+      setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -685,11 +983,13 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
             )}
 
             {/* Upload Progress */}
-            {uploading && (
+            {(uploading || checkingDuplicates) && (
               <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-4">
                 <div className="flex items-center gap-3">
                   <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#f5a623] border-t-transparent" />
-                  <span className="text-[12px] text-[#e2e8f0]">Importing salary data...</span>
+                  <span className="text-[12px] text-[#e2e8f0]">
+                    {checkingDuplicates ? 'Checking for duplicates...' : 'Importing salary data...'}
+                  </span>
                 </div>
               </div>
             )}
@@ -720,9 +1020,19 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
                         <span className="text-[#5a6878]">Imported:</span>{' '}
                         <span className="text-[#00e676] font-semibold">{result.imported}</span>
                       </div>
+                      {result.updated !== undefined && (
+                        <div>
+                          <span className="text-[#5a6878]">Updated:</span>{' '}
+                          <span className="text-[#00d4ff] font-semibold">{result.updated}</span>
+                        </div>
+                      )}
                       <div>
                         <span className="text-[#5a6878]">Failed:</span>{' '}
                         <span className="text-[#ff3d3d] font-semibold">{result.failed}</span>
+                      </div>
+                      <div>
+                        <span className="text-[#5a6878]">Skipped:</span>{' '}
+                        <span className="text-[#ffab40] font-semibold">{result.skipped}</span>
                       </div>
                     </div>
 
@@ -789,6 +1099,242 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Duplicate Handling Dialog */}
+      <Dialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base">
+              Duplicate Records Found
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Summary */}
+            <div className="bg-[#ffab40]/10 border border-[#ffab40]/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={20} className="text-[#ffab40] shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="text-[12px] font-semibold text-[#e2e8f0] mb-2">
+                    {duplicates.length} employees already have salary data for {getMonthName(duplicateMonth)} {duplicateYear}
+                  </div>
+                  <div className="text-[10px] text-[#8899aa]">
+                    Choose whether to update existing records with new data or keep the existing data.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bulk Actions */}
+            <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#2e3a48]">
+              <div className="text-[11px] text-[#8899aa]">
+                Apply action to all {duplicates.length} records:
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleUpdateAll}
+                  className="px-3 py-1.5 text-[10px] font-semibold bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/30 rounded hover:bg-[#00d4ff]/20 transition-colors"
+                >
+                  Update All
+                </button>
+                <button
+                  onClick={handleKeepAll}
+                  className="px-3 py-1.5 text-[10px] font-semibold bg-[#ff3d3d]/10 text-[#ff3d3d] border border-[#ff3d3d]/30 rounded hover:bg-[#ff3d3d]/20 transition-colors"
+                >
+                  Keep All
+                </button>
+              </div>
+            </div>
+
+            {/* Duplicate Records List */}
+            <div className="max-h-96 overflow-y-auto space-y-3">
+              {duplicates.map((dup) => {
+                const action = duplicateActions.get(dup.employeeId);
+                const isUpdate = action === 'update';
+                const isKeep = action === 'keep';
+
+                return (
+                  <div
+                    key={dup.employeeId}
+                    className={`border rounded-lg p-3 transition-colors ${
+                      isUpdate
+                        ? 'border-[#00d4ff]/30 bg-[#00d4ff]/5'
+                        : isKeep
+                        ? 'border-[#ff3d3d]/30 bg-[#ff3d3d]/5'
+                        : 'border-[#2e3a48] bg-[#0d1117]'
+                    }`}
+                  >
+                    {/* Employee Header */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="text-[12px] font-semibold text-[#e2e8f0]">
+                          {dup.employeeCode} - {dup.employeeName}
+                        </div>
+                        <div className="text-[10px] text-[#5a6878] mt-0.5">
+                          Row {dup.row}
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        {isUpdate && (
+                          <div className="px-2 py-0.5 rounded bg-[#00d4ff]/20 text-[#00d4ff] text-[9px] font-semibold">
+                            WILL UPDATE
+                          </div>
+                        )}
+                        {isKeep && (
+                          <div className="px-2 py-0.5 rounded bg-[#ff3d3d]/20 text-[#ff3d3d] text-[9px] font-semibold">
+                            WILL KEEP
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Data Comparison */}
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      {/* Existing Data */}
+                      <div className="bg-[#141920] border border-[#2e3a48] rounded p-2">
+                        <div className="text-[9px] text-[#5a6878] uppercase font-semibold mb-2">
+                          Existing Data
+                        </div>
+                        <div className="space-y-1 text-[10px]">
+                          <div className="flex justify-between">
+                            <span className="text-[#8899aa]">Net Pay:</span>
+                            <span className="text-[#e2e8f0] font-mono">
+                              ₹{dup.existingData.netPay.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#8899aa]">Gross:</span>
+                            <span className="text-[#e2e8f0] font-mono">
+                              ₹{dup.existingData.grossEarning.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#8899aa]">Advance:</span>
+                            <span className="text-[#e2e8f0] font-mono">
+                              ₹{dup.existingData.advance.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div className="text-[9px] text-[#5a6878] mt-2">
+                            Updated: {new Date(dup.existingData.updatedAt).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* New Data */}
+                      <div className="bg-[#141920] border border-[#00d4ff]/30 rounded p-2">
+                        <div className="text-[9px] text-[#00d4ff] uppercase font-semibold mb-2">
+                          New Data
+                        </div>
+                        <div className="space-y-1 text-[10px]">
+                          <div className="flex justify-between">
+                            <span className="text-[#8899aa]">Net Pay:</span>
+                            <span className="text-[#e2e8f0] font-mono">
+                              ₹{dup.newData.netPay.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#8899aa]">Gross:</span>
+                            <span className="text-[#e2e8f0] font-mono">
+                              ₹{dup.newData.grossEarning.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#8899aa]">Advance:</span>
+                            <span className="text-[#e2e8f0] font-mono">
+                              ₹{dup.newData.advance.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div className="text-[9px] text-[#5a6878] mt-2">
+                            From uploaded file
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleDuplicateAction(dup.employeeId, 'update')}
+                        className={`flex-1 px-3 py-2 text-[11px] font-semibold rounded border transition-colors ${
+                          isUpdate
+                            ? 'bg-[#00d4ff]/20 text-[#00d4ff] border-[#00d4ff]'
+                            : 'bg-[#0d1117] text-[#8899aa] border-[#2e3a48] hover:border-[#00d4ff]/50'
+                        }`}
+                      >
+                        Update with New Data
+                      </button>
+                      <button
+                        onClick={() => handleDuplicateAction(dup.employeeId, 'keep')}
+                        className={`flex-1 px-3 py-2 text-[11px] font-semibold rounded border transition-colors ${
+                          isKeep
+                            ? 'bg-[#ff3d3d]/20 text-[#ff3d3d] border-[#ff3d3d]'
+                            : 'bg-[#0d1117] text-[#8899aa] border-[#2e3a48] hover:border-[#ff3d3d]/50'
+                        }`}
+                      >
+                        Keep Existing Data
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Action Summary */}
+            <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-3">
+              <div className="flex items-center justify-between text-[11px]">
+                <div className="flex gap-4">
+                  <div>
+                    <span className="text-[#5a6878]">Will Update:</span>{' '}
+                    <span className="text-[#00d4ff] font-semibold">
+                      {Array.from(duplicateActions.values()).filter(a => a === 'update').length}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#5a6878]">Will Keep:</span>{' '}
+                    <span className="text-[#ff3d3d] font-semibold">
+                      {Array.from(duplicateActions.values()).filter(a => a === 'keep').length}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#5a6878]">Not Selected:</span>{' '}
+                    <span className="text-[#ffab40] font-semibold">
+                      {duplicates.length - duplicateActions.size}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]"
+              onClick={() => {
+                setShowDuplicateDialog(false);
+                setDuplicateActions(new Map());
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold"
+              disabled={uploading || duplicateActions.size === 0}
+              onClick={handleProceedWithDuplicates}
+            >
+              {uploading ? 'Processing...' : `Proceed with ${duplicateActions.size} Actions`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
+}
+
+function getMonthName(month: number): string {
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  return months[month - 1] || 'Unknown';
 }

@@ -114,9 +114,10 @@ export async function GET(request: NextRequest) {
       sheetData.push(['AT HOUSE NO-G1/3 BINAYAKPURAM OPPOSITE OF MANMOHAN M.E. SCHOOL JHARSUGUDA']);
       sheetData.push(['Nature & location of work:- MECHANICAL JOB, GAP']);
       
-      // Column headers (Row 10)
+      // Column headers (Row 10) — SL NO. first, EMPLOYEE ID second, then 24 compliance cols
       sheetData.push([
         'Sl. No.',
+        'Employee ID',
         'Name of the workman',
         'Site',
         'UAN',
@@ -187,9 +188,10 @@ export async function GET(request: NextRequest) {
         const netPay = totalWagesForESI - totalDeduction;
 
         sheetData.push([
-          index + 1,
-          fullName,
-          employee.Branch?.name || 'N/A',
+          index + 1,                    // Sl. No.
+          employee.employeeCode,        // Employee ID
+          fullName,                     // Name of the workman
+          employee.Branch?.name || 'N/A', // Site
           employee.uanNumber || '',
           employee.esicNumber || '',
           employee.Designation?.name || '',
@@ -214,9 +216,10 @@ export async function GET(request: NextRequest) {
         ]);
       });
     } else {
-      // Non-Compliance Format - Detailed 68-column format
+      // Non-Compliance Format - Detailed 69-column format (SL NO. + EMPLOYEE ID + 67 cols)
       sheetData.push([
         'SL NO.',
+        'EMPLOYEE ID',
         'WORKMEN SL. NO.',
         'TOKEN NO.',
         'NAME OF EMPLOYEE',
@@ -334,9 +337,10 @@ export async function GET(request: NextRequest) {
         const nettPayableAfterDeduction = totalNettPayable - totalDeduction;
 
         sheetData.push([
-          index + 1,
-          index + 1,
-          employee.employeeCode,
+          index + 1,                    // SL NO.
+          employee.employeeCode,        // EMPLOYEE ID
+          index + 1,                    // WORKMEN SL. NO.
+          employee.employeeCode,        // TOKEN NO.
           fullName,
           employee.fatherName || '',
           employee.dateOfJoining ? new Date(employee.dateOfJoining).toLocaleDateString('en-IN') : '',
@@ -413,6 +417,7 @@ export async function GET(request: NextRequest) {
     if (format === 'compliance') {
       const colWidths = [
         { wch: 8 },  // Sl. No.
+        { wch: 14 }, // Employee ID
         { wch: 25 }, // Name
         { wch: 15 }, // Site
         { wch: 15 }, // UAN
@@ -439,9 +444,10 @@ export async function GET(request: NextRequest) {
       ];
       worksheet['!cols'] = colWidths;
     } else {
-      // Non-compliance format column widths
+      // Non-compliance format column widths (69 cols)
       const colWidths = [
         { wch: 8 },  // SL NO
+        { wch: 14 }, // EMPLOYEE ID
         { wch: 12 }, // WORKMEN SL NO
         { wch: 12 }, // TOKEN NO
         { wch: 25 }, // NAME
@@ -453,7 +459,7 @@ export async function GET(request: NextRequest) {
         { wch: 15 }, // IFSC
       ];
       // Add remaining column widths (58 more columns)
-      for (let i = 10; i < 68; i++) {
+      for (let i = 11; i < 69; i++) {
         colWidths.push({ wch: 12 });
       }
       worksheet['!cols'] = colWidths;

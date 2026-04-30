@@ -69,13 +69,6 @@ interface Project {
   people: number;
 }
 
-interface SupportTicket {
-  id: string;
-  ticketNo: string;
-  status: string;
-  priority: string;
-}
-
 interface Expense {
   id: string;
   claimNo: string;
@@ -267,7 +260,6 @@ export default function EmployeeAnalytics() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [payroll, setPayroll] = useState<Payroll[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -287,13 +279,12 @@ export default function EmployeeAnalytics() {
     async function fetchData() {
       try {
         // Fetch all APIs in parallel, but each is individually safe
-        const [empData, attData, leaveData, payData, projData, ticketData, expData] = await Promise.all([
+        const [empData, attData, leaveData, payData, projData, expData] = await Promise.all([
           safeFetch('/api/employees'),
           safeFetch('/api/attendance'),
           safeFetch('/api/leave'),
           safeFetch('/api/payroll'),
           safeFetch('/api/projects'),
-          safeFetch('/api/support'),
           safeFetch('/api/expenses'),
         ]);
 
@@ -337,7 +328,6 @@ export default function EmployeeAnalytics() {
         setLeaveRequests(Array.isArray(leaveData?.data) ? leaveData.data : []);
         setPayroll(Array.isArray(payData?.data) ? payData.data : []);
         setProjects(Array.isArray(projData?.data) ? projData.data : []);
-        setTickets(Array.isArray(ticketData?.data) ? ticketData.data : []);
         setExpenses(Array.isArray(expData?.data) ? expData.data : []);
       } catch (e: any) {
         setError(e.message || 'Failed to load analytics');
@@ -352,7 +342,6 @@ export default function EmployeeAnalytics() {
   const activeEmployees = employees.filter(e => e.status?.toLowerCase() === 'active').length;
   const totalEmployees = employees.length;
   const pendingLeave = leaveRequests.filter(l => l.status?.toLowerCase() === 'pending').length;
-  const openTickets = tickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
   const pendingExpenses = expenses.filter(e => e.status === 'Pending').length;
   const totalPayroll = payroll.reduce((s, p) => s + (p.gross || 0), 0);
 
@@ -505,14 +494,6 @@ export default function EmployeeAnalytics() {
       icon: CalendarOff,
       color: '#ff3d3d',
       trend: pendingLeave > 0 ? 'up' : 'neutral',
-    },
-    {
-      label: 'Open Tickets',
-      value: openTickets,
-      sub: `${tickets.length} Total`,
-      icon: Ticket,
-      color: '#00d4ff',
-      trend: openTickets > 0 ? 'down' : 'neutral',
     },
     {
       label: 'Pending Claims',

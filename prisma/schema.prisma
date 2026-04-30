@@ -104,6 +104,10 @@ model Designation {
 model Employee {
   id                        Int                         @id @default(autoincrement())
   employeeCode              String                      @unique
+  tokenNumber               String?                     @unique
+  workmenSlNo               String?
+  monthlyGrossSalary        Decimal?                    @db.Decimal(15, 2)
+  natureOfDesignation       String?
   userId                    Int?                        @unique
   firstName                 String
   middleName                String?
@@ -238,32 +242,6 @@ model ItemCategory {
   name String  @unique
   code String? @unique
   Item Item[]
-}
-
-model Lead {
-  id            Int            @id @default(autoincrement())
-  leadNo        String         @unique
-  companyName   String
-  contactPerson String
-  email         String?
-  phone         String?
-  status        String         @default("new")
-  source        String?
-  assignedToId  Int?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime
-  LeadActivity  LeadActivity[]
-}
-
-model LeadActivity {
-  id           Int      @id @default(autoincrement())
-  leadId       Int
-  type         String   @default("note")
-  subject      String
-  description  String?
-  activityDate DateTime
-  createdAt    DateTime @default(now())
-  Lead         Lead     @relation(fields: [leadId], references: [id])
 }
 
 model LeaveRequest {
@@ -806,24 +784,25 @@ model BiometricSiteConfig {
 
 // ── Employee Requests (general + advance payment) ────────────────
 model EmployeeRequest {
-  id            Int      @id @default(autoincrement())
-  employeeId    Int
-  requestType   String                        // "general" | "advance_payment"
-  subject       String
-  description   String
-  amount        Decimal? @db.Decimal(15, 2)   // only for advance_payment
-  status        String   @default("pending")  // pending | approved | rejected
-  currentStep   Int      @default(1)          // which approval step we're waiting on
-  approvedBy    Int?
-  approvedDate  DateTime?
-  rejectedBy    Int?
-  rejectedDate  DateTime?
-  rejectionNote String?
-  isDeleted     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime
+  id             Int      @id @default(autoincrement())
+  employeeId     Int
+  requestType    String                        // "general" | "advance_payment"
+  subject        String
+  description    String
+  amount         Decimal? @db.Decimal(15, 2)   // requested amount (advance_payment only)
+  approvedAmount Decimal? @db.Decimal(15, 2)   // approver-adjusted amount (may differ from requested)
+  status         String   @default("pending")  // pending | approved | rejected
+  currentStep    Int      @default(1)          // which approval step we're waiting on
+  approvedBy     Int?
+  approvedDate   DateTime?
+  rejectedBy     Int?
+  rejectedDate   DateTime?
+  rejectionNote  String?
+  isDeleted      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime
 
-  Employee      Employee @relation(fields: [employeeId], references: [id])
+  Employee       Employee @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId, status])
   @@index([requestType, status])
@@ -973,4 +952,39 @@ model ExitClearance {
   resignation   Resignation @relation(fields: [resignationId], references: [id])
 
   @@index([resignationId])
+}
+
+// ── Notice Board ──────────────────────────────────────────────────
+model Notice {
+  id            Int          @id @default(autoincrement())
+  title         String
+  body          String
+  type          String       @default("general") // general | policy | payroll | safety | hr | it
+  targetDept    String?      // null = all departments
+  targetDesig   String?      // null = all designations
+  isPinned      Boolean      @default(false)
+  publishedAt   DateTime     @default(now())
+  expiresAt     DateTime?
+  createdBy     Int?
+  createdByName String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  reads         NoticeRead[]
+
+  @@index([publishedAt])
+  @@index([targetDept])
+  @@index([targetDesig])
+}
+
+model NoticeRead {
+  id         Int      @id @default(autoincrement())
+  noticeId   Int
+  employeeId Int
+  readAt     DateTime @default(now())
+
+  notice     Notice   @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+
+  @@unique([noticeId, employeeId])
+  @@index([employeeId])
 }

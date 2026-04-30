@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   IndianRupee, TrendingUp, Users, Download, FileSpreadsheet,
-  Plus, Eye, Loader2, AlertTriangle, CheckCircle2, Clock, Shield
+  Plus, Eye, Loader2, AlertTriangle, CheckCircle2, Clock, Shield, Send
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -335,6 +335,21 @@ export default function PayrollCompliance() {
                       >
                         <Eye size={14} />
                         View
+                      </button>
+                      <button 
+                        className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-medium bg-[#a78bfa]/10 text-[#a78bfa] hover:bg-[#a78bfa]/20 border border-[#a78bfa]/30 transition-colors"
+                        onClick={async () => {
+                          const res = await fetch('/api/payroll/dispatch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payrollRunId: run.id }) }).then(r => r.json());
+                          if (res.success) {
+                            if (res.data.alreadyDispatched > 0 && res.data.dispatched === 0) toast.info(`All ${res.data.total} payslips already dispatched`);
+                            else toast.success(`Dispatched ${res.data.dispatched} payslip${res.data.dispatched !== 1 ? 's' : ''} to employees${res.data.alreadyDispatched > 0 ? ` (${res.data.alreadyDispatched} already sent)` : ''}`);
+                            fetchData();
+                          } else toast.error(res.error);
+                        }}
+                        title="Dispatch payslips to employee dashboards"
+                      >
+                        <Send size={14} />
+                        Dispatch
                       </button>
                       <button 
                         className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-medium bg-[#00e676]/10 text-[#00e676] hover:bg-[#00e676]/20 border border-[#00e676]/30 transition-colors"

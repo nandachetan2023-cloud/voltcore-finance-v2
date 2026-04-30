@@ -8,10 +8,10 @@ export async function GET() {
     // Create workbook
     const workbook = XLSX.utils.book_new();
 
-    // Define headers — Employee ID first, then the 24-column FORM XVII/XIII format
+    // Define headers — SL NO. first, then EMPLOYEE ID, then the 24-column FORM XVII/XIII format
     const headers = [
-      'Employee ID',
       'Sl. No.',
+      'Employee ID',
       'Name of the workman',
       'Site',
       'UAN',
@@ -43,8 +43,8 @@ export async function GET() {
 
     // Set column widths for compliance format
     const colWidths = headers.map((h, i) => {
-      if (i === 0) return { wch: 14 }; // Employee ID
-      if (i === 1) return { wch: 8 };  // Sl. No.
+      if (i === 0) return { wch: 8 };  // Sl. No.
+      if (i === 1) return { wch: 14 }; // Employee ID
       if (i === 2) return { wch: 25 }; // Name of the workman
       if (i === 3) return { wch: 15 }; // Site
       if (i === 4 || i === 5) return { wch: 15 }; // UAN, IP NO
@@ -65,8 +65,8 @@ export async function GET() {
       ['5. Save the file and upload it through the Bulk Import feature'],
       [''],
       ['Required Fields:'],
-      ['- Employee ID (unique employee code from your system, e.g. EMP001)'],
       ['- Sl. No. (Serial number starting from 1)'],
+      ['- Employee ID (unique employee code from your system, e.g. EMP001)'],
       ['- Name of the workman (Employee name — system will try to match if Employee ID is blank)'],
       ['- TOTAL NO OF DAYS WORKED (Number of days attended)'],
       ['- Basic wages in Rs (Basic salary amount)'],

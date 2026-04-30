@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Briefcase, Users, Send, UserCheck, Plus, Pencil,
-  Trash2, Loader2, AlertTriangle, Zap, CheckCircle2,
+  Trash2, Loader2, AlertTriangle, Zap, CheckCircle2, Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
@@ -124,7 +124,9 @@ function StatCard({ icon: Icon, label, value, color }: {
    ════════════════════════════════════════════════════════ */
 export default function Recruitment() {
   const [openings, setOpenings] = useState<JobOpening[]>([]);
-  const [sites, setSites] = useState<string[]>([]);
+  const [biometricSites, setBiometricSites] = useState<{ id: number; siteId: string; siteName: string }[]>([]);
+  const [customSiteMode, setCustomSiteMode] = useState(false);
+  const [editCustomSiteMode, setEditCustomSiteMode] = useState(false);
   const [designations, setDesignations] = useState<Designation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -141,22 +143,28 @@ export default function Recruitment() {
   useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
 
   /* ── Fetch ── */
+  const fetchBiometricSites = useCallback(async () => {
+    try {
+      const res = await fetch('/api/biometric/sites-list');
+      const json = await res.json();
+      if (json.success) {
+        setBiometricSites(json.data || []);
+      }
+    } catch {
+      // silent — sites stay empty, user can use custom value mode
+    }
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [jobRes, siteRes, desigRes] = await Promise.all([
+      const [jobRes, desigRes] = await Promise.all([
         fetch('/api/recruitment'),
-        fetch('/api/biometric/sites'),
         fetch('/api/designations'),
       ]);
       const jobJson = await jobRes.json();
-      const siteJson = await siteRes.json();
       const desigJson = await desigRes.json();
       if (jobJson.success) setOpenings(jobJson.data);
-      if (siteJson.success) {
-        const siteNames = siteJson.data.map((s: any) => s.name);
-        setSites(siteNames);
-      }
       if (desigJson.success) setDesignations(desigJson.data);
     } catch {
       toast.error('Failed to fetch recruitment data');
@@ -165,7 +173,7 @@ export default function Recruitment() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(); fetchBiometricSites(); }, [fetchData, fetchBiometricSites]);
 
   /* ── Stats ── */
   const openPositions = openings.filter(o => o.status === 'Open' || o.status === 'Shortlisting').length;
@@ -263,6 +271,9 @@ export default function Recruitment() {
       position: job.position, designationId: job.designationId || null, site: job.site, openings: job.openings,
       priority: job.priority, status: job.status,
     });
+    // Detect if stored site matches a biometric site or is a custom value
+    const matchesBiometricSite = biometricSites.some(s => s.siteId === job.site || s.siteName === job.site);
+    setEditCustomSiteMode(!matchesBiometricSite && job.site !== '');
     setEditOpen(true);
   };
 
@@ -365,10 +376,41 @@ export default function Recruitment() {
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
-              <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none">
-                <option value="">Select site...</option>
-                {sites.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setCustomSiteMode(false)}
+                    className={`flex-1 px-3 py-1.5 rounded-md text-[10px] font-medium transition-colors ${!customSiteMode ? 'bg-[#f5a623] text-black' : 'bg-[#141920] text-[#8899aa] border border-[#2e3a48] hover:border-[#f5a623]'}`}>
+                    Select Site
+                  </button>
+                  <button type="button" onClick={() => setCustomSiteMode(true)}
+                    className={`flex-1 px-3 py-1.5 rounded-md text-[10px] font-medium transition-colors ${customSiteMode ? 'bg-[#f5a623] text-black' : 'bg-[#141920] text-[#8899aa] border border-[#2e3a48] hover:border-[#f5a623]'}`}>
+                    Custom Value
+                  </button>
+                </div>
+                {!customSiteMode ? (
+                  <>
+                    <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none" disabled={biometricSites.length === 0}>
+                      <option value="">{biometricSites.length === 0 ? 'No biometric sites configured' : 'Select biometric site'}</option>
+                      {biometricSites.map(s => (
+                        <option key={s.id} value={s.siteId}>{s.siteName} ({s.siteId})</option>
+                      ))}
+                    </select>
+                    {biometricSites.length === 0 && (
+                      <div className="bg-[#ffab40]/10 border border-[#ffab40]/30 rounded-md p-2 flex items-start gap-2">
+                        <Info size={13} className="text-[#ffab40] mt-0.5 shrink-0" />
+                        <div className="text-[9px] text-[#ffab40]">No biometric sites found. Configure sites in <span className="font-semibold">Biometric Settings</span> or use Custom Value mode.</div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <input type="text" value={form.site} onChange={e => updateForm('site', e.target.value)} placeholder="Enter custom site name" className="vc-input" />
+                )}
+                <p className="text-[9px] text-[#5a6878]">
+                  {!customSiteMode
+                    ? biometricSites.length > 0 ? `${biometricSites.length} biometric site(s) available.` : 'Switch to Custom Value to enter a site manually.'
+                    : 'Enter any custom site identifier'}
+                </p>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -422,9 +464,41 @@ export default function Recruitment() {
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
-              <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none">
-                {sites.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setEditCustomSiteMode(false)}
+                    className={`flex-1 px-3 py-1.5 rounded-md text-[10px] font-medium transition-colors ${!editCustomSiteMode ? 'bg-[#f5a623] text-black' : 'bg-[#141920] text-[#8899aa] border border-[#2e3a48] hover:border-[#f5a623]'}`}>
+                    Select Site
+                  </button>
+                  <button type="button" onClick={() => setEditCustomSiteMode(true)}
+                    className={`flex-1 px-3 py-1.5 rounded-md text-[10px] font-medium transition-colors ${editCustomSiteMode ? 'bg-[#f5a623] text-black' : 'bg-[#141920] text-[#8899aa] border border-[#2e3a48] hover:border-[#f5a623]'}`}>
+                    Custom Value
+                  </button>
+                </div>
+                {!editCustomSiteMode ? (
+                  <>
+                    <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none" disabled={biometricSites.length === 0}>
+                      <option value="">{biometricSites.length === 0 ? 'No biometric sites configured' : 'Select biometric site'}</option>
+                      {biometricSites.map(s => (
+                        <option key={s.id} value={s.siteId}>{s.siteName} ({s.siteId})</option>
+                      ))}
+                    </select>
+                    {biometricSites.length === 0 && (
+                      <div className="bg-[#ffab40]/10 border border-[#ffab40]/30 rounded-md p-2 flex items-start gap-2">
+                        <Info size={13} className="text-[#ffab40] mt-0.5 shrink-0" />
+                        <div className="text-[9px] text-[#ffab40]">No biometric sites found. Configure sites in <span className="font-semibold">Biometric Settings</span> or use Custom Value mode.</div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <input type="text" value={form.site} onChange={e => updateForm('site', e.target.value)} placeholder="Enter custom site name" className="vc-input" />
+                )}
+                <p className="text-[9px] text-[#5a6878]">
+                  {!editCustomSiteMode
+                    ? biometricSites.length > 0 ? `${biometricSites.length} biometric site(s) available.` : 'Switch to Custom Value to enter a site manually.'
+                    : 'Enter any custom site identifier'}
+                </p>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

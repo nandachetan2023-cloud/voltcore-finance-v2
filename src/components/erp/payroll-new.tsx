@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   IndianRupee, TrendingUp, Users, Download, FileSpreadsheet,
   Plus, Eye, Loader2, AlertTriangle, CheckCircle2, Clock, Filter
@@ -124,6 +124,12 @@ export default function PayrollModule() {
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  
+  // New 2-step process states
+  const [uploadCalculateOpen, setUploadCalculateOpen] = useState(false);
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [calculating, setCalculating] = useState(false);
+  const templateFileInputRef = useRef<HTMLInputElement>(null);
   
   const [generateForm, setGenerateForm] = useState({
     mode: 'bulk' as 'single' | 'bulk',
@@ -446,6 +452,123 @@ export default function PayrollModule() {
     }
   };
 
+  // New 2-step process handlers
+  const handleDownloadTemplate = async () => {
+    try {
+      toast.info('Generating payroll template...');
+      
+      const params = new URLSearchParams({
+        month: generateForm.month.toString(),
+        year: generateForm.year.toString(),
+      });
+
+      if (generateForm.mode === 'single' && generateForm.employeeId) {
+        params.append('employeeId', generateForm.employeeId);
+      }
+
+      const res = await fetch(`/api/payroll/generate-template?${params.toString()}`);
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Payroll_Template_${MONTHS[generateForm.month - 1].label}_${generateForm.year}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        toast.success('Template downloaded successfully! Fill in the highlighted columns and upload for calculation.');
+        setGenerateOpen(false);
+        // Open upload dialog after download
+        setTimeout(() => setUploadCalculateOpen(true), 500);
+      } else {
+        const json = await res.json();
+        toast.error(json.error || 'Failed to generate template');
+      }
+    } catch (error) {
+      toast.error('Failed to download template');
+      console.error(error);
+    }
+  };
+
+  const handleTemplateFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setTemplateFile(file);
+    }
+  };
+
+  const handleUploadAndCalculate = async () => {
+    if (!templateFile) {
+      toast.error('Please select a file to upload');
+      return;
+    }
+
+    setCalculating(true);
+    try {
+      toast.info('Calculating payroll from template...');
+      
+      const formData = new FormData();
+      formData.append('file', templateFile);
+
+      const res = await fetch('/api/payroll/calculate-from-template', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const timestamp = Date.now();
+        a.download = `Payroll_Calculated_${timestamp}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        const calculatedRows = res.headers.get('X-Calculated-Rows') || '0';
+        toast.success(
+          <div>
+            <div className="font-semibold">Calculation Complete!</div>
+            <div className="text-xs mt-1">{calculatedRows} employees processed. Upload this file to "Non-Compliance Bulk Import" to save to database.</div>
+          </div>,
+          { duration: 6000 }
+        );
+        
+        setUploadCalculateOpen(false);
+        setTemplateFile(null);
+        if (templateFileInputRef.current) {
+          templateFileInputRef.current.value = '';
+        }
+      } else {
+        const json = await res.json();
+        toast.error(
+          <div>
+            <div className="font-semibold">Calculation Failed</div>
+            <div className="text-xs mt-1">{json.error || 'Unknown error'}</div>
+            {json.details && json.details.length > 0 && (
+              <div className="text-xs mt-2 max-h-32 overflow-y-auto">
+                {json.details.slice(0, 5).map((err: string, idx: number) => (
+                  <div key={idx}>• {err}</div>
+                ))}
+                {json.details.length > 5 && <div>... and {json.details.length - 5} more errors</div>}
+              </div>
+            )}
+          </div>,
+          { duration: 8000 }
+        );
+      }
+    } catch (error) {
+      toast.error('Failed to calculate payroll');
+      console.error(error);
+    } finally {
+      setCalculating(false);
+    }
+  };
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -482,6 +605,9 @@ export default function PayrollModule() {
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Payroll Runs</span>
           <span className="ml-auto text-[10px] text-[#5a6878]">{payrollRuns.length} runs</span>
           <SalaryComplianceBulkImport onImportComplete={fetchData} />
+          <button className="vc-btn-secondary ml-2 flex items-center gap-1" onClick={() => setGenerateOpen(true)}>
+            <Plus size={13} /> Generate Payroll Excel
+          </button>
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={() => setSearchPayslipOpen(true)}>
             <Download size={13} /> Search & Download Payslips
           </button>
@@ -640,13 +766,26 @@ export default function PayrollModule() {
         </DialogContent>
       </Dialog>
 
-      {/* Generate Payroll Dialog (kept for manual generation if needed) */}
+      {/* Generate Payroll Dialog - Step 1A: Download Template */}
       <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
         <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-[#e2e8f0] text-base">Generate Payroll</DialogTitle>
+            <DialogTitle className="text-[#e2e8f0] text-base">Generate Payroll Excel - Step 1</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-3">
+              <div className="text-[10px] text-[#8899aa] space-y-2">
+                <p className="font-semibold text-[#e2e8f0]">2-Step Process:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Download template with auto-filled data</li>
+                  <li>Fill in highlighted user input columns</li>
+                  <li>Upload for calculation</li>
+                  <li>Download final sheet</li>
+                  <li>Import to database via "Non-Compliance Bulk Import"</li>
+                </ol>
+              </div>
+            </div>
+
             <div>
               <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">Mode</label>
               <select 
@@ -710,10 +849,90 @@ export default function PayrollModule() {
             </Button>
             <Button 
               className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" 
-              disabled={submitting} 
-              onClick={handleGenerate}
+              onClick={handleDownloadTemplate}
             >
-              {submitting ? 'Generating...' : 'Generate'}
+              Download Template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload & Calculate Dialog - Step 1B */}
+      <Dialog open={uploadCalculateOpen} onOpenChange={setUploadCalculateOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base">Upload & Calculate - Step 2</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-3">
+              <div className="text-[10px] text-[#8899aa] space-y-2">
+                <p className="font-semibold text-[#e2e8f0]">Instructions:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Upload the template you filled offline</li>
+                  <li>System will validate and calculate all formulas</li>
+                  <li>Download the final calculated sheet</li>
+                  <li>Upload final sheet to "Non-Compliance Bulk Import"</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Upload Section */}
+            <div className="border-2 border-dashed border-[#2e3a48] rounded-lg p-6 text-center">
+              <input
+                ref={templateFileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleTemplateFileSelect}
+                className="hidden"
+                id="template-file-upload"
+              />
+              <label
+                htmlFor="template-file-upload"
+                className="cursor-pointer flex flex-col items-center gap-2"
+              >
+                <div className="w-12 h-12 rounded-full bg-[#f5a623]/10 flex items-center justify-center">
+                  <FileSpreadsheet size={24} className="text-[#f5a623]" />
+                </div>
+                <div>
+                  <div className="text-[12px] font-semibold text-[#e2e8f0] mb-1">
+                    {templateFile ? templateFile.name : 'Click to upload filled template'}
+                  </div>
+                  <div className="text-[10px] text-[#5a6878]">
+                    Excel file (.xlsx, .xls)
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {calculating && (
+              <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-3">
+                <div className="flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#f5a623] border-t-transparent" />
+                  <span className="text-[11px] text-[#e2e8f0]">Calculating payroll...</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="ghost" 
+              className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" 
+              onClick={() => {
+                setUploadCalculateOpen(false);
+                setTemplateFile(null);
+                if (templateFileInputRef.current) {
+                  templateFileInputRef.current.value = '';
+                }
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" 
+              disabled={!templateFile || calculating}
+              onClick={handleUploadAndCalculate}
+            >
+              {calculating ? 'Calculating...' : 'Upload & Calculate'}
             </Button>
           </DialogFooter>
         </DialogContent>

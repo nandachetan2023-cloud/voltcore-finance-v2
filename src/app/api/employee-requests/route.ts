@@ -355,7 +355,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { id, action, rejectionNote, approvedBy } = body
+    const { id, action, rejectionNote, approvedBy, approvedAmount } = body
 
     if (!id || !action) {
       return NextResponse.json({ success: false, error: 'id and action required' }, { status: 400 })
@@ -520,16 +520,34 @@ export async function PATCH(request: NextRequest) {
     const isLastStep = !chain || currentStep >= totalSteps || skipAdminStep
 
     if (isLastStep) {
-      // Final approval — mark as approved
+      // Final approval — mark as approved, store approvedAmount if provided
+      const approvedAmountValue = approvedAmount !== undefined && approvedAmount !== null && approvedAmount !== ''
+        ? parseFloat(String(approvedAmount))
+        : null;
+
       const updated = await db.employeeRequest.update({
         where: { id: parseInt(id) },
         data: {
           status: 'approved',
           approvedBy: approvedBy ? parseInt(approvedBy) : null,
           approvedDate: new Date(),
+          // Store approvedAmount if provided (for advance_payment adjustments)
+          // If not provided, approvedAmount stays null (meaning full amount was approved)
+          ...(approvedAmountValue !== null && { approvedAmount: approvedAmountValue }),
           updatedAt: new Date(),
         },
       })
+
+      // Build notification message — mention adjusted amount if different from requested
+      let approvalMessage = `Your request "${existing.subject}" has been fully approved.`;
+      if (existing.requestType === 'advance_payment' && approvedAmountValue !== null && existing.amount) {
+        const requestedAmt = Number(existing.amount);
+        if (approvedAmountValue < requestedAmt) {
+          approvalMessage = `Your advance payment request "${existing.subject}" has been approved for ₹${approvedAmountValue.toLocaleString('en-IN')} (you requested ₹${requestedAmt.toLocaleString('en-IN')}).`;
+        } else {
+          approvalMessage = `Your advance payment request "${existing.subject}" has been approved for ₹${approvedAmountValue.toLocaleString('en-IN')}.`;
+        }
+      }
 
       // Notify the employee
       await db.notification.create({
@@ -537,7 +555,7 @@ export async function PATCH(request: NextRequest) {
           userId: existing.employeeId,
           userEmail: existing.Employee.email,
           title: 'Request Approved ✓',
-          message: `Your request "${existing.subject}" has been fully approved.`,
+          message: approvalMessage,
           type: 'success',
           link: '',
           entityType: 'request',

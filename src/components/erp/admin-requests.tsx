@@ -32,6 +32,7 @@ export default function AdminRequests() {
   const [typeFilter, setTypeFilter] = useState<'all' | 'general' | 'advance_payment'>('all');
   const [actionTarget, setActionTarget] = useState<{ request: any; action: 'approve' | 'reject' } | null>(null);
   const [rejectionNote, setRejectionNote] = useState('');
+  const [approvedAmount, setApprovedAmount] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [myEmployeeId, setMyEmployeeId] = useState<number | null>(null);
 
@@ -60,22 +61,45 @@ export default function AdminRequests() {
 
   const handleAction = async () => {
     if (!actionTarget) return;
+
+    // Validate approved amount for advance payment approvals
+    if (actionTarget.action === 'approve' && actionTarget.request.requestType === 'advance_payment') {
+      const requested = Number(actionTarget.request.amount);
+      const approved = parseFloat(approvedAmount);
+      if (isNaN(approved) || approved <= 0) {
+        toast.error('Please enter a valid approved amount');
+        return;
+      }
+      if (approved > requested) {
+        toast.error(`Approved amount cannot exceed the requested amount of ₹${requested.toLocaleString('en-IN')}`);
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
+      const body: any = {
+        id: actionTarget.request.id,
+        action: actionTarget.action,
+        rejectionNote: rejectionNote || undefined,
+      };
+
+      // Include approvedAmount for advance payment approvals
+      if (actionTarget.action === 'approve' && actionTarget.request.requestType === 'advance_payment' && approvedAmount) {
+        body.approvedAmount = parseFloat(approvedAmount);
+      }
+
       const res = await fetch('/api/employee-requests', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: actionTarget.request.id,
-          action: actionTarget.action,
-          rejectionNote: rejectionNote || undefined,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (data.success) {
         toast.success(`Request ${actionTarget.action === 'approve' ? 'approved' : 'rejected'}`);
         setActionTarget(null);
         setRejectionNote('');
+        setApprovedAmount('');
         fetchRequests();
       } else toast.error(data.error);
     } finally { setSubmitting(false); }
@@ -208,9 +232,22 @@ export default function AdminRequests() {
                       </div>
                       <p className="text-[11px] text-[#8899aa] mt-1 line-clamp-2">{r.description}</p>
                       {r.amount && (
-                        <div className="flex items-center gap-1 mt-1 text-[12px] text-[#f5a623] font-bold">
-                          <IndianRupee size={12} />
-                          {Number(r.amount).toLocaleString('en-IN')}
+                        <div className="flex items-center gap-2 mt-1 text-[12px] font-bold">
+                          <span className="flex items-center gap-1 text-[#f5a623]">
+                            <IndianRupee size={12} />
+                            {Number(r.amount).toLocaleString('en-IN')}
+                            <span className="text-[10px] font-normal text-[#8899aa]">requested</span>
+                          </span>
+                          {r.approvedAmount !== null && r.approvedAmount !== undefined && r.status === 'approved' && (
+                            <>
+                              <span className="text-[#5a6878]">→</span>
+                              <span className="flex items-center gap-1 text-[#00e676]">
+                                <IndianRupee size={12} />
+                                {Number(r.approvedAmount).toLocaleString('en-IN')}
+                                <span className="text-[10px] font-normal text-[#8899aa]">approved</span>
+                              </span>
+                            </>
+                          )}
                         </div>
                       )}
                       {r.status === 'rejected' && r.rejectionNote && (
@@ -224,11 +261,19 @@ export default function AdminRequests() {
 
                   {r.status === 'pending' && (
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <button onClick={() => setActionTarget({ request: r, action: 'approve' })}
+                      <button onClick={() => {
+                          setActionTarget({ request: r, action: 'approve' });
+                          // Pre-fill approved amount with requested amount for advance payments
+                          if (r.requestType === 'advance_payment' && r.amount) {
+                            setApprovedAmount(String(Number(r.amount)));
+                          } else {
+                            setApprovedAmount('');
+                          }
+                        }}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-[#00e676]/10 text-[#00e676] hover:bg-[#00e676]/20 border border-[#00e676]/20 transition-all">
                         <CheckCircle2 size={12} /> {r.currentStep > 1 ? `Approve (Step ${r.currentStep})` : 'Approve'}
                       </button>
-                      <button onClick={() => { setActionTarget({ request: r, action: 'reject' }); setRejectionNote(''); }}
+                      <button onClick={() => { setActionTarget({ request: r, action: 'reject' }); setRejectionNote(''); setApprovedAmount(''); }}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-[#ff3d3d]/10 text-[#ff3d3d] hover:bg-[#ff3d3d]/20 border border-[#ff3d3d]/20 transition-all">
                         <XCircle size={12} /> Reject
                       </button>
@@ -248,7 +293,7 @@ export default function AdminRequests() {
 
       {/* Action Dialog */}
       {actionTarget && (
-        <Dialog open onOpenChange={() => { setActionTarget(null); setRejectionNote(''); }}>
+        <Dialog open onOpenChange={() => { setActionTarget(null); setRejectionNote(''); setApprovedAmount(''); }}>
           <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
             <DialogHeader>
               <DialogTitle className={`flex items-center gap-2 ${actionTarget.action === 'approve' ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>
@@ -261,6 +306,37 @@ export default function AdminRequests() {
                 {actionTarget.action === 'approve' ? 'Approve' : 'Reject'} request:{' '}
                 <span className="text-[#e2e8f0] font-semibold">"{actionTarget.request.subject}"</span>
               </p>
+
+              {/* Advance payment amount adjustment */}
+              {actionTarget.action === 'approve' && actionTarget.request.requestType === 'advance_payment' && actionTarget.request.amount && (
+                <div className="bg-[#f5a623]/10 border border-[#f5a623]/30 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-[#8899aa]">Requested Amount:</span>
+                    <span className="text-[#f5a623] font-bold flex items-center gap-1">
+                      <IndianRupee size={11} />
+                      {Number(actionTarget.request.amount).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">
+                      Approved Amount (₹) <span className="text-[#ff3d3d]">*</span>
+                    </label>
+                    <input
+                      className="vc-input"
+                      type="number"
+                      min="1"
+                      max={Number(actionTarget.request.amount)}
+                      value={approvedAmount}
+                      onChange={e => setApprovedAmount(e.target.value)}
+                      placeholder="Enter approved amount"
+                    />
+                    <p className="text-[9px] text-[#5a6878] mt-1">
+                      You can approve the full amount or reduce it. Cannot exceed the requested amount.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {actionTarget.action === 'reject' && (
                 <div>
                   <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Reason for Rejection</label>
@@ -271,7 +347,7 @@ export default function AdminRequests() {
             </div>
             <DialogFooter className="gap-2">
               <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] border border-[#2e3a48]"
-                onClick={() => { setActionTarget(null); setRejectionNote(''); }}>Cancel</Button>
+                onClick={() => { setActionTarget(null); setRejectionNote(''); setApprovedAmount(''); }}>Cancel</Button>
               <Button
                 className={actionTarget.action === 'approve' ? 'bg-[#00e676] text-black hover:bg-[#00c853] font-semibold' : 'bg-[#ff3d3d] text-white hover:bg-[#e63535] font-semibold'}
                 disabled={submitting} onClick={handleAction}>

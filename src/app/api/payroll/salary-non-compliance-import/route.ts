@@ -91,10 +91,15 @@ export async function POST(request: NextRequest) {
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
-    // Use specified sheet or find "COMBINED SALARY SHEET" or use first sheet
+    // Use specified sheet or find "NON-COMPLIANCE SALARY SHEET" or use first sheet
     let targetSheet = sheetName;
     if (!targetSheet || !workbook.SheetNames.includes(targetSheet)) {
-      targetSheet = workbook.SheetNames.find(name => name === 'COMBINED SALARY SHEET') || workbook.SheetNames[0];
+      targetSheet = workbook.SheetNames.find(name =>
+        name === 'NON-COMPLIANCE SALARY SHEET' ||
+        name === 'COMBINED SALARY SHEET' ||
+        name.toLowerCase().includes('non-compliance') ||
+        name.toLowerCase().includes('salary')
+      ) || workbook.SheetNames[0];
     }
 
     const worksheet = workbook.Sheets[targetSheet];
@@ -154,11 +159,11 @@ export async function POST(request: NextRequest) {
       const rowNumber = i + 2; // +2 because of header and 0-index
 
       try {
-        // Skip empty rows — col 0 = EMPLOYEE ID, col 3 = TOKEN NO (employee code), col 4 = NAME
-        if (!row || row.length === 0 || (!row[0] && !row[3])) continue;
+        // Skip empty rows — col 0 = SL NO., col 1 = EMPLOYEE ID, col 3 = TOKEN NO (employee code), col 4 = NAME
+        if (!row || row.length === 0 || (!row[1] && !row[3])) continue;
 
-        const employeeIdCol = String(row[0] || '').trim(); // EMPLOYEE ID
-        const tokenNo = String(row[3] || '').trim();       // TOKEN NO (col 3, was col 2 before Employee ID added)
+        const employeeIdCol = String(row[1] || '').trim(); // EMPLOYEE ID (col 1)
+        const tokenNo = String(row[3] || '').trim();       // TOKEN NO (col 3)
         if (!tokenNo && !employeeIdCol) {
           errors.push({ row: rowNumber, error: 'Missing TOKEN NO. and Employee ID' });
           failed++;
@@ -190,9 +195,9 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Parse data — col 0 = EMPLOYEE ID, then original 68-col format starts at col 1
+        // Parse data — col 0 = SL NO., col 1 = EMPLOYEE ID, then original 67-col format starts at col 2
         const salaryData: SalaryNonComplianceRow = {
-          slNo: Number(row[1]) || 0,                    // col 1: SL NO.
+          slNo: Number(row[0]) || 0,                     // col 0: SL NO.
           tokenNo,                                        // col 3: TOKEN NO. (already read)
           employeeName: String(row[4] || ''),            // col 4: NAME OF EMPLOYEE
           fatherName: String(row[5] || ''),              // col 5: FATHER'S NAME

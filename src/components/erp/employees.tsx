@@ -45,6 +45,8 @@ interface Employee {
 interface EmployeeFormData {
   // Identity
   empId: string;
+  tokenNumber: string;
+  workmenSlNo: string;
   firstName: string;
   middleName: string;
   lastName: string;
@@ -70,6 +72,7 @@ interface EmployeeFormData {
   // Organisation
   departmentId: string;
   designationId: string;
+  natureOfDesignation: string;
   branchId: string;
   gradeId: string;
   reportingManagerId: string;
@@ -80,6 +83,8 @@ interface EmployeeFormData {
   employmentStatus: string;
   probationMonths: string;
   noticePeriodDays: string;
+  // Salary
+  monthlyGrossSalary: string;
   // Statutory
   panNumber: string;
   aadharNumber: string;
@@ -96,16 +101,17 @@ interface EmployeeFormData {
 }
 
 const emptyForm: EmployeeFormData = {
-  empId: '', firstName: '', middleName: '', lastName: '',
+  empId: '', tokenNumber: '', workmenSlNo: '', firstName: '', middleName: '', lastName: '',
   email: '', phone: '', alternatePhone: '', personalEmail: '',
   dateOfBirth: '', gender: 'male', maritalStatus: '', bloodGroup: '',
   fatherName: '',
   currentAddress: '', currentCity: '', currentState: '', currentPincode: '',
   permanentAddress: '', permanentCity: '', permanentState: '', permanentPincode: '',
-  departmentId: '', designationId: '', branchId: '', gradeId: '', reportingManagerId: '',
+  departmentId: '', designationId: '', natureOfDesignation: '', branchId: '', gradeId: '', reportingManagerId: '',
   dateOfJoining: '', confirmationDate: '',
   employmentType: 'permanent', employmentStatus: 'active',
   probationMonths: '6', noticePeriodDays: '30',
+  monthlyGrossSalary: '',
   panNumber: '', aadharNumber: '', uanNumber: '', esicNumber: '',
   bankName: '', bankAccount: '', bankIfsc: '',
   emergencyContactName: '', emergencyContactRelation: '', emergencyContactPhone: '',
@@ -318,6 +324,8 @@ export default function EmployeesModule() {
   const openEdit = (emp: any) => {
     setForm({
       empId: emp.employeeCode || '',
+      tokenNumber: emp.tokenNumber || '',
+      workmenSlNo: emp.workmenSlNo || '',
       firstName: emp.firstName || '',
       middleName: emp.middleName || '',
       lastName: emp.lastName || '',
@@ -340,6 +348,7 @@ export default function EmployeesModule() {
       permanentPincode: emp.permanentPincode || '',
       departmentId: emp.departmentId?.toString() || emp.Department?.id?.toString() || '',
       designationId: emp.designationId?.toString() || emp.Designation?.id?.toString() || '',
+      natureOfDesignation: emp.natureOfDesignation || '',
       branchId: emp.branchId?.toString() || emp.Branch?.id?.toString() || '',
       gradeId: emp.gradeId?.toString() || '',
       reportingManagerId: emp.reportingManagerId?.toString() || '',
@@ -349,6 +358,7 @@ export default function EmployeesModule() {
       employmentStatus: emp.employmentStatus || 'active',
       probationMonths: emp.probationMonths?.toString() || '6',
       noticePeriodDays: emp.noticePeriodDays?.toString() || '30',
+      monthlyGrossSalary: emp.monthlyGrossSalary?.toString() || '',
       panNumber: emp.panNumber || '',
       aadharNumber: emp.aadharNumber || '',
       uanNumber: emp.uanNumber || '',
@@ -401,6 +411,8 @@ export default function EmployeesModule() {
 
       const apiBody: any = {
         employeeCode,
+        tokenNumber: form.tokenNumber.trim() || null,
+        workmenSlNo: form.workmenSlNo.trim() || null,
         firstName: form.firstName.trim(),
         middleName: form.middleName.trim() || null,
         lastName: form.lastName.trim(),
@@ -423,6 +435,7 @@ export default function EmployeesModule() {
         permanentPincode: form.permanentPincode.trim() || null,
         departmentId: parseInt(form.departmentId),
         designationId: parseInt(form.designationId),
+        natureOfDesignation: form.natureOfDesignation.trim() || null,
         branchId: parseInt(form.branchId),
         gradeId: form.gradeId ? parseInt(form.gradeId) : null,
         reportingManagerId: form.reportingManagerId ? parseInt(form.reportingManagerId) : null,
@@ -432,6 +445,7 @@ export default function EmployeesModule() {
         employmentStatus: form.employmentStatus,
         probationMonths: parseInt(form.probationMonths) || 6,
         noticePeriodDays: parseInt(form.noticePeriodDays) || 30,
+        monthlyGrossSalary: form.monthlyGrossSalary ? parseFloat(form.monthlyGrossSalary) : null,
         panNumber: form.panNumber.trim() || null,
         aadharNumber: form.aadharNumber.trim() || null,
         uanNumber: form.uanNumber.trim() || null,
@@ -535,6 +549,8 @@ export default function EmployeesModule() {
         {/* ── Identity ── */}
         {formTab === 'identity' && <>
           <F label="Employee ID" req><input className={inp} value={form.empId} onChange={e => setForm(f => ({ ...f, empId: e.target.value.toUpperCase() }))} placeholder="EMP0001" maxLength={7} /></F>
+          <F label="Token Number"><input className={inp} value={form.tokenNumber} onChange={e => setForm(f => ({ ...f, tokenNumber: e.target.value.toUpperCase() }))} placeholder="TKN001" /></F>
+          <F label="Workmen Sl. No."><input className={inp} value={form.workmenSlNo} onChange={e => setForm(f => ({ ...f, workmenSlNo: e.target.value.toUpperCase() }))} placeholder="WM001" /></F>
           <F label="First Name" req><input className={inp} value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} placeholder="Rajesh" /></F>
           <F label="Middle Name"><input className={inp} value={form.middleName} onChange={e => setForm(f => ({ ...f, middleName: e.target.value }))} placeholder="Kumar" /></F>
           <F label="Last Name" req><input className={inp} value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} placeholder="Sharma" /></F>
@@ -644,6 +660,16 @@ export default function EmployeesModule() {
               <option value="separated">Separated</option>
             </select>
           </F>
+          <F label="Nature of Designation">
+            <select className={sel} value={form.natureOfDesignation} onChange={e => setForm(f => ({ ...f, natureOfDesignation: e.target.value }))}>
+              <option value="">Select...</option>
+              <option value="Skilled">Skilled</option>
+              <option value="Semi-skilled">Semi-skilled</option>
+              <option value="Unskilled">Unskilled</option>
+              <option value="Highly Skilled">Highly Skilled</option>
+            </select>
+          </F>
+          <F label="Monthly Gross Salary"><input className={inp} type="number" min="0" step="0.01" value={form.monthlyGrossSalary} onChange={e => setForm(f => ({ ...f, monthlyGrossSalary: e.target.value }))} placeholder="15000.00" /></F>
           <F label="Probation Months"><input className={inp} type="number" min="0" value={form.probationMonths} onChange={e => setForm(f => ({ ...f, probationMonths: e.target.value }))} /></F>
           <F label="Notice Period Days"><input className={inp} type="number" min="0" value={form.noticePeriodDays} onChange={e => setForm(f => ({ ...f, noticePeriodDays: e.target.value }))} /></F>
         </>}

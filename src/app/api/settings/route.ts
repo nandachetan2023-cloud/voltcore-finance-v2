@@ -1,86 +1,56 @@
-import { db } from '@/lib/db'
+import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
 // GET: Return all settings as key-value object
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const settings = await db.companySettings.findMany({
-      select: {
-        key: true,
-        value: true,
-        label: true,
-      },
+      select: { key: true, value: true, label: true, group: true },
+      orderBy: { group: 'asc' },
     })
 
-    // Convert array to key-value object
     const settingsMap: Record<string, string> = {}
-    const labelsMap: Record<string, string> = {}
     for (const s of settings) {
       settingsMap[s.key] = s.value
-      labelsMap[s.key] = s.label
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        settings: settingsMap,
-        labels: labelsMap,
-      },
-    })
+    return NextResponse.json({ success: true, data: { settings: settingsMap } })
   } catch (error) {
     console.error('Error fetching settings:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch settings' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: 'Failed to fetch settings' }, { status: 500 })
   }
 }
 
-// PUT: Upsert settings (accept object of key-value pairs)
+// PUT: Upsert settings — accepts { settings: { key: value, ... }, group?: string }
 export async function PUT(request: NextRequest) {
+  const db = getDbForRequest(request)
   try {
     const body = await request.json()
-    const { settings } = body
+    const { settings, groups } = body
 
     if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
-      return NextResponse.json(
-        { success: false, error: 'settings object with key-value pairs is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ success: false, error: 'settings object required' }, { status: 400 })
     }
-
-    const results = []
 
     for (const [key, value] of Object.entries(settings)) {
-      const result = await db.companySettings.upsert({
+      const group = groups?.[key] || 'general'
+      const label = key
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase())
+
+      await db.companySettings.upsert({
         where: { key },
-        update: { value: String(value) },
-        create: {
-          key,
-          value: String(value),
-          label: key
-            .replace(/([A-Z])/g, ' $1')
-            .replace(/^./, (s) => s.toUpperCase())
-            .trim(),
-        },
+        update: { value: String(value), updatedAt: new Date() },
+        create: { key, value: String(value), label, group, updatedAt: new Date() },
       })
-      results.push(result)
     }
 
-    // Return updated settings as key-value map
-    const settingsMap: Record<string, string> = {}
-    for (const r of results) {
-      settingsMap[r.key] = r.value
-    }
-
-    return NextResponse.json({ success: true, data: settingsMap })
+    return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error updating settings:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to update settings' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: 'Failed to update settings' }, { status: 500 })
   }
 }

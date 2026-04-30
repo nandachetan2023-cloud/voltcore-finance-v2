@@ -1,301 +1,215 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Settings as SettingsIcon, Building2, Save, Clock, CalendarDays, Shield, Loader2 } from 'lucide-react'
+import { Building2, Save, Loader2, RefreshCw, FileText, IndianRupee, Users, Settings as SettingsIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
+// ── Field groups ─────────────────────────────────────────────────
 
-interface SettingsData {
-  [key: string]: string
-}
-
-/* ------------------------------------------------------------------ */
-/*  Default settings for display when API returns empty                */
-/* ------------------------------------------------------------------ */
-
-const DEFAULT_COMPANY: Record<string, string> = {
-  company_name: 'VoltCore Engineering Pvt. Ltd.',
-  pan: 'AAECV1234K',
-  gst: '09AAECV1234K1Z5',
-  pf_reg: 'PFBNG0012345000',
-  esi_reg: '31000123456789',
-  address: 'Plot No. 42, Sector 15, Electronic City,\nBengaluru, Karnataka 560100',
-}
-
-const LEAVE_POLICY = [
-  { type: 'Earned Leave (EL)', key: 'leave_el', days: 18, color: 'text-[#00e676]' },
-  { type: 'Sick Leave (SL)', key: 'leave_sl', days: 7, color: 'text-[#00d4ff]' },
-  { type: 'Casual Leave (CL)', key: 'leave_cl', days: 5, color: 'text-[#f5a623]' },
-  { type: 'Maternity Leave (ML)', key: 'leave_ml', days: 182, color: 'text-[#a78bfa]' },
+const GROUPS: { id: string; label: string; icon: any; color: string; fields: { key: string; label: string; type?: string; mono?: boolean; placeholder?: string; span?: boolean }[] }[] = [
+  {
+    id: 'company',
+    label: 'Company Identity',
+    icon: Building2,
+    color: '#f5a623',
+    fields: [
+      { key: 'company_name',    label: 'Company Name',              placeholder: 'e.g. VoltCore Engineering Pvt. Ltd.', span: true },
+      { key: 'company_type',    label: 'Company Type',              placeholder: 'e.g. Private Limited' },
+      { key: 'industry',        label: 'Industry / Sector',         placeholder: 'e.g. Power Plant Contractor' },
+      { key: 'incorporation_date', label: 'Incorporation Date',     type: 'date' },
+      { key: 'cin',             label: 'CIN',                       mono: true, placeholder: 'U12345MH2020PTC123456' },
+      { key: 'website',         label: 'Website',                   placeholder: 'https://company.com' },
+    ],
+  },
+  {
+    id: 'address',
+    label: 'Registered Address',
+    icon: Building2,
+    color: '#00d4ff',
+    fields: [
+      { key: 'address_line1',   label: 'Address Line 1',            placeholder: 'Plot No., Street', span: true },
+      { key: 'address_line2',   label: 'Address Line 2',            placeholder: 'Area, Locality', span: true },
+      { key: 'city',            label: 'City',                      placeholder: 'e.g. Mumbai' },
+      { key: 'state',           label: 'State',                     placeholder: 'e.g. Maharashtra' },
+      { key: 'pincode',         label: 'Pincode',                   mono: true, placeholder: '400001' },
+      { key: 'country',         label: 'Country',                   placeholder: 'India' },
+    ],
+  },
+  {
+    id: 'statutory',
+    label: 'Statutory & Compliance',
+    icon: FileText,
+    color: '#00e676',
+    fields: [
+      { key: 'pan',             label: 'PAN',                       mono: true, placeholder: 'AAECV1234K' },
+      { key: 'tan',             label: 'TAN',                       mono: true, placeholder: 'MUMV12345A' },
+      { key: 'gst',             label: 'GST Number',                mono: true, placeholder: '27AAECV1234K1Z5' },
+      { key: 'pf_reg',          label: 'PF Registration No.',       mono: true, placeholder: 'PFBNG0012345000' },
+      { key: 'esi_reg',         label: 'ESI Registration No.',      mono: true, placeholder: '31000123456789' },
+      { key: 'esi_state_code',  label: 'ESI State Code',            mono: true, placeholder: 'e.g. 31' },
+      { key: 'pt_reg',          label: 'PT Registration No.',       mono: true, placeholder: 'Professional Tax Reg.' },
+      { key: 'lwf_reg',         label: 'LWF Registration No.',      mono: true, placeholder: 'Labour Welfare Fund Reg.' },
+      { key: 'labour_licence',  label: 'Labour Licence No.',        mono: true, placeholder: 'Contract Labour Licence' },
+    ],
+  },
+  {
+    id: 'payroll',
+    label: 'Payroll Configuration',
+    icon: IndianRupee,
+    color: '#a78bfa',
+    fields: [
+      { key: 'payroll_cycle',       label: 'Payroll Cycle',             placeholder: 'e.g. Monthly' },
+      { key: 'financial_year_start',label: 'Financial Year Start Month', placeholder: 'e.g. April' },
+      { key: 'working_days_week',   label: 'Working Days per Week',     placeholder: 'e.g. 6', mono: true },
+      { key: 'working_days_month',  label: 'Working Days per Month',    placeholder: 'e.g. 26', mono: true },
+      { key: 'ot_rate_multiplier',  label: 'OT Rate Multiplier',        placeholder: 'e.g. 2 (for 2x)', mono: true },
+      { key: 'pf_employer_rate',    label: 'PF Employer Rate (%)',      placeholder: 'e.g. 12', mono: true },
+      { key: 'pf_employee_rate',    label: 'PF Employee Rate (%)',      placeholder: 'e.g. 12', mono: true },
+      { key: 'esi_employer_rate',   label: 'ESI Employer Rate (%)',     placeholder: 'e.g. 3.25', mono: true },
+      { key: 'esi_employee_rate',   label: 'ESI Employee Rate (%)',     placeholder: 'e.g. 0.75', mono: true },
+      { key: 'pt_monthly',          label: 'Professional Tax (monthly)',placeholder: 'e.g. 200', mono: true },
+    ],
+  },
+  {
+    id: 'bank',
+    label: 'Company Bank Details',
+    icon: IndianRupee,
+    color: '#ffab40',
+    fields: [
+      { key: 'bank_name',       label: 'Bank Name',                 placeholder: 'e.g. State Bank of India' },
+      { key: 'bank_branch',     label: 'Branch Name',               placeholder: 'e.g. Andheri West' },
+      { key: 'bank_account',    label: 'Account Number',            mono: true, placeholder: 'Salary disbursement account' },
+      { key: 'bank_ifsc',       label: 'IFSC Code',                 mono: true, placeholder: 'e.g. SBIN0001234' },
+      { key: 'bank_account_type', label: 'Account Type',            placeholder: 'e.g. Current' },
+    ],
+  },
+  {
+    id: 'contact',
+    label: 'HR & Admin Contact',
+    icon: Users,
+    color: '#00d4ff',
+    fields: [
+      { key: 'hr_name',         label: 'HR Manager Name',           placeholder: 'Full name' },
+      { key: 'hr_email',        label: 'HR Email',                  type: 'email', placeholder: 'hr@company.com' },
+      { key: 'hr_phone',        label: 'HR Phone',                  mono: true, placeholder: '9876543210' },
+      { key: 'admin_email',     label: 'Admin Email',               type: 'email', placeholder: 'admin@company.com' },
+      { key: 'payroll_email',   label: 'Payroll Email',             type: 'email', placeholder: 'payroll@company.com' },
+      { key: 'support_phone',   label: 'Support / Helpdesk Phone',  mono: true, placeholder: '1800-xxx-xxxx' },
+    ],
+  },
 ]
 
-const SHIFT_CONFIG = [
-  { label: 'Day Shift A', key: 'shift_day_a', timing: '06:00 – 18:00', color: 'bg-[#00e676]' },
-  { label: 'Day Shift B', key: 'shift_day_b', timing: '07:00 – 19:00', color: 'bg-[#00d4ff]' },
-  { label: 'Night Shift B', key: 'shift_night_b', timing: '18:00 – 06:00', color: 'bg-[#ffab40]' },
-  { label: 'General Shift', key: 'shift_general', timing: '09:00 – 18:00', color: 'bg-[#a78bfa]' },
-  { label: 'OT Multiplier', key: 'shift_ot', timing: '2x on Sundays', color: 'bg-[#f5a623]' },
-]
-
-/* ------------------------------------------------------------------ */
-/*  Skeleton                                                          */
-/* ------------------------------------------------------------------ */
-
-function SkeletonPanel() {
-  return (
-    <div className="vc-panel animate-pulse">
-      <div className="vc-panel-header">
-        <div className="h-4 bg-[#252e3a] rounded w-32" />
-      </div>
-      <div className="vc-panel-body space-y-3">
-        {[1, 2, 3, 4].map(i => (
-          <div key={i} className="h-10 bg-[#252e3a] rounded w-full" />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/*  Main Component                                                     */
-/* ------------------------------------------------------------------ */
+// ── Component ────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<SettingsData>({})
+  const [settings, setSettings] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [activeGroup, setActiveGroup] = useState('company')
 
-  /* Fetch settings on mount */
   const fetchSettings = useCallback(async () => {
+    setLoading(true)
     try {
       const res = await fetch('/api/settings')
       const json = await res.json()
-      if (json.success) {
-        setSettings(json.data.settings || {})
-      }
-    } catch {
-      toast.error('Failed to load settings')
-    } finally {
-      setLoading(false)
-    }
+      if (json.success) setSettings(json.data.settings || {})
+      else toast.error('Failed to load settings')
+    } catch { toast.error('Failed to load settings') }
+    finally { setLoading(false) }
   }, [])
 
-  useEffect(() => {
-    fetchSettings()
-  }, [fetchSettings])
+  useEffect(() => { fetchSettings() }, [fetchSettings])
 
-  /* Get a setting value with fallback */
-  const get = (key: string, fallback: string = ''): string => {
-    return settings[key] || fallback
-  }
+  const get = (key: string) => settings[key] || ''
+  const set = (key: string, value: string) => setSettings(prev => ({ ...prev, [key]: value }))
 
-  /* Handle save */
   const handleSave = async () => {
     setSaving(true)
     try {
+      // Build groups map for the API
+      const groups: Record<string, string> = {}
+      GROUPS.forEach(g => g.fields.forEach(f => { groups[f.key] = g.id }))
+
       const res = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify({ settings, groups }),
       })
       const json = await res.json()
-      if (json.success) {
-        toast.success('Settings saved successfully')
-        // Re-fetch to get latest values
-        const getRes = await fetch('/api/settings')
-        const getJson = await getRes.json()
-        if (getJson.success) {
-          setSettings(getJson.data.settings || {})
-        }
-      } else {
-        toast.error(json.error || 'Failed to save settings')
-      }
-    } catch {
-      toast.error('Network error saving settings')
-    } finally {
-      setSaving(false)
-    }
+      if (json.success) toast.success('Settings saved')
+      else toast.error(json.error || 'Failed to save')
+    } catch { toast.error('Network error') }
+    finally { setSaving(false) }
   }
 
-  /* Update a single setting */
-  const updateSetting = (key: string, value: string) => {
-    setSettings(prev => ({ ...prev, [key]: value }))
-  }
+  const currentGroup = GROUPS.find(g => g.id === activeGroup)!
 
-  /* ---------------------------------------------------------------- */
-
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SkeletonPanel />
-        <div className="space-y-4">
-          <SkeletonPanel />
-          <SkeletonPanel />
-        </div>
-      </div>
-    )
-  }
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-7 h-7 border-2 border-[#f5a623]/30 border-t-[#f5a623] rounded-full animate-spin" />
+    </div>
+  )
 
   return (
-    <div className="space-y-6">
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Left: Company Settings */}
-        <div className="vc-panel">
-          <div className="vc-panel-header">
-            <Building2 size={15} className="text-[#f5a623]" />
-            <span className="text-[12px] font-semibold text-[#e2e8f0]">Company Settings</span>
+    <div className="p-4 max-w-5xl space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-[#f5a623]/10 rounded-xl flex items-center justify-center">
+            <SettingsIcon size={18} className="text-[#f5a623]" />
           </div>
-          <div className="vc-panel-body space-y-3">
-            <div>
-              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Company Name</label>
-              <input
-                type="text"
-                value={get('company_name', DEFAULT_COMPANY.company_name)}
-                onChange={(e) => updateSetting('company_name', e.target.value)}
-                className="vc-input"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">PAN</label>
-                <input
-                  type="text"
-                  value={get('pan', DEFAULT_COMPANY.pan)}
-                  onChange={(e) => updateSetting('pan', e.target.value)}
-                  className="vc-input"
-                  style={{ fontFamily: "'Share Tech Mono', monospace", textTransform: 'uppercase' }}
-                />
-              </div>
-              <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">GST Number</label>
-                <input
-                  type="text"
-                  value={get('gst', DEFAULT_COMPANY.gst)}
-                  onChange={(e) => updateSetting('gst', e.target.value)}
-                  className="vc-input"
-                  style={{ fontFamily: "'Share Tech Mono', monospace", textTransform: 'uppercase' }}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">PF Registration</label>
-                <input
-                  type="text"
-                  value={get('pf_reg', DEFAULT_COMPANY.pf_reg)}
-                  onChange={(e) => updateSetting('pf_reg', e.target.value)}
-                  className="vc-input"
-                  style={{ fontFamily: "'Share Tech Mono', monospace" }}
-                />
-              </div>
-              <div>
-                <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">ESI Registration</label>
-                <input
-                  type="text"
-                  value={get('esi_reg', DEFAULT_COMPANY.esi_reg)}
-                  onChange={(e) => updateSetting('esi_reg', e.target.value)}
-                  className="vc-input"
-                  style={{ fontFamily: "'Share Tech Mono', monospace" }}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">Registered Office Address</label>
-              <textarea
-                value={get('address', DEFAULT_COMPANY.address)}
-                onChange={(e) => updateSetting('address', e.target.value)}
-                className="vc-input min-h-[72px] resize-none"
-                rows={3}
-              />
-            </div>
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="vc-btn-primary flex items-center gap-1.5 py-2 px-5 disabled:opacity-50"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 size={13} className="animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save size={13} />
-                    <span>Save</span>
-                  </>
-                )}
-              </button>
-            </div>
+          <div>
+            <h2 className="text-[16px] font-bold text-[#e2e8f0]">Company Settings</h2>
+            <p className="text-[11px] text-[#5a6878]">Stored in database — persists across sessions</p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <button onClick={fetchSettings} className="p-1.5 text-[#5a6878] hover:text-[#e2e8f0]"><RefreshCw size={14} /></button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50">
+            {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+            {saving ? 'Saving...' : 'Save All'}
+          </button>
+        </div>
+      </div>
 
-        {/* Right: Policy Panels */}
-        <div className="space-y-4">
-          {/* Leave Policy */}
-          <div className="vc-panel">
-            <div className="vc-panel-header">
-              <CalendarDays size={15} className="text-[#00d4ff]" />
-              <span className="text-[12px] font-semibold text-[#e2e8f0]">Leave Policy</span>
-            </div>
-            <div className="vc-panel-body">
-              <div className="space-y-2">
-                {LEAVE_POLICY.map((leave) => {
-                  const daysStr = get(leave.key, String(leave.days))
-                  const days = parseInt(daysStr) || leave.days
-                  return (
-                    <div key={leave.type} className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-[#141920] border border-[#252e3a]/50">
-                      <div className="flex items-center gap-2">
-                        <Shield size={12} className="text-[#5a6878]" />
-                        <span className="text-[11px] text-[#e2e8f0] font-medium">{leave.type}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span
-                          className={`text-[16px] font-bold ${leave.color}`}
-                          style={{ fontFamily: "'Share Tech Mono', monospace" }}
-                        >
-                          {days}
-                        </span>
-                        <span className="text-[9px] text-[#5a6878]">days/yr</span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+      <div className="flex gap-4">
+        {/* Sidebar nav */}
+        <div className="w-[180px] shrink-0 space-y-1">
+          {GROUPS.map(g => {
+            const Icon = g.icon
+            const isActive = activeGroup === g.id
+            return (
+              <button key={g.id} onClick={() => setActiveGroup(g.id)}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-[11px] font-semibold transition-all ${isActive ? 'text-[#e2e8f0] border-l-[3px]' : 'text-[#5a6878] hover:text-[#8899aa] hover:bg-[#141920]'}`}
+                style={isActive ? { background: `${g.color}10`, borderLeftColor: g.color } : {}}>
+                <Icon size={13} style={{ color: isActive ? g.color : undefined }} />
+                {g.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Fields panel */}
+        <div className="flex-1 bg-[#161c24] border border-[#252e3a] rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[#252e3a]">
+            <currentGroup.icon size={15} style={{ color: currentGroup.color }} />
+            <span className="text-[13px] font-bold text-[#e2e8f0]">{currentGroup.label}</span>
           </div>
-
-          {/* Shift Configuration */}
-          <div className="vc-panel">
-            <div className="vc-panel-header">
-              <Clock size={15} className="text-[#f5a623]" />
-              <span className="text-[12px] font-semibold text-[#e2e8f0]">Shift Configuration</span>
-            </div>
-            <div className="vc-panel-body">
-              <div className="space-y-2">
-                {SHIFT_CONFIG.map((shift) => {
-                  const timing = get(shift.key, shift.timing)
-                  return (
-                    <div key={shift.label} className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-[#141920] border border-[#252e3a]/50">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${shift.color}`} />
-                        <span className="text-[11px] text-[#e2e8f0] font-medium">{shift.label}</span>
-                      </div>
-                      <span
-                        className="text-[11px] text-[#8899aa]"
-                        style={{ fontFamily: "'Share Tech Mono', monospace" }}
-                      >
-                        {timing}
-                      </span>
-                    </div>
-                  )
-                })}
+          <div className="grid grid-cols-2 gap-4">
+            {currentGroup.fields.map(f => (
+              <div key={f.key} className={f.span ? 'col-span-2' : ''}>
+                <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">{f.label}</label>
+                <input
+                  type={f.type || 'text'}
+                  value={get(f.key)}
+                  onChange={e => set(f.key, e.target.value)}
+                  placeholder={f.placeholder || ''}
+                  className="vc-input"
+                  style={f.mono ? { fontFamily: "'Share Tech Mono', monospace" } : {}}
+                />
               </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>

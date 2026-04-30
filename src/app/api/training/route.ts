@@ -3,30 +3,22 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-// GET: List all certifications and training sessions combined
-export async function GET() {
+// GET: List all certifications
+export async function GET(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
-    const [certifications, trainingSessions] = await Promise.all([
-      db.certification.findMany({
-        orderBy: { createdAt: 'desc' },
-      }),
-      db.trainingSession.findMany({
-        orderBy: { createdAt: 'desc' },
-      }),
-    ])
+    const certifications = await db.certification.findMany({
+      orderBy: { createdAt: 'desc' },
+    })
 
     return NextResponse.json({
       success: true,
-      data: {
-        certifications,
-        trainingSessions,
-      },
+      data: { certifications },
     })
   } catch (error) {
-    console.error('Error fetching training data:', error)
+    console.error('Error fetching certifications:', error)
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch training data' },
+      { success: false, error: 'Failed to fetch certifications' },
       { status: 500 }
     )
   }
