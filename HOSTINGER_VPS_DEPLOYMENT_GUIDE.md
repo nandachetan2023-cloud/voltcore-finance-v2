@@ -234,17 +234,26 @@ Copy the output and paste it as the value for `NEXTAUTH_SECRET`.
 This pushes your Prisma schema to all three databases:
 
 ```bash
-# Main database
+# Main database schema
 bun run db:push
 
-# Superadmin database
+# Superadmin database schema
 DATABASE_URL=$SUPERADMIN_DATABASE_URL npx prisma db push --schema=prisma/superadmin.prisma
 ```
 
-### 7.5 Seed the database (if needed)
+### 7.5 Seed the superadmin account
+
+This creates the superadmin login (everything else is managed through the UI):
 
 ```bash
 bun run db:seed
+```
+
+You should see:
+```
+✅ SuperAdmin account created
+   Email:    superadmin@voltcore.com
+   Password: superadmin@123
 ```
 
 ### 7.6 Build the Next.js app
