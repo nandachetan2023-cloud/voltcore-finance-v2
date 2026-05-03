@@ -21,11 +21,18 @@ Complete step-by-step guide to deploy this Next.js ERP on a Hostinger VPS.
 
 Go to [hostinger.com/vps-hosting](https://www.hostinger.com/vps-hosting).
 
-**Minimum recommended plan:**
-- **KVM 2** — 2 vCPU, 8 GB RAM, ~$8–12/month
-- OS: **Ubuntu 22.04 LTS** (select during setup)
+### Plan comparison
 
-> KVM 1 (1 GB RAM) is too tight for Next.js + PostgreSQL + Prisma running together.
+| Plan | vCPU | RAM | Storage | India price (intro) | Renewal | Use case |
+|---|---|---|---|---|---|---|
+| **KVM 1** | 1 | 4 GB | 50 GB NVMe | ₹599/mo | ₹999/mo | Testing / staging |
+| **KVM 2** | 2 | 8 GB | 100 GB NVMe | ₹799/mo | ₹1,199/mo | Production (recommended) |
+| KVM 4 | 4 | 16 GB | 200 GB NVMe | ₹1,099/mo | ₹2,399/mo | Multi-tenant / heavy load |
+
+**For production:** use **KVM 2**.
+**For testing/staging:** KVM 1 works — see the [KVM 1 Testing Setup](#appendix-kvm-1-testing-phase-setup) appendix at the end of this guide.
+
+- OS: **Ubuntu 22.04 LTS** (select during setup)
 
 ---
 
@@ -535,3 +542,171 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 - [ ] Caddy systemd service running
 - [ ] Firewall: ports 22, 80, 443 open only
 - [ ] App accessible at `https://yourdomain.com`
+
+---
+
+## Appendix: KVM 1 Testing Phase Setup
+
+> Use this when you want a cheap server (₹599/mo) to test the app, demo it to a client, or run QA before going to production. Not suitable for real users or live data.
+
+### What's different on KVM 1
+
+| | KVM 1 (Testing) | KVM 2 (Production) |
+|---|---|---|
+| RAM | 4 GB | 8 GB |
+| vCPU | 1 | 2 |
+| Build time | ~6–10 min | ~2–5 min |
+| Concurrent users | < 10 safely | 20–100 |
+| Swap required | Yes (mandatory) | Optional |
+| PM2 memory limit | 512 MB | 1 GB |
+
+---
+
+### A.1 — Add swap before doing anything else
+
+This is mandatory on KVM 1. Without it, `bun run build` will likely get OOM-killed.
+
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+Verify it's active:
+
+```bash
+free -h
+# Should show ~2G under Swap
+```
+
+---
+
+### A.2 — Tune PostgreSQL for low RAM
+
+The default PostgreSQL config is tuned for servers with more RAM. On KVM 1, reduce its memory footprint:
+
+```bash
+sudo nano /etc/postgresql/14/main/postgresql.conf
+```
+
+Find and update these values:
+
+```
+shared_buffers = 128MB          # default is 128MB, keep it
+work_mem = 4MB                  # default is 4MB, keep it
+maintenance_work_mem = 64MB     # reduce from 64MB default
+max_connections = 20            # reduce from 100 — your app uses a connection pool
+effective_cache_size = 512MB    # tell PG how much OS cache is available
+```
+
+Restart PostgreSQL:
+
+```bash
+sudo systemctl restart postgresql
+```
+
+---
+
+### A.3 — Reduce PM2 memory limit
+
+In your `ecosystem.config.js`, lower the memory restart threshold so PM2 recycles the process before it starves the OS:
+
+```js
+module.exports = {
+  apps: [
+    {
+      name: 'erp-nextjs',
+      script: 'node_modules/.bin/next',
+      args: 'start -p 3000',
+      cwd: '/home/erp/app',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3000,
+      },
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '512M',   // lower than production's 1G
+      error_file: '/home/erp/logs/erp-error.log',
+      out_file: '/home/erp/logs/erp-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+    },
+  ],
+};
+```
+
+---
+
+### A.4 — Use HTTP only (no domain needed for testing)
+
+If you're just testing and don't have a domain yet, skip the Caddy SSL setup and access the app directly on port 3000 via the server IP.
+
+Open port 3000 in the firewall temporarily:
+
+```bash
+sudo ufw allow 3000/tcp
+sudo ufw reload
+```
+
+Access the app at: `http://YOUR_SERVER_IP:3000`
+
+Update your `.env` accordingly:
+
+```env
+NEXTAUTH_URL="http://YOUR_SERVER_IP:3000"
+NEXTAUTH_SECRET="any-random-string-for-testing"
+NODE_ENV="production"
+```
+
+> When you're done testing and move to KVM 2 for production, close port 3000 again (`sudo ufw delete allow 3000/tcp`) and set up Caddy with your domain properly.
+
+---
+
+### A.5 — Monitor RAM during testing
+
+Keep an eye on memory while you test heavy operations (payroll generation, bulk imports, Excel exports):
+
+```bash
+# Live process monitor
+pm2 monit
+
+# Quick RAM snapshot
+free -h
+
+# See what's eating memory
+ps aux --sort=-%mem | head -15
+```
+
+If you see swap usage climbing above 1 GB consistently, the KVM 1 plan is too small for your workload and you should upgrade to KVM 2.
+
+---
+
+### A.6 — Upgrading from KVM 1 to KVM 2
+
+When you're ready to go to production, Hostinger lets you upgrade the plan without reinstalling the OS or losing data:
+
+1. Go to your Hostinger hPanel → VPS → Upgrade
+2. Select KVM 2
+3. Pay the difference
+4. The server reboots with more RAM and CPU — your app, databases, and files stay intact
+
+After upgrading, update `max_memory_restart` in `ecosystem.config.js` back to `'1G'` and restart PM2:
+
+```bash
+pm2 restart erp-nextjs
+```
+
+---
+
+### KVM 1 Testing Checklist
+
+- [ ] 2 GB swap file created and persisted in `/etc/fstab`
+- [ ] PostgreSQL tuned (`max_connections = 20`, `effective_cache_size = 512MB`)
+- [ ] PM2 `max_memory_restart` set to `512M`
+- [ ] Port 3000 opened in firewall (if no domain)
+- [ ] `.env` uses `http://YOUR_SERVER_IP:3000` for `NEXTAUTH_URL`
+- [ ] `bun run build` completed without OOM errors
+- [ ] App accessible at `http://YOUR_SERVER_IP:3000`
+- [ ] RAM monitored during heavy operations (`pm2 monit`)
