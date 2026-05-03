@@ -79,6 +79,9 @@ server.log
 *.bak
 .config_backup.json
 
+# Credentials
+CREDENTIALS.md
+
 # IDE
 .vscode/*
 !.vscode/settings.json
