@@ -17,7 +17,7 @@ async function main() {
   console.log('🌱 Seeding superadmin database...\n')
 
   // Create the superadmin login account
-  const superAdminEmail = 'superadmin@voltcore.com'
+  const superAdminEmail = 'admin@techpioneerhub.in'
   const superAdminPassword = 'superadmin@123'
 
   const existingSA = await superadminDb.superAdminUser.findUnique({

@@ -22,11 +22,13 @@ export const FULL_MODULE_TREE: {
   {
     key: 'organization', label: 'Organization',
     subModules: [
-      { key: 'departments',      label: 'Departments' },
-      { key: 'designations',     label: 'Designations' },
-      { key: 'holidays',         label: 'Holidays' },
-      { key: 'leave-policies',   label: 'Leave Policies' },
-      { key: 'attendance-rules', label: 'Attendance Rules' },
+      { key: 'departments',         label: 'Departments' },
+      { key: 'designations',        label: 'Designations' },
+      { key: 'holidays',            label: 'Holidays' },
+      { key: 'leave-policies',      label: 'Leave Policies' },
+      { key: 'attendance-rules',    label: 'Attendance Rules' },
+      { key: 'checklist-templates', label: 'Checklist Templates' },
+      { key: 'employee-documents',  label: 'Employee Documents' },
     ],
   },
   {
@@ -40,8 +42,11 @@ export const FULL_MODULE_TREE: {
       { key: 'shift',              label: 'Shift Roster' },
       { key: 'timesheet',          label: 'Timesheet' },
       { key: 'payroll',            label: 'Payroll' },
-      { key: 'training',           label: 'Training & Certs' },
+      { key: 'training',           label: 'Certificates' },
       { key: 'recruitment',        label: 'Recruitment' },
+      { key: 'onboarding',         label: 'Onboarding' },
+      { key: 'offboarding',        label: 'Offboarding' },
+      { key: 'exit-management',    label: 'Exit Management' },
     ],
   },
   {
@@ -54,15 +59,15 @@ export const FULL_MODULE_TREE: {
   {
     key: 'finance', label: 'Finance',
     subModules: [
-      { key: 'finance-dashboard',    label: 'Finance Dashboard' },
-      { key: 'ledger',               label: 'Ledger Management' },
-      { key: 'accounts-payable',     label: 'Accounts Payable' },
-      { key: 'accounts-receivable',  label: 'Accounts Receivable' },
-      { key: 'journal-entries',      label: 'Journal Entries' },
-      { key: 'bank-cash',            label: 'Bank & Cash' },
-      { key: 'taxation',             label: 'Taxation' },
-      { key: 'budget',               label: 'Budget & Forecasting' },
-      { key: 'financial-reports',    label: 'Financial Reports' },
+      { key: 'finance-dashboard',   label: 'Dashboard' },
+      { key: 'ledger',              label: 'Ledger Management' },
+      { key: 'accounts-payable',    label: 'Accounts Payable' },
+      { key: 'accounts-receivable', label: 'Accounts Receivable' },
+      { key: 'journal-entries',     label: 'Journal Entries' },
+      { key: 'bank-cash',           label: 'Bank & Cash' },
+      { key: 'taxation',            label: 'Taxation & Compliance' },
+      { key: 'budget',              label: 'Budget & Forecasting' },
+      { key: 'financial-reports',   label: 'Financial Reports' },
     ],
   },
   {
@@ -73,7 +78,7 @@ export const FULL_MODULE_TREE: {
     ],
   },
   {
-    key: 'assets', label: 'Assets & Operations',
+    key: 'assets', label: 'Assets',
     subModules: [
       { key: 'equipment',      label: 'Equipment' },
       { key: 'permits',        label: 'Work Permits' },
@@ -82,42 +87,42 @@ export const FULL_MODULE_TREE: {
     ],
   },
   {
-    key: 'sales', label: 'Sales',
-    subModules: [],
-  },
-  {
-    key: 'crm', label: 'CRM',
-    subModules: [],
-  },
-  {
-    key: 'inventory', label: 'Inventory',
-    subModules: [],
-  },
-  {
     key: 'system', label: 'System',
     subModules: [
-      { key: 'reports',          label: 'Reports' },
-      { key: 'settings',         label: 'Settings' },
-      { key: 'user-management',  label: 'User Management' },
-      { key: 'requests',         label: 'Employee Requests' },
+      { key: 'reports',         label: 'Reports' },
+      { key: 'settings',        label: 'Settings' },
+      { key: 'user-management', label: 'User Management' },
+      { key: 'requests',        label: 'Employee Requests' },
+      { key: 'notice-board',    label: 'Notice Board' },
     ],
   },
   {
-    key: 'self-service', label: 'My Portal (Self-Service)',
+    key: 'reports', label: 'Reports',
+    subModules: [
+      { key: 'report-manpower',   label: 'Manpower' },
+      { key: 'report-attendance', label: 'Attendance' },
+      { key: 'report-payroll',    label: 'Payroll' },
+      { key: 'report-leave',      label: 'Leave' },
+      { key: 'report-late-fine',  label: 'Late & Fines' },
+      { key: 'report-onboarding', label: 'Onboarding' },
+      { key: 'report-turnover',   label: 'Turnover / Exit' },
+      { key: 'report-training',   label: 'Training & Certs' },
+      { key: 'report-notices',    label: 'Notice Read Rate' },
+      { key: 'report-dispatch',   label: 'Payslip Dispatch' },
+    ],
+  },
+  {
+    key: 'self-service', label: 'My Portal',
     subModules: [
       { key: 'my-attendance', label: 'My Attendance' },
       { key: 'my-leave',      label: 'Apply Leave' },
       { key: 'my-requests',   label: 'My Requests' },
+      { key: 'my-profile',    label: 'My Profile' },
+      { key: 'my-notices',    label: 'My Notices' },
+      { key: 'my-payslips',   label: 'My Payslips' },
+      { key: 'my-documents',  label: 'My Documents' },
+      { key: 'my-shifts',     label: 'My Shifts' },
     ],
-  },
-  {
-    key: 'support',       label: 'Support',       subModules: [],
-  },
-  {
-    key: 'knowledgebase', label: 'Knowledgebase',  subModules: [],
-  },
-  {
-    key: 'downloads',     label: 'Downloads',      subModules: [],
   },
 ];
 

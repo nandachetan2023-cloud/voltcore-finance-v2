@@ -231,15 +231,21 @@ Copy the output and paste it as the value for `NEXTAUTH_SECRET`.
 
 ### 7.4 Run database migrations
 
-This pushes your Prisma schema to all three databases:
+**IMPORTANT: Run these in order!**
 
 ```bash
-# Main database schema
+# Step 1: Push main database schema
 bun run db:push
-
-# Superadmin database schema
-DATABASE_URL=$SUPERADMIN_DATABASE_URL npx prisma db push --schema=prisma/superadmin.prisma
 ```
+
+Wait for it to complete, then:
+
+```bash
+# Step 2: Push superadmin database schema
+npx prisma db push --schema=prisma/superadmin.prisma
+```
+
+You should see "Your database is now in sync with your Prisma schema" for both.
 
 ### 7.5 Seed the superadmin account
 
@@ -254,6 +260,12 @@ You should see:
 ✅ SuperAdmin account created
    Email:    superadmin@voltcore.com
    Password: superadmin@123
+
+📋 Next steps:
+   1. Login at /superadmin with the credentials above
+   2. Create tenants (companies) from the superadmin dashboard
+   3. Create users for each tenant
+   4. Assign roles and modules to users
 ```
 
 ### 7.6 Build the Next.js app
@@ -470,19 +482,40 @@ When you push new code, SSH into the server and run:
 cd /home/erp/app
 git pull origin main
 bun install
+
+# IMPORTANT: Push any schema changes to the database
+bun run db:push
+
+# If you get schema conflicts, use --accept-data-loss (be careful!)
+# npx prisma db push --accept-data-loss
+
 bun run build
 pm2 restart erp-nextjs
 ```
 
-If you have database schema changes:
-
+**If you added new tables or columns to the Prisma schema:**
 ```bash
-bun run db:push
+# Also push to superadmin database if you changed prisma/superadmin.prisma
+npx prisma db push --schema=prisma/superadmin.prisma
 ```
 
 ---
 
 ## Troubleshooting
+
+### Seed fails with "table SuperAdminUser does not exist"
+
+This means you haven't pushed the superadmin schema yet. Run:
+
+```bash
+npx prisma db push --schema=prisma/superadmin.prisma
+```
+
+Then try seeding again:
+
+```bash
+bun run db:seed
+```
 
 ### App won't start
 

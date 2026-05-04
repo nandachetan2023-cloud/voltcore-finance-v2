@@ -79,6 +79,20 @@ model SuperAdminUser {
   updatedAt DateTime @updatedAt
 }
 
+// ── PasswordResetOTP: stores OTPs for password reset ────────────
+// Works for both SuperAdminUser and TenantUser (userType distinguishes them)
+model PasswordResetOTP {
+  id        String   @id @default(cuid())
+  email     String
+  otp       String                        // 6-digit code (hashed)
+  userType  String   @default("tenant")  // "tenant" | "superadmin"
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
 // ── OrgRole: business roles defined per tenant ──────────────────
 // Superadmin defines these; tenant admin assigns them to users.
 // level: 1=lowest authority, higher=more authority

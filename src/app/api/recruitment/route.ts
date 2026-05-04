@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 
 // GET: List all job openings
-export async function GET() {
+export async function GET(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
     const jobOpenings = await db.jobOpening.findMany({

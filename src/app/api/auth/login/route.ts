@@ -15,6 +15,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if SUPERADMIN_DATABASE_URL is configured
+    if (!process.env.SUPERADMIN_DATABASE_URL) {
+      console.error('SUPERADMIN_DATABASE_URL is not configured')
+      return NextResponse.json(
+        { success: false, error: 'Server configuration error. Please contact administrator.' },
+        { status: 500 }
+      )
+    }
+
     const { user, error } = await authenticateUser(email, password)
 
     if (!user) {
@@ -64,10 +73,19 @@ export async function POST(request: NextRequest) {
     }
 
     return response
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error)
+    
+    // Return specific error messages for common issues
+    if (error.code === 'P2021') {
+      return NextResponse.json(
+        { success: false, error: 'Database not configured. Please run database migrations.' },
+        { status: 500 }
+      )
+    }
+    
     return NextResponse.json(
-      { success: false, error: 'Login failed' },
+      { success: false, error: 'Login failed. Please try again.' },
       { status: 500 }
     )
   }

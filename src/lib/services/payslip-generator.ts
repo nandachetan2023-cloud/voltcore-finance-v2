@@ -1,12 +1,12 @@
 // Payslip PDF Generator Service
 // Generates professional payslips in PDF format using jsPDF
-// Matching Upasana Associate format
+// Matching exactly with UA_Slip_format.xlsx
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import JSZip from 'jszip';
 
-interface PayslipData {
+export interface PayslipData {
   company: {
     name: string;
     address: string;
@@ -63,27 +63,19 @@ const MONTHS = [
   'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'
 ];
 
-// Color palette
-const BLUE = '#1A56C4';
-const BLACK = '#000000';
-const ORANGE = '#E86500';
-
 export class PayslipGenerator {
   /**
-   * Format currency in Indian format with rupee symbol
+   * Format currency to match Excel format (Whole numbers, no symbol)
    */
   private formatCurrency(amount: number): string {
     if (isNaN(amount) || amount === null || amount === undefined) {
-      return '₹ 0.00';
+      return '0';
     }
-    return `₹ ${amount.toLocaleString('en-IN', { 
-      minimumFractionDigits: 2, 
-      maximumFractionDigits: 2 
-    })}`;
+    return Math.round(amount).toString();
   }
 
   /**
-   * Create a single payslip PDF
+   * Create a single payslip PDF matching UA_Slip_format.xlsx
    */
   private createPayslipPDF(data: PayslipData): jsPDF {
     const doc = new jsPDF({
@@ -93,211 +85,174 @@ export class PayslipGenerator {
     });
 
     const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 11; // ~0.43 inches
+    const margin = 11;
     const contentWidth = pageWidth - (margin * 2);
-    let yPos = 10;
+    let yPos = 15;
 
-    // Company Header
-    doc.setFontSize(17);
+    // Company Header Title (Row 1)
+    doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text(data.company.name, pageWidth / 2, yPos, { align: 'center' });
-    
-    yPos += 6;
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.text(data.company.address, pageWidth / 2, yPos, { align: 'center' });
-    
     yPos += 5;
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Name & Address of the Principal Employer : ${data.company.principalEmployer}`, margin, yPos);
-    
-    yPos += 6;
 
-    // Month / Date-of-Payment Row
-    autoTable(doc, {
-      startY: yPos,
-      head: [[
-        { content: `Employee pay summery for the month of ${data.period.monthName}`, styles: { fontStyle: 'bold' } },
-        { content: 'Date of Payment', styles: { fontStyle: 'bold' } },
-        data.period.dateOfPayment
-      ]],
-      theme: 'grid',
-      styles: { fontSize: 8.5, cellPadding: 1.5, lineColor: BLACK, lineWidth: 0.1 },
-      columnStyles: {
-        0: { cellWidth: contentWidth * 0.52 },
-        1: { cellWidth: contentWidth * 0.28 },
-        2: { cellWidth: contentWidth * 0.20 }
-      },
-      margin: { left: margin, right: margin }
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY;
-
-    // Employee Info + Bank Details
+    // Generate Single Unified Table
     autoTable(doc, {
       startY: yPos,
       body: [
+        // Row 2: Company Address
+        [{ content: data.company.address, colSpan: 6, styles: { fontStyle: 'bold', halign: 'center', fontSize: 9 } }],
+        // Row 3: Principal Employer
+        [{ content: `Name & Address of the Principal Employer : ${data.company.principalEmployer}`, colSpan: 6, styles: { fontStyle: 'bold', halign: 'left', fontSize: 9 } }],
+        // Row 4: Period & Date
         [
-          { content: 'Employee Name', styles: { textColor: BLUE } },
-          data.employee.name,
-          { content: 'Monthly Working Day', styles: { textColor: BLUE } },
-          { content: String(data.attendance.workingDays), styles: { halign: 'right' } }
+          { content: `Employee pay summery for the month of ${data.period.monthName}-${String(data.period.year).slice(-2)}`, colSpan: 3, styles: { fontStyle: 'bold', fontSize: 9 } },
+          { content: 'Date of Payment', styles: { fontStyle: 'bold' } },
+          { content: data.period.dateOfPayment || '', colSpan: 2, styles: { halign: 'center' } }
         ],
+        // Row 5
         [
-          { content: 'Employee Code', styles: { textColor: BLUE } },
-          data.employee.code,
-          { content: 'No. of Working Day Attended', styles: { textColor: BLUE } },
-          { content: String(data.attendance.presentDays), styles: { halign: 'right' } }
+          { content: 'Employee Name' },
+          { content: data.employee.name, colSpan: 2 },
+          { content: 'Monthly Working Day', colSpan: 2 },
+          { content: String(data.attendance.workingDays), styles: { halign: 'left' } }
         ],
+        // Row 6
         [
-          { content: 'Designation', styles: { textColor: BLUE } },
-          data.employee.designation,
-          { content: 'Bank Details', colSpan: 2, styles: { fontStyle: 'bold', halign: 'center' } }
+          { content: 'Employee Code' },
+          { content: data.employee.code, colSpan: 2 },
+          { content: 'No. of Working Day Attended', colSpan: 2 },
+          { content: String(data.attendance.presentDays), styles: { halign: 'left' } }
         ],
+        // Row 7
         [
-          { content: 'EPF Number', styles: { textColor: BLUE } },
-          data.employee.epfNumber || '0',
-          { content: 'Bank Name', styles: { textColor: BLUE } },
-          data.employee.bankName
+          { content: 'Designation' },
+          { content: data.employee.designation, colSpan: 2 },
+          { content: 'Bank Details', colSpan: 3, styles: { fontStyle: 'bold', halign: 'center' } }
         ],
+        // Row 8
         [
-          { content: 'UAN Number', styles: { textColor: BLUE } },
-          data.employee.uanNumber || '0',
-          { content: 'Bank Account No.', styles: { textColor: BLUE } },
-          data.employee.bankAccount
+          { content: 'EPF Number' },
+          { content: data.employee.epfNumber || '0', colSpan: 2 },
+          { content: 'Bank Name' },
+          { content: data.employee.bankName, colSpan: 2 }
         ],
+        // Row 9
         [
-          { content: 'ESIC Number', styles: { textColor: BLUE } },
-          data.employee.esicNumber || '0',
-          { content: 'Bank IFSC Code', styles: { textColor: BLUE } },
-          data.employee.ifscCode
-        ]
-      ],
-      theme: 'grid',
-      styles: { fontSize: 8.5, cellPadding: 1.5, lineColor: BLACK, lineWidth: 0.1 },
-      columnStyles: {
-        0: { cellWidth: contentWidth * 0.21 },
-        1: { cellWidth: contentWidth * 0.24 },
-        2: { cellWidth: contentWidth * 0.31 },
-        3: { cellWidth: contentWidth * 0.24 }
-      },
-      margin: { left: margin, right: margin }
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY;
-
-    // Earnings / Deductions
-    autoTable(doc, {
-      startY: yPos,
-      body: [
+          { content: 'UAN Number' },
+          { content: data.employee.uanNumber || '0', colSpan: 2 },
+          { content: 'Bank Account No.' },
+          { content: data.employee.bankAccount, colSpan: 2 }
+        ],
+        // Row 10
+        [
+          { content: 'ESIC Number' },
+          { content: data.employee.esicNumber || '0', colSpan: 2 },
+          { content: 'Bank IFSC Code' },
+          { content: data.employee.ifscCode, colSpan: 2 }
+        ],
+        // Row 11: Earnings & Deductions Header
         [
           { content: 'EARNING SALARY', styles: { fontStyle: 'bold' } },
-          { content: 'AMOUNT', styles: { fontStyle: 'bold', halign: 'right' } },
+          { content: 'AMOUNT', colSpan: 2, styles: { fontStyle: 'bold', halign: 'left' } },
           { content: 'DEDUCTIONS', styles: { fontStyle: 'bold' } },
-          { content: 'AMOUNT', styles: { fontStyle: 'bold', halign: 'right' } }
+          { content: 'AMOUNT', colSpan: 2, styles: { fontStyle: 'bold', halign: 'left' } }
         ],
+        // Row 12
         [
-          { content: 'Basic Salary', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.earnings.basicSalary), styles: { halign: 'right', fontSize: 7.5 } },
-          { content: 'EPF', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.deductions.pf), styles: { halign: 'right', fontSize: 7.5 } }
+          { content: 'Basic Salary' },
+          { content: this.formatCurrency(data.earnings.basicSalary), colSpan: 2 },
+          { content: 'EPF' },
+          { content: this.formatCurrency(data.deductions.pf), colSpan: 2 }
         ],
+        // Row 13
         [
-          { content: 'House Rent Allowances', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.earnings.hra), styles: { halign: 'right', fontSize: 7.5 } },
-          { content: 'ESIC', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.deductions.esi), styles: { halign: 'right', fontSize: 7.5 } }
+          { content: 'House Rent Allowances' },
+          { content: this.formatCurrency(data.earnings.hra), colSpan: 2 },
+          { content: 'ESIC' },
+          { content: this.formatCurrency(data.deductions.esi), colSpan: 2 }
         ],
+        // Row 14
         [
-          { content: 'Site Allowances', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.earnings.siteAllowance), styles: { halign: 'right', fontSize: 7.5 } },
-          { content: 'PT', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.deductions.pt), styles: { halign: 'right', fontSize: 7.5 } }
+          { content: 'Site Allowances' },
+          { content: this.formatCurrency(data.earnings.siteAllowance), colSpan: 2 },
+          { content: 'PT' },
+          { content: this.formatCurrency(data.deductions.pt), colSpan: 2 }
         ],
+        // Row 15
         [
-          { content: 'Travel Allowances', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.earnings.travelAllowance), styles: { halign: 'right', fontSize: 7.5 } },
-          { content: 'Advance', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.deductions.advance), styles: { halign: 'right', fontSize: 7.5 } }
+          { content: 'Travel Allowances' },
+          { content: this.formatCurrency(data.earnings.travelAllowance), colSpan: 2 },
+          { content: 'Advance' },
+          { content: this.formatCurrency(data.deductions.advance), colSpan: 2 }
         ],
+        // Row 16
         [
-          { content: 'Special Allowances', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.earnings.specialAllowance), styles: { halign: 'right', fontSize: 7.5 } },
-          { content: 'Other Deduction', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.deductions.other), styles: { halign: 'right', fontSize: 7.5 } }
+          { content: 'Special Allowances' },
+          { content: this.formatCurrency(data.earnings.specialAllowance), colSpan: 2 },
+          { content: 'Other Deduction' },
+          { content: this.formatCurrency(data.deductions.other), colSpan: 2 }
         ],
+        // Row 17
         [
-          { content: 'Attendance Allowances', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.earnings.attendanceAllowance), styles: { halign: 'right', fontSize: 7.5 } },
-          '',
-          ''
+          { content: 'Attendance Allowances' },
+          { content: this.formatCurrency(data.earnings.attendanceAllowance), colSpan: 2 },
+          { content: '' },
+          { content: '', colSpan: 2 }
         ],
+        // Row 18
         [
-          { content: 'OT Amount', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.earnings.overtime), styles: { halign: 'right', fontSize: 7.5 } },
-          '',
-          ''
+          { content: 'OT Amount' },
+          { content: this.formatCurrency(data.earnings.overtime), colSpan: 2 },
+          { content: '' },
+          { content: '', colSpan: 2 }
         ],
+        // Row 19
         [
-          { content: 'PH Amount', styles: { textColor: BLUE } },
-          { content: this.formatCurrency(data.earnings.phAmount), styles: { halign: 'right', fontSize: 7.5 } },
-          '',
-          ''
+          { content: 'PH Amount' },
+          { content: this.formatCurrency(data.earnings.phAmount), colSpan: 2 },
+          { content: '' },
+          { content: '', colSpan: 2 }
         ],
+        // Row 20: Totals
         [
           { content: 'Gross Earnings', styles: { fontStyle: 'bold' } },
-          { content: this.formatCurrency(data.earnings.total), styles: { fontStyle: 'bold', halign: 'right', fontSize: 7.5 } },
+          { content: this.formatCurrency(data.earnings.total), colSpan: 2, styles: { fontStyle: 'bold' } },
           { content: 'Total Deductions', styles: { fontStyle: 'bold' } },
-          { content: this.formatCurrency(data.deductions.total), styles: { fontStyle: 'bold', halign: 'right', fontSize: 7.5 } }
+          { content: this.formatCurrency(data.deductions.total), colSpan: 2, styles: { fontStyle: 'bold' } }
         ],
+        // Row 21: Net Payable
         [
-          { content: 'Net Payable===>', colSpan: 3, styles: { fontStyle: 'bold' } },
-          { content: this.formatCurrency(data.netSalary), styles: { fontStyle: 'bold', halign: 'right', fontSize: 7.5 } }
+          { content: 'Net Payable==>', colSpan: 3, styles: { fontStyle: 'bold' } },
+          { content: this.formatCurrency(data.netSalary), colSpan: 3, styles: { fontStyle: 'bold' } }
+        ],
+        // Row 22: Notice
+        [
+          { content: '', colSpan: 3, styles: { minCellHeight: 12 } },
+          { content: 'This is a computer generated slip, hence Sign.not required', colSpan: 3, styles: { halign: 'left', valign: 'top' } }
+        ],
+        // Row 23: Signatures
+        [
+          { content: 'Employee Signature', colSpan: 3, styles: { fontStyle: 'bold', halign: 'center', minCellHeight: 15, valign: 'bottom' } },
+          { content: 'Employer Signature', colSpan: 3, styles: { fontStyle: 'bold', halign: 'center', minCellHeight: 15, valign: 'bottom' } }
         ]
       ],
       theme: 'grid',
-      styles: { fontSize: 8.5, cellPadding: 1.5, lineColor: BLACK, lineWidth: 0.1, overflow: 'hidden' },
-      columnStyles: {
-        0: { cellWidth: contentWidth * 0.35 },
-        1: { cellWidth: contentWidth * 0.15, overflow: 'hidden' },
-        2: { cellWidth: contentWidth * 0.35 },
-        3: { cellWidth: contentWidth * 0.15, overflow: 'hidden' }
+      styles: {
+        fontSize: 10,
+        cellPadding: 2,
+        lineColor: '#000000',
+        lineWidth: 0.1,
+        textColor: '#000000',
+        font: 'helvetica'
       },
-      margin: { left: margin, right: margin }
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY;
-
-    // Computer Generated Notice
-    autoTable(doc, {
-      startY: yPos,
-      body: [[
-        '',
-        { content: 'This is a computer generated slip, hence Sign.not required', styles: { textColor: ORANGE, halign: 'center' } }
-      ]],
-      theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 1.5, lineColor: BLACK, lineWidth: 0.1 },
+      // Maps to the 6 virtual columns underlying the Excel File (Total = 100%)
       columnStyles: {
-        0: { cellWidth: contentWidth * 0.35 },
-        1: { cellWidth: contentWidth * 0.65 }
-      },
-      margin: { left: margin, right: margin }
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY;
-
-    // Signatures
-    autoTable(doc, {
-      startY: yPos,
-      body: [[
-        { content: 'Employee Signature', styles: { fontStyle: 'bold', halign: 'center', minCellHeight: 18 } },
-        { content: 'Employer Signature', styles: { fontStyle: 'bold', halign: 'center', minCellHeight: 18 } }
-      ]],
-      theme: 'grid',
-      styles: { fontSize: 8.5, cellPadding: 1.5, lineColor: BLACK, lineWidth: 0.1 },
-      columnStyles: {
-        0: { cellWidth: contentWidth * 0.50 },
-        1: { cellWidth: contentWidth * 0.50 }
+        0: { cellWidth: contentWidth * 0.25 },
+        1: { cellWidth: contentWidth * 0.125 },
+        2: { cellWidth: contentWidth * 0.125 },
+        3: { cellWidth: contentWidth * 0.25 },
+        4: { cellWidth: contentWidth * 0.125 },
+        5: { cellWidth: contentWidth * 0.125 }
       },
       margin: { left: margin, right: margin }
     });
@@ -310,16 +265,9 @@ export class PayslipGenerator {
    */
   async generateSinglePayslip(data: PayslipData): Promise<Blob> {
     try {
-      console.log('[PayslipGenerator] Creating PDF with jsPDF...');
       const doc = this.createPayslipPDF(data);
-      
-      console.log('[PayslipGenerator] Converting to blob...');
-      const blob = doc.output('blob');
-      
-      console.log('[PayslipGenerator] PDF generated successfully, size:', blob.size);
-      return blob;
+      return doc.output('blob');
     } catch (error) {
-      console.error('[PayslipGenerator] Error generating payslip:', error);
       throw new Error(`Payslip generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -329,26 +277,16 @@ export class PayslipGenerator {
    */
   async generateBulkPayslips(payslipsData: PayslipData[]): Promise<Blob> {
     try {
-      console.log(`[PayslipGenerator] Generating ${payslipsData.length} payslips...`);
       const zip = new JSZip();
-
       for (let i = 0; i < payslipsData.length; i++) {
         const data = payslipsData[i];
-        console.log(`[PayslipGenerator] Processing ${i + 1}/${payslipsData.length}: ${data.employee.code}`);
-        
         const pdfBlob = await this.generateSinglePayslip(data);
         const pdfArrayBuffer = await pdfBlob.arrayBuffer();
         const fileName = `Payslip_${data.employee.code}_${data.period.monthName}.pdf`;
         zip.file(fileName, pdfArrayBuffer);
       }
-
-      console.log('[PayslipGenerator] Creating ZIP archive...');
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      console.log('[PayslipGenerator] ZIP created successfully, size:', zipBlob.size);
-      
-      return zipBlob;
+      return await zip.generateAsync({ type: 'blob' });
     } catch (error) {
-      console.error('[PayslipGenerator] Error generating bulk payslips:', error);
       throw new Error(`Bulk payslip generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
