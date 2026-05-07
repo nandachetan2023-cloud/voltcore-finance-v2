@@ -3,6 +3,7 @@
 import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed } from '@/store/erp-store';
 import { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import {
   Building2, Users, ShoppingCart, CreditCard, FolderKanban, Package, Wrench,
   TrendingUp, Briefcase, Settings, MessageSquare, BookOpen, Zap,
@@ -91,14 +92,14 @@ function ModuleRenderer({ moduleKey }: { moduleKey: string }) {
 function ModuleGrid() {
   const { setActiveModule, userRole, allowedModules } = useERPStore();
   const visibleModules = MAIN_MODULES.filter(mod =>
-    userRole === 'admin' || isModuleAllowed(mod.id, allowedModules)
+    allowedModules === 'all' || isModuleAllowed(mod.id, allowedModules)
   );
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
       {visibleModules.map((mod) => {
         const Icon = ICON_MAP[mod.icon] || Zap;
         const allSubs = SUB_MODULES[mod.id] || [];
-        const visibleSubs = userRole === 'admin'
+        const visibleSubs = allowedModules === 'all'
           ? allSubs
           : allSubs.filter(s => isModuleAllowed(s.id, allowedModules));
         return (
@@ -120,7 +121,7 @@ function ModuleGrid() {
 function SubModuleGrid({ moduleId }: { moduleId: string }) {
   const { setActiveModule, userRole, allowedModules } = useERPStore();
   const allItems = SUB_MODULES[moduleId] || [];
-  const items = userRole === 'admin'
+  const items = allowedModules === 'all'
     ? allItems
     : allItems.filter(item => isModuleAllowed(item.id, allowedModules));
   const config = MODULE_CONFIG[moduleId];
@@ -215,7 +216,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
 
   const isPageModule = !isSubNav && PAGE_MODULES.includes(activeModule as string) && activeModule !== 'dashboard';
   const allSubModules = SUB_MODULES[activeParentModule] || [];
-  const subModules = userRole === 'admin'
+  const subModules = allowedModules === 'all'
     ? allSubModules
     : allSubModules.filter(item => isModuleAllowed(item.id, allowedModules));
 
@@ -283,6 +284,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
         </div>
 
         <div className="border-t border-[#252e3a] p-3 relative user-menu-container">
+          <ThemeToggle />
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="w-full flex items-center gap-2 p-2 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors cursor-pointer"

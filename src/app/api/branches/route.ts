@@ -1,20 +1,48 @@
 import { getDbForRequest } from '@/lib/db'
+import { superadminDb } from '@/lib/superadmin-db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-// GET: List all branches
+/**
+ * Syncs biometric sites from superadmin DB into the tenant's Branch table.
+ * This ensures Branch = Site everywhere — one source of truth.
+ */
+async function syncBiometricSitesAsBranches(db: any, tenantId: string) {
+  try {
+    const sites = await superadminDb.biometricSiteConfig.findMany({
+      where: { tenantId, isActive: true },
+      select: { siteId: true, siteName: true },
+    })
+
+    for (const site of sites) {
+      const existing = await db.branch.findFirst({ where: { name: site.siteName } })
+      if (!existing) {
+        await db.branch.create({
+          data: { name: site.siteName, address: `Site ID: ${site.siteId}` },
+        })
+      }
+    }
+  } catch {
+    // Silently ignore sync errors — branches still work without biometric sites
+  }
+}
+
+// GET: List all branches (auto-synced from biometric sites)
 export async function GET(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
+    // Auto-sync biometric sites as branches before returning
+    const tenantId = request.cookies.get('erp_tenant_id')?.value
+    if (tenantId) {
+      await syncBiometricSitesAsBranches(db, tenantId)
+    }
+
     const branches = await db.branch.findMany({
       orderBy: { name: 'asc' },
     })
 
-    return NextResponse.json({
-      success: true,
-      data: branches,
-    })
+    return NextResponse.json({ success: true, data: branches })
   } catch (error) {
     console.error('Error fetching branches:', error)
     return NextResponse.json(

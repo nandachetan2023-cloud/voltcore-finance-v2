@@ -164,10 +164,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Soft delete by setting isActive to false
-    await db.attendanceRule.update({
+    await db.attendanceRule.delete({
       where: { id: parseInt(id) },
-      data: { isActive: false, updatedAt: new Date() },
     });
 
     return NextResponse.json({ success: true });

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { tenantId, name, email, password, phone, allowedModules } = body
+    const { tenantId, name, email, password, phone, allowedModules, createdBySuperadmin, employeeId } = body
     if (!tenantId || !name || !email || !password) {
       return NextResponse.json({ success: false, error: 'tenantId, name, email and password are required' }, { status: 400 })
     }
@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
         password: hash,
         phone: phone || '',
         allowedModules: allowedModules || 'all',
-        createdBySuperadmin: true,  // superadmin-created users are exempt from maxUsers limit
+        createdBySuperadmin: createdBySuperadmin !== false, // default true unless explicitly false
+        employeeId: employeeId || null,
       },
     })
     const { password: _, ...safe } = user
@@ -54,11 +55,16 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, password, ...rest } = body
+    // Strip fields that can't be directly updated or are UI-only
+    const { id, password, tenantId, isAdminRole, createdBySuperadmin, ...rest } = body
     if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 })
     const data: any = { ...rest }
     if (password && password.trim()) {
       data.password = await bcrypt.hash(password, 12)
+    }
+    // Update createdBySuperadmin if explicitly passed (for admin role toggle)
+    if (createdBySuperadmin !== undefined) {
+      data.createdBySuperadmin = createdBySuperadmin
     }
     const user = await superadminDb.tenantUser.update({ where: { id }, data })
     const { password: _, ...safe } = user

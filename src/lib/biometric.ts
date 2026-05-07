@@ -591,7 +591,7 @@ export async function syncAllSites(dbClient?: DbClient, tenantId?: string): Prom
   const sites = await loadBiometricSitesFromDb(db, tenantId)
 
   if (sites.length === 0) {
-    throw new Error('No biometric sites configured. Go to HRMS → Biometric Sync → Site Settings to add your punch machine credentials.')
+    throw new Error('No biometric sites configured for this tenant. Please add site credentials in the Superadmin panel.')
   }
 
   const results = []
@@ -615,12 +615,12 @@ export async function createBiometricServiceFromDb(siteId?: string, dbClient?: D
   const sites = await loadBiometricSitesFromDb(db, tenantId)
 
   if (sites.length === 0) {
-    throw new Error('No biometric sites configured. Go to HRMS → Biometric Sync → Site Settings to add your punch machine credentials.')
+    throw new Error('No biometric sites configured for this tenant. Please add site credentials in the Superadmin panel.')
   }
 
   if (siteId) {
     const site = sites.find(s => s.id === siteId)
-    if (!site) throw new Error(`Site "${siteId}" not found. Please check your Biometric Site Settings.`)
+    if (!site) throw new Error(`Site "${siteId}" not found. Please check your biometric configuration in the Superadmin panel.`)
     return new BiometricService(site.config, db)
   }
 

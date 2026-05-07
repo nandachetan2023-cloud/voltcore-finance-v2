@@ -7,8 +7,9 @@ export const dynamic = 'force-dynamic'
 // POST: Process unprocessed raw logs to attendance
 export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
+  const tenantId = request.cookies.get('erp_tenant_id')?.value
   try {
-    const biometricService = await createBiometricServiceFromDb(undefined, db)
+    const biometricService = await createBiometricServiceFromDb(undefined, db, tenantId)
     const { processedCount, processedEmployees } = await biometricService.processRawLogs()
 
     return NextResponse.json({

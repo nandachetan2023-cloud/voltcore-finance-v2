@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import {
-  Building2, Users, Fingerprint, Shield, LogOut, Plus, Pencil, Trash2,
+import { Building2, Users, Fingerprint, Shield, LogOut, Plus, Pencil, Trash2,
   X, Eye, EyeOff, RefreshCw, Wifi, WifiOff,
   AlertTriangle, Database, GitBranch, Layers
 } from 'lucide-react';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { toast } from 'sonner';
 import HierarchyTab from './hierarchy-tab';
 import TrashTab from './trash-tab';
@@ -103,6 +103,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
             className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-[#8899aa] hover:text-[#ff3d3d] border border-[#252e3a] hover:border-[#ff3d3d]/40 rounded-lg transition-colors">
             <LogOut size={12} /> Logout
           </button>
+          <ThemeToggle compact />
           <button
             onClick={() => { window.location.href = '/'; }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-[#8899aa] hover:text-[#f5a623] border border-[#252e3a] hover:border-[#f5a623]/40 rounded-lg transition-colors">
@@ -324,7 +325,7 @@ function TenantsTab({ tenants, onRefresh, onOpenHierarchy }: { tenants: Tenant[]
 
 /* ── Users Tab ───────────────────────────────────────────────── */
 function UsersTab({ users, tenants, onRefresh }: { users: TenantUser[]; tenants: Tenant[]; onRefresh: () => void }) {
-  const empty = { tenantId: '', name: '', email: '', password: '', phone: '', allowedModules: 'all', employeeId: null as number | null };
+  const empty = { tenantId: '', name: '', email: '', password: '', phone: '', allowedModules: 'all', isAdminRole: true, employeeId: null as number | null };
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -395,7 +396,9 @@ function UsersTab({ users, tenants, onRefresh }: { users: TenantUser[]; tenants:
       const res = await fetch('/api/superadmin/users', {
         method: editId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editId ? { id: editId, ...form } : form),
+        body: JSON.stringify(editId
+          ? { id: editId, ...form, createdBySuperadmin: form.isAdminRole }
+          : { ...form, createdBySuperadmin: form.isAdminRole }),
       });
       const data = await res.json();
       if (data.success) { toast.success(editId ? 'User updated' : 'User created'); onRefresh(); setShowForm(false); setForm(empty); setEditId(null); }
@@ -566,9 +569,35 @@ function UsersTab({ users, tenants, onRefresh }: { users: TenantUser[]; tenants:
             </div>
             <div className="col-span-2">
               <label className={lbl}>Module Access</label>
-              <ModuleSelect value={form.allowedModules} onChange={v => setForm(f => ({ ...f, allowedModules: v }))} />
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, allowedModules: 'all', isAdminRole: true }))}
+                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg border transition-colors ${form.allowedModules === 'all' ? 'bg-[#f5a623] text-black border-[#f5a623]' : 'text-[#f5a623] border-[#f5a623]/30 hover:bg-[#f5a623]/10'}`}>
+                  Full Admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, allowedModules: f.allowedModules === 'all' ? '' : f.allowedModules, isAdminRole: true }))}
+                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg border transition-colors ${form.allowedModules !== 'all' && form.isAdminRole ? 'bg-[#00d4ff]/20 text-[#00d4ff] border-[#00d4ff]/40' : 'text-[#00d4ff] border-[#00d4ff]/20 hover:bg-[#00d4ff]/10'}`}>
+                  Admin + Limited Modules
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, allowedModules: f.allowedModules === 'all' ? '' : f.allowedModules, isAdminRole: false }))}
+                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg border transition-colors ${!form.isAdminRole ? 'bg-[#252e3a] text-[#e2e8f0] border-[#2e3a48]' : 'text-[#5a6878] border-[#252e3a] hover:bg-[#1a2028]'}`}>
+                  Restricted User
+                </button>
+              </div>
+              {form.allowedModules !== 'all' && (
+                <ModuleSelect value={form.allowedModules} onChange={v => setForm(f => ({ ...f, allowedModules: v }))} />
+              )}
               <p className="text-[10px] text-[#5a6878] mt-1">
-                "All Modules" = admin access. Select specific groups to restrict (e.g. Organization + HRMS only).
+                {form.allowedModules === 'all'
+                  ? '✓ Full admin — sees and manages all modules.'
+                  : form.isAdminRole
+                  ? '✓ Admin role with selected modules only — can create/edit within allowed modules.'
+                  : '✓ Restricted user — read access to selected modules only.'}
               </p>
             </div>
           </div>
@@ -620,7 +649,7 @@ function UsersTab({ users, tenants, onRefresh }: { users: TenantUser[]; tenants:
                   {u.isActive ? 'Deactivate' : 'Activate'}
                 </button>
                 <button onClick={() => {
-                  setForm({ tenantId: u.tenantId, name: u.name, email: u.email, password: '', phone: u.phone, allowedModules: u.allowedModules });
+                  setForm({ tenantId: u.tenantId, name: u.name, email: u.email, password: '', phone: u.phone, allowedModules: u.allowedModules, isAdminRole: u.createdBySuperadmin || u.allowedModules === 'all', employeeId: null });
                   setEditId(u.id); setShowForm(true);
                 }} className="p-1.5 text-[#5a6878] hover:text-[#f5a623] transition-colors"><Pencil size={13} /></button>
                 <button onClick={() => del(u.id, u.email)} className="p-1.5 text-[#5a6878] hover:text-[#ff3d3d] transition-colors"><Trash2 size={13} /></button>

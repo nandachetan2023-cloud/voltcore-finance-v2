@@ -396,7 +396,7 @@ export default function ModuleSelect({ value, onChange, placeholder = 'Select mo
                     .filter(s => selected.has(s.key))
                     .map(s => ({ key: s.key, label: s.label, groupKey: g.key }));
                 }).map(item => (
-                  <span key={item.key}
+                  <span key={`${item.groupKey}-${item.key}`}
                     className="inline-flex items-center gap-1 text-[9px] bg-[#f5a623]/10 text-[#f5a623] px-2 py-[2px] rounded-md font-medium">
                     {item.label}
                     <button onClick={() => {

@@ -327,10 +327,10 @@ function resolveInitialSubModule(parent: ModuleId, allowedModules: string, userR
   const subs = SUB_MODULES[parent];
   if (!subs || subs.length === 0) return parent;
   
-  // If admin, return first sub-module
-  if (userRole === 'admin') return subs[0].id;
+  // If full access, return first sub-module
+  if (allowedModules === 'all') return subs[0].id;
   
-  // For restricted users, find the first allowed sub-module
+  // For restricted access, find the first allowed sub-module
   const allowedSub = subs.find(sub => isModuleAllowed(sub.id, allowedModules));
   return allowedSub ? allowedSub.id : parent;
 }
@@ -352,8 +352,8 @@ interface ERPStore {
 export const useERPStore = create<ERPStore>((set) => ({
   activeModule: 'dashboard',
   setActiveModule: (module) => set((s) => {
-    // Guard: non-admin users cannot navigate to modules they don't have access to
-    if (s.userRole !== 'admin' && module !== 'dashboard' && !isModuleAllowed(module, s.allowedModules)) {
+    // Guard: users without full access cannot navigate to modules they don't have access to
+    if (s.allowedModules !== 'all' && module !== 'dashboard' && !isModuleAllowed(module, s.allowedModules)) {
       console.warn(`[ERPStore] Access denied to module: ${module}`);
       return s; // No state change — stay where they are
     }

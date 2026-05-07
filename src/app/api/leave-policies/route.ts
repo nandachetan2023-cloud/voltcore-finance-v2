@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     if (!name || !code || !leaveType) {
       return NextResponse.json(
-        { success: false, error: 'Name, code, and leave type are required' },
+        { success: false, error: `Missing required fields: ${!name ? 'name' : ''}${!code ? ' code' : ''}${!leaveType ? ' leave type' : ''}`.trim() },
         { status: 400 }
       );
     }
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
 
     if (existing) {
       return NextResponse.json(
-        { success: false, error: 'Leave policy code already exists' },
+        { success: false, error: `A leave policy with code "${code}" already exists. Please use a different code.` },
         { status: 400 }
       );
     }
@@ -200,10 +200,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Soft delete by setting isActive to false
-    await db.leavePolicy.update({
+    await db.leavePolicy.delete({
       where: { id: parseInt(id) },
-      data: { isActive: false, updatedAt: new Date() },
     });
 
     return NextResponse.json({ success: true });

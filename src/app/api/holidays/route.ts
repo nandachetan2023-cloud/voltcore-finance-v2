@@ -147,10 +147,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Soft delete by setting isActive to false
-    await db.holiday.update({
+    await db.holiday.delete({
       where: { id: parseInt(id) },
-      data: { isActive: false, updatedAt: new Date() },
     });
 
     return NextResponse.json({ success: true });

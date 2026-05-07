@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { LogIn, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle, Mail, KeyRound, ArrowLeft, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 interface LoginProps {
   onLogin: (email: string, password: string) => Promise<boolean>;
@@ -26,6 +27,9 @@ function Card({ children }: { children: React.ReactNode }) {
         </div>
         <div className="mt-8 text-center">
           <p className="text-xs text-[#5a6878]">© 2025 VoltCore Engineering Pvt. Ltd. All rights reserved.</p>
+          <div className="mt-3 flex justify-center">
+            <ThemeToggle compact />
+          </div>
         </div>
       </div>
     </div>

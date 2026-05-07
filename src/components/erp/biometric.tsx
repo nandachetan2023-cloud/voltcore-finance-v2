@@ -1,30 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { 
-  RefreshCw, 
-  Database, 
-  Activity, 
-  CheckCircle2, 
-  XCircle, 
-  Clock, 
-  Users,
-  Calendar,
-  Download,
-  AlertCircle,
-  Building2,
-  Settings2
-} from 'lucide-react';
-import BiometricSiteSettings from '@/components/erp/biometric-settings';
+import { RefreshCw, CheckCircle2, XCircle, Clock, Database, Calendar, Fingerprint, AlertCircle, Building2 } from 'lucide-react';
 
 interface BiometricSite {
   id: string;
@@ -43,6 +21,12 @@ interface SyncLog {
   createdAt: string;
 }
 
+interface SyncStatus {
+  syncHistory: SyncLog[];
+  unprocessedCount: number;
+  lastSuccessfulSync?: SyncLog;
+}
+
 interface RawLog {
   id: number;
   empCode: string;
@@ -54,647 +38,427 @@ interface RawLog {
   createdAt: string;
 }
 
-interface SyncStatus {
-  syncHistory: SyncLog[];
-  unprocessedCount: number;
-  lastSuccessfulSync?: SyncLog;
-}
+const inp = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]/60 transition-colors placeholder:text-[#5a6878]';
 
 export default function BiometricPage() {
   const [sites, setSites] = useState<BiometricSite[]>([]);
   const [selectedSite, setSelectedSite] = useState<string>('all');
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [rawLogs, setRawLogs] = useState<RawLog[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loadingLogs, setLoadingLogs] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [processing, setProcessing] = useState(false);
-  
-  // Date range sync
+  const [logFilter, setLogFilter] = useState<'all' | 'pending' | 'processed'>('all');
+
+  // Date range
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [dateRangeSyncing, setDateRangeSyncing] = useState(false);
+  const [showDateRange, setShowDateRange] = useState(false);
 
   useEffect(() => {
     fetchSites();
     fetchSyncStatus();
     fetchRawLogs();
+  }, []);
+
+  useEffect(() => {
+    fetchSyncStatus();
+    fetchRawLogs();
   }, [selectedSite]);
+
+  useEffect(() => {
+    fetchRawLogs();
+  }, [logFilter]);
 
   const fetchSites = async () => {
     try {
-      const response = await fetch('/api/biometric/sync');
-      const data = await response.json();
-      if (data.success) {
-        setSites(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching sites:', error);
-    }
+      const res = await fetch('/api/biometric/sync');
+      const data = await res.json();
+      if (data.success) setSites(data.data || []);
+    } catch {}
   };
 
   const fetchSyncStatus = async () => {
     try {
-      const url = selectedSite && selectedSite !== 'all'
+      const url = selectedSite !== 'all'
         ? `/api/biometric/sync-status?siteId=${selectedSite}`
         : '/api/biometric/sync-status';
-      
-      const response = await fetch(url);
-      const data = await response.json();
-      if (data.success) {
-        setSyncStatus(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching sync status:', error);
-    }
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.success) setSyncStatus(data.data);
+    } catch {}
   };
 
-  const fetchRawLogs = async (processed?: boolean) => {
+  const fetchRawLogs = async () => {
+    setLoadingLogs(true);
     try {
-      setLoading(true);
-      let url = processed !== undefined 
+      const processed = logFilter === 'all' ? undefined : logFilter === 'processed';
+      let url = processed !== undefined
         ? `/api/biometric/logs?processed=${processed}&limit=50`
         : '/api/biometric/logs?limit=50';
-      
-      if (selectedSite && selectedSite !== 'all') {
-        url += `&siteId=${selectedSite}`;
-      }
-      
-      const response = await fetch(url);
-      const data = await response.json();
-      if (data.success) {
-        setRawLogs(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching raw logs:', error);
-    } finally {
-      setLoading(false);
-    }
+      if (selectedSite !== 'all') url += `&siteId=${selectedSite}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.success) setRawLogs(data.data);
+    } catch {}
+    finally { setLoadingLogs(false); }
   };
 
-  const handleIncrementalSync = async () => {
+  const handleSync = async () => {
+    setSyncing(true);
     try {
-      setSyncing(true);
-      const siteText = selectedSite === 'all' ? 'all sites' : sites.find(s => s.id === selectedSite)?.name || selectedSite;
-      toast.info(`Starting incremental sync for ${siteText}...`);
-      
       const body = selectedSite !== 'all' ? { siteId: selectedSite } : {};
-      
-      const response = await fetch('/api/biometric/sync', {
+      const res = await fetch('/api/biometric/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      
-      const data = await response.json();
-      
+      const data = await res.json();
       if (data.success) {
-        if (Array.isArray(data.data.sync)) {
-          // Multiple sites
-          const totalFetched = data.data.sync.reduce((sum: number, r: any) => sum + r.result.fetched, 0);
-          const totalProcessed = data.data.processing.reduce((sum: number, r: any) => sum + r.result.processedCount, 0);
-          
-          if (totalFetched === 0) {
-            toast.info(
-              `No new data available.\n\nThis is normal - incremental sync only fetches NEW records since last sync.\n\nTo get new data:\n• Wait for employees to punch in/out today\n• Use Date Range Sync for specific dates`,
-              { duration: 8000 }
-            );
-          } else {
-            const summary = data.data.sync.map((r: any, i: number) => 
-              `${r.site}: ${r.result.fetched} synced, ${data.data.processing[i].result.processedCount} processed`
-            ).join('\n');
-            toast.success(`Sync & Processing completed!\n${summary}`);
-          }
+        const fetched = Array.isArray(data.data?.sync)
+          ? data.data.sync.reduce((s: number, r: any) => s + r.result.fetched, 0)
+          : data.data?.sync?.fetched || 0;
+        if (fetched === 0) {
+          toast.info('No new punch data since last sync.');
         } else {
-          // Single site
-          const fetched = data.data.sync?.fetched || 0;
-          const processed = data.data.processing?.processedCount || 0;
-          
-          if (fetched === 0) {
-            toast.info(
-              `No new data available.\n\nThis is normal - incremental sync only fetches NEW records since last sync.\n\nTo get new data:\n• Wait for employees to punch in/out today\n• Use Date Range Sync for specific dates`,
-              { duration: 8000 }
-            );
-          } else {
-            toast.success(`Sync & Processing completed! Fetched: ${fetched}, Processed: ${processed} employees`);
-          }
+          toast.success(`Sync complete — ${fetched} new records fetched.`);
         }
         fetchSyncStatus();
         fetchRawLogs();
       } else {
         toast.error(data.error || 'Sync failed');
       }
-    } catch (error) {
-      toast.error('Sync failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } catch {
+      toast.error('Sync failed. Check your connection.');
     } finally {
       setSyncing(false);
     }
   };
 
   const handleDateRangeSync = async () => {
-    if (!fromDate || !toDate) {
-      toast.error('Please select both from and to dates');
-      return;
-    }
-
+    if (!fromDate || !toDate) { toast.error('Select both dates'); return; }
+    setDateRangeSyncing(true);
     try {
-      setDateRangeSyncing(true);
-      toast.info('Starting date range sync...');
-      
       const body: any = { fromDate, toDate };
-      if (selectedSite !== 'all') {
-        body.siteId = selectedSite;
-      }
-      
-      const response = await fetch('/api/biometric/sync/date-range', {
+      if (selectedSite !== 'all') body.siteId = selectedSite;
+      const res = await fetch('/api/biometric/sync/date-range', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      
-      const data = await response.json();
-      
+      const data = await res.json();
       if (data.success) {
-        if (Array.isArray(data.data)) {
-          // Multiple sites
-          const summary = data.data.map((r: any) => 
-            `${r.site}: ${r.result.fetched} fetched, ${r.result.processed} processed`
-          ).join('\n');
-          toast.success(`Date range sync completed!\n${summary}`);
-        } else {
-          // Single site
-          toast.success(`Date range sync completed! Fetched: ${data.data.fetched}, Processed: ${data.data.processed}`);
-        }
+        const fetched = Array.isArray(data.data)
+          ? data.data.reduce((s: number, r: any) => s + r.result.fetched, 0)
+          : data.data?.fetched || 0;
+        toast.success(`Date range sync complete — ${fetched} records fetched.`);
         fetchSyncStatus();
         fetchRawLogs();
       } else {
         toast.error(data.error || 'Date range sync failed');
       }
-    } catch (error) {
-      toast.error('Date range sync failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } catch {
+      toast.error('Date range sync failed.');
     } finally {
       setDateRangeSyncing(false);
     }
   };
 
-  const handleProcessLogs = async () => {
+  const handleRetryUnmatched = async () => {
+    setProcessing(true);
     try {
-      setProcessing(true);
-      toast.info('Processing raw logs...');
-      
-      const response = await fetch('/api/biometric/process', {
-        method: 'POST',
-      });
-      
-      const data = await response.json();
-      
+      const res = await fetch('/api/biometric/process', { method: 'POST' });
+      const data = await res.json();
       if (data.success) {
-        const { processedCount, processedEmployees } = data.data;
-        
-        // Show summary with employee names
-        if (processedEmployees && processedEmployees.length > 0) {
-          const employeeList = processedEmployees
-            .slice(0, 10)
-            .map((emp: any) => `${emp.name} (${emp.empCode}): ${emp.recordsCount} records`)
-            .join('\n');
-          
-          const moreText = processedEmployees.length > 10 
-            ? `\n...and ${processedEmployees.length - 10} more employees` 
-            : '';
-          
-          toast.success(
-            `Processing completed!\n\nProcessed ${processedCount} records for ${processedEmployees.length} employees:\n\n${employeeList}${moreText}`,
-            { duration: 10000 }
-          );
-        } else {
-          toast.success(`Processing completed! Processed: ${processedCount} records`);
-        }
-        
+        toast.success(`Processed ${data.data.processedCount} records.`);
         fetchSyncStatus();
         fetchRawLogs();
       } else {
         toast.error(data.error || 'Processing failed');
       }
-    } catch (error) {
-      toast.error('Processing failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } catch {
+      toast.error('Processing failed.');
     } finally {
       setProcessing(false);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
-  };
+  const fmt = (d: string) => new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const fmtTime = (d: string) => new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  const lastSync = syncStatus?.lastSuccessfulSync;
+  const unprocessed = syncStatus?.unprocessedCount || 0;
+  const activeSiteName = selectedSite === 'all' ? 'All Sites' : (sites.find(s => s.id === selectedSite)?.name || selectedSite);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 max-w-5xl space-y-5">
+
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Biometric Integration</h1>
-          <p className="text-sm text-gray-400 mt-1">Manage biometric device sync and attendance data</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-[#f5a623]/10 rounded-xl flex items-center justify-center">
+            <Fingerprint size={20} className="text-[#f5a623]" />
+          </div>
+          <div>
+            <h2 className="text-[16px] font-bold text-[#e2e8f0]">Biometric Sync</h2>
+            <p className="text-[11px] text-[#5a6878]">Pull punch data from biometric devices into attendance</p>
+          </div>
         </div>
-        <div className="flex gap-3 items-center">
+        <div className="flex items-center gap-2">
+          {/* Site selector */}
           {sites.length > 0 && (
-            <Select value={selectedSite} onValueChange={setSelectedSite}>
-              <SelectTrigger className="w-[180px] bg-[#161b22] border-[#30363d]">
-                <Building2 className="w-4 h-4 mr-2" />
-                <SelectValue placeholder="Select site" />
-              </SelectTrigger>
-              <SelectContent className="bg-[#161b22] border-[#30363d]">
-                <SelectItem value="all">All Sites</SelectItem>
-                {sites.map((site) => (
-                  <SelectItem key={site.id} value={site.id}>
-                    {site.name}
-                  </SelectItem>
+            <div className="flex items-center gap-1.5 bg-[#161c24] border border-[#252e3a] rounded-lg px-3 py-1.5">
+              <Building2 size={13} className="text-[#5a6878]" />
+              <select
+                value={selectedSite}
+                onChange={e => setSelectedSite(e.target.value)}
+                className="bg-transparent text-[12px] text-[#e2e8f0] outline-none cursor-pointer"
+              >
+                <option value="all">All Sites</option>
+                {sites.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
-              </SelectContent>
-            </Select>
+              </select>
+            </div>
           )}
-          <Button 
-            onClick={handleIncrementalSync} 
+          <button
+            onClick={handleSync}
             disabled={syncing}
-            className="bg-[#f5a623] hover:bg-[#f5a623]/90"
+            className="flex items-center gap-2 px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50 transition-colors"
           >
-            {syncing ? (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                Syncing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Sync Now
-              </>
-            )}
-          </Button>
+            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Syncing...' : `Sync ${selectedSite !== 'all' ? activeSiteName : 'All'}`}
+          </button>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-[#161b22] border-[#30363d]">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-400 flex items-center gap-2">
-              <Database className="w-4 h-4" />
-              Unprocessed Logs
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">
-              {syncStatus?.unprocessedCount || 0}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Sites overview — only when "All Sites" selected and multiple sites exist */}
+      {sites.length > 1 && selectedSite === 'all' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {sites.map(site => (
+            <button
+              key={site.id}
+              onClick={() => setSelectedSite(site.id)}
+              className="bg-[#161c24] border border-[#252e3a] rounded-xl p-3 text-left hover:border-[#f5a623]/40 transition-colors group"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Building2 size={13} className="text-[#f5a623]" />
+                <span className="text-[11px] font-semibold text-[#e2e8f0] group-hover:text-[#f5a623] transition-colors truncate">{site.name}</span>
+              </div>
+              <p className="text-[10px] text-[#5a6878]">Click to filter by this site</p>
+            </button>
+          ))}
+        </div>
+      )}
 
-        <Card className="bg-[#161b22] border-[#30363d]">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-400 flex items-center gap-2">
-              <Activity className="w-4 h-4" />
-              Last Sync
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm text-white">
-              {syncStatus?.lastSuccessfulSync 
-                ? new Date(syncStatus.lastSuccessfulSync.createdAt).toLocaleTimeString()
-                : 'Never'}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-[#161b22] border-[#30363d]">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-400 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" />
-              Last Fetched
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">
-              {syncStatus?.lastSuccessfulSync?.recordsFetched || 0}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-[#161b22] border-[#30363d]">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-400 flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Last Processed
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">
-              {syncStatus?.lastSuccessfulSync?.recordsProcessed || 0}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Status Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+          <p className="text-[10px] text-[#5a6878] uppercase tracking-wider mb-1">Last Sync</p>
+          <p className="text-[13px] font-semibold text-[#e2e8f0]">
+            {lastSync ? fmtTime(lastSync.createdAt) : '—'}
+          </p>
+        </div>
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+          <p className="text-[10px] text-[#5a6878] uppercase tracking-wider mb-1">Records Fetched</p>
+          <p className="text-[22px] font-bold text-[#e2e8f0]">{lastSync?.recordsFetched ?? '—'}</p>
+        </div>
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+          <p className="text-[10px] text-[#5a6878] uppercase tracking-wider mb-1">Processed</p>
+          <p className="text-[22px] font-bold text-[#00e676]">{lastSync?.recordsProcessed ?? '—'}</p>
+        </div>
+        <div className={`bg-[#161c24] border rounded-xl p-4 ${unprocessed > 0 ? 'border-[#ffab40]/40' : 'border-[#252e3a]'}`}>
+          <p className="text-[10px] text-[#5a6878] uppercase tracking-wider mb-1">Pending</p>
+          <p className={`text-[22px] font-bold ${unprocessed > 0 ? 'text-[#ffab40]' : 'text-[#e2e8f0]'}`}>{unprocessed}</p>
+        </div>
       </div>
 
-      {/* Main Content */}
-      <Tabs defaultValue="sync" className="space-y-4">
-        <TabsList className="bg-[#161b22] border border-[#30363d]">
-          <TabsTrigger value="sync">Sync Operations</TabsTrigger>
-          <TabsTrigger value="logs">Raw Logs</TabsTrigger>
-          <TabsTrigger value="history">Sync History</TabsTrigger>
-          <TabsTrigger value="settings">Site Settings</TabsTrigger>
-        </TabsList>
+      {/* Pending alert + retry */}
+      {unprocessed > 0 && (
+        <div className="bg-[#ffab40]/10 border border-[#ffab40]/30 rounded-xl p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle size={16} className="text-[#ffab40] shrink-0" />
+            <p className="text-[12px] text-[#ffab40]">
+              <span className="font-semibold">{unprocessed} records</span> are pending — punch logs where the employee code wasn't matched. Retry after linking employees.
+            </p>
+          </div>
+          <button
+            onClick={handleRetryUnmatched}
+            disabled={processing}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-[#ffab40] border border-[#ffab40]/40 rounded-lg hover:bg-[#ffab40]/10 disabled:opacity-50 transition-colors"
+          >
+            <Database size={12} className={processing ? 'animate-spin' : ''} />
+            {processing ? 'Retrying...' : 'Retry'}
+          </button>
+        </div>
+      )}
 
-        {/* Sync Operations Tab */}
-        <TabsContent value="sync" className="space-y-4">
-          <Card className="bg-[#161b22] border-[#30363d]">
-            <CardHeader>
-              <CardTitle className="text-white">Incremental Sync</CardTitle>
-              <CardDescription>Fetch new punch data since last sync (Recommended)</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-4">
-                <Button 
-                  onClick={handleIncrementalSync} 
-                  disabled={syncing}
-                  className="bg-[#f5a623] hover:bg-[#f5a623]/90"
-                >
-                  {syncing ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      Syncing...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Run Incremental Sync
-                    </>
-                  )}
-                </Button>
-                <div className="text-sm text-gray-400">
-                  Fetches only new records since last sync
-                  {selectedSite !== 'all' && ` for ${sites.find(s => s.id === selectedSite)?.name}`}
-                </div>
+      {/* Date Range Sync */}
+      <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <button
+          onClick={() => setShowDateRange(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#1a2028] transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-[#5a6878]" />
+            <span className="text-[12px] font-semibold text-[#e2e8f0]">Sync by Date Range</span>
+            <span className="text-[10px] text-[#5a6878]">— use this to backfill missing data</span>
+          </div>
+          <span className="text-[10px] text-[#5a6878]">{showDateRange ? '▲' : '▼'}</span>
+        </button>
+        {showDateRange && (
+          <div className="px-4 pb-4 border-t border-[#252e3a] pt-3 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-[#5a6878] uppercase tracking-wider mb-1.5">From</label>
+                <input className={inp} type="text" placeholder="01/04/2026_00:00" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+                <p className="text-[10px] text-[#5a6878] mt-1">Format: DD/MM/YYYY_HH:MM</p>
               </div>
-            </CardContent>
-          </Card>
+              <div>
+                <label className="block text-[10px] text-[#5a6878] uppercase tracking-wider mb-1.5">To</label>
+                <input className={inp} type="text" placeholder="30/04/2026_23:59" value={toDate} onChange={e => setToDate(e.target.value)} />
+                <p className="text-[10px] text-[#5a6878] mt-1">Format: DD/MM/YYYY_HH:MM</p>
+              </div>
+            </div>
+            <button
+              onClick={handleDateRangeSync}
+              disabled={dateRangeSyncing}
+              className="flex items-center gap-2 px-4 py-2 bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/30 text-[12px] font-semibold rounded-lg hover:bg-[#00d4ff]/20 disabled:opacity-50 transition-colors"
+            >
+              <Calendar size={13} className={dateRangeSyncing ? 'animate-spin' : ''} />
+              {dateRangeSyncing ? 'Syncing...' : `Sync ${selectedSite !== 'all' ? activeSiteName : 'All Sites'}`}
+            </button>
+          </div>
+        )}
+      </div>
 
-          <Card className="bg-[#161b22] border-[#30363d]">
-            <CardHeader>
-              <CardTitle className="text-white">Date Range Sync</CardTitle>
-              <CardDescription>Sync specific date range (for backfilling)</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="fromDate" className="text-gray-300">From Date</Label>
-                  <Input
-                    id="fromDate"
-                    type="text"
-                    placeholder="dd/MM/yyyy_HH:mm"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="bg-[#0d1117] border-[#30363d] text-white"
-                  />
-                  <p className="text-xs text-gray-500">Format: 01/04/2026_00:00</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="toDate" className="text-gray-300">To Date</Label>
-                  <Input
-                    id="toDate"
-                    type="text"
-                    placeholder="dd/MM/yyyy_HH:mm"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="bg-[#0d1117] border-[#30363d] text-white"
-                  />
-                  <p className="text-xs text-gray-500">Format: 30/04/2026_23:59</p>
-                </div>
-              </div>
-              <Button 
-                onClick={handleDateRangeSync} 
-                disabled={dateRangeSyncing}
-                className="bg-blue-600 hover:bg-blue-700"
+      {/* Punch Logs */}
+      <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#252e3a]">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-semibold text-[#e2e8f0]">Punch Logs</span>
+            {selectedSite !== 'all' && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f5a623]/10 text-[#f5a623] font-semibold">{activeSiteName}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {(['all', 'pending', 'processed'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setLogFilter(f)}
+                className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-colors capitalize ${logFilter === f ? 'bg-[#f5a623] text-black' : 'text-[#5a6878] hover:text-[#e2e8f0]'}`}
               >
-                {dateRangeSyncing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Syncing...
-                  </>
-                ) : (
-                  <>
-                    <Calendar className="w-4 h-4 mr-2" />
-                    Sync Date Range
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
+                {f}
+              </button>
+            ))}
+            <button onClick={fetchRawLogs} className="ml-2 p-1 text-[#5a6878] hover:text-[#e2e8f0] transition-colors">
+              <RefreshCw size={12} className={loadingLogs ? 'animate-spin' : ''} />
+            </button>
+          </div>
+        </div>
 
-          <Card className="bg-[#161b22] border-[#30363d]">
-            <CardHeader>
-              <CardTitle className="text-white">Process Unmatched Logs</CardTitle>
-              <CardDescription>
-                Matched employee logs are processed automatically during sync. 
-                Use this to retry processing logs for employees not found in the system.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-4">
-                <Button 
-                  onClick={handleProcessLogs} 
-                  disabled={processing || (syncStatus?.unprocessedCount || 0) === 0}
-                  variant="outline"
-                  className="border-[#30363d] hover:bg-[#30363d]"
-                >
-                  {processing ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Database className="w-4 h-4 mr-2" />
-                      Retry Unmatched ({syncStatus?.unprocessedCount || 0})
-                    </>
-                  )}
-                </Button>
-                <div className="text-sm text-gray-400">
-                  Attempts to process logs for employees not found during sync
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Raw Logs Tab */}
-        <TabsContent value="logs" className="space-y-4">
-          <Card className="bg-[#161b22] border-[#30363d]">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-white">Raw Biometric Logs</CardTitle>
-                  <CardDescription>View punch data from biometric devices</CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => fetchRawLogs()}
-                    className="border-[#30363d]"
-                  >
-                    All
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => fetchRawLogs(false)}
-                    className="border-[#30363d]"
-                  >
-                    Unprocessed
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => fetchRawLogs(true)}
-                    className="border-[#30363d]"
-                  >
-                    Processed
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="flex justify-center py-8">
-                  <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-[#30363d]">
-                        <TableHead className="text-gray-400">Site</TableHead>
-                        <TableHead className="text-gray-400">Employee Code</TableHead>
-                        <TableHead className="text-gray-400">Name</TableHead>
-                        <TableHead className="text-gray-400">Punch Date</TableHead>
-                        <TableHead className="text-gray-400">Device ID</TableHead>
-                        <TableHead className="text-gray-400">Status</TableHead>
-                        <TableHead className="text-gray-400">Created</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {rawLogs.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={7} className="text-center text-gray-400 py-8">
-                            No logs found
-                          </TableCell>
-                        </TableRow>
+        {loadingLogs ? (
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw size={20} className="animate-spin text-[#5a6878]" />
+          </div>
+        ) : rawLogs.length === 0 ? (
+          <div className="text-center py-12 text-[#5a6878] text-[12px]">No punch logs found.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b border-[#252e3a] bg-[#141920]">
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Employee</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Punch Time</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Site</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rawLogs.map(log => (
+                  <tr key={log.id} className="border-b border-[#1e252e] hover:bg-[#1a2028] transition-colors">
+                    <td className="px-4 py-2.5">
+                      <span className="font-mono text-[#f5a623]">{log.empCode}</span>
+                      {log.name && <span className="text-[#8899aa] ml-2">{log.name}</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-[#e2e8f0]">{fmt(log.punchDate)}</td>
+                    <td className="px-4 py-2.5">
+                      {log.siteId ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00d4ff]/10 text-[#00d4ff] font-semibold">
+                          {sites.find(s => s.id === log.siteId)?.name || log.siteId}
+                        </span>
+                      ) : <span className="text-[#5a6878]">—</span>}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {log.processed ? (
+                        <span className="inline-flex items-center gap-1 text-[#00e676] text-[10px] font-semibold">
+                          <CheckCircle2 size={11} /> Processed
+                        </span>
                       ) : (
-                        rawLogs.map((log) => (
-                          <TableRow key={log.id} className="border-[#30363d]">
-                            <TableCell>
-                              <Badge variant="outline" className="border-blue-600 text-blue-600">
-                                {log.siteId || 'N/A'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-white font-mono">{log.empCode}</TableCell>
-                            <TableCell className="text-white">{log.name}</TableCell>
-                            <TableCell className="text-gray-300">{formatDate(log.punchDate)}</TableCell>
-                            <TableCell className="text-gray-300">{log.deviceId || '-'}</TableCell>
-                            <TableCell>
-                              {log.processed ? (
-                                <Badge className="bg-green-600">Processed</Badge>
-                              ) : (
-                                <Badge variant="outline" className="border-yellow-600 text-yellow-600">
-                                  Pending
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-gray-400 text-sm">
-                              {formatDate(log.createdAt)}
-                            </TableCell>
-                          </TableRow>
-                        ))
+                        <span className="inline-flex items-center gap-1 text-[#ffab40] text-[10px] font-semibold">
+                          <Clock size={11} /> Pending
+                        </span>
                       )}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
-        {/* Sync History Tab */}
-        <TabsContent value="history" className="space-y-4">
-          <Card className="bg-[#161b22] border-[#30363d]">
-            <CardHeader>
-              <CardTitle className="text-white">Sync History</CardTitle>
-              <CardDescription>View past sync operations and their status</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-[#30363d]">
-                      <TableHead className="text-gray-400">Site</TableHead>
-                      <TableHead className="text-gray-400">Date/Time</TableHead>
-                      <TableHead className="text-gray-400">Type</TableHead>
-                      <TableHead className="text-gray-400">Fetched</TableHead>
-                      <TableHead className="text-gray-400">Processed</TableHead>
-                      <TableHead className="text-gray-400">Status</TableHead>
-                      <TableHead className="text-gray-400">Error</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {!syncStatus?.syncHistory || syncStatus.syncHistory.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center text-gray-400 py-8">
-                          No sync history found
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      syncStatus.syncHistory.map((log) => (
-                        <TableRow key={log.id} className="border-[#30363d]">
-                          <TableCell>
-                            <Badge variant="outline" className="border-blue-600 text-blue-600">
-                              {log.siteId || 'All'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-white">{formatDate(log.createdAt)}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="border-purple-600 text-purple-600">
-                              {log.syncType}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-white">{log.recordsFetched}</TableCell>
-                          <TableCell className="text-white">{log.recordsProcessed}</TableCell>
-                          <TableCell>
-                            {log.status === 'success' ? (
-                              <Badge className="bg-green-600">
-                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                                Success
-                              </Badge>
-                            ) : (
-                              <Badge variant="destructive">
-                                <XCircle className="w-3 h-3 mr-1" />
-                                Failed
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-red-400 text-sm">
-                            {log.errorMessage || '-'}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Site Settings Tab */}
-        <TabsContent value="settings">
-          <BiometricSiteSettings />
-        </TabsContent>
-      </Tabs>
+      {/* Sync History */}
+      {syncStatus?.syncHistory && syncStatus.syncHistory.length > 0 && (
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#252e3a]">
+            <span className="text-[13px] font-semibold text-[#e2e8f0]">Recent Sync History</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b border-[#252e3a] bg-[#141920]">
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Time</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Site</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Type</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Fetched</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Processed</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {syncStatus.syncHistory.slice(0, 10).map(log => (
+                  <tr key={log.id} className="border-b border-[#1e252e] hover:bg-[#1a2028] transition-colors">
+                    <td className="px-4 py-2.5 text-[#8899aa]">{fmtTime(log.createdAt)}</td>
+                    <td className="px-4 py-2.5">
+                      {log.siteId ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00d4ff]/10 text-[#00d4ff] font-semibold">
+                          {sites.find(s => s.id === log.siteId)?.name || log.siteId}
+                        </span>
+                      ) : <span className="text-[#5a6878] text-[10px]">All</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-[#e2e8f0] capitalize">{log.syncType}</td>
+                    <td className="px-4 py-2.5 text-[#e2e8f0]">{log.recordsFetched}</td>
+                    <td className="px-4 py-2.5 text-[#e2e8f0]">{log.recordsProcessed}</td>
+                    <td className="px-4 py-2.5">
+                      {log.status === 'success' ? (
+                        <span className="inline-flex items-center gap-1 text-[#00e676] text-[10px] font-semibold">
+                          <CheckCircle2 size={11} /> Success
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[#ff3d3d] text-[10px] font-semibold" title={log.errorMessage}>
+                          <XCircle size={11} /> Failed
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

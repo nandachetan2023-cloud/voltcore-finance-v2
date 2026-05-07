@@ -101,8 +101,12 @@ export async function authenticateUser(email: string, password: string): Promise
           } catch {}
         }
 
-        // Determine role: "all" = admin, anything else = restricted user
-        const role: UserRole = modules === 'all' ? 'admin' : 'demo'
+        // Determine role:
+        // - "all" modules = full admin
+        // - specific modules but user was created by superadmin = admin with limited modules
+        // - specific modules, regular tenant user = demo (restricted)
+        // createdBySuperadmin flag means the superadmin explicitly granted this user admin-level role
+        const role: UserRole = (modules === 'all' || tenantUser.createdBySuperadmin) ? 'admin' : 'demo'
 
         return {
           user: {

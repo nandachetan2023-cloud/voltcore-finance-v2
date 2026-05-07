@@ -619,7 +619,7 @@ export default function EmployeesModule() {
           </F>
           <F label="Branch / Site" req>
             <select className={sel} value={form.branchId} onChange={e => setForm(f => ({ ...f, branchId: e.target.value }))}>
-              <option value="">Select branch...</option>
+              <option value="">Select site...</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </F>
