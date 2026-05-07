@@ -82,6 +82,10 @@ server.log
 # Credentials
 CREDENTIALS.md
 
+# Seed scripts with sensitive data
+scripts/seed-full-state.ts
+scripts/seed-demo-employees.ts
+
 # IDE
 .vscode/*
 !.vscode/settings.json
