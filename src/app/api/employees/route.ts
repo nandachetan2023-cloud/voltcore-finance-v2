@@ -19,17 +19,55 @@ export async function GET(request: NextRequest) {
     const selectBase: any = {
       id: true,
       employeeCode: true,
+      tokenNumber: true,
+      workmenSlNo: true,
       firstName: true,
       middleName: true,
       lastName: true,
       email: true,
       phone: true,
       alternatePhone: true,
+      personalEmail: true,
       dateOfBirth: true,
       gender: true,
+      maritalStatus: true,
+      bloodGroup: true,
+      fatherName: true,
+      currentAddress: true,
+      currentCity: true,
+      currentState: true,
+      currentPincode: true,
+      permanentAddress: true,
+      permanentCity: true,
+      permanentState: true,
+      permanentPincode: true,
+      departmentId: true,
+      designationId: true,
+      natureOfDesignation: true,
+      branchId: true,
+      gradeId: true,
+      reportingManagerId: true,
+      dateOfJoining: true,
+      confirmationDate: true,
       employmentType: true,
       employmentStatus: true,
+      probationMonths: true,
+      noticePeriodDays: true,
+      monthlyGrossSalary: true,
+      panNumber: true,
+      aadharNumber: true,
+      uanNumber: true,
+      esicNumber: true,
+      bankName: true,
+      bankAccount: true,
+      bankIfsc: true,
+      emergencyContactName: true,
+      emergencyContactRelation: true,
+      emergencyContactPhone: true,
       isActive: true,
+      isDeleted: true,
+      employmentType: true,
+      employmentStatus: true,
       dateOfJoining: true,
       Department: {
         select: {
@@ -44,6 +82,12 @@ export async function GET(request: NextRequest) {
         },
       },
       Branch: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      Grade: {
         select: {
           id: true,
           name: true,
@@ -301,9 +345,15 @@ export async function PUT(request: NextRequest) {
     const updateData: any = { ...data }
     if (updateData.dateOfBirth) updateData.dateOfBirth = new Date(updateData.dateOfBirth)
     if (updateData.dateOfJoining) updateData.dateOfJoining = new Date(updateData.dateOfJoining)
+    if (updateData.confirmationDate) updateData.confirmationDate = new Date(updateData.confirmationDate)
     if (updateData.departmentId) updateData.departmentId = parseInt(updateData.departmentId)
     if (updateData.designationId) updateData.designationId = parseInt(updateData.designationId)
     if (updateData.branchId) updateData.branchId = parseInt(updateData.branchId)
+    if (updateData.gradeId !== undefined) updateData.gradeId = updateData.gradeId ? parseInt(updateData.gradeId) : null
+    if (updateData.reportingManagerId !== undefined) updateData.reportingManagerId = updateData.reportingManagerId ? parseInt(updateData.reportingManagerId) : null
+    if (updateData.probationMonths !== undefined) updateData.probationMonths = parseInt(updateData.probationMonths) || 6
+    if (updateData.noticePeriodDays !== undefined) updateData.noticePeriodDays = parseInt(updateData.noticePeriodDays) || 30
+    if (updateData.monthlyGrossSalary !== undefined) updateData.monthlyGrossSalary = updateData.monthlyGrossSalary ? parseFloat(updateData.monthlyGrossSalary) : null
     updateData.updatedAt = new Date()
 
     const employee = await db.employee.update({
