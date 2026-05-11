@@ -402,11 +402,14 @@ export default function EmployeesModule() {
       }
 
       let employeeCode = form.empId.trim().toUpperCase();
-      if (/^\d{1,4}$/.test(employeeCode)) employeeCode = `EMP${employeeCode.padStart(4, '0')}`;
-      if (!/^EMP\d{4}$/.test(employeeCode)) {
-        toast.error('Employee ID must be in format EMP0001 to EMP9999');
-        setSubmitting(false);
-        return;
+      // Only auto-format and validate code format when creating new employees
+      if (mode === 'create') {
+        if (/^\d{1,4}$/.test(employeeCode)) employeeCode = `EMP${employeeCode.padStart(4, '0')}`;
+        if (!/^EMP\d{4}$/.test(employeeCode)) {
+          toast.error('Employee ID must be in format EMP0001 to EMP9999');
+          setSubmitting(false);
+          return;
+        }
       }
 
       const apiBody: any = {
