@@ -207,8 +207,8 @@ export async function POST(request: NextRequest) {
         branchId: parseInt(branchId),
         dateOfJoining: new Date(dateOfJoining),
         employmentType: employmentType || 'permanent',
-        employmentStatus: employmentStatus || 'inactive', // inactive until shift is assigned
-        isActive: false, // will be set to true when a shift is assigned
+        employmentStatus: employmentStatus || 'active',
+        isActive: true,
         updatedAt: new Date(),
       },
       include: {
