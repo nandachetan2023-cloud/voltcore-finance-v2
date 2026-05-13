@@ -14,6 +14,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FieldError, fieldBorderError } from '@/components/ui/field-error';
+import { validateFields, isValid, type FieldErrors } from '@/lib/form-validation';
 
 /* ── Types ────────────────────────────────────────── */
 interface Employee {
@@ -412,9 +414,10 @@ export default function LeaveModule() {
   const [deleteTarget, setDeleteTarget] = useState<LeaveRequest | null>(null);
   const [form, setForm] = useState<LeaveFormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const { triggerCreate } = useERPStore();
 
-  useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
+  useEffect(() => { if (triggerCreate > 0) { setForm(EMPTY_FORM); setFieldErrors({}); setCreateOpen(true); } }, [triggerCreate]);
 
   /* ── Fetch ── */
   const fetchData = useCallback(async () => {
@@ -640,8 +643,16 @@ export default function LeaveModule() {
   };
 
   const handleCreate = async () => {
-    if (!form.empId || !form.fromDate || !form.toDate || form.days < 1) {
-      toast.error('Please fill in employee, dates, and valid date range');
+    const errors = validateFields([
+      { field: 'empId', value: form.empId, label: 'Employee' },
+      { field: 'type', value: form.type, label: 'Leave Type' },
+      { field: 'fromDate', value: form.fromDate, label: 'From Date' },
+      { field: 'toDate', value: form.toDate, label: 'To Date' },
+    ]);
+    setFieldErrors(errors);
+    if (!isValid(errors)) return;
+    if (form.days < 1) {
+      toast.error('Please select a valid date range');
       return;
     }
     if (formBalanceWarning) {
@@ -707,6 +718,7 @@ export default function LeaveModule() {
         }
         setCreateOpen(false);
         setForm(EMPTY_FORM);
+        setFieldErrors({});
         await fetchData();
       } else if (res.status === 422) {
         setCreateOpen(false);
@@ -892,7 +904,7 @@ export default function LeaveModule() {
       <LeaveLedger records={records} employees={employees} leavePolicies={leavePolicies} />
 
       {/* Create Leave Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) { setForm(EMPTY_FORM); setFieldErrors({}); } }}>
         <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
@@ -902,17 +914,18 @@ export default function LeaveModule() {
           <div className="space-y-3">
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Employee *</label>
-              <select value={form.empId} onChange={e => updateForm('empId', e.target.value)} className="vc-input appearance-none">
+              <select value={form.empId} onChange={e => { updateForm('empId', e.target.value); setFieldErrors(fe => ({ ...fe, empId: '' })); }} className={`vc-input appearance-none ${fieldBorderError(fieldErrors.empId)}`}>
                 <option value="">Select employee...</option>
                 {employees.map(emp => (
                   <option key={emp.id} value={emp.id}>{emp.empId} - {emp.name}</option>
                 ))}
               </select>
+              <FieldError message={fieldErrors.empId} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Leave Type *</label>
-                <select value={form.type} onChange={e => updateForm('type', e.target.value)} className="vc-input appearance-none">
+                <select value={form.type} onChange={e => { updateForm('type', e.target.value); setFieldErrors(fe => ({ ...fe, type: '' })); }} className={`vc-input appearance-none ${fieldBorderError(fieldErrors.type)}`}>
                   <option value="">Select Leave Type</option>
                   {form.empId ? (
                     getApplicablePolicies(form.empId).map(policy => (
@@ -928,6 +941,7 @@ export default function LeaveModule() {
                     ))
                   )}
                 </select>
+                <FieldError message={fieldErrors.type} />
               </div>
               <div>
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site</label>
@@ -942,11 +956,13 @@ export default function LeaveModule() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">From Date *</label>
-                <input type="date" value={form.fromDate} onChange={e => updateForm('fromDate', e.target.value)} className="vc-input" />
+                <input type="date" value={form.fromDate} onChange={e => { updateForm('fromDate', e.target.value); setFieldErrors(fe => ({ ...fe, fromDate: '' })); }} className={`vc-input ${fieldBorderError(fieldErrors.fromDate)}`} />
+                <FieldError message={fieldErrors.fromDate} />
               </div>
               <div>
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">To Date *</label>
-                <input type="date" value={form.toDate} onChange={e => updateForm('toDate', e.target.value)} className="vc-input" />
+                <input type="date" value={form.toDate} onChange={e => { updateForm('toDate', e.target.value); setFieldErrors(fe => ({ ...fe, toDate: '' })); }} className={`vc-input ${fieldBorderError(fieldErrors.toDate)}`} />
+                <FieldError message={fieldErrors.toDate} />
               </div>
             </div>
             <div>
@@ -984,7 +1000,7 @@ export default function LeaveModule() {
             </div>
           </div>
           <DialogFooter>
-            <button onClick={() => setCreateOpen(false)} className="vc-btn-ghost">Cancel</button>
+            <button onClick={() => { setCreateOpen(false); setForm(EMPTY_FORM); setFieldErrors({}); }} className="vc-btn-ghost">Cancel</button>
             <button onClick={handleCreate} disabled={submitting || !!formBalanceWarning}
               className={`flex items-center gap-1.5 disabled:opacity-50 ${formBalanceWarning ? 'px-4 py-2 rounded-lg text-[12px] font-bold bg-[#ff3d3d] text-white' : 'vc-btn-primary'}`}>
               {submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}

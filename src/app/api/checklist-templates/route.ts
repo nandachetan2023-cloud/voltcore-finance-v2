@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
             assignedRole: t.assignedRole || 'hr',
             dueDayOffset: t.dueDayOffset || 1,
             requiresDocument: t.requiresDocument || false,
+            documentNecessary: t.requiresDocument ? (t.documentNecessary || false) : false,
             order: i,
           })),
         } : undefined,
@@ -77,6 +78,7 @@ export async function PUT(request: NextRequest) {
             assignedRole: t.assignedRole || 'hr',
             dueDayOffset: t.dueDayOffset || 1,
             requiresDocument: t.requiresDocument || false,
+            documentNecessary: t.requiresDocument ? (t.documentNecessary || false) : false,
             order: i,
           })),
         })

@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
 import EmployeeBulkImport from './employee-bulk-import';
+import { FieldError, fieldBorderError } from '@/components/ui/field-error';
+import { validateFields, isValid, type FieldErrors } from '@/lib/form-validation';
 
 interface Employee {
   id: number;
@@ -226,6 +228,7 @@ export default function EmployeesModule() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<EmployeeFormData>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formTab, setFormTab] = useState<'identity' | 'personal' | 'address' | 'org' | 'employment' | 'statutory' | 'bank' | 'emergency'>('identity');
   const { triggerCreate } = useERPStore();
 
@@ -319,6 +322,7 @@ export default function EmployeesModule() {
     const suggestedId = nextNumber <= 9999 ? `EMP${nextNumber.toString().padStart(4, '0')}` : '';
     setForm({ ...emptyForm, empId: suggestedId }); 
     setFormTab('identity');
+    setFieldErrors({});
     setCreateOpen(true); 
   };
   const openEdit = (emp: any) => {
@@ -372,6 +376,7 @@ export default function EmployeesModule() {
     });
     setSelectedId(emp.id.toString());
     setFormTab('identity');
+    setFieldErrors({});
     setEditOpen(true);
   };
   const openDelete = (id: number) => { setSelectedId(id.toString()); setDeleteOpen(true); };
@@ -379,24 +384,24 @@ export default function EmployeesModule() {
   const handleSubmit = async (mode: 'create' | 'edit') => {
     setSubmitting(true);
     try {
-      const errors: string[] = [];
-      if (!form.empId.trim()) errors.push('Employee ID is required');
-      if (!form.firstName.trim()) errors.push('First Name is required');
-      if (!form.lastName.trim()) errors.push('Last Name is required');
-      if (!form.email.trim()) errors.push('Email is required');
-      if (!form.phone.trim()) errors.push('Phone is required');
-      if (!form.dateOfBirth) errors.push('Date of Birth is required');
-      if (!form.currentAddress.trim()) errors.push('Current Address is required');
-      if (!form.currentCity.trim()) errors.push('Current City is required');
-      if (!form.currentState.trim()) errors.push('Current State is required');
-      if (!form.currentPincode.trim()) errors.push('Current Pincode is required');
-      if (!form.departmentId) errors.push('Department is required');
-      if (!form.designationId) errors.push('Designation is required');
-      if (!form.branchId) errors.push('Branch is required');
-      if (!form.dateOfJoining) errors.push('Date of Joining is required');
-
-      if (errors.length > 0) {
-        toast.error(<div><div className="font-semibold mb-1">Please fix the following errors:</div><ul className="list-disc list-inside text-xs">{errors.map((e, i) => <li key={i}>{e}</li>)}</ul></div>, { duration: 5000 });
+      const errors = validateFields([
+        { field: 'empId', value: form.empId, label: 'Employee ID' },
+        { field: 'firstName', value: form.firstName, label: 'First Name' },
+        { field: 'lastName', value: form.lastName, label: 'Last Name' },
+        { field: 'email', value: form.email, label: 'Email' },
+        { field: 'phone', value: form.phone, label: 'Phone' },
+        { field: 'dateOfBirth', value: form.dateOfBirth, label: 'Date of Birth' },
+        { field: 'currentAddress', value: form.currentAddress, label: 'Current Address' },
+        { field: 'currentCity', value: form.currentCity, label: 'Current City' },
+        { field: 'currentState', value: form.currentState, label: 'Current State' },
+        { field: 'currentPincode', value: form.currentPincode, label: 'Current Pincode' },
+        { field: 'departmentId', value: form.departmentId, label: 'Department' },
+        { field: 'designationId', value: form.designationId, label: 'Designation' },
+        { field: 'branchId', value: form.branchId, label: 'Branch' },
+        { field: 'dateOfJoining', value: form.dateOfJoining, label: 'Date of Joining' },
+      ]);
+      setFieldErrors(errors);
+      if (!isValid(errors)) {
         setSubmitting(false);
         return;
       }
@@ -404,9 +409,9 @@ export default function EmployeesModule() {
       let employeeCode = form.empId.trim().toUpperCase();
       // Only auto-format and validate code format when creating new employees
       if (mode === 'create') {
-        if (/^\d{1,4}$/.test(employeeCode)) employeeCode = `EMP${employeeCode.padStart(4, '0')}`;
-        if (!/^EMP\d{4}$/.test(employeeCode)) {
-          toast.error('Employee ID must be in format EMP0001 to EMP9999');
+        if (/^\d{1,8}$/.test(employeeCode)) employeeCode = `UA${employeeCode.padStart(8, '0')}`;
+        if (!/^UA\d{8}$/.test(employeeCode)) {
+          toast.error('Employee ID must be in format UA00000001 to UA99999999');
           setSubmitting(false);
           return;
         }
@@ -551,23 +556,23 @@ export default function EmployeesModule() {
       <div className="grid grid-cols-2 gap-3 max-h-[55vh] overflow-y-auto pr-1">
         {/* ── Identity ── */}
         {formTab === 'identity' && <>
-          <F label="Employee ID" req><input className={inp} value={form.empId} onChange={e => setForm(f => ({ ...f, empId: e.target.value.toUpperCase() }))} placeholder="EMP0001" maxLength={7} /></F>
+          <F label="Employee ID" req><input className={`${inp} ${fieldBorderError(fieldErrors.empId)}`} value={form.empId} onChange={e => { setForm(f => ({ ...f, empId: e.target.value.toUpperCase() })); setFieldErrors(fe => ({ ...fe, empId: '' })); }} placeholder="UA00000001" maxLength={10} /><FieldError message={fieldErrors.empId} /></F>
           <F label="Token Number"><input className={inp} value={form.tokenNumber} onChange={e => setForm(f => ({ ...f, tokenNumber: e.target.value.toUpperCase() }))} placeholder="TKN001" /></F>
           <F label="Workmen Sl. No."><input className={inp} value={form.workmenSlNo} onChange={e => setForm(f => ({ ...f, workmenSlNo: e.target.value.toUpperCase() }))} placeholder="WM001" /></F>
-          <F label="First Name" req><input className={inp} value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} placeholder="Rajesh" /></F>
+          <F label="First Name" req><input className={`${inp} ${fieldBorderError(fieldErrors.firstName)}`} value={form.firstName} onChange={e => { setForm(f => ({ ...f, firstName: e.target.value })); setFieldErrors(fe => ({ ...fe, firstName: '' })); }} placeholder="Rajesh" /><FieldError message={fieldErrors.firstName} /></F>
           <F label="Middle Name"><input className={inp} value={form.middleName} onChange={e => setForm(f => ({ ...f, middleName: e.target.value }))} placeholder="Kumar" /></F>
-          <F label="Last Name" req><input className={inp} value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} placeholder="Sharma" /></F>
-          <F label="Work Email" req><input className={inp} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="rajesh@company.com" /></F>
+          <F label="Last Name" req><input className={`${inp} ${fieldBorderError(fieldErrors.lastName)}`} value={form.lastName} onChange={e => { setForm(f => ({ ...f, lastName: e.target.value })); setFieldErrors(fe => ({ ...fe, lastName: '' })); }} placeholder="Sharma" /><FieldError message={fieldErrors.lastName} /></F>
+          <F label="Work Email" req><input className={`${inp} ${fieldBorderError(fieldErrors.email)}`} type="email" value={form.email} onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setFieldErrors(fe => ({ ...fe, email: '' })); }} placeholder="rajesh@company.com" /><FieldError message={fieldErrors.email} /></F>
           <F label="Personal Email"><input className={inp} type="email" value={form.personalEmail} onChange={e => setForm(f => ({ ...f, personalEmail: e.target.value }))} placeholder="rajesh@gmail.com" /></F>
-          <F label="Phone" req><input className={inp} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210" /></F>
+          <F label="Phone" req><input className={`${inp} ${fieldBorderError(fieldErrors.phone)}`} value={form.phone} onChange={e => { setForm(f => ({ ...f, phone: e.target.value })); setFieldErrors(fe => ({ ...fe, phone: '' })); }} placeholder="+91 98765 43210" /><FieldError message={fieldErrors.phone} /></F>
           <F label="Alternate Phone"><input className={inp} value={form.alternatePhone} onChange={e => setForm(f => ({ ...f, alternatePhone: e.target.value }))} placeholder="+91 98765 43211" /></F>
         </>}
 
         {/* ── Personal ── */}
         {formTab === 'personal' && <>
-          <F label="Date of Birth" req><input className={inp} type="date" value={form.dateOfBirth} onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))} /></F>
+          <F label="Date of Birth" req><input className={`${inp} ${fieldBorderError(fieldErrors.dateOfBirth)}`} type="date" value={form.dateOfBirth} onChange={e => { setForm(f => ({ ...f, dateOfBirth: e.target.value })); setFieldErrors(fe => ({ ...fe, dateOfBirth: '' })); }} /><FieldError message={fieldErrors.dateOfBirth} /></F>
           <F label="Gender" req>
-            <select className={sel} value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
+            <select className={`${sel} ${fieldBorderError(fieldErrors.gender)}`} value={form.gender} onChange={e => { setForm(f => ({ ...f, gender: e.target.value })); setFieldErrors(fe => ({ ...fe, gender: '' })); }}>
               <option value="male">Male</option>
               <option value="female">Female</option>
               <option value="other">Other</option>
@@ -593,10 +598,10 @@ export default function EmployeesModule() {
 
         {/* ── Address ── */}
         {formTab === 'address' && <>
-          <F label="Current Address" req span2><input className={inp} value={form.currentAddress} onChange={e => setForm(f => ({ ...f, currentAddress: e.target.value }))} placeholder="House No, Street, Area" /></F>
-          <F label="Current City" req><input className={inp} value={form.currentCity} onChange={e => setForm(f => ({ ...f, currentCity: e.target.value }))} placeholder="Mumbai" /></F>
-          <F label="Current State" req><input className={inp} value={form.currentState} onChange={e => setForm(f => ({ ...f, currentState: e.target.value }))} placeholder="Maharashtra" /></F>
-          <F label="Current Pincode" req><input className={inp} value={form.currentPincode} onChange={e => setForm(f => ({ ...f, currentPincode: e.target.value }))} placeholder="400001" maxLength={6} /></F>
+          <F label="Current Address" req span2><input className={`${inp} ${fieldBorderError(fieldErrors.currentAddress)}`} value={form.currentAddress} onChange={e => { setForm(f => ({ ...f, currentAddress: e.target.value })); setFieldErrors(fe => ({ ...fe, currentAddress: '' })); }} placeholder="House No, Street, Area" /><FieldError message={fieldErrors.currentAddress} /></F>
+          <F label="Current City" req><input className={`${inp} ${fieldBorderError(fieldErrors.currentCity)}`} value={form.currentCity} onChange={e => { setForm(f => ({ ...f, currentCity: e.target.value })); setFieldErrors(fe => ({ ...fe, currentCity: '' })); }} placeholder="Mumbai" /><FieldError message={fieldErrors.currentCity} /></F>
+          <F label="Current State" req><input className={`${inp} ${fieldBorderError(fieldErrors.currentState)}`} value={form.currentState} onChange={e => { setForm(f => ({ ...f, currentState: e.target.value })); setFieldErrors(fe => ({ ...fe, currentState: '' })); }} placeholder="Maharashtra" /><FieldError message={fieldErrors.currentState} /></F>
+          <F label="Current Pincode" req><input className={`${inp} ${fieldBorderError(fieldErrors.currentPincode)}`} value={form.currentPincode} onChange={e => { setForm(f => ({ ...f, currentPincode: e.target.value })); setFieldErrors(fe => ({ ...fe, currentPincode: '' })); }} placeholder="400001" maxLength={6} /><FieldError message={fieldErrors.currentPincode} /></F>
           <div className="col-span-2 border-t border-[#252e3a] pt-2 mt-1">
             <p className="text-[10px] text-[#5a6878] mb-2">Permanent Address (if different)</p>
           </div>
@@ -609,22 +614,25 @@ export default function EmployeesModule() {
         {/* ── Organisation ── */}
         {formTab === 'org' && <>
           <F label="Department" req>
-            <select className={sel} value={form.departmentId} onChange={e => setForm(f => ({ ...f, departmentId: e.target.value }))}>
+            <select className={`${sel} ${fieldBorderError(fieldErrors.departmentId)}`} value={form.departmentId} onChange={e => { setForm(f => ({ ...f, departmentId: e.target.value })); setFieldErrors(fe => ({ ...fe, departmentId: '' })); }}>
               <option value="">Select department...</option>
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
+            <FieldError message={fieldErrors.departmentId} />
           </F>
           <F label="Designation" req>
-            <select className={sel} value={form.designationId} onChange={e => setForm(f => ({ ...f, designationId: e.target.value }))}>
+            <select className={`${sel} ${fieldBorderError(fieldErrors.designationId)}`} value={form.designationId} onChange={e => { setForm(f => ({ ...f, designationId: e.target.value })); setFieldErrors(fe => ({ ...fe, designationId: '' })); }}>
               <option value="">Select designation...</option>
               {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
+            <FieldError message={fieldErrors.designationId} />
           </F>
           <F label="Branch / Site" req>
-            <select className={sel} value={form.branchId} onChange={e => setForm(f => ({ ...f, branchId: e.target.value }))}>
+            <select className={`${sel} ${fieldBorderError(fieldErrors.branchId)}`} value={form.branchId} onChange={e => { setForm(f => ({ ...f, branchId: e.target.value })); setFieldErrors(fe => ({ ...fe, branchId: '' })); }}>
               <option value="">Select site...</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
+            <FieldError message={fieldErrors.branchId} />
           </F>
           <F label="Grade">
             <select className={sel} value={form.gradeId} onChange={e => setForm(f => ({ ...f, gradeId: e.target.value }))}>
@@ -644,7 +652,7 @@ export default function EmployeesModule() {
 
         {/* ── Employment ── */}
         {formTab === 'employment' && <>
-          <F label="Date of Joining" req><input className={inp} type="date" value={form.dateOfJoining} onChange={e => setForm(f => ({ ...f, dateOfJoining: e.target.value }))} /></F>
+          <F label="Date of Joining" req><input className={`${inp} ${fieldBorderError(fieldErrors.dateOfJoining)}`} type="date" value={form.dateOfJoining} onChange={e => { setForm(f => ({ ...f, dateOfJoining: e.target.value })); setFieldErrors(fe => ({ ...fe, dateOfJoining: '' })); }} /><FieldError message={fieldErrors.dateOfJoining} /></F>
           <F label="Confirmation Date"><input className={inp} type="date" value={form.confirmationDate} onChange={e => setForm(f => ({ ...f, confirmationDate: e.target.value }))} /></F>
           <F label="Employment Type" req>
             <select className={sel} value={form.employmentType} onChange={e => setForm(f => ({ ...f, employmentType: e.target.value }))}>

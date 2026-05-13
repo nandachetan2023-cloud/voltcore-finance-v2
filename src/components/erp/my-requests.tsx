@@ -8,6 +8,8 @@ import {
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { FieldError, fieldBorderError } from '@/components/ui/field-error';
+import { validateFields, isValid, type FieldErrors } from '@/lib/form-validation';
 
 const TYPE_CONFIG = {
   general:         { label: 'General Request',  color: '#00d4ff', icon: FileText },
@@ -35,6 +37,7 @@ export default function MyRequests() {
 
   const emptyForm = { requestType: 'general', subject: '', description: '', amount: '' };
   const [form, setForm] = useState(emptyForm);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   useEffect(() => {
     const match = document.cookie.match(/(^| )erp_employee_id=([^;]+)/);
@@ -61,14 +64,17 @@ export default function MyRequests() {
   }, [employeeId, fetchRequests]);
 
   const handleSubmit = async () => {
-    if (!employeeId || !form.subject || !form.description) {
-      toast.error('Subject and description are required');
-      return;
-    }
-    if (form.requestType === 'advance_payment' && (!form.amount || parseFloat(form.amount) <= 0)) {
-      toast.error('Please enter a valid amount for advance payment request');
-      return;
-    }
+    const specs = [
+      { field: 'subject', value: form.subject, label: 'Subject' },
+      { field: 'description', value: form.description, label: 'Description' },
+      ...(form.requestType === 'advance_payment' ? [{
+        field: 'amount', value: form.amount, label: 'Amount',
+        rules: [{ test: (v: any) => parseFloat(v) > 0, message: 'Amount must be greater than 0' }],
+      }] : []),
+    ];
+    const errors = validateFields(specs);
+    setFieldErrors(errors);
+    if (!isValid(errors)) return;
     setSubmitting(true);
     try {
       const res = await fetch('/api/employee-requests', {
@@ -283,20 +289,23 @@ export default function MyRequests() {
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Subject *</label>
-              <input className="vc-input" value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
+              <input className={`vc-input ${fieldBorderError(fieldErrors.subject)}`} value={form.subject}
+                onChange={e => { setForm(f => ({ ...f, subject: e.target.value })); setFieldErrors(fe => ({ ...fe, subject: '' })); }}
                 placeholder="Brief subject of your request" />
+              <FieldError message={fieldErrors.subject} />
             </div>
             {form.requestType === 'advance_payment' && (
               <div>
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Amount (₹) *</label>
-                <input className="vc-input" type="number" min="1" value={form.amount}
-                  onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="Enter amount" />
+                <input className={`vc-input ${fieldBorderError(fieldErrors.amount)}`} type="number" min="1" value={form.amount}
+                  onChange={e => { setForm(f => ({ ...f, amount: e.target.value })); setFieldErrors(fe => ({ ...fe, amount: '' })); }} placeholder="Enter amount" />
+                <FieldError message={fieldErrors.amount} />
               </div>
             )}
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Description *</label>
-              <textarea className="vc-input resize-none" rows={4} value={form.description}
-                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              <textarea className={`vc-input resize-none ${fieldBorderError(fieldErrors.description)}`} rows={4} value={form.description}
+                onChange={e => { setForm(f => ({ ...f, description: e.target.value })); setFieldErrors(fe => ({ ...fe, description: '' })); }}
                 placeholder={form.requestType === 'advance_payment'
                   ? 'Explain why you need the advance payment...'
                   : 'Describe your request in detail...'} />

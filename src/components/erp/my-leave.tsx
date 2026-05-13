@@ -143,6 +143,10 @@ export default function MyLeave() {
       toast.error(balanceWarning);
       return;
     }
+    if (policyViolation) {
+      toast.error(policyViolation.replace('⚠ ', ''));
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch('/api/leave', {
@@ -212,6 +216,49 @@ export default function MyLeave() {
     return balances.find(b => b.type === form.leaveType) || null;
   }, [form.leaveType, balances]);
 
+  // Selected policy object (for restriction hints)
+  const selectedPolicy = useMemo(() => {
+    if (!form.leaveType) return null;
+    return policies.find(p => (p.code || p.leaveType) === form.leaveType) || null;
+  }, [form.leaveType, policies]);
+
+  // Policy restriction warnings shown inline in the form
+  const policyRestrictions = useMemo(() => {
+    if (!selectedPolicy) return [];
+    const hints: { type: 'info' | 'warn'; text: string }[] = [];
+
+    if (selectedPolicy.minDaysNotice > 0) {
+      hints.push({ type: 'info', text: `Requires ${selectedPolicy.minDaysNotice} day${selectedPolicy.minDaysNotice !== 1 ? 's' : ''} advance notice before leave start date.` });
+    }
+    if (selectedPolicy.maxConsecutiveDays > 0) {
+      hints.push({ type: 'info', text: `Maximum ${selectedPolicy.maxConsecutiveDays} consecutive day${selectedPolicy.maxConsecutiveDays !== 1 ? 's' : ''} per application.` });
+    }
+    if (selectedPolicy.applicableAfterMonths > 0) {
+      hints.push({ type: 'info', text: `Eligible only after ${selectedPolicy.applicableAfterMonths} month${selectedPolicy.applicableAfterMonths !== 1 ? 's' : ''} of service.` });
+    }
+    if (selectedPolicy.applicableGender && selectedPolicy.applicableGender !== 'all') {
+      hints.push({ type: 'info', text: `Applicable to ${selectedPolicy.applicableGender} employees only.` });
+    }
+    if (selectedPolicy.requiresDocument) {
+      hints.push({ type: 'info', text: 'Supporting document (e.g. medical certificate) required.' });
+    }
+
+    // Active violations
+    if (form.fromDate && selectedPolicy.minDaysNotice > 0) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const leaveFrom = new Date(form.fromDate); leaveFrom.setHours(0, 0, 0, 0);
+      const daysUntil = Math.floor((leaveFrom.getTime() - today.getTime()) / 86400000);
+      if (daysUntil < selectedPolicy.minDaysNotice) {
+        hints.push({ type: 'warn', text: `⚠ Leave starts in ${daysUntil} day${daysUntil !== 1 ? 's' : ''} — minimum ${selectedPolicy.minDaysNotice} days notice required.` });
+      }
+    }
+    if (form.days > 0 && selectedPolicy.maxConsecutiveDays > 0 && form.days > selectedPolicy.maxConsecutiveDays) {
+      hints.push({ type: 'warn', text: `⚠ You selected ${form.days} days — maximum allowed is ${selectedPolicy.maxConsecutiveDays} consecutive days.` });
+    }
+
+    return hints;
+  }, [selectedPolicy, form.fromDate, form.days]);
+
   const balanceWarning = useMemo(() => {
     if (!selectedBalance || form.days <= 0) return null;
     const remaining = selectedBalance.allocated - selectedBalance.used;
@@ -220,6 +267,11 @@ export default function MyLeave() {
     }
     return null;
   }, [selectedBalance, form.days, form.leaveType]);
+
+  // Any active policy violation that should block submission
+  const policyViolation = useMemo(() => {
+    return policyRestrictions.find(r => r.type === 'warn')?.text || null;
+  }, [policyRestrictions]);
 
   const filtered = activeTab === 'all' ? records : records.filter(r => r.status === activeTab);
 
@@ -364,6 +416,16 @@ export default function MyLeave() {
                 ))}
               </select>
             </div>
+            {/* Policy restriction hints */}
+            {policyRestrictions.length > 0 && (
+              <div className="rounded-lg border border-[#2e3a48] bg-[#0f1318] divide-y divide-[#1e2530]">
+                {policyRestrictions.map((hint, i) => (
+                  <div key={i} className={`flex items-start gap-2 px-3 py-2 ${hint.type === 'warn' ? 'bg-[#ff3d3d]/8' : ''}`}>
+                    <span className={`text-[11px] leading-snug ${hint.type === 'warn' ? 'text-[#ff3d3d]' : 'text-[#8899aa]'}`}>{hint.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">From Date *</label>
@@ -402,8 +464,8 @@ export default function MyLeave() {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] border border-[#2e3a48]" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button className={`font-semibold ${balanceWarning ? 'bg-[#ff3d3d] hover:bg-[#cc2020] text-white' : 'bg-[#f5a623] text-black hover:bg-[#e8891a]'}`} disabled={submitting || !!balanceWarning} onClick={handleSubmit}>
-              {submitting ? 'Submitting...' : balanceWarning ? 'Exceeds Balance' : 'Submit Application'}
+            <Button className={`font-semibold ${balanceWarning || policyViolation ? 'bg-[#ff3d3d] hover:bg-[#cc2020] text-white' : 'bg-[#f5a623] text-black hover:bg-[#e8891a]'}`} disabled={submitting || !!balanceWarning || !!policyViolation} onClick={handleSubmit}>
+              {submitting ? 'Submitting...' : balanceWarning ? 'Exceeds Balance' : policyViolation ? 'Policy Violation' : 'Submit Application'}
             </Button>
           </DialogFooter>
         </DialogContent>

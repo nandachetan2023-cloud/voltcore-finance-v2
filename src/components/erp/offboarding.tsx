@@ -4,6 +4,8 @@ import { UserX, Plus, CheckCircle2, Clock, XCircle, RefreshCw, ChevronDown, Chev
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { FieldError, fieldBorderError } from '@/components/ui/field-error';
+import { type FieldErrors } from '@/lib/form-validation';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: '#ffab40', approved: '#00e676', rejected: '#ff3d3d',
@@ -25,6 +27,7 @@ export default function OffboardingModule() {
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ employeeId: '', reason: '', requestedLwd: '', buyoutDays: '0' });
+  const [offboardFieldErrors, setOffboardFieldErrors] = useState<FieldErrors>({});
   const [currentUser, setCurrentUser] = useState<CurrentUser>({ isAdmin: false, deptName: null, employeeId: null, isLevel1: false });
 
   const fetchData = useCallback(async () => {
@@ -46,7 +49,12 @@ export default function OffboardingModule() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const submit = async () => {
-    if (!form.employeeId || !form.reason || !form.requestedLwd) { toast.error('All fields required'); return; }
+    const errors: FieldErrors = {}
+    if (!form.employeeId) errors.employeeId = 'Employee is required'
+    if (!form.reason) errors.reason = 'Reason is required'
+    if (!form.requestedLwd) errors.requestedLwd = 'Last Working Day is required'
+    setOffboardFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
     setSubmitting(true);
     try {
       const res = await fetch('/api/offboarding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
@@ -56,6 +64,7 @@ export default function OffboardingModule() {
         fetchData();
         setShowForm(false);
         setForm({ employeeId: '', reason: '', requestedLwd: '', buyoutDays: '0' });
+        setOffboardFieldErrors({});
       } else toast.error(data.error);
     } finally { setSubmitting(false); }
   };
@@ -147,7 +156,7 @@ export default function OffboardingModule() {
           )}
           <button onClick={fetchData} className="p-1.5 text-[#5a6878] hover:text-[#e2e8f0]"><RefreshCw size={14} /></button>
           {currentUser.isAdmin && (
-            <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-3 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a]">
+            <button onClick={() => { setShowForm(true); setOffboardFieldErrors({}); }} className="flex items-center gap-1.5 px-3 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a]">
               <Plus size={13} /> New Resignation
             </button>
           )}
@@ -322,7 +331,7 @@ export default function OffboardingModule() {
         )}
       </div>
 
-      <Dialog open={showForm} onOpenChange={setShowForm}>
+      <Dialog open={showForm} onOpenChange={(open) => { setShowForm(open); if (!open) setOffboardFieldErrors({}); }}>
         <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2"><UserX size={16} /> Submit Resignation</DialogTitle>
@@ -330,14 +339,16 @@ export default function OffboardingModule() {
           <div className="space-y-3">
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Employee *</label>
-              <select className="vc-input appearance-none" value={form.employeeId} onChange={e => setForm(f => ({ ...f, employeeId: e.target.value }))}>
+              <select className={`vc-input appearance-none ${fieldBorderError(offboardFieldErrors.employeeId)}`} value={form.employeeId} onChange={e => { setForm(f => ({ ...f, employeeId: e.target.value })); setOffboardFieldErrors(fe => ({ ...fe, employeeId: '' })); }}>
                 <option value="">Select employee...</option>
                 {employees.map((e: any) => <option key={e.id} value={e.id}>{e.employeeCode} — {e.firstName} {e.lastName}</option>)}
               </select>
+              <FieldError message={offboardFieldErrors.employeeId} />
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Requested Last Working Day *</label>
-              <input type="date" className="vc-input" value={form.requestedLwd} onChange={e => setForm(f => ({ ...f, requestedLwd: e.target.value }))} />
+              <input type="date" className={`vc-input ${fieldBorderError(offboardFieldErrors.requestedLwd)}`} value={form.requestedLwd} onChange={e => { setForm(f => ({ ...f, requestedLwd: e.target.value })); setOffboardFieldErrors(fe => ({ ...fe, requestedLwd: '' })); }} />
+              <FieldError message={offboardFieldErrors.requestedLwd} />
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Buyout Days</label>
@@ -345,11 +356,12 @@ export default function OffboardingModule() {
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Reason *</label>
-              <textarea className="vc-input resize-none" rows={3} value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="Reason for resignation..." />
+              <textarea className={`vc-input resize-none ${fieldBorderError(offboardFieldErrors.reason)}`} rows={3} value={form.reason} onChange={e => { setForm(f => ({ ...f, reason: e.target.value })); setOffboardFieldErrors(fe => ({ ...fe, reason: '' })); }} placeholder="Reason for resignation..." />
+              <FieldError message={offboardFieldErrors.reason} />
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] border border-[#2e3a48]" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] border border-[#2e3a48]" onClick={() => { setShowForm(false); setOffboardFieldErrors({}); }}>Cancel</Button>
             <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={submit}>
               {submitting ? 'Submitting...' : 'Submit'}
             </Button>

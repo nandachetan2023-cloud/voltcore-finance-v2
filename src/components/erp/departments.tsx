@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Building2, Plus, Pencil, Trash2, Users, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { FieldError, fieldBorderError } from '@/components/ui/field-error';
+import { validateFields, isValid, type FieldErrors } from '@/lib/form-validation';
 
 interface Department {
   id: number;
@@ -22,6 +24,7 @@ export default function DepartmentsModule() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({ name: '', code: '' });
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   useEffect(() => { fetchDepartments(); }, []);
 
@@ -36,7 +39,12 @@ export default function DepartmentsModule() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.code) { toast.error('Please fill all required fields'); return; }
+    const errors = validateFields([
+      { field: 'name', value: formData.name, label: 'Department Name' },
+      { field: 'code', value: formData.code, label: 'Department Code' },
+    ]);
+    setFieldErrors(errors);
+    if (!isValid(errors)) return;
     try {
       const res = await fetch('/api/departments', {
         method: editingId ? 'PUT' : 'POST',
@@ -46,7 +54,7 @@ export default function DepartmentsModule() {
       const data = await res.json();
       if (data.success) {
         toast.success(editingId ? 'Department updated' : 'Department created');
-        setShowDialog(false); setFormData({ name: '', code: '' }); setEditingId(null);
+        setShowDialog(false); setFormData({ name: '', code: '' }); setEditingId(null); setFieldErrors({});
         fetchDepartments();
       } else toast.error(data.error || 'Operation failed');
     } catch { toast.error('Failed to save department'); }
@@ -94,7 +102,7 @@ export default function DepartmentsModule() {
             )}
           </p>
         </div>
-        <button onClick={() => { setFormData({ name: '', code: '' }); setEditingId(null); setShowDialog(true); }} className="vc-btn-primary">
+        <button onClick={() => { setFormData({ name: '', code: '' }); setEditingId(null); setFieldErrors({}); setShowDialog(true); }} className="vc-btn-primary">
           <Plus size={16} /> Add Department
         </button>
       </div>
@@ -145,15 +153,17 @@ export default function DepartmentsModule() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-[#e2e8f0] mb-2">Department Name *</label>
-                <input type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#0d1117] border border-[#2e3a48] rounded-lg text-[#e2e8f0] focus:outline-none focus:ring-2 focus:ring-[#f5a623]"
+                <input type="text" value={formData.name} onChange={e => { setFormData({ ...formData, name: e.target.value }); setFieldErrors(fe => ({ ...fe, name: '' })); }}
+                  className={`w-full px-3 py-2 bg-[#0d1117] border rounded-lg text-[#e2e8f0] focus:outline-none focus:ring-2 focus:ring-[#f5a623] ${fieldBorderError(fieldErrors.name) || 'border-[#2e3a48]'}`}
                   placeholder="e.g., Engineering" />
+                <FieldError message={fieldErrors.name} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#e2e8f0] mb-2">Department Code *</label>
-                <input type="text" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                  className="w-full px-3 py-2 bg-[#0d1117] border border-[#2e3a48] rounded-lg text-[#e2e8f0] focus:outline-none focus:ring-2 focus:ring-[#f5a623]"
+                <input type="text" value={formData.code} onChange={e => { setFormData({ ...formData, code: e.target.value.toUpperCase() }); setFieldErrors(fe => ({ ...fe, code: '' })); }}
+                  className={`w-full px-3 py-2 bg-[#0d1117] border rounded-lg text-[#e2e8f0] focus:outline-none focus:ring-2 focus:ring-[#f5a623] ${fieldBorderError(fieldErrors.code) || 'border-[#2e3a48]'}`}
                   placeholder="e.g., ENG" maxLength={10} />
+                <FieldError message={fieldErrors.code} />
               </div>
               <div className="flex gap-2 pt-4">
                 <button type="button" onClick={() => { setShowDialog(false); setFormData({ name: '', code: '' }); setEditingId(null); }}

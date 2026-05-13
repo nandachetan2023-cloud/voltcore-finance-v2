@@ -86,6 +86,7 @@ function getMonthName(dateStr: string): string {
 
 export default function HolidaysModule() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
   
@@ -98,6 +99,13 @@ export default function HolidaysModule() {
   const { triggerCreate } = useERPStore();
 
   useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
+
+  // Fetch branches for the site-specific selector
+  useEffect(() => {
+    fetch('/api/branches').then(r => r.json()).then(d => {
+      if (d.success) setBranches(d.data || []);
+    }).catch(() => {});
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -447,6 +455,29 @@ export default function HolidaysModule() {
               </Select>
             </div>
             <div>
+              <Label className="text-[11px] text-[#8899aa]">Applicable To</Label>
+              <Select value={form.branchId || 'all'} onValueChange={(v) => updateForm('branchId', v === 'all' ? '' : v)}>
+                <SelectTrigger className="bg-[#141920] border-[#2e3a48] text-[#e2e8f0] mt-1">
+                  <SelectValue placeholder="All branches (company-wide)" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#1a2332] border-[#2e3a48]">
+                  <SelectItem value="all" className="text-[#e2e8f0]">
+                    <span className="flex items-center gap-2"><Globe className="w-3 h-3 text-[#00e676]" /> All Branches (Company-wide)</span>
+                  </SelectItem>
+                  {branches.map(b => (
+                    <SelectItem key={b.id} value={b.id.toString()} className="text-[#e2e8f0]">
+                      <span className="flex items-center gap-2"><Building2 className="w-3 h-3 text-[#00d4ff]" /> {b.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[9px] text-[#5a6878] mt-1">
+                {form.branchId
+                  ? `Only employees at ${branches.find(b => b.id.toString() === form.branchId)?.name || 'this branch'} will observe this holiday.`
+                  : 'All employees across all branches will observe this holiday.'}
+              </p>
+            </div>
+            <div>
               <Label className="text-[11px] text-[#8899aa]">Description</Label>
               <Textarea
                 value={form.description}
@@ -511,6 +542,29 @@ export default function HolidaysModule() {
                   <SelectItem value="restricted" className="text-[#e2e8f0]">Restricted</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label className="text-[11px] text-[#8899aa]">Applicable To</Label>
+              <Select value={form.branchId || 'all'} onValueChange={(v) => updateForm('branchId', v === 'all' ? '' : v)}>
+                <SelectTrigger className="bg-[#141920] border-[#2e3a48] text-[#e2e8f0] mt-1">
+                  <SelectValue placeholder="All branches (company-wide)" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#1a2332] border-[#2e3a48]">
+                  <SelectItem value="all" className="text-[#e2e8f0]">
+                    <span className="flex items-center gap-2"><Globe className="w-3 h-3 text-[#00e676]" /> All Branches (Company-wide)</span>
+                  </SelectItem>
+                  {branches.map(b => (
+                    <SelectItem key={b.id} value={b.id.toString()} className="text-[#e2e8f0]">
+                      <span className="flex items-center gap-2"><Building2 className="w-3 h-3 text-[#00d4ff]" /> {b.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[9px] text-[#5a6878] mt-1">
+                {form.branchId
+                  ? `Only employees at ${branches.find(b => b.id.toString() === form.branchId)?.name || 'this branch'} will observe this holiday.`
+                  : 'All employees across all branches will observe this holiday.'}
+              </p>
             </div>
             <div>
               <Label className="text-[11px] text-[#8899aa]">Description</Label>

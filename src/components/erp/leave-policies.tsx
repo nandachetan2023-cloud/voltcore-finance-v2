@@ -22,6 +22,12 @@ interface LeavePolicy {
   applicableGender: string;
   requiresDocument: boolean;
   isActive: boolean;
+  // Earned leave settings
+  earnedLeaveAccrualMethod?: string | null;
+  earnedLeaveAccrualRate?: number | null;
+  earnedLeaveMaxAccumulation?: number | null;
+  earnedLeaveRoundingRule?: string | null;
+  earnedLeaveEligibleAfterDays?: number | null;
 }
 
 const inputCls = "w-full bg-[#1a2332] border-[1.5px] border-[#2e3a48] rounded-lg px-3.5 py-2.5 text-[13px] text-[#e2e8f0] outline-none transition-all duration-200 placeholder:text-[#5a6878] hover:border-[#3a4858] hover:bg-[#1e2838] focus:border-[#f5a623] focus:bg-[#1e2838] focus:shadow-[0_0_0_3px_rgba(245,166,35,0.15)]";
@@ -40,7 +46,13 @@ export default function LeavePoliciesModule() {
     name: '', code: '', leaveType: 'paid', annualQuota: '0', carryForward: false, maxCarryForward: '0', 
     encashable: false, maxEncashment: '0', minDaysNotice: '0', maxConsecutiveDays: '0', 
     applicableAfterMonths: '0', applicableGender: 'all', applicableTo: 'all', 
-    departmentId: '', designationId: '', requiresDocument: false 
+    departmentId: '', designationId: '', requiresDocument: false,
+    // Earned leave settings
+    earnedLeaveAccrualMethod: 'monthly',
+    earnedLeaveAccrualRate: '1.25',
+    earnedLeaveMaxAccumulation: '30',
+    earnedLeaveRoundingRule: 'round_down',
+    earnedLeaveEligibleAfterDays: '240',
   });
 
   const resetForm = () => {
@@ -48,7 +60,12 @@ export default function LeavePoliciesModule() {
       name: '', code: '', leaveType: 'paid', annualQuota: '0', carryForward: false, maxCarryForward: '0', 
       encashable: false, maxEncashment: '0', minDaysNotice: '0', maxConsecutiveDays: '0', 
       applicableAfterMonths: '0', applicableGender: 'all', applicableTo: 'all', 
-      departmentId: '', designationId: '', requiresDocument: false 
+      departmentId: '', designationId: '', requiresDocument: false,
+      earnedLeaveAccrualMethod: 'monthly',
+      earnedLeaveAccrualRate: '1.25',
+      earnedLeaveMaxAccumulation: '30',
+      earnedLeaveRoundingRule: 'round_down',
+      earnedLeaveEligibleAfterDays: '240',
     });
   };
   const [submitting, setSubmitting] = useState(false);
@@ -189,6 +206,7 @@ export default function LeavePoliciesModule() {
                     <span className={`inline-flex px-2 py-1 rounded-md text-[11px] font-semibold ${
                       policy.leaveType === 'paid' ? 'bg-[#00e676]/10 text-[#00e676]' : 
                       policy.leaveType === 'sick' ? 'bg-[#ff3d3d]/10 text-[#ff3d3d]' : 
+                      policy.leaveType === 'earned' ? 'bg-[#f5a623]/10 text-[#f5a623]' :
                       'bg-[#a78bfa]/10 text-[#a78bfa]'
                     }`}>
                       {policy.leaveType}
@@ -213,7 +231,12 @@ export default function LeavePoliciesModule() {
                             maxConsecutiveDays: policy.maxConsecutiveDays.toString(), applicableAfterMonths: policy.applicableAfterMonths.toString(), 
                             applicableGender: policy.applicableGender, applicableTo: (policy as any).applicableTo || 'all',
                             departmentId: (policy as any).departmentId?.toString() || '', designationId: (policy as any).designationId?.toString() || '',
-                            requiresDocument: policy.requiresDocument 
+                            requiresDocument: policy.requiresDocument,
+                            earnedLeaveAccrualMethod: policy.earnedLeaveAccrualMethod || 'monthly',
+                            earnedLeaveAccrualRate: policy.earnedLeaveAccrualRate?.toString() || '1.25',
+                            earnedLeaveMaxAccumulation: policy.earnedLeaveMaxAccumulation?.toString() || '30',
+                            earnedLeaveRoundingRule: policy.earnedLeaveRoundingRule || 'round_down',
+                            earnedLeaveEligibleAfterDays: policy.earnedLeaveEligibleAfterDays?.toString() || '240',
                           }); 
                           setSelectedId(policy.id); 
                           setEditOpen(true); 
@@ -254,6 +277,7 @@ export default function LeavePoliciesModule() {
                 <option value="paid">Paid</option>
                 <option value="sick">Sick</option>
                 <option value="casual">Casual</option>
+                <option value="earned">Earned</option>
                 <option value="maternity">Maternity</option>
                 <option value="paternity">Paternity</option>
                 <option value="unpaid">Unpaid</option>
@@ -263,6 +287,49 @@ export default function LeavePoliciesModule() {
               <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Annual Quota (days) <span className="text-[#ff3d3d]">*</span></label>
               <input type="number" step="0.5" className={inputCls} value={form.annualQuota} onChange={e => setForm(f => ({ ...f, annualQuota: e.target.value }))} />
             </div>
+            {/* Earned Leave Settings */}
+            {form.leaveType === 'earned' && (
+              <div className="col-span-2 rounded-xl border border-[#f5a623]/30 bg-[#f5a623]/5 p-4 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-[#f5a623]" />
+                  <span className="text-[12px] font-bold text-[#f5a623] uppercase tracking-wider">Earned Leave Accrual Settings</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Accrual Method</label>
+                    <select className={selectCls} value={form.earnedLeaveAccrualMethod} onChange={e => setForm(f => ({ ...f, earnedLeaveAccrualMethod: e.target.value }))}>
+                      <option value="monthly">Monthly (days per month)</option>
+                      <option value="quarterly">Quarterly (days per quarter)</option>
+                      <option value="annual">Annual (full quota at start)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">
+                      Accrual Rate (days/{form.earnedLeaveAccrualMethod === 'quarterly' ? 'quarter' : form.earnedLeaveAccrualMethod === 'annual' ? 'year' : 'month'})
+                    </label>
+                    <input type="number" step="0.01" min="0" className={inputCls} value={form.earnedLeaveAccrualRate} onChange={e => setForm(f => ({ ...f, earnedLeaveAccrualRate: e.target.value }))} placeholder="1.25" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Max Accumulation (days)</label>
+                    <input type="number" step="0.5" min="0" className={inputCls} value={form.earnedLeaveMaxAccumulation} onChange={e => setForm(f => ({ ...f, earnedLeaveMaxAccumulation: e.target.value }))} placeholder="30" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Rounding Rule</label>
+                    <select className={selectCls} value={form.earnedLeaveRoundingRule} onChange={e => setForm(f => ({ ...f, earnedLeaveRoundingRule: e.target.value }))}>
+                      <option value="none">No Rounding (keep decimals)</option>
+                      <option value="round_down">Round Down (floor)</option>
+                      <option value="round_up">Round Up (ceil)</option>
+                      <option value="round_nearest">Round to Nearest 0.5</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Eligible After (days of service)</label>
+                    <input type="number" min="0" className={inputCls} value={form.earnedLeaveEligibleAfterDays} onChange={e => setForm(f => ({ ...f, earnedLeaveEligibleAfterDays: e.target.value }))} placeholder="240" />
+                    <p className="text-[10px] text-[#5a6878] mt-1">Employee must complete this many working days before EL starts accruing</p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Min Days Notice</label>
               <input type="number" className={inputCls} value={form.minDaysNotice} onChange={e => setForm(f => ({ ...f, minDaysNotice: e.target.value }))} />
@@ -363,6 +430,7 @@ export default function LeavePoliciesModule() {
                 <option value="paid">Paid</option>
                 <option value="sick">Sick</option>
                 <option value="casual">Casual</option>
+                <option value="earned">Earned</option>
                 <option value="maternity">Maternity</option>
                 <option value="paternity">Paternity</option>
                 <option value="unpaid">Unpaid</option>
@@ -372,6 +440,49 @@ export default function LeavePoliciesModule() {
               <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Annual Quota (days) <span className="text-[#ff3d3d]">*</span></label>
               <input type="number" step="0.5" className={inputCls} value={form.annualQuota} onChange={e => setForm(f => ({ ...f, annualQuota: e.target.value }))} />
             </div>
+            {/* Earned Leave Settings */}
+            {form.leaveType === 'earned' && (
+              <div className="col-span-2 rounded-xl border border-[#f5a623]/30 bg-[#f5a623]/5 p-4 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-[#f5a623]" />
+                  <span className="text-[12px] font-bold text-[#f5a623] uppercase tracking-wider">Earned Leave Accrual Settings</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Accrual Method</label>
+                    <select className={selectCls} value={form.earnedLeaveAccrualMethod} onChange={e => setForm(f => ({ ...f, earnedLeaveAccrualMethod: e.target.value }))}>
+                      <option value="monthly">Monthly (days per month)</option>
+                      <option value="quarterly">Quarterly (days per quarter)</option>
+                      <option value="annual">Annual (full quota at start)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">
+                      Accrual Rate (days/{form.earnedLeaveAccrualMethod === 'quarterly' ? 'quarter' : form.earnedLeaveAccrualMethod === 'annual' ? 'year' : 'month'})
+                    </label>
+                    <input type="number" step="0.01" min="0" className={inputCls} value={form.earnedLeaveAccrualRate} onChange={e => setForm(f => ({ ...f, earnedLeaveAccrualRate: e.target.value }))} placeholder="1.25" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Max Accumulation (days)</label>
+                    <input type="number" step="0.5" min="0" className={inputCls} value={form.earnedLeaveMaxAccumulation} onChange={e => setForm(f => ({ ...f, earnedLeaveMaxAccumulation: e.target.value }))} placeholder="30" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Rounding Rule</label>
+                    <select className={selectCls} value={form.earnedLeaveRoundingRule} onChange={e => setForm(f => ({ ...f, earnedLeaveRoundingRule: e.target.value }))}>
+                      <option value="none">No Rounding (keep decimals)</option>
+                      <option value="round_down">Round Down (floor)</option>
+                      <option value="round_up">Round Up (ceil)</option>
+                      <option value="round_nearest">Round to Nearest 0.5</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Eligible After (days of service)</label>
+                    <input type="number" min="0" className={inputCls} value={form.earnedLeaveEligibleAfterDays} onChange={e => setForm(f => ({ ...f, earnedLeaveEligibleAfterDays: e.target.value }))} placeholder="240" />
+                    <p className="text-[10px] text-[#5a6878] mt-1">Employee must complete this many working days before EL starts accruing</p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Min Days Notice</label>
               <input type="number" className={inputCls} value={form.minDaysNotice} onChange={e => setForm(f => ({ ...f, minDaysNotice: e.target.value }))} />

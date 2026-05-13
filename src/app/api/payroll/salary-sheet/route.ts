@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       'NATURE OF DESIGNATION',
       'MONTHLY GROSS SALARY',
       'ACTUAL ATTENDANCE',
-      'EXTRA DAYS',
+      'LEAVE DAYS',
       'PH DAYS',
       'ACTUAL EARN WAGES',
       'ACTUAL OT HRS',
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
         'High Skilled', // Default nature
         grossEarnings, // MONTHLY GROSS SALARY
         attendance, // ACTUAL ATTENDANCE
-        0, // EXTRA DAYS
+        0, // LEAVE DAYS
         phDays, // PH DAYS
         earnWages, // ACTUAL EARN WAGES
         otHours, // ACTUAL OT HRS
@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
       { wch: 15 }, // NATURE
       { wch: 12 }, // MONTHLY GROSS
       { wch: 12 }, // ACTUAL ATTENDANCE
-      { wch: 10 }, // EXTRA DAYS
+      { wch: 10 }, // LEAVE DAYS
       { wch: 10 }, // PH DAYS
       { wch: 15 }, // ACTUAL EARN WAGES
       { wch: 12 }, // ACTUAL OT HRS

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Award, Plus, Pencil, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { FieldError, fieldBorderError } from '@/components/ui/field-error';
+import { validateFields, isValid, type FieldErrors } from '@/lib/form-validation';
 
 interface Designation {
   id: number;
@@ -16,6 +18,7 @@ export default function DesignationsModule() {
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({ name: '' });
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   useEffect(() => { fetchDesignations(); }, []);
 
@@ -30,7 +33,9 @@ export default function DesignationsModule() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name) { toast.error('Please enter designation name'); return; }
+    const errors = validateFields([{ field: 'name', value: formData.name, label: 'Designation Name' }]);
+    setFieldErrors(errors);
+    if (!isValid(errors)) return;
     try {
       const res = await fetch('/api/designations', {
         method: editingId ? 'PUT' : 'POST',
@@ -40,7 +45,7 @@ export default function DesignationsModule() {
       const data = await res.json();
       if (data.success) {
         toast.success(editingId ? 'Designation updated' : 'Designation created');
-        setShowDialog(false); setFormData({ name: '' }); setEditingId(null);
+        setShowDialog(false); setFormData({ name: '' }); setEditingId(null); setFieldErrors({});
         fetchDesignations();
       } else toast.error(data.error || 'Operation failed');
     } catch { toast.error('Failed to save designation'); }
@@ -125,9 +130,10 @@ export default function DesignationsModule() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-[#e2e8f0] mb-2">Designation Name *</label>
-                <input type="text" value={formData.name} onChange={e => setFormData({ name: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#0d1117] border border-[#2e3a48] rounded-lg text-[#e2e8f0] focus:outline-none focus:ring-2 focus:ring-[#f5a623]"
+                <input type="text" value={formData.name} onChange={e => { setFormData({ name: e.target.value }); setFieldErrors({}); }}
+                  className={`w-full px-3 py-2 bg-[#0d1117] border rounded-lg text-[#e2e8f0] focus:outline-none focus:ring-2 focus:ring-[#f5a623] ${fieldBorderError(fieldErrors.name) || 'border-[#2e3a48]'}`}
                   placeholder="e.g., Senior Engineer" />
+                <FieldError message={fieldErrors.name} />
               </div>
               <div className="flex gap-2 pt-4">
                 <button type="button" onClick={() => { setShowDialog(false); setFormData({ name: '' }); setEditingId(null); }}

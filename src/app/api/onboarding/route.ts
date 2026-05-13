@@ -163,6 +163,16 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // Block completion if documentNecessary is true and no document has been uploaded
+    if (status === 'completed' && (taskWithDep.templateTask as any).documentNecessary) {
+      if (!taskWithDep.documentPath && !taskWithDep.documentData) {
+        return NextResponse.json({
+          success: false,
+          error: 'This task requires a document upload before it can be marked as complete.',
+        }, { status: 422 })
+      }
+    }
+
     const task = await db.onboardingTask.update({
       where: { id: parseInt(taskId) },
       data: {

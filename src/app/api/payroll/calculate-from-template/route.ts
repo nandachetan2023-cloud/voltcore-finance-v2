@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         // Auto-filled values needed for calculation
         const Q = getNum(18); // col 18: MONTHLY GROSS SALARY
         const R = getNum(19); // col 19: ACTUAL ATTENDANCE
-        const S = getNum(20); // col 20: EXTRA DAYS
+        const S = getNum(20); // col 20: LEAVE DAYS
 
         // Validate required user inputs
         if (!Y || !Z || !AB) {

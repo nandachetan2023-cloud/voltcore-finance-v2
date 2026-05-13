@@ -28,6 +28,9 @@ export interface PunchData {
   PunchDate: string
   M_Flag: string | null
   mcid?: string
+  EmpcardNo?: string  // EnrolledId — unique 8-digit biometric enrollment number
+  ID?: number
+  Table?: string
 }
 
 export interface InOutPunchData {
@@ -242,6 +245,7 @@ export class BiometricService {
           await this.db.biometricRawLog.create({
             data: {
               empCode: punch.Empcode,
+              enrolledId: punch.EmpcardNo || null,
               name: punch.Name,
               punchDate: new Date(this.parsePunchDate(punch.PunchDate)),
               deviceId: punch.mcid || null,
@@ -283,34 +287,24 @@ export class BiometricService {
 
     for (const [key, logs] of Object.entries(groupedLogs)) {
       try {
-        const [empCode, dateStr] = key.split('|')
-        
-        // Find employee by employeeCode - try with EMP prefix first, then without
-        let employee = await this.db.employee.findUnique({
-          where: { employeeCode: `EMP${empCode}` },
-          select: {
-            id: true,
-            employeeCode: true,
-            firstName: true,
-            lastName: true,
+        const [identifier, dateStr] = key.split('|')
+
+        // ── Employee matching ─────────────────────────────────────────────────
+        // Employee codes are stored as "UA00000005".
+        // Biometric EmpcardNo is stored as enrolledId = "00000005".
+        // Strip the "UA" prefix from employeeCode to get the numeric part,
+        // then compare directly with enrolledId (both are 8-digit zero-padded strings).
+        const enrolledId = logs[0]?.enrolledId || identifier
+
+        const employee = await this.db.employee.findFirst({
+          where: {
+            employeeCode: `UA${enrolledId}`,
           },
+          select: { id: true, employeeCode: true, firstName: true, lastName: true },
         })
 
-        // If not found with EMP prefix, try without
         if (!employee) {
-          employee = await this.db.employee.findUnique({
-            where: { employeeCode: empCode },
-            select: {
-              id: true,
-              employeeCode: true,
-              firstName: true,
-              lastName: true,
-            },
-          })
-        }
-
-        if (!employee) {
-          console.warn(`Employee not found: ${empCode} (tried EMP${empCode} and ${empCode})`)
+          console.warn(`[Biometric] No employee found for enrolledId="${enrolledId}" (tried employeeCode="UA${enrolledId}"). Ensure the employee exists with this ID.`)
           continue
         }
 
@@ -329,7 +323,7 @@ export class BiometricService {
         const [year, month, day] = dateStr.split('-').map(Number)
         const logDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0))
 
-        console.log(`Processing ${empCode} for ${dateStr}:`)
+        console.log(`[Biometric] Processing enrolledId=${enrolledId} (${employee.employeeCode}) for ${dateStr}:`)
         console.log(`  - First punch: ${firstPunch.punchDate}`)
         console.log(`  - Calculated logDate: ${logDate.toISOString()} (${logDate.toLocaleDateString()})`)
 
@@ -347,7 +341,7 @@ export class BiometricService {
         // ── Shift guard: skip employees without an active shift ──
         const shiftAssignment = await getActiveShiftAssignment(employee.id, logDate, this.db)
         if (!shiftAssignment) {
-          console.log(`Skipping ${empCode} for ${dateStr}: no active shift assignment — marking employee inactive`)
+          console.log(`[Biometric] Skipping enrolledId=${enrolledId} (${employee.employeeCode}) for ${dateStr}: no active shift assignment — marking employee inactive`)
           // Deactivate the employee since they have no shift
           await this.db.employee.update({
             where: { id: employee.id },
@@ -417,11 +411,11 @@ export class BiometricService {
         processedCount += logs.length
         
         // Track employee record count
-        const existing = employeeRecordCount.get(empCode)
+        const existing = employeeRecordCount.get(enrolledId)
         if (existing) {
           existing.count += logs.length
         } else {
-          employeeRecordCount.set(empCode, { name: employeeName, count: logs.length })
+          employeeRecordCount.set(enrolledId, { name: employeeName, count: logs.length })
         }
       } catch (error) {
         console.error(`Error processing logs for ${key}:`, error)
@@ -568,12 +562,14 @@ export class BiometricService {
 
     for (const log of logs) {
       const date = new Date(log.punchDate)
-      // Use local date instead of UTC to avoid timezone issues
       const year = date.getFullYear()
       const month = String(date.getMonth() + 1).padStart(2, '0')
       const day = String(date.getDate()).padStart(2, '0')
       const dateKey = `${year}-${month}-${day}`
-      const key = `${log.empCode}|${dateKey}`
+      // Use enrolledId as the primary key when available — it is globally unique.
+      // Fall back to empCode only if enrolledId is missing (older records).
+      const identifier = log.enrolledId || log.empCode
+      const key = `${identifier}|${dateKey}`
 
       if (!grouped[key]) {
         grouped[key] = []

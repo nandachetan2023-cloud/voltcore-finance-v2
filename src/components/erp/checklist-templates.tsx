@@ -17,7 +17,7 @@ export default function ChecklistTemplates() {
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({ name: '', description: '', departmentId: '', designationId: '' });
-  const [tasks, setTasks] = useState<{ title: string; description: string; dueDayOffset: number; requiresDocument: boolean }[]>([]);
+  const [tasks, setTasks] = useState<{ title: string; description: string; dueDayOffset: number; requiresDocument: boolean; documentNecessary: boolean }[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -38,7 +38,7 @@ export default function ChecklistTemplates() {
 
   const openEdit = (t: any) => {
     setForm({ name: t.name, description: t.description || '', departmentId: t.departmentId?.toString() || '', designationId: t.designationId?.toString() || '' });
-    setTasks(t.tasks.map((tk: any) => ({ title: tk.title, description: tk.description || '', dueDayOffset: tk.dueDayOffset, requiresDocument: tk.requiresDocument })));
+    setTasks(t.tasks.map((tk: any) => ({ title: tk.title, description: tk.description || '', dueDayOffset: tk.dueDayOffset, requiresDocument: tk.requiresDocument, documentNecessary: tk.documentNecessary || false })));
     setEditId(t.id);
     setShowForm(true);
   };
@@ -122,7 +122,7 @@ export default function ChecklistTemplates() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className={lbl + ' mb-0'}>Tasks ({tasks.length})</label>
-              <button onClick={() => setTasks(t => [...t, { title: '', description: '', dueDayOffset: 1, requiresDocument: false }])}
+              <button onClick={() => setTasks(t => [...t, { title: '', description: '', dueDayOffset: 1, requiresDocument: false, documentNecessary: false }])}
                 className="text-[10px] text-[#f5a623] hover:text-[#e8891a] font-semibold flex items-center gap-1">
                 <Plus size={11} /> Add Task
               </button>
@@ -146,10 +146,28 @@ export default function ChecklistTemplates() {
                       <input type="number" min="1" className={inp + ' w-20'} value={task.dueDayOffset} onChange={e => setTasks(t => t.map((tk, idx) => idx === i ? { ...tk, dueDayOffset: parseInt(e.target.value) || 1 } : tk))} />
                       <span className="text-[10px] text-[#5a6878]">day(s) after joining</span>
                     </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={task.requiresDocument} onChange={e => setTasks(t => t.map((tk, idx) => idx === i ? { ...tk, requiresDocument: e.target.checked } : tk))} className="accent-[#f5a623]" />
-                      <span className="text-[11px] text-[#8899aa]">Requires document upload</span>
-                    </label>
+                    <div className="col-span-2 flex items-center gap-4 flex-wrap">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={task.requiresDocument}
+                          onChange={e => setTasks(t => t.map((tk, idx) => idx === i ? {
+                            ...tk,
+                            requiresDocument: e.target.checked,
+                            // clear documentNecessary if unchecking requiresDocument
+                            documentNecessary: e.target.checked ? tk.documentNecessary : false,
+                          } : tk))}
+                          className="accent-[#f5a623]" />
+                        <span className="text-[11px] text-[#8899aa]">Requires document upload</span>
+                      </label>
+                      {task.requiresDocument && (
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={task.documentNecessary}
+                            onChange={e => setTasks(t => t.map((tk, idx) => idx === i ? { ...tk, documentNecessary: e.target.checked } : tk))}
+                            className="accent-[#ff3d3d]" />
+                          <span className="text-[11px] text-[#ff3d3d] font-semibold">Necessary</span>
+                          <span className="text-[10px] text-[#5a6878]">(task cannot be completed without upload)</span>
+                        </label>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -204,6 +222,7 @@ export default function ChecklistTemplates() {
                     </div>
                     <span className="text-[9px] text-[#5a6878]">Day {task.dueDayOffset}</span>
                     {task.requiresDocument && <span className="text-[9px] text-[#f5a623]">📎 Doc</span>}
+                    {task.documentNecessary && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#ff3d3d]/15 text-[#ff3d3d]">Necessary</span>}
                   </div>
                 ))}
               </div>

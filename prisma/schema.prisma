@@ -27,6 +27,7 @@ model AttendanceLog {
 model BiometricRawLog {
   id          Int       @id @default(autoincrement())
   empCode     String
+  enrolledId  String?
   name        String?
   punchDate   DateTime
   deviceId    String?
@@ -38,6 +39,7 @@ model BiometricRawLog {
   siteId      String?
 
   @@index([empCode, punchDate])
+  @@index([enrolledId])
   @@index([processed])
   @@index([siteId])
 }
@@ -709,6 +711,12 @@ model LeavePolicy {
   isActive              Boolean      @default(true)
   createdAt             DateTime     @default(now())
   updatedAt             DateTime
+  // Earned Leave specific settings
+  earnedLeaveAccrualMethod   String?  // "monthly" | "quarterly" | "annual"
+  earnedLeaveAccrualRate     Decimal? @db.Decimal(5, 2) // days earned per accrual period
+  earnedLeaveMaxAccumulation Decimal? @db.Decimal(5, 1) // max days that can accumulate
+  earnedLeaveRoundingRule    String?  // "none" | "round_up" | "round_down" | "round_nearest"
+  earnedLeaveEligibleAfterDays Int?   // days of service before EL starts accruing
   Department            Department?  @relation(fields: [departmentId], references: [id])
   Designation           Designation? @relation(fields: [designationId], references: [id])
 
@@ -854,6 +862,7 @@ model ChecklistTemplateTask {
   dueDayOffset        Int                @default(1)       // days after joining
   dependsOnTaskId     Int?               // dependency
   requiresDocument    Boolean            @default(false)
+  documentNecessary   Boolean            @default(false)  // if true, task cannot be marked complete without a document upload
   order               Int                @default(0)
   template            ChecklistTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
   dependsOn           ChecklistTemplateTask? @relation("TaskDependency", fields: [dependsOnTaskId], references: [id])

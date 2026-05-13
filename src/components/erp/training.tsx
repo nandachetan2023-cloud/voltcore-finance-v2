@@ -5,6 +5,8 @@ import { Award, AlertTriangle, Clock, Plus, Trash2, Loader2, FileText, Search, X
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { useERPStore } from '@/store/erp-store'
+import { FieldError, fieldBorderError } from '@/components/ui/field-error'
+import { type FieldErrors } from '@/lib/form-validation'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -202,6 +204,7 @@ export default function Training() {
     status: 'Valid',
   })
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [certFieldErrors, setCertFieldErrors] = useState<FieldErrors>({})
 
   const { triggerCreate } = useERPStore()
   useEffect(() => { if (triggerCreate > 0) setCreateCertOpen(true) }, [triggerCreate])
@@ -249,13 +252,15 @@ export default function Training() {
   const resetCertForm = () => {
     setCertForm({ empId: 0, name: '', issuedBy: '', issueDate: '', expiryDate: '', status: 'Valid' })
     setUploadedFile(null)
+    setCertFieldErrors({})
   }
 
   const handleCreateCert = async () => {
-    if (!certForm.empId || !uploadedFile) {
-      toast.error('Please select an employee and upload a certificate file')
-      return
-    }
+    const errors: FieldErrors = {}
+    if (!certForm.empId) errors.empId = 'Employee is required'
+    if (!uploadedFile) errors.file = 'Certificate file is required'
+    setCertFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
     const emp = employees.find(e => e.id === certForm.empId)
     if (!emp) { toast.error('Employee not found'); return }
 
@@ -498,11 +503,14 @@ export default function Training() {
               <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
                 Employee <span className="text-[#ff3d3d]">*</span>
               </label>
-              <EmployeeSearchSelect
-                employees={employees.filter(e => e.employmentStatus?.toLowerCase() === 'active')}
-                value={certForm.empId}
-                onChange={(id) => setCertForm(f => ({ ...f, empId: id }))}
-              />
+              <div className={certFieldErrors.empId ? 'rounded-md border border-[#ff3d3d]/60' : ''}>
+                <EmployeeSearchSelect
+                  employees={employees.filter(e => e.employmentStatus?.toLowerCase() === 'active')}
+                  value={certForm.empId}
+                  onChange={(id) => { setCertForm(f => ({ ...f, empId: id })); setCertFieldErrors(fe => ({ ...fe, empId: '' })); }}
+                />
+              </div>
+              <FieldError message={certFieldErrors.empId} />
             </div>
             <div>
               <label className="text-[9px] text-[#5a6878] uppercase tracking-wider font-semibold mb-1 block">
@@ -515,13 +523,15 @@ export default function Training() {
                   const file = e.target.files?.[0]
                   if (file) {
                     setUploadedFile(file)
+                    setCertFieldErrors(fe => ({ ...fe, file: '' }))
                     if (!certForm.name) {
                       setCertForm(f => ({ ...f, name: file.name.replace(/\.[^/.]+$/, '') }))
                     }
                   }
                 }}
-                className="vc-input text-[11px]"
+                className={`vc-input text-[11px] ${fieldBorderError(certFieldErrors.file)}`}
               />
+              <FieldError message={certFieldErrors.file} />
               {uploadedFile && (
                 <div className="mt-1 text-[10px] text-[#00e676] flex items-center gap-1">
                   <span>✓</span>

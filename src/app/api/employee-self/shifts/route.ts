@@ -12,25 +12,46 @@ export async function GET(request: NextRequest) {
     }
     const employeeId = parseInt(cookieEmpId)
 
-    // Get shifts for the next 4 weeks + past 1 week
-    const from = new Date()
-    from.setDate(from.getDate() - 7)
-    const to = new Date()
-    to.setDate(to.getDate() + 28)
+    // Fetch all assignments for this employee that overlap the display window
+    // Window: 1 week back → 5 weeks forward
+    const windowStart = new Date()
+    windowStart.setDate(windowStart.getDate() - 7)
+    windowStart.setHours(0, 0, 0, 0)
 
+    const windowEnd = new Date()
+    windowEnd.setDate(windowEnd.getDate() + 35)
+    windowEnd.setHours(23, 59, 59, 999)
+
+    // An assignment overlaps the window if:
+    //   effectiveFrom <= windowEnd  AND  (effectiveTo IS NULL OR effectiveTo >= windowStart)
     const assignments = await db.shiftAssignment.findMany({
       where: {
         employeeId,
-        date: { gte: from, lte: to },
+        effectiveFrom: { lte: windowEnd },
+        OR: [
+          { effectiveTo: null },
+          { effectiveTo: { gte: windowStart } },
+        ],
       },
       include: {
-        Shift: { select: { name: true, startTime: true, endTime: true, color: true } },
+        Shift: {
+          select: {
+            id: true,
+            name: true,
+            startTime: true,
+            endTime: true,
+            crossesMidnight: true,
+            weekOffDays: true,
+            type: true,
+          },
+        },
       },
-      orderBy: { date: 'asc' },
+      orderBy: { effectiveFrom: 'asc' },
     })
 
     return NextResponse.json({ success: true, data: assignments })
   } catch (e) {
+    console.error('employee-self/shifts error:', e)
     return NextResponse.json({ success: false, error: 'Failed to fetch shifts' }, { status: 500 })
   }
 }

@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, UserCheck, CheckCircle2, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, Upload, FileText, X, Download, Lock } from 'lucide-react';
 import { toast } from 'sonner';
+import { FieldError, fieldBorderError } from '@/components/ui/field-error';
+import { type FieldErrors } from '@/lib/form-validation';
 
 // Confirmation dialog component
 function ConfirmDialog({ open, title, message, onConfirm, onCancel, confirmLabel = 'Yes', danger = false }: {
@@ -37,6 +39,7 @@ export default function OnboardingModule() {
   const [newEmpId, setNewEmpId] = useState('');
   const [newTplId, setNewTplId] = useState('');
   const [creating, setCreating] = useState(false);
+  const [checklistFieldErrors, setChecklistFieldErrors] = useState<FieldErrors>({});
   const [uploading, setUploading] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTargetTaskId, setUploadTargetTaskId] = useState<number | null>(null);
@@ -67,12 +70,16 @@ export default function OnboardingModule() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const createChecklist = async () => {
-    if (!newEmpId || !newTplId) { toast.error('Select employee and template'); return; }
+    const errors: FieldErrors = {}
+    if (!newEmpId) errors.newEmpId = 'Employee is required'
+    if (!newTplId) errors.newTplId = 'Template is required'
+    setChecklistFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
     setCreating(true);
     try {
       const res = await fetch('/api/onboarding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employeeId: newEmpId, templateId: newTplId }) });
       const data = await res.json();
-      if (data.success) { toast.success('Onboarding checklist created'); fetchData(); setShowCreate(false); setNewEmpId(''); setNewTplId(''); }
+      if (data.success) { toast.success('Onboarding checklist created'); fetchData(); setShowCreate(false); setNewEmpId(''); setNewTplId(''); setChecklistFieldErrors({}); }
       else toast.error(data.error);
     } finally { setCreating(false); }
   };
@@ -91,7 +98,10 @@ export default function OnboardingModule() {
   const requestMarkComplete = (task: any, isBlocked: boolean) => {
     if (isBlocked) return;
     const requiresDocument = !!task.templateTask?.requiresDocument;
+    const docNecessary = !!task.templateTask?.documentNecessary;
     const hasDocument = !!task.documentPath;
+    // Hard block at UI level — API also enforces this
+    if (docNecessary && !hasDocument) return;
     setConfirmDialog({ open: true, taskId: task.id, requiresDocument, hasDocument });
   };
 
@@ -188,7 +198,7 @@ export default function OnboardingModule() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={fetchData} className="p-1.5 text-[#5a6878] hover:text-[#e2e8f0]"><RefreshCw size={14} /></button>
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a]"><Plus size={13} /> Start Onboarding</button>
+          <button onClick={() => { setShowCreate(true); setChecklistFieldErrors({}); }} className="flex items-center gap-1.5 px-3 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a]"><Plus size={13} /> Start Onboarding</button>
         </div>
       </div>
 
@@ -218,22 +228,24 @@ export default function OnboardingModule() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">Employee *</label>
-              <select className="w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none" value={newEmpId} onChange={e => setNewEmpId(e.target.value)}>
+              <select className={`w-full bg-[#0d1117] border rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none ${checklistFieldErrors.newEmpId ? 'border-[#ff3d3d]/60 focus:border-[#ff3d3d]' : 'border-[#2e3a48]'}`} value={newEmpId} onChange={e => { setNewEmpId(e.target.value); setChecklistFieldErrors(fe => ({ ...fe, newEmpId: '' })); }}>
                 <option value="">Select employee...</option>
                 {employees.map((e: any) => <option key={e.id} value={e.id}>{e.employeeCode} — {e.firstName} {e.lastName}</option>)}
               </select>
+              <FieldError message={checklistFieldErrors.newEmpId} />
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">Template *</label>
-              <select className="w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none" value={newTplId} onChange={e => setNewTplId(e.target.value)}>
+              <select className={`w-full bg-[#0d1117] border rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none ${checklistFieldErrors.newTplId ? 'border-[#ff3d3d]/60 focus:border-[#ff3d3d]' : 'border-[#2e3a48]'}`} value={newTplId} onChange={e => { setNewTplId(e.target.value); setChecklistFieldErrors(fe => ({ ...fe, newTplId: '' })); }}>
                 <option value="">Select template...</option>
                 {templates.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
+              <FieldError message={checklistFieldErrors.newTplId} />
             </div>
           </div>
           <div className="flex gap-2">
             <button onClick={createChecklist} disabled={creating} className="px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50">{creating ? 'Creating...' : 'Create Checklist'}</button>
-            <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-[12px] text-[#8899aa] border border-[#252e3a] rounded-lg hover:border-[#f5a623]">Cancel</button>
+            <button onClick={() => { setShowCreate(false); setChecklistFieldErrors({}); }} className="px-4 py-2 text-[12px] text-[#8899aa] border border-[#252e3a] rounded-lg hover:border-[#f5a623]">Cancel</button>
           </div>
         </div>
       )}
@@ -274,14 +286,24 @@ export default function OnboardingModule() {
                     const isDone = task.status === 'completed' || task.status === 'skipped';
                     const isBlocked = task.templateTask?.dependsOnTaskId &&
                       c.tasks.find((t: any) => t.templateTaskId === task.templateTask.dependsOnTaskId)?.status !== 'completed';
+                    const docNecessary = !!task.templateTask?.documentNecessary;
+                    const hasDoc = !!task.documentPath;
+                    // Hard block: documentNecessary + no document uploaded
+                    const isDocBlocked = docNecessary && !hasDoc && !isDone;
                     return (
                       <div key={task.id} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors ${isBlocked ? 'bg-[#0d1117] opacity-50' : 'bg-[#0d1117]'}`}>
                         {/* Checkbox — hidden once completed */}
                         {!isDone ? (
                           <button
-                            onClick={() => requestMarkComplete(task, isBlocked)}
-                            disabled={isBlocked || uploading === task.id}
-                            className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${isBlocked ? 'border-[#2e3a48] cursor-not-allowed' : 'border-[#2e3a48] hover:border-[#00e676]'}`}>
+                            onClick={() => !isDocBlocked && requestMarkComplete(task, !!isBlocked)}
+                            disabled={!!isBlocked || uploading === task.id || isDocBlocked}
+                            title={isDocBlocked ? 'Upload the required document before marking complete' : undefined}
+                            className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                              isBlocked || isDocBlocked
+                                ? 'border-[#ff3d3d]/40 cursor-not-allowed'
+                                : 'border-[#2e3a48] hover:border-[#00e676]'
+                            }`}>
+                            {isDocBlocked && <span className="text-[#ff3d3d] text-[8px] font-bold">!</span>}
                           </button>
                         ) : (
                           <div className="w-5 h-5 rounded bg-[#00e676] border border-[#00e676] flex items-center justify-center shrink-0 mt-0.5">
@@ -290,9 +312,14 @@ export default function OnboardingModule() {
                         )}
 
                         <div className="flex-1 min-w-0">
-                          <div className={`text-[11px] font-semibold ${isDone ? 'line-through text-[#5a6878]' : 'text-[#e2e8f0]'}`}>
+                          <div className={`text-[11px] font-semibold flex items-center gap-1.5 flex-wrap ${isDone ? 'line-through text-[#5a6878]' : 'text-[#e2e8f0]'}`}>
                             {task.templateTask?.title}
-                            {isBlocked && <span className="ml-2 text-[9px] text-[#ffab40] font-normal">⚠ Blocked — complete previous task first</span>}
+                            {isBlocked && <span className="text-[9px] text-[#ffab40] font-normal no-underline">⚠ Blocked — complete previous task first</span>}
+                            {docNecessary && !isDone && (
+                              <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#ff3d3d]/15 text-[#ff3d3d] no-underline" style={{ textDecoration: 'none' }}>
+                                NECESSARY
+                              </span>
+                            )}
                           </div>
                           {task.templateTask?.description && <div className="text-[10px] text-[#5a6878] mt-0.5">{task.templateTask.description}</div>}
                           {task.dueDate && (
@@ -313,7 +340,6 @@ export default function OnboardingModule() {
                                   <button onClick={() => removeDoc(task.id)} className="text-[#5a6878] hover:text-[#ff3d3d]"><X size={11} /></button>
                                 </div>
                               ) : isDone ? (
-                                // Task completed but no document — show unavailable marker
                                 <div className="flex items-center gap-1.5 px-2 py-1 bg-[#ff3d3d]/8 border border-[#ff3d3d]/30 rounded-md">
                                   <AlertTriangle size={10} className="text-[#ff3d3d] shrink-0" />
                                   <span className="text-[10px] text-[#ff3d3d] font-semibold">Document Not Available</span>
@@ -321,12 +347,28 @@ export default function OnboardingModule() {
                               ) : (
                                 <button
                                   onClick={() => !isBlocked && triggerUpload(task.id)}
-                                  disabled={isBlocked || uploading === task.id}
-                                  className="flex items-center gap-1.5 px-2 py-1 text-[10px] text-[#f5a623] border border-[#f5a623]/30 rounded-md hover:bg-[#f5a623]/10 transition-colors disabled:opacity-40">
+                                  disabled={!!isBlocked || uploading === task.id}
+                                  className={`flex items-center gap-1.5 px-2 py-1 text-[10px] border rounded-md transition-colors disabled:opacity-40 ${
+                                    docNecessary
+                                      ? 'text-[#ff3d3d] border-[#ff3d3d]/40 hover:bg-[#ff3d3d]/10 font-semibold'
+                                      : 'text-[#f5a623] border-[#f5a623]/30 hover:bg-[#f5a623]/10'
+                                  }`}>
                                   {uploading === task.id ? <RefreshCw size={10} className="animate-spin" /> : <Upload size={10} />}
-                                  {uploading === task.id ? 'Uploading...' : 'Upload Document *'}
+                                  {uploading === task.id
+                                    ? 'Uploading...'
+                                    : docNecessary
+                                    ? 'Upload Required to Complete ↑'
+                                    : 'Upload Document *'}
                                 </button>
                               )}
+                            </div>
+                          )}
+
+                          {/* Hard block notice */}
+                          {isDocBlocked && (
+                            <div className="mt-1.5 flex items-center gap-1.5 text-[9px] text-[#ff3d3d]">
+                              <AlertTriangle size={9} />
+                              <span>Document upload is required before this task can be marked complete.</span>
                             </div>
                           )}
                         </div>

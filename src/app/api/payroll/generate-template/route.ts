@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
       'SL NO.', 'EMPLOYEE ID', 'WORKMEN SL. NO.', 'TOKEN NO.', 'NAME OF EMPLOYEE', "FATHER'S NAME",
       'DOJ', 'DOB', 'BANK NAME', 'ACCOUNT NO.', 'IFSC CODE NO.', '',
       'UAN NO.', 'ESIC IP NO', 'DESIGNATION', 'DEPARTMENT', 'NATURE OF DESIGNATION',
-      'MONTHLY GROSS SALARY', 'ACTUAL ATTENDANCE', 'EXTRA DAYS', 'PH DAYS',
+      'MONTHLY GROSS SALARY', 'ACTUAL ATTENDANCE', 'LEAVE DAYS', 'PH DAYS',
       'ACTUAL EARN WAGES', 'ACTUAL OT HRS', 'ACTUAL OT AMOUNT', 'GROSS EARN WAGES',
       'BASIC WAGES/DAY', 'MONTHLY WORKING DAYS', 'OT. HRS', 'ATTENDANCE', 'PH',
       'WAGES/MONTH', 'EARN WAGES', 'PH AMOUNT', 'TOTAL EARN WAGES', 'OT HRS PAYMENT',
@@ -207,7 +207,7 @@ export async function GET(request: NextRequest) {
         employee.natureOfDesignation || '', // P: NATURE OF DESIGNATION
         employee.monthlyGrossSalary ? parseFloat(employee.monthlyGrossSalary.toString()) : '', // Q: MONTHLY GROSS SALARY
         attendance.present, // R: ACTUAL ATTENDANCE
-        attendance.extra, // S: EXTRA DAYS
+        attendance.extra, // S: LEAVE DAYS
         '', // T: PH DAYS (USER INPUT)
         '', // U: ACTUAL EARN WAGES (CALCULATED)
         '', // V: ACTUAL OT HRS (USER INPUT)
@@ -285,7 +285,7 @@ export async function GET(request: NextRequest) {
       { width: 20 }, // P: NATURE OF DESIGNATION
       { width: 15 }, // Q: MONTHLY GROSS SALARY
       { width: 12 }, // R: ACTUAL ATTENDANCE
-      { width: 12 }, // S: EXTRA DAYS
+      { width: 12 }, // S: LEAVE DAYS
       { width: 12 }, // T: PH DAYS
     ];
     

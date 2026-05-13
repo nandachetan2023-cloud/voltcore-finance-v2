@@ -66,6 +66,12 @@ export async function POST(request: NextRequest) {
       departmentId,
       designationId,
       requiresDocument = false,
+      // Earned leave settings
+      earnedLeaveAccrualMethod,
+      earnedLeaveAccrualRate,
+      earnedLeaveMaxAccumulation,
+      earnedLeaveRoundingRule,
+      earnedLeaveEligibleAfterDays,
     } = body;
 
     if (!name || !code || !leaveType) {
@@ -107,6 +113,12 @@ export async function POST(request: NextRequest) {
         requiresDocument,
         isActive: true,
         updatedAt: new Date(),
+        // Earned leave settings (only stored when leaveType === 'earned')
+        earnedLeaveAccrualMethod: leaveType === 'earned' ? (earnedLeaveAccrualMethod || 'monthly') : null,
+        earnedLeaveAccrualRate: leaveType === 'earned' && earnedLeaveAccrualRate != null ? new Prisma.Decimal(earnedLeaveAccrualRate) : null,
+        earnedLeaveMaxAccumulation: leaveType === 'earned' && earnedLeaveMaxAccumulation != null ? new Prisma.Decimal(earnedLeaveMaxAccumulation) : null,
+        earnedLeaveRoundingRule: leaveType === 'earned' ? (earnedLeaveRoundingRule || 'round_down') : null,
+        earnedLeaveEligibleAfterDays: leaveType === 'earned' ? (parseInt(earnedLeaveEligibleAfterDays) || 0) : null,
       },
       include: {
         Department: { select: { id: true, name: true } },
@@ -162,6 +174,26 @@ export async function PUT(request: NextRequest) {
     }
     if (updateData.designationId !== undefined) {
       updateData.designationId = updateData.designationId ? parseInt(updateData.designationId) : null;
+    }
+
+    // Handle earned leave fields
+    if (updateData.leaveType !== 'earned') {
+      // Clear earned leave settings if type changed away from earned
+      updateData.earnedLeaveAccrualMethod = null;
+      updateData.earnedLeaveAccrualRate = null;
+      updateData.earnedLeaveMaxAccumulation = null;
+      updateData.earnedLeaveRoundingRule = null;
+      updateData.earnedLeaveEligibleAfterDays = null;
+    } else {
+      if (updateData.earnedLeaveAccrualRate != null) {
+        updateData.earnedLeaveAccrualRate = new Prisma.Decimal(updateData.earnedLeaveAccrualRate);
+      }
+      if (updateData.earnedLeaveMaxAccumulation != null) {
+        updateData.earnedLeaveMaxAccumulation = new Prisma.Decimal(updateData.earnedLeaveMaxAccumulation);
+      }
+      if (updateData.earnedLeaveEligibleAfterDays != null) {
+        updateData.earnedLeaveEligibleAfterDays = parseInt(updateData.earnedLeaveEligibleAfterDays) || 0;
+      }
     }
 
     const policy = await db.leavePolicy.update({

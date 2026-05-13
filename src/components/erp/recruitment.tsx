@@ -13,6 +13,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { FieldError, fieldBorderError } from '@/components/ui/field-error';
+import { type FieldErrors } from '@/lib/form-validation';
 
 /* ── Types ────────────────────────────────────────── */
 interface JobOpening {
@@ -138,9 +140,11 @@ export default function Recruitment() {
   const [editTarget, setEditTarget] = useState<JobOpening | null>(null);
   const [form, setForm] = useState<JobFormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [createFieldErrors, setCreateFieldErrors] = useState<FieldErrors>({});
+  const [editFieldErrors, setEditFieldErrors] = useState<FieldErrors>({});
   const { triggerCreate } = useERPStore();
 
-  useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
+  useEffect(() => { if (triggerCreate > 0) { setForm(EMPTY_FORM); setCreateFieldErrors({}); setCreateOpen(true); } }, [triggerCreate]);
 
   /* ── Fetch ── */
   const fetchBiometricSites = useCallback(async () => {
@@ -187,10 +191,13 @@ export default function Recruitment() {
   };
 
   const handleCreate = async () => {
-    if (!form.position || !form.site || !form.openings || !form.priority) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
+    const errors: FieldErrors = {}
+    if (!form.position) errors.position = 'Position is required'
+    if (!form.site) errors.site = 'Site is required'
+    if (!form.openings) errors.openings = 'Openings is required'
+    if (!form.priority) errors.priority = 'Priority is required'
+    setCreateFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
     try {
       setSubmitting(true);
       const res = await fetch('/api/recruitment', {
@@ -203,6 +210,7 @@ export default function Recruitment() {
         toast.success('Job opening created');
         setCreateOpen(false);
         setForm(EMPTY_FORM);
+        setCreateFieldErrors({});
         await fetchData();
       } else {
         toast.error(json.error || 'Failed to create job opening');
@@ -215,10 +223,11 @@ export default function Recruitment() {
   };
 
   const handleEdit = async () => {
-    if (!editTarget || !form.position || !form.site) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
+    const errors: FieldErrors = {}
+    if (!form.position) errors.position = 'Position is required'
+    if (!form.site) errors.site = 'Site is required'
+    setEditFieldErrors(errors)
+    if (!editTarget || Object.keys(errors).length > 0) return
     try {
       setSubmitting(true);
       const res = await fetch('/api/recruitment', {
@@ -232,6 +241,7 @@ export default function Recruitment() {
         setEditOpen(false);
         setEditTarget(null);
         setForm(EMPTY_FORM);
+        setEditFieldErrors({});
         await fetchData();
       } else {
         toast.error(json.error || 'Failed to update job opening');
@@ -274,6 +284,7 @@ export default function Recruitment() {
     // Detect if stored site matches a biometric site or is a custom value
     const matchesBiometricSite = biometricSites.some(s => s.siteId === job.site || s.siteName === job.site);
     setEditCustomSiteMode(!matchesBiometricSite && job.site !== '');
+    setEditFieldErrors({});
     setEditOpen(true);
   };
 
@@ -355,7 +366,7 @@ export default function Recruitment() {
       </div>
 
       {/* Create Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) { setForm(EMPTY_FORM); setCreateFieldErrors({}); } }}>
         <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
@@ -365,7 +376,8 @@ export default function Recruitment() {
           <div className="space-y-3">
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Position *</label>
-              <input type="text" value={form.position} onChange={e => updateForm('position', e.target.value)} placeholder="e.g. Site Engineer" className="vc-input" />
+              <input type="text" value={form.position} onChange={e => { updateForm('position', e.target.value); setCreateFieldErrors(fe => ({ ...fe, position: '' })); }} placeholder="e.g. Site Engineer" className={`vc-input ${fieldBorderError(createFieldErrors.position)}`} />
+              <FieldError message={createFieldErrors.position} />
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Designation</label>
@@ -389,7 +401,7 @@ export default function Recruitment() {
                 </div>
                 {!customSiteMode ? (
                   <>
-                    <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none" disabled={biometricSites.length === 0}>
+                    <select value={form.site} onChange={e => { updateForm('site', e.target.value); setCreateFieldErrors(fe => ({ ...fe, site: '' })); }} className={`vc-input appearance-none ${fieldBorderError(createFieldErrors.site)}`} disabled={biometricSites.length === 0}>
                       <option value="">{biometricSites.length === 0 ? 'No biometric sites configured' : 'Select biometric site'}</option>
                       {biometricSites.map(s => (
                         <option key={s.id} value={s.siteId}>{s.siteName} ({s.siteId})</option>
@@ -403,8 +415,9 @@ export default function Recruitment() {
                     )}
                   </>
                 ) : (
-                  <input type="text" value={form.site} onChange={e => updateForm('site', e.target.value)} placeholder="Enter custom site name" className="vc-input" />
+                  <input type="text" value={form.site} onChange={e => { updateForm('site', e.target.value); setCreateFieldErrors(fe => ({ ...fe, site: '' })); }} placeholder="Enter custom site name" className={`vc-input ${fieldBorderError(createFieldErrors.site)}`} />
                 )}
+                <FieldError message={createFieldErrors.site} />
                 <p className="text-[9px] text-[#5a6878]">
                   {!customSiteMode
                     ? biometricSites.length > 0 ? `${biometricSites.length} biometric site(s) available.` : 'Switch to Custom Value to enter a site manually.'
@@ -415,13 +428,15 @@ export default function Recruitment() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Openings *</label>
-                <input type="number" value={form.openings} onChange={e => updateForm('openings', Number(e.target.value))} className="vc-input" min="1" />
+                <input type="number" value={form.openings} onChange={e => { updateForm('openings', Number(e.target.value)); setCreateFieldErrors(fe => ({ ...fe, openings: '' })); }} className={`vc-input ${fieldBorderError(createFieldErrors.openings)}`} min="1" />
+                <FieldError message={createFieldErrors.openings} />
               </div>
               <div>
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Priority *</label>
-                <select value={form.priority} onChange={e => updateForm('priority', e.target.value)} className="vc-input appearance-none">
+                <select value={form.priority} onChange={e => { updateForm('priority', e.target.value); setCreateFieldErrors(fe => ({ ...fe, priority: '' })); }} className={`vc-input appearance-none ${fieldBorderError(createFieldErrors.priority)}`}>
                   {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
+                <FieldError message={createFieldErrors.priority} />
               </div>
             </div>
             <div>
@@ -432,7 +447,7 @@ export default function Recruitment() {
             </div>
           </div>
           <DialogFooter>
-            <button onClick={() => setCreateOpen(false)} className="vc-btn-ghost">Cancel</button>
+            <button onClick={() => { setCreateOpen(false); setForm(EMPTY_FORM); setCreateFieldErrors({}); }} className="vc-btn-ghost">Cancel</button>
             <button onClick={handleCreate} disabled={submitting}
               className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">
               {submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
@@ -443,7 +458,7 @@ export default function Recruitment() {
       </Dialog>
 
       {/* Edit Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog open={editOpen} onOpenChange={(open) => { setEditOpen(open); if (!open) setEditFieldErrors({}); }}>
         <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#00d4ff] flex items-center gap-2">
@@ -453,7 +468,8 @@ export default function Recruitment() {
           <div className="space-y-3">
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Position *</label>
-              <input type="text" value={form.position} onChange={e => updateForm('position', e.target.value)} className="vc-input" />
+              <input type="text" value={form.position} onChange={e => { updateForm('position', e.target.value); setEditFieldErrors(fe => ({ ...fe, position: '' })); }} className={`vc-input ${fieldBorderError(editFieldErrors.position)}`} />
+              <FieldError message={editFieldErrors.position} />
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Designation</label>
@@ -477,7 +493,7 @@ export default function Recruitment() {
                 </div>
                 {!editCustomSiteMode ? (
                   <>
-                    <select value={form.site} onChange={e => updateForm('site', e.target.value)} className="vc-input appearance-none" disabled={biometricSites.length === 0}>
+                    <select value={form.site} onChange={e => { updateForm('site', e.target.value); setEditFieldErrors(fe => ({ ...fe, site: '' })); }} className={`vc-input appearance-none ${fieldBorderError(editFieldErrors.site)}`} disabled={biometricSites.length === 0}>
                       <option value="">{biometricSites.length === 0 ? 'No biometric sites configured' : 'Select biometric site'}</option>
                       {biometricSites.map(s => (
                         <option key={s.id} value={s.siteId}>{s.siteName} ({s.siteId})</option>
@@ -491,8 +507,9 @@ export default function Recruitment() {
                     )}
                   </>
                 ) : (
-                  <input type="text" value={form.site} onChange={e => updateForm('site', e.target.value)} placeholder="Enter custom site name" className="vc-input" />
+                  <input type="text" value={form.site} onChange={e => { updateForm('site', e.target.value); setEditFieldErrors(fe => ({ ...fe, site: '' })); }} placeholder="Enter custom site name" className={`vc-input ${fieldBorderError(editFieldErrors.site)}`} />
                 )}
+                <FieldError message={editFieldErrors.site} />
                 <p className="text-[9px] text-[#5a6878]">
                   {!editCustomSiteMode
                     ? biometricSites.length > 0 ? `${biometricSites.length} biometric site(s) available.` : 'Switch to Custom Value to enter a site manually.'
@@ -520,7 +537,7 @@ export default function Recruitment() {
             </div>
           </div>
           <DialogFooter>
-            <button onClick={() => setEditOpen(false)} className="vc-btn-ghost">Cancel</button>
+            <button onClick={() => { setEditOpen(false); setEditFieldErrors({}); }} className="vc-btn-ghost">Cancel</button>
             <button onClick={handleEdit} disabled={submitting}
               className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">
               {submitting ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}

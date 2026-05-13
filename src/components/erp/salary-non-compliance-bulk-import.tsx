@@ -138,7 +138,7 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
         'NATURE OF DESIGNATION',
         'MONTHLY GROSS SALARY',
         'ACTUAL ATTENDANCE',
-        'EXTRA DAYS',
+        'LEAVE DAYS',
         'PH DAYS',
         'ACTUAL EARN WAGES',
         'ACTUAL OT HRS',

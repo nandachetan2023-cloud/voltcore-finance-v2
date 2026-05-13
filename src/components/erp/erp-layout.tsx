@@ -327,7 +327,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
 
 // ── Topbar ──────────────────────────────────────────────────────
 function Topbar({ onLogout }: { onLogout?: () => void }) {
-  const { activeModule, setSidebarOpen } = useERPStore();
+  const { activeModule, setSidebarOpen, setActiveModule, userRole, allowedModules } = useERPStore();
   const config = MODULE_CONFIG[activeModule];
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -364,6 +364,53 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
       });
       setNotifications([]);
     } catch {}
+  };
+
+  const markOneRead = async (notifId: string) => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId: notifId }),
+      });
+      setNotifications(prev => prev.filter(n => n.id !== notifId));
+    } catch {}
+  };
+
+  // Map entityType → module IDs: [adminModule, selfServiceModule]
+  // Admin/approver sees the management module; employee sees their self-service module.
+  const ENTITY_MODULE_MAP: Record<string, { admin: string; self: string }> = {
+    leave:      { admin: 'leave',        self: 'my-leave' },
+    request:    { admin: 'requests',     self: 'my-requests' },
+    attendance: { admin: 'attendance',   self: 'my-attendance' },
+    payroll:    { admin: 'payroll',      self: 'my-payslips' },
+    notice:     { admin: 'notice-board', self: 'my-notices' },
+  };
+
+  const handleNotificationClick = async (notif: any) => {
+    // Mark this notification as read
+    await markOneRead(notif.id);
+    setShowNotifications(false);
+
+    const entityType = notif.entityType as string;
+    const mapping = ENTITY_MODULE_MAP[entityType];
+    if (!mapping) return; // no known module for this type
+
+    const isAdmin = userRole === 'admin';
+    // Prefer admin module for admins, self-service for employees.
+    // But always check access first — fall back to the other if not allowed.
+    const preferred  = isAdmin ? mapping.admin : mapping.self;
+    const fallback   = isAdmin ? mapping.self  : mapping.admin;
+
+    const canPreferred = isModuleAllowed(preferred, allowedModules);
+    const canFallback  = isModuleAllowed(fallback,  allowedModules);
+
+    if (canPreferred) {
+      setActiveModule(preferred as any);
+    } else if (canFallback) {
+      setActiveModule(fallback as any);
+    }
+    // If neither is accessible, do nothing (notification is still marked read)
   };
 
   useEffect(() => {
@@ -425,13 +472,43 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
                     <p className="text-[11px] text-[#5a6878]">No new notifications</p>
                   </div>
                 ) : (
-                  notifications.map((notif, idx) => (
-                    <div key={idx} className="p-3 border-b border-[#252e3a] hover:bg-[#141920] transition-colors cursor-pointer">
-                      <div className="text-[11px] text-[#e2e8f0] mb-1">{notif.title}</div>
-                      <div className="text-[10px] text-[#5a6878]">{notif.message}</div>
-                      <div className="text-[9px] text-[#5a6878] mt-1">{notif.time}</div>
-                    </div>
-                  ))
+                  notifications.map((notif, idx) => {
+                    const mapping = ENTITY_MODULE_MAP[notif.entityType as string];
+                    const isAdmin = userRole === 'admin';
+                    const targetModule = mapping
+                      ? (isAdmin
+                          ? (isModuleAllowed(mapping.admin, allowedModules) ? mapping.admin : isModuleAllowed(mapping.self, allowedModules) ? mapping.self : null)
+                          : (isModuleAllowed(mapping.self, allowedModules) ? mapping.self : isModuleAllowed(mapping.admin, allowedModules) ? mapping.admin : null))
+                      : null;
+                    const typeColor: Record<string, string> = {
+                      info: '#00d4ff', success: '#00e676', warning: '#f5a623', error: '#ff3d3d',
+                    };
+                    const borderColor = typeColor[notif.type] || '#5a6878';
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => handleNotificationClick(notif)}
+                        className={`p-3 border-b border-[#252e3a] hover:bg-[#141920] transition-colors border-l-[3px] ${targetModule ? 'cursor-pointer' : 'cursor-default'}`}
+                        style={{ borderLeftColor: borderColor }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="text-[11px] font-semibold text-[#e2e8f0] leading-snug flex-1">{notif.title}</div>
+                          {targetModule && (
+                            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5" style={{ background: `${borderColor}20`, color: borderColor }}>
+                              {MODULE_CONFIG[targetModule]?.title || targetModule}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-[#8899aa] mt-0.5 leading-snug">{notif.message}</div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-[9px] text-[#5a6878]">{notif.time}</span>
+                          {targetModule && (
+                            <span className="text-[9px] text-[#5a6878] hover:text-[#e2e8f0]">Click to open →</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>

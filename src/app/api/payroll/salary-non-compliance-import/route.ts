@@ -21,7 +21,7 @@ interface SalaryNonComplianceRow {
   natureOfDesignation: string;
   monthlyGrossSalary: number;
   actualAttendance: number;
-  extraDays: number;
+  leaveDays: number;
   phDays: number;
   actualEarnWages: number;
   actualOtHrs: number;
@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
           natureOfDesignation: String(row[16] || ''),    // col 16: NATURE OF DESIGNATION
           monthlyGrossSalary: Number(row[17]) || 0,      // col 17: MONTHLY GROSS SALARY
           actualAttendance: Number(row[18]) || 0,        // col 18: ACTUAL ATTENDANCE
-          extraDays: Number(row[19]) || 0,               // col 19: EXTRA DAYS
+          leaveDays: Number(row[19]) || 0,               // col 19: LEAVE DAYS
           phDays: Number(row[20]) || 0,                  // col 20: PH DAYS
           actualEarnWages: Number(row[21]) || 0,         // col 21: ACTUAL EARN WAGES
           actualOtHrs: Number(row[22]) || 0,             // col 22: ACTUAL OT HRS

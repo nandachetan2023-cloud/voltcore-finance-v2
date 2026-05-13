@@ -252,6 +252,80 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ── Policy restriction checks ─────────────────────────────────
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const leaveFrom = new Date(fromDate)
+    leaveFrom.setHours(0, 0, 0, 0)
+    const leaveTo = new Date(toDate)
+    leaveTo.setHours(0, 0, 0, 0)
+
+    // 1. Min days notice — employee must apply at least N days before leave starts
+    if (policy.minDaysNotice && policy.minDaysNotice > 0) {
+      const daysUntilLeave = Math.floor((leaveFrom.getTime() - today.getTime()) / 86400000)
+      if (daysUntilLeave < policy.minDaysNotice) {
+        return NextResponse.json({
+          success: false,
+          error: `${policy.name} requires at least ${policy.minDaysNotice} day${policy.minDaysNotice !== 1 ? 's' : ''} advance notice. Your leave starts in ${daysUntilLeave} day${daysUntilLeave !== 1 ? 's' : ''}.`,
+        }, { status: 400 })
+      }
+    }
+
+    // 2. Max consecutive days
+    const requestedDays = days || Math.ceil((leaveTo.getTime() - leaveFrom.getTime()) / 86400000) + 1
+    if (policy.maxConsecutiveDays && policy.maxConsecutiveDays > 0 && requestedDays > policy.maxConsecutiveDays) {
+      return NextResponse.json({
+        success: false,
+        error: `${policy.name} allows a maximum of ${policy.maxConsecutiveDays} consecutive day${policy.maxConsecutiveDays !== 1 ? 's' : ''} per application. You requested ${requestedDays} days.`,
+      }, { status: 400 })
+    }
+
+    // 3. Applicable after N months of service
+    if (policy.applicableAfterMonths && policy.applicableAfterMonths > 0) {
+      const fullEmployee = await db.employee.findUnique({
+        where: { id: parseInt(employeeId) },
+        select: { joiningDate: true, gender: true },
+      })
+      if (fullEmployee?.joiningDate) {
+        const joining = new Date(fullEmployee.joiningDate)
+        const monthsWorked =
+          (today.getFullYear() - joining.getFullYear()) * 12 +
+          (today.getMonth() - joining.getMonth())
+        if (monthsWorked < policy.applicableAfterMonths) {
+          const remaining = policy.applicableAfterMonths - monthsWorked
+          return NextResponse.json({
+            success: false,
+            error: `${policy.name} is only available after ${policy.applicableAfterMonths} months of service. You need ${remaining} more month${remaining !== 1 ? 's' : ''} to be eligible.`,
+          }, { status: 400 })
+        }
+      }
+
+      // 4. Gender restriction (fetch gender if not already fetched)
+      if (policy.applicableGender && policy.applicableGender !== 'all') {
+        const empGender = fullEmployee?.gender?.toLowerCase()
+        if (empGender && empGender !== policy.applicableGender.toLowerCase()) {
+          return NextResponse.json({
+            success: false,
+            error: `${policy.name} is only applicable to ${policy.applicableGender} employees.`,
+          }, { status: 400 })
+        }
+      }
+    } else if (policy.applicableGender && policy.applicableGender !== 'all') {
+      // Gender check even when no service period restriction
+      const fullEmployee = await db.employee.findUnique({
+        where: { id: parseInt(employeeId) },
+        select: { gender: true },
+      })
+      const empGender = fullEmployee?.gender?.toLowerCase()
+      if (empGender && empGender !== policy.applicableGender.toLowerCase()) {
+        return NextResponse.json({
+          success: false,
+          error: `${policy.name} is only applicable to ${policy.applicableGender} employees.`,
+        }, { status: 400 })
+      }
+    }
+
     // Check for holidays in the leave date range
     const holidays = await getHolidaysInRange(fromDate, toDate, employee.branchId, db)
     

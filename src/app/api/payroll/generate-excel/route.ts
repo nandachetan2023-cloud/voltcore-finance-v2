@@ -237,7 +237,7 @@ export async function GET(request: NextRequest) {
         'NATURE OF DESIGNATION',
         'MONTHLY GROSS SALARY',
         'ACTUAL ATTENDANCE',
-        'EXTRA DAYS',
+        'LEAVE DAYS',
         'PH DAYS',
         'ACTUAL EARN WAGES',
         'ACTUAL OT HRS',
