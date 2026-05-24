@@ -5,13 +5,13 @@ export type UserRole = 'superadmin' | 'admin' | 'demo';
 // All top-level modules and their sub-modules for access checking
 export const MODULE_TREE: Record<string, string[]> = {
   organization: ['organization', 'departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents'],
-  hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
+  hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
   procurement: ['procurement', 'purchases', 'expenses'],
   finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
   projects: ['projects', 'project-list', 'sites'],
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
   // A dedicated "self-service" group for employees
-  'self-service': ['my-attendance', 'my-leave', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
+  'self-service': ['my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
   system: ['system', 'reports', 'settings', 'user-management', 'requests', 'notice-board'],
   reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
 }
@@ -50,7 +50,7 @@ export type ModuleId =
   | 'projects' | 'assets'
   | 'system'
   // Sub-modules
-  | 'employees' | 'attendance' | 'leave' | 'shift' | 'training' | 'recruitment'
+  | 'employees' | 'attendance' | 'leave' | 'tour-requests' | 'shift' | 'training' | 'recruitment'
   | 'onboarding' | 'offboarding' | 'exit-management' | 'checklist-templates'
   | 'purchases' | 'expenses' | 'invoices'
   | 'sites' | 'permits' | 'safety' | 'subcontractors'
@@ -79,6 +79,7 @@ export type ModuleId =
   // Employee self-service
   | 'my-attendance'
   | 'my-leave'
+  | 'my-tours'
   | 'my-requests'
   | 'my-profile'
   | 'my-notices'
@@ -111,6 +112,7 @@ export const DEMO_ALLOWED_MODULES: Set<string> = new Set([
   'employees',
   'attendance',
   'leave',
+  'tour-requests',
   'shift',
   'timesheet',
   'payroll',
@@ -146,6 +148,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'attendance', icon: 'ClipboardList', label: 'Attendance', section: 'HRMS' },
     { id: 'biometric', icon: 'Fingerprint', label: 'Biometric Sync', section: 'HRMS' },
     { id: 'leave', icon: 'CalendarDays', label: 'Leave Management', section: 'HRMS' },
+    { id: 'tour-requests', icon: 'Plane', label: 'Tour Requests', section: 'HRMS' },
     { id: 'shift', icon: 'RotateCcw', label: 'Shift Roster', section: 'HRMS' },
     { id: 'timesheet', icon: 'TimerReset', label: 'Timesheet', section: 'HRMS' },
     { id: 'payroll', icon: 'IndianRupee', label: 'Payroll', section: 'HRMS' },
@@ -202,6 +205,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
   'self-service': [
     { id: 'my-attendance', icon: 'ClipboardList', label: 'My Attendance', section: 'My Portal' },
     { id: 'my-leave', icon: 'CalendarDays', label: 'Apply Leave', section: 'My Portal' },
+    { id: 'my-tours', icon: 'Plane', label: 'My Tours', section: 'My Portal' },
     { id: 'my-requests', icon: 'FileText', label: 'My Requests', section: 'My Portal' },
     { id: 'my-profile', icon: 'User', label: 'My Profile', section: 'My Portal' },
     { id: 'my-notices', icon: 'Bell', label: 'My Notices', section: 'My Portal' },
@@ -284,6 +288,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'self-service': { title: 'My Portal', breadcrumb: 'VoltCore ERP › My Portal' },
   'my-attendance': { title: 'My Attendance', breadcrumb: 'My Portal › Attendance' },
   'my-leave': { title: 'Apply for Leave', breadcrumb: 'My Portal › Leave Application' },
+  'my-tours': { title: 'My Tour Requests', breadcrumb: 'My Portal › Tour Requests' },
   'my-requests': { title: 'My Requests', breadcrumb: 'My Portal › Requests' },
   'my-profile':   { title: 'My Profile',   breadcrumb: 'My Portal › Profile' },
   'my-notices':   { title: 'My Notices',   breadcrumb: 'My Portal › Notices' },

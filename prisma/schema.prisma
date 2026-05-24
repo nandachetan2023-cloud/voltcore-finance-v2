@@ -168,6 +168,7 @@ model Employee {
   other_Employee            Employee[]                  @relation("EmployeeToEmployee")
   User                      User?                       @relation(fields: [userId], references: [id])
   LeaveRequest              LeaveRequest[]
+  TourRequest               TourRequest[]
   PayrollItem               PayrollItem[]
   SalaryStructureAssignment SalaryStructureAssignment[]
   ShiftAssignment           ShiftAssignment[]
@@ -996,4 +997,31 @@ model NoticeRead {
 
   @@unique([noticeId, employeeId])
   @@index([employeeId])
+}
+
+// ── Tour Request: on-duty/tour approval (counts as paid attendance) ──
+model TourRequest {
+  id              Int       @id @default(autoincrement())
+  employeeId      Int
+  fromDate        DateTime
+  toDate          DateTime
+  days            Decimal   @default(1.0) @db.Decimal(5, 1)
+  destination     String
+  purpose         String
+  remarks         String?
+  status          String    @default("pending") // pending | approved | rejected
+  currentStep     Int       @default(1)
+  appliedDate     DateTime  @default(now())
+  approvedBy      Int?
+  approvedDate    DateTime?
+  rejectedBy      Int?
+  rejectedDate    DateTime?
+  rejectionReason String?
+  isDeleted       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime
+  Employee        Employee  @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, status])
+  @@index([fromDate, toDate])
 }

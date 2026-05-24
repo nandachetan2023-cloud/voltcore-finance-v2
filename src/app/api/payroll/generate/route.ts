@@ -187,6 +187,24 @@ export async function POST(request: NextRequest) {
           paidLeaveDays += days;
         }
 
+        // Get approved tour days (count as paid attendance)
+        const tourRequests = await db.tourRequest.findMany({
+          where: {
+            employeeId: employee.id,
+            status: 'approved',
+            isDeleted: false,
+            fromDate: { lte: endDate },
+            toDate: { gte: startDate },
+          },
+        });
+
+        for (const tour of tourRequests) {
+          const tourStart = new Date(Math.max(tour.fromDate.getTime(), startDate.getTime()));
+          const tourEnd = new Date(Math.min(tour.toDate.getTime(), endDate.getTime()));
+          const days = Math.ceil((tourEnd.getTime() - tourStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          paidLeaveDays += days; // Tour days count as paid days (same as leave)
+        }
+
         // Calculate OT hours (includes holiday work as full OT)
         const totalOTHours = await calculateTotalOvertimeHours(
           attendanceLogs.map(log => ({

@@ -13,7 +13,7 @@ import {
   ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileEdit, Landmark, Scale, Target, PieChart,
   Wallet, FileSpreadsheet, ReceiptIndianRupee, BadgeIndianRupee, CircleDollarSign, Undo2,
   ArrowRightLeft, HandCoins, RefreshCw, AlertTriangle, Award, Download, Fingerprint, Shield, Trash2,
-  UserCircle, UserCheck, UserX, FolderOpen, Megaphone, User, Send
+  UserCircle, UserCheck, UserX, FolderOpen, Megaphone, User, Send, Plane
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -25,7 +25,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Landmark, Scale, Target, PieChart, Wallet, FileSpreadsheet, ReceiptIndianRupee,
   BadgeIndianRupee, CircleDollarSign, Undo2, ArrowRightLeft, HandCoins, Award, Download,
   Fingerprint, Shield, Trash2, UserCircle, UserCheck, UserX, FolderOpen, Megaphone, Bell, User,
-  AlertTriangle, Send,
+  AlertTriangle, Send, Plane,
 };
 
 const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'financial-reports', 'trash'];
@@ -380,11 +380,12 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
   // Map entityType → module IDs: [adminModule, selfServiceModule]
   // Admin/approver sees the management module; employee sees their self-service module.
   const ENTITY_MODULE_MAP: Record<string, { admin: string; self: string }> = {
-    leave:      { admin: 'leave',        self: 'my-leave' },
-    request:    { admin: 'requests',     self: 'my-requests' },
-    attendance: { admin: 'attendance',   self: 'my-attendance' },
-    payroll:    { admin: 'payroll',      self: 'my-payslips' },
-    notice:     { admin: 'notice-board', self: 'my-notices' },
+    leave:      { admin: 'leave',           self: 'my-leave' },
+    tour:       { admin: 'tour-requests',   self: 'tour-requests' },
+    request:    { admin: 'requests',        self: 'my-requests' },
+    attendance: { admin: 'attendance',      self: 'my-attendance' },
+    payroll:    { admin: 'payroll',         self: 'my-payslips' },
+    notice:     { admin: 'notice-board',    self: 'my-notices' },
   };
 
   const handleNotificationClick = async (notif: any) => {
