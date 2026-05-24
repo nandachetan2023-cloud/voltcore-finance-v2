@@ -27,16 +27,20 @@ export async function POST(request: NextRequest) {
 
       const sites = await loadBiometricSitesFromDb(db, tenantId)
       const processingResults = []
+      const allSkipped: Array<{ empCode: string; name: string; date: string; reason: string }> = []
       for (const site of sites) {
         const biometricService = await createBiometricServiceFromDb(site.id, db, tenantId)
         const processResult = await biometricService.processRawLogs()
         processingResults.push({ site: site.id, result: processResult })
+        if (processResult.skippedRecords?.length) {
+          allSkipped.push(...processResult.skippedRecords)
+        }
       }
 
       return NextResponse.json({
         success: true,
         message: 'Biometric sync and processing completed for all sites',
-        data: { sync: results, processing: processingResults },
+        data: { sync: results, processing: processingResults, skippedRecords: allSkipped },
       })
     }
   } catch (error) {

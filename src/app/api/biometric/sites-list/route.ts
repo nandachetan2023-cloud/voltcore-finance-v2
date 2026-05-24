@@ -6,8 +6,29 @@ export const dynamic = 'force-dynamic'
 // GET: List all active biometric sites for the current tenant (from superadmin DB)
 export async function GET(request: NextRequest) {
   try {
-    // Get the current user's tenant ID from cookies
+    // Get the current user's tenant ID from cookies or query param
     const tenantId = request.cookies.get('erp_tenant_id')?.value
+      || new URL(request.url).searchParams.get('tenantId')
+    const role = request.cookies.get('erp_user_role')?.value
+
+    // Superadmin: return all active sites across all tenants
+    if (role === 'superadmin' && !tenantId) {
+      const sites = await superadminDb.biometricSiteConfig.findMany({
+        where: { isActive: true },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          siteId: true,
+          siteName: true,
+          tenantId: true,
+        },
+      })
+
+      return NextResponse.json({
+        success: true,
+        data: sites,
+      })
+    }
 
     if (!tenantId) {
       return NextResponse.json(

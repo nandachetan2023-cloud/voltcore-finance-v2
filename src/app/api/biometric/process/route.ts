@@ -10,12 +10,12 @@ export async function POST(request: NextRequest) {
   const tenantId = request.cookies.get('erp_tenant_id')?.value
   try {
     const biometricService = await createBiometricServiceFromDb(undefined, db, tenantId)
-    const { processedCount, processedEmployees } = await biometricService.processRawLogs()
+    const { processedCount, processedEmployees, skippedRecords } = await biometricService.processRawLogs()
 
     return NextResponse.json({
       success: true,
       message: 'Raw logs processed successfully',
-      data: { processedCount, processedEmployees },
+      data: { processedCount, processedEmployees, skippedRecords },
     })
   } catch (error) {
     console.error('Process logs error:', error)

@@ -62,16 +62,16 @@ export async function GET(request: NextRequest) {
     });
 
     // Create attendance map
-    const attendanceMap = new Map<number, { present: number; extra: number }>();
+    const attendanceMap = new Map<number, { present: number; leaveDays: number }>();
     attendanceData.forEach(a => {
       if (!attendanceMap.has(a.employeeId)) {
-        attendanceMap.set(a.employeeId, { present: 0, extra: 0 });
+        attendanceMap.set(a.employeeId, { present: 0, leaveDays: 0 });
       }
       const data = attendanceMap.get(a.employeeId)!;
       if (a.status === 'present' || a.status === 'half-day') {
         data.present += a._count?.id || 0;
       }
-      // Extra days logic can be enhanced based on your attendance tracking
+      // Leave days logic can be enhanced based on your attendance/leave tracking
     });
 
     // Fetch approved advances for the month
@@ -184,7 +184,7 @@ export async function GET(request: NextRequest) {
     employees.forEach((employee, index) => {
       const rowNumber = index + 2; // +2 because row 1 is header
       const fullName = `${employee.firstName} ${employee.middleName || ''} ${employee.lastName}`.trim().toUpperCase();
-      const attendance = attendanceMap.get(employee.id) || { present: 0, extra: 0 };
+      const attendance = attendanceMap.get(employee.id) || { present: 0, leaveDays: 0 };
       const advance = advanceMap.get(employee.id) || 0;
 
       const row = worksheet.addRow([
@@ -207,7 +207,7 @@ export async function GET(request: NextRequest) {
         employee.natureOfDesignation || '', // P: NATURE OF DESIGNATION
         employee.monthlyGrossSalary ? parseFloat(employee.monthlyGrossSalary.toString()) : '', // Q: MONTHLY GROSS SALARY
         attendance.present, // R: ACTUAL ATTENDANCE
-        attendance.extra, // S: LEAVE DAYS
+        attendance.leaveDays, // S: LEAVE DAYS
         '', // T: PH DAYS (USER INPUT)
         '', // U: ACTUAL EARN WAGES (CALCULATED)
         '', // V: ACTUAL OT HRS (USER INPUT)

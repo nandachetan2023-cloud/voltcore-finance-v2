@@ -268,7 +268,8 @@ export class BiometricService {
   // Process raw logs to attendance
   async processRawLogs(): Promise<{ 
     processedCount: number; 
-    processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }> 
+    processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }>;
+    skippedRecords: Array<{ empCode: string; name: string; date: string; reason: string }>;
   }> {
     const unprocessedLogs = await this.db.biometricRawLog.findMany({
       where: { 
@@ -280,6 +281,7 @@ export class BiometricService {
 
     let processedCount = 0
     const processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }> = []
+    const skippedRecords: Array<{ empCode: string; name: string; date: string; reason: string }> = []
     const employeeRecordCount = new Map<string, { name: string; count: number }>()
 
     // Group by employee and date
@@ -304,7 +306,14 @@ export class BiometricService {
         })
 
         if (!employee) {
-          console.warn(`[Biometric] No employee found for enrolledId="${enrolledId}" (tried employeeCode="UA${enrolledId}"). Ensure the employee exists with this ID.`)
+          const reason = `No employee found with code "UA${enrolledId}"`
+          console.warn(`[Biometric] ${reason}. Ensure the employee exists with this ID.`)
+          skippedRecords.push({ empCode: enrolledId, name: logs[0]?.name || 'Unknown', date: dateStr, reason })
+          // Mark as processed with skip reason so they don't keep retrying
+          await this.db.biometricRawLog.updateMany({
+            where: { id: { in: logs.map(l => l.id) } },
+            data: { processed: true, processedAt: new Date() },
+          })
           continue
         }
 
@@ -341,12 +350,9 @@ export class BiometricService {
         // ── Shift guard: skip employees without an active shift ──
         const shiftAssignment = await getActiveShiftAssignment(employee.id, logDate, this.db)
         if (!shiftAssignment) {
-          console.log(`[Biometric] Skipping enrolledId=${enrolledId} (${employee.employeeCode}) for ${dateStr}: no active shift assignment — marking employee inactive`)
-          // Deactivate the employee since they have no shift
-          await this.db.employee.update({
-            where: { id: employee.id },
-            data: { isActive: false, employmentStatus: 'inactive', updatedAt: new Date() },
-          }).catch(() => {})
+          const reason = `No active shift assignment for ${employee.employeeCode} (${employeeName})`
+          console.log(`[Biometric] Skipping: ${reason}`)
+          skippedRecords.push({ empCode: employee.employeeCode, name: employeeName, date: dateStr, reason })
           // Mark logs as processed so they don't keep retrying
           await this.db.biometricRawLog.updateMany({
             where: { id: { in: logs.map(l => l.id) } },
@@ -431,7 +437,7 @@ export class BiometricService {
       })
     })
 
-    return { processedCount, processedEmployees }
+    return { processedCount, processedEmployees, skippedRecords }
   }
 
   // Incremental sync (recommended for production)

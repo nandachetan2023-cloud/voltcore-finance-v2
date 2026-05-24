@@ -49,6 +49,7 @@ export default function BiometricPage() {
   const [syncing, setSyncing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [logFilter, setLogFilter] = useState<'all' | 'pending' | 'processed'>('all');
+  const [skippedRecords, setSkippedRecords] = useState<Array<{ empCode: string; name: string; date: string; reason: string }>>([]);
 
   // Date range
   const [fromDate, setFromDate] = useState('');
@@ -124,6 +125,17 @@ export default function BiometricPage() {
         } else {
           toast.success(`Sync complete — ${fetched} new records fetched.`);
         }
+        // Capture skipped records from processing
+        const skipped = data.data?.skippedRecords || data.data?.processing?.skippedRecords || [];
+        if (Array.isArray(skipped) && skipped.length > 0) {
+          setSkippedRecords(skipped);
+        } else if (data.data?.processing) {
+          // Check nested processing results (multi-site)
+          const nested = Array.isArray(data.data.processing)
+            ? data.data.processing.flatMap((p: any) => p.result?.skippedRecords || [])
+            : data.data.processing?.skippedRecords || [];
+          if (nested.length > 0) setSkippedRecords(nested);
+        }
         fetchSyncStatus();
         fetchRawLogs();
       } else {
@@ -153,6 +165,14 @@ export default function BiometricPage() {
           ? data.data.reduce((s: number, r: any) => s + r.result.fetched, 0)
           : data.data?.fetched || 0;
         toast.success(`Date range sync complete — ${fetched} records fetched.`);
+        // Capture skipped records
+        const skipped = Array.isArray(data.data)
+          ? data.data.flatMap((r: any) => r.result?.skippedRecords || [])
+          : data.data?.skippedRecords || [];
+        if (skipped.length > 0) {
+          setSkippedRecords(skipped);
+          toast.warning(`${skipped.length} record(s) skipped — see details below.`);
+        }
         fetchSyncStatus();
         fetchRawLogs();
       } else {
@@ -171,7 +191,17 @@ export default function BiometricPage() {
       const res = await fetch('/api/biometric/process', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        toast.success(`Processed ${data.data.processedCount} records.`);
+        const processed = data.data.processedCount || 0;
+        const skipped = data.data.skippedRecords || [];
+        if (processed > 0) {
+          toast.success(`Processed ${processed} records.`);
+        }
+        if (skipped.length > 0) {
+          setSkippedRecords(skipped);
+          toast.warning(`${skipped.length} record(s) skipped — see details below.`);
+        } else if (processed === 0) {
+          toast.info('No records to process.');
+        }
         fetchSyncStatus();
         fetchRawLogs();
       } else {
@@ -291,6 +321,55 @@ export default function BiometricPage() {
             <Database size={12} className={processing ? 'animate-spin' : ''} />
             {processing ? 'Retrying...' : 'Retry'}
           </button>
+        </div>
+      )}
+
+      {/* Skipped Records — shows why processed logs didn't create attendance */}
+      {skippedRecords.length > 0 && (
+        <div className="bg-[#161c24] border border-[#ff3d3d]/30 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[#252e3a]">
+            <div className="flex items-center gap-2">
+              <XCircle size={14} className="text-[#ff3d3d]" />
+              <span className="text-[13px] font-semibold text-[#e2e8f0]">Skipped Records</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#ff3d3d]/10 text-[#ff3d3d] font-semibold">{skippedRecords.length}</span>
+            </div>
+            <button
+              onClick={() => setSkippedRecords([])}
+              className="text-[10px] text-[#5a6878] hover:text-[#e2e8f0] transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+          <div className="px-4 py-2 bg-[#ff3d3d]/5 border-b border-[#252e3a]">
+            <p className="text-[11px] text-[#ff9999]">
+              These punch logs were marked as processed but did NOT create attendance records. Fix the issue and re-sync to generate attendance.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b border-[#252e3a] bg-[#141920]">
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Employee</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Date</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {skippedRecords.map((rec, idx) => (
+                  <tr key={idx} className="border-b border-[#1e252e] hover:bg-[#1a2028] transition-colors">
+                    <td className="px-4 py-2.5">
+                      <span className="font-mono text-[#f5a623]">{rec.empCode}</span>
+                      {rec.name && <span className="text-[#8899aa] ml-2">{rec.name}</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-[#e2e8f0]">{rec.date}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="text-[#ff9999]">{rec.reason}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
