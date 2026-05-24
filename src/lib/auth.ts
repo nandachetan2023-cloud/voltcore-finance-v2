@@ -17,6 +17,7 @@ export interface AuthUser {
   phone?: string
   employeeId?: number
   employeeCode?: string  // the employee's code e.g. "EMP001"
+  onboardingStatus?: string // none | pending | submitted | approved
 }
 
 // ── Authenticate against superadmin DB ──────────────────────────
@@ -123,6 +124,7 @@ export async function authenticateUser(email: string, password: string): Promise
             phone: tenantUser.phone || undefined,
             employeeId: tenantUser.employeeId || undefined,
             employeeCode,
+            onboardingStatus: (tenantUser as any).onboardingStatus || 'none',
           },
         }
       }

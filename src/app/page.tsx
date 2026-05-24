@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ERPLayout from '@/components/erp/erp-layout';
 import Login from '@/components/auth/login';
+import OnboardingForm from '@/components/auth/onboarding-form';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
 
 export default function ERPPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [onboardingStatus, setOnboardingStatus] = useState<string>('none');
   const { setUserRole, setAllowedModules } = useERPStore();
   const router = useRouter();
 
@@ -29,6 +31,7 @@ export default function ERPPage() {
         }
         setUserRole(user.role);
         setAllowedModules(user.allowedModules || 'all');
+        setOnboardingStatus(user.onboardingStatus || 'none');
         setIsAuthenticated(true);
       } catch {}
     }
@@ -60,6 +63,7 @@ export default function ERPPage() {
         }
         setUserRole(data.user.role);
         setAllowedModules(data.user.allowedModules || 'all');
+        setOnboardingStatus(data.user.onboardingStatus || 'none');
         setIsAuthenticated(true);
         toast.success(`Welcome back, ${data.user.name}!`);
         return true;
@@ -77,8 +81,20 @@ export default function ERPPage() {
     localStorage.removeItem('erp_auth_user');
     setUserRole('admin');
     setAllowedModules('all');
+    setOnboardingStatus('none');
     setIsAuthenticated(false);
     toast.success('Logged out successfully');
+  };
+
+  const handleOnboardingSubmit = () => {
+    // Update local state after form submission
+    setOnboardingStatus('submitted');
+    const authUser = localStorage.getItem('erp_auth_user');
+    if (authUser) {
+      const user = JSON.parse(authUser);
+      user.onboardingStatus = 'submitted';
+      localStorage.setItem('erp_auth_user', JSON.stringify(user));
+    }
   };
 
   if (isLoading) {
@@ -91,6 +107,11 @@ export default function ERPPage() {
 
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
+  }
+
+  // Gate: show onboarding form if status is pending or submitted (awaiting approval)
+  if (onboardingStatus === 'pending' || onboardingStatus === 'submitted') {
+    return <OnboardingForm status={onboardingStatus} onSubmit={handleOnboardingSubmit} onLogout={handleLogout} />;
   }
 
   return <ERPLayout onLogout={handleLogout} />;

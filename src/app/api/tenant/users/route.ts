@@ -98,7 +98,8 @@ export async function POST(request: NextRequest) {
         orgRoleId: orgRoleId || null,
         employeeId: body.employeeId ? parseInt(body.employeeId) : null,
         createdBySuperadmin: false,
-      },
+        onboardingStatus: body.requireOnboarding ? 'pending' : 'none',
+      } as any,
     })
     const { password: _, ...safe } = user
     return NextResponse.json({ success: true, data: safe }, { status: 201 })

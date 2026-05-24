@@ -13,6 +13,7 @@ interface TenantUser {
   id: string; name: string; email: string; phone: string;
   allowedModules: string; orgRoleId?: string; isActive: boolean;
   lastActiveAt?: string; createdAt: string; employeeId?: number;
+  onboardingStatus?: string;
 }
 
 interface OrgRole {
@@ -62,7 +63,7 @@ export default function UserManagement() {
   const [showPw, setShowPw] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const emptyForm = { name: '', email: '', password: '', phone: '', orgRoleId: '', employeeId: '' };
+  const emptyForm = { name: '', email: '', password: '', phone: '', orgRoleId: '', employeeId: '', requireOnboarding: true };
   const [form, setForm] = useState(emptyForm);
   const [empSearch, setEmpSearch] = useState('');
   const [showEmpDropdown, setShowEmpDropdown] = useState(false);
@@ -118,10 +119,11 @@ export default function UserManagement() {
     if (!form.orgRoleId) { toast.error('A role must be assigned'); return; }
     setSaving(true);
     try {
+      const payload = editId ? { id: editId, ...form } : form;
       const res = await fetch('/api/tenant/users', {
         method: editId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editId ? { id: editId, ...form } : form),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success) {
@@ -149,6 +151,19 @@ export default function UserManagement() {
     const data = await res.json();
     if (data.success) { toast.success(u.isActive ? 'User deactivated' : 'User activated'); fetchData(); }
     else toast.error(data.error);
+  };
+
+  const handleOnboardingAction = async (userId: string, action: 'approve' | 'reject') => {
+    const res = await fetch('/api/onboarding-form', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, action }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast.success(action === 'approve' ? 'Onboarding approved — user can now access the system' : 'Onboarding rejected — user can re-submit');
+      fetchData();
+    } else toast.error(data.error);
   };
 
   const openEdit = (u: TenantUser) => {
@@ -372,6 +387,23 @@ export default function UserManagement() {
               Cancel
             </button>
           </div>
+
+          {/* Require Onboarding toggle */}
+          {!editId && (
+            <div className="mt-4 pt-4 border-t border-[#252e3a]">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={form.requireOnboarding}
+                  onChange={e => setForm(f => ({ ...f, requireOnboarding: e.target.checked }))}
+                  className="w-4 h-4 mt-0.5 rounded border-[#2e3a48] bg-[#0d1117] text-[#f5a623] focus:ring-[#f5a623]" />
+                <div>
+                  <span className="text-[12px] font-semibold text-[#e2e8f0]">Require Onboarding Form</span>
+                  <p className="text-[10px] text-[#5a6878] mt-0.5">
+                    When enabled, the user must fill and submit the joining form before accessing the system. You will need to approve it.
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
         </div>
       )}
 
@@ -393,6 +425,12 @@ export default function UserManagement() {
                       <span className="text-[11px] text-[#5a6878]">{u.email}</span>
                       {!u.isActive && (
                         <span className="text-[9px] font-bold px-2 py-[2px] rounded-full bg-[#ff3d3d]/10 text-[#ff3d3d]">Inactive</span>
+                      )}
+                      {u.onboardingStatus === 'pending' && (
+                        <span className="text-[9px] font-bold px-2 py-[2px] rounded-full bg-[#ffab40]/10 text-[#ffab40]">Onboarding Pending</span>
+                      )}
+                      {u.onboardingStatus === 'submitted' && (
+                        <span className="text-[9px] font-bold px-2 py-[2px] rounded-full bg-[#00d4ff]/10 text-[#00d4ff]">Awaiting Approval</span>
                       )}
                     </div>
 
@@ -422,6 +460,18 @@ export default function UserManagement() {
                     {u.lastActiveAt && (
                       <div className="text-[10px] text-[#5a6878] mt-0.5">
                         Last active: {new Date(u.lastActiveAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </div>
+                    )}
+                    {u.onboardingStatus === 'submitted' && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <button onClick={() => handleOnboardingAction(u.id, 'approve')}
+                          className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-[#00e676]/10 text-[#00e676] border border-[#00e676]/30 rounded-lg hover:bg-[#00e676]/20 transition-colors">
+                          <Check size={11} /> Approve Onboarding
+                        </button>
+                        <button onClick={() => handleOnboardingAction(u.id, 'reject')}
+                          className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-[#ff3d3d]/10 text-[#ff3d3d] border border-[#ff3d3d]/30 rounded-lg hover:bg-[#ff3d3d]/20 transition-colors">
+                          <X size={11} /> Reject
+                        </button>
                       </div>
                     )}
                   </div>

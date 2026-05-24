@@ -40,6 +40,10 @@ model TenantUser {
   employeeId     Int?                          // linked employee record in the tenant's DB
   createdBySuperadmin Boolean @default(false)  // true = exempt from maxUsers limit
   isActive       Boolean  @default(true)
+  onboardingStatus String @default("none")     // none | pending | submitted | approved
+  onboardingData Json?                         // stores the filled onboarding form data
+  onboardingSubmittedAt DateTime?
+  onboardingApprovedAt  DateTime?
   lastActiveAt   DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
