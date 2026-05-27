@@ -251,7 +251,6 @@ export default function EmployeesModule() {
   const [designations, setDesignations] = useState<Array<{ id: number; name: string }>>([]);
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
   const [branches, setBranches] = useState<Array<{ id: number; name: string }>>([]);
-  const [grades, setGrades] = useState<Array<{ id: number; name: string; code: string }>>([]);
 
   useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
 
@@ -290,9 +289,8 @@ export default function EmployeesModule() {
     fetchData(); 
     fetchDesignations();
     fetchDepartments();
-    // Fetch branches and grades
+    // Fetch branches
     fetch('/api/branches').then(r => r.json()).then(d => { if (d.success) setBranches(d.data); });
-    fetch('/api/grades').then(r => r.json()).then(d => { if (d.success) setGrades(d.data); });
   }, [fetchData, fetchDesignations, fetchDepartments]);
 
   const sites = useMemo(() => Array.from(new Set(employees.map(e => e.Branch?.name).filter(Boolean))).sort(), [employees]);
@@ -399,6 +397,7 @@ export default function EmployeesModule() {
   const handleSubmit = async (mode: 'create' | 'edit') => {
     setSubmitting(true);
     try {
+      console.log('[Employee Form] Submitting...', { mode, form });
       const errors = validateFields([
         { field: 'empId', value: form.empId, label: 'Employee ID' },
         { field: 'firstName', value: form.firstName, label: 'First Name' },
@@ -415,18 +414,35 @@ export default function EmployeesModule() {
         { field: 'branchId', value: form.branchId, label: 'Branch' },
         { field: 'dateOfJoining', value: form.dateOfJoining, label: 'Date of Joining' },
       ]);
+      console.log('[Employee Form] Validation errors:', errors);
       setFieldErrors(errors);
       if (!isValid(errors)) {
+        // Navigate to the first tab that has an error so the user can see it
+        const tabFieldMap: Record<string, string[]> = {
+          identity: ['empId', 'firstName', 'lastName', 'email', 'phone'],
+          personal: ['dateOfBirth'],
+          address: ['currentAddress', 'currentCity', 'currentState', 'currentPincode'],
+          org: ['departmentId', 'designationId', 'branchId'],
+          employment: ['dateOfJoining'],
+        };
+        for (const [tab, fields] of Object.entries(tabFieldMap)) {
+          if (fields.some(f => errors[f])) {
+            setFormTab(tab as any);
+            break;
+          }
+        }
+        const errorList = Object.values(errors).filter(Boolean);
+        toast.error(`Please fill required fields: ${errorList.slice(0, 3).join(', ')}${errorList.length > 3 ? ` +${errorList.length - 3} more` : ''}`);
         setSubmitting(false);
         return;
       }
 
       let employeeCode = form.empId.trim().toUpperCase();
-      // Only auto-format and validate code format when creating new employees
+      // Allow any employee code format (e.g. UA00000001, EMP001, E-001, etc.)
+      // Just ensure it's not empty and reasonable length
       if (mode === 'create') {
-        if (/^\d{1,8}$/.test(employeeCode)) employeeCode = `UA${employeeCode.padStart(8, '0')}`;
-        if (!/^UA\d{8}$/.test(employeeCode)) {
-          toast.error('Employee ID must be in format UA00000001 to UA99999999');
+        if (!employeeCode || employeeCode.length < 2 || employeeCode.length > 20) {
+          toast.error('Employee ID must be 2-20 characters long');
           setSubmitting(false);
           return;
         }
@@ -460,7 +476,7 @@ export default function EmployeesModule() {
         designationId: parseInt(form.designationId),
         natureOfDesignation: form.natureOfDesignation.trim() || null,
         branchId: parseInt(form.branchId),
-        gradeId: form.gradeId ? parseInt(form.gradeId) : null,
+        gradeId: null, // Grade FK not used — grade is entered as free text in natureOfDesignation
         reportingManagerId: form.reportingManagerId ? parseInt(form.reportingManagerId) : null,
         dateOfJoining: new Date(form.dateOfJoining).toISOString(),
         confirmationDate: form.confirmationDate ? new Date(form.confirmationDate).toISOString() : null,
@@ -482,8 +498,10 @@ export default function EmployeesModule() {
       };
 
       const body = mode === 'edit' ? { id: parseInt(selectedId || '0'), ...apiBody } : apiBody;
+      console.log('[Employee Form] Sending to API:', body);
       const res = await fetch('/api/employees', { method: mode === 'create' ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
+      console.log('[Employee Form] API response:', { status: res.status, json });
 
       if (json.success) {
         toast.success(<div><div className="font-semibold">{mode === 'create' ? 'Employee Created!' : 'Employee Updated!'}</div><div className="text-xs mt-1">{employeeCode} - {form.firstName} {form.lastName}</div></div>, { duration: 3000 });
@@ -491,10 +509,12 @@ export default function EmployeesModule() {
         setForm(emptyForm);
         await fetchData();
       } else {
-        toast.error(<div><div className="font-semibold mb-1">Failed to {mode} employee</div><div className="text-xs">{json.error || 'Unknown error'}</div></div>, { duration: 5000 });
+        console.error('[Employee Form] API error:', json);
+        toast.error(<div><div className="font-semibold mb-1">Failed to {mode} employee</div><div className="text-xs">{json.error || 'Unknown error'}</div></div>, { duration: 8000 });
       }
     } catch (error) {
-      toast.error('An unexpected error occurred');
+      console.error('[Employee Form] Caught error:', error);
+      toast.error(`Error: ${error instanceof Error ? error.message : 'An unexpected error occurred'}`);
     } finally {
       setSubmitting(false);
     }
@@ -639,11 +659,8 @@ export default function EmployeesModule() {
             </select>
             <FieldError message={fieldErrors.branchId} />
           </F>
-          <F label="Grade">
-            <select className={sel} value={form.gradeId} onChange={e => setForm(f => ({ ...f, gradeId: e.target.value }))}>
-              <option value="">Select grade...</option>
-              {grades.map(g => <option key={g.id} value={g.id}>{g.name} ({g.code})</option>)}
-            </select>
+          <F label="Grade / Level">
+            <input className={inp} value={form.gradeId} onChange={e => setForm(f => ({ ...f, gradeId: e.target.value }))} placeholder="e.g. A1, Senior, Grade-3 (optional)" />
           </F>
           <F label="Reporting Manager" span2>
             <select className={sel} value={form.reportingManagerId} onChange={e => setForm(f => ({ ...f, reportingManagerId: e.target.value }))}>
