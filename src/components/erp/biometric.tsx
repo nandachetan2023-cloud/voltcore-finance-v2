@@ -222,7 +222,7 @@ export default function BiometricPage() {
   const activeSiteName = selectedSite === 'all' ? 'All Sites' : (sites.find(s => s.id === selectedSite)?.name || selectedSite);
 
   return (
-    <div className="p-4 max-w-5xl space-y-5">
+    <div className="p-4 space-y-5">
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">

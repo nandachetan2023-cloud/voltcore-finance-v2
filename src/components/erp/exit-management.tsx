@@ -111,7 +111,7 @@ export default function ExitManagement() {
   // Block non-level-1, non-admin users
   if (!currentUser.isAdmin && !currentUser.isLevel1) {
     return (
-      <div className="p-4 max-w-4xl">
+      <div className="p-4">
         <div className="flex flex-col items-center justify-center h-[400px] bg-[#161c24] border border-[#252e3a] rounded-xl">
           <div className="w-16 h-16 bg-[#ff3d3d]/10 rounded-full flex items-center justify-center mb-4">
             <UserX size={32} className="text-[#ff3d3d]" />
@@ -127,7 +127,7 @@ export default function ExitManagement() {
   }
 
   return (
-    <div className="p-4 max-w-4xl space-y-4">
+    <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-[#a78bfa]/10 rounded-xl flex items-center justify-center">

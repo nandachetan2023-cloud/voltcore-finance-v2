@@ -104,7 +104,7 @@ export default function NoticeBoardModule() {
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-7 h-7 border-2 border-[#f5a623]/30 border-t-[#f5a623] rounded-full animate-spin" /></div>;
 
   return (
-    <div className="p-4 max-w-4xl space-y-4">
+    <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-[#f5a623]/10 rounded-xl flex items-center justify-center">

@@ -63,7 +63,7 @@ export function ReportShell({
   loading: boolean;
 }) {
   return (
-    <div className="p-4 max-w-5xl space-y-4">
+    <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${color}15` }}>

@@ -20,7 +20,7 @@ export default function Reports() {
   const { setActiveModule } = useERPStore()
 
   return (
-    <div className="p-4 max-w-5xl space-y-4">
+    <div className="p-4 space-y-4">
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 bg-[#f5a623]/10 rounded-xl flex items-center justify-center">
           <BarChart3 size={18} className="text-[#f5a623]" />

@@ -140,7 +140,7 @@ export default function TourRequests() {
   const days = calculateDays(form.fromDate, form.toDate);
 
   return (
-    <div className="p-4 max-w-5xl space-y-4">
+    <div className="p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

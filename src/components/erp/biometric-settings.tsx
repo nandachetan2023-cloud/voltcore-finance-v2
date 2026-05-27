@@ -136,7 +136,7 @@ export default function BiometricSettings() {
   const labelCls = 'block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1';
 
   return (
-    <div className="p-4 max-w-3xl">
+    <div className="p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">

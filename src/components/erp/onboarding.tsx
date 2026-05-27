@@ -154,7 +154,7 @@ export default function OnboardingModule() {
   // Block anyone who is not admin or level-1
   if (currentUser && !currentUser.isAdmin && !currentUser.isLevel1) {
     return (
-      <div className="p-4 max-w-4xl">
+      <div className="p-4">
         <div className="flex flex-col items-center justify-center h-[400px] bg-[#161c24] border border-[#252e3a] rounded-xl">
           <div className="w-16 h-16 bg-[#00e676]/10 rounded-full flex items-center justify-center mb-4">
             <Lock size={32} className="text-[#00e676]" />
@@ -170,7 +170,7 @@ export default function OnboardingModule() {
   }
 
   return (
-    <div className="p-4 max-w-4xl space-y-4">
+    <div className="p-4 space-y-4">
       {/* Hidden file input */}
       <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" onChange={handleFileChange} />
 

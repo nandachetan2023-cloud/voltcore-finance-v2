@@ -120,7 +120,7 @@ export default function AdminRequests() {
   const pendingCount = requests.filter(r => r.status === 'pending').length;
 
   return (
-    <div className="space-y-4 p-4 max-w-5xl">
+    <div className="space-y-4 p-4">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
