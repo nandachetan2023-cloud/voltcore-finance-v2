@@ -112,16 +112,11 @@ export async function POST(request: NextRequest) {
     // Process each employee
     for (const employee of employees) {
       try {
-        // ── Shift guard: skip + deactivate employees without an active shift ──
+        // ── Shift guard: skip employees without an active shift ──
         const payrollDate = new Date(year, month - 1, 1)
         const shiftAssignment = await getActiveShiftAssignment(employee.id, payrollDate, db)
         if (!shiftAssignment) {
-          // Deactivate the employee — no shift means not eligible for payroll
-          await db.employee.update({
-            where: { id: employee.id },
-            data: { isActive: false, employmentStatus: 'inactive', updatedAt: new Date() },
-          }).catch(() => {})
-          errors.push({ employeeId: employee.id, error: 'Skipped: no active shift assignment — employee marked inactive' })
+          errors.push({ employeeId: employee.id, error: 'Skipped: no active shift assignment. Assign a shift to include in payroll.' })
           continue
         }
 

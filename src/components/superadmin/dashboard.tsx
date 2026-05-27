@@ -15,6 +15,7 @@ import ModuleSelect from './module-select';
 interface Tenant {
   id: string; name: string; slug: string; dbUrl: string;
   status: string; notes: string; createdAt: string;
+  logoUrl?: string;
   _count?: { users: number; biometric: number };
 }
 
@@ -191,7 +192,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
 
 /* ── Tenants Tab ─────────────────────────────────────────────── */
 function TenantsTab({ tenants, onRefresh, onOpenHierarchy }: { tenants: Tenant[]; onRefresh: () => void; onOpenHierarchy: (t: Tenant) => void }) {
-  const empty = { name: '', slug: '', dbUrl: '', notes: '', status: 'active' };
+  const empty = { name: '', slug: '', dbUrl: '', notes: '', status: 'active', logoUrl: '' };
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -265,6 +266,45 @@ function TenantsTab({ tenants, onRefresh, onOpenHierarchy }: { tenants: Tenant[]
             <div className="col-span-2">
               <Field label="Notes"><input className={inp} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></Field>
             </div>
+            <div className="col-span-2">
+              <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">Company Logo (PNG)</label>
+              <div className="flex items-center gap-3">
+                {form.logoUrl ? (
+                  <div className="relative">
+                    <img src={form.logoUrl} alt="Logo preview" className="w-16 h-16 object-contain rounded-lg border border-[#252e3a] bg-[#0a0d12] p-1" />
+                    <button type="button" onClick={() => setForm(f => ({ ...f, logoUrl: '' }))}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-[#ff3d3d] text-white rounded-full flex items-center justify-center text-[10px] hover:bg-[#cc0000]">
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 rounded-lg border border-dashed border-[#252e3a] bg-[#0a0d12] flex items-center justify-center text-[10px] text-[#5a6878]">
+                    No logo
+                  </div>
+                )}
+                <div className="flex-1">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 500 * 1024) {
+                        toast.error('Logo file too large. Max 500KB.');
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        setForm(f => ({ ...f, logoUrl: String(ev.target?.result || '') }));
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                    className="block text-[11px] text-[#8899aa] file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[11px] file:font-semibold file:bg-[#f5a623]/10 file:text-[#f5a623] hover:file:bg-[#f5a623]/20 file:cursor-pointer cursor-pointer"
+                  />
+                  <p className="text-[10px] text-[#5a6878] mt-1">PNG/JPG/SVG, max 500KB. Will be shown to all tenant users.</p>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="flex gap-2 pt-1">
             <button onClick={save} disabled={saving} className="px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50 transition-colors">
@@ -308,7 +348,7 @@ function TenantsTab({ tenants, onRefresh, onOpenHierarchy }: { tenants: Tenant[]
                   className="px-2.5 py-1.5 text-[10px] font-semibold text-[#f5a623] border border-[#f5a623]/30 rounded-lg hover:bg-[#f5a623]/10 transition-colors flex items-center gap-1">
                   <GitBranch size={11} /> Hierarchy
                 </button>
-                <button onClick={() => { setForm({ name: t.name, slug: t.slug, dbUrl: t.dbUrl, notes: t.notes, status: t.status }); setEditId(t.id); setShowForm(true); }}
+                <button onClick={() => { setForm({ name: t.name, slug: t.slug, dbUrl: t.dbUrl, notes: t.notes, status: t.status, logoUrl: (t as any).logoUrl || '' }); setEditId(t.id); setShowForm(true); }}
                   className="p-1.5 text-[#5a6878] hover:text-[#f5a623] transition-colors"><Pencil size={13} /></button>
                 <button onClick={() => del(t.id, t.name)} className="p-1.5 text-[#5a6878] hover:text-[#ff3d3d] transition-colors"><Trash2 size={13} /></button>
               </div>

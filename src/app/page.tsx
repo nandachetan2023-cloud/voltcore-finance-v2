@@ -7,6 +7,7 @@ import Login from '@/components/auth/login';
 import OnboardingForm from '@/components/auth/onboarding-form';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
+import { clearTenantBrandingCache } from '@/hooks/use-tenant-branding';
 
 export default function ERPPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -61,6 +62,7 @@ export default function ERPPage() {
         if (data.user.employeeId) {
           localStorage.setItem('erp_employee_id', String(data.user.employeeId));
         }
+        clearTenantBrandingCache();
         setUserRole(data.user.role);
         setAllowedModules(data.user.allowedModules || 'all');
         setOnboardingStatus(data.user.onboardingStatus || 'none');
@@ -79,6 +81,7 @@ export default function ERPPage() {
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     localStorage.removeItem('erp_auth_user');
+    clearTenantBrandingCache();
     setUserRole('admin');
     setAllowedModules('all');
     setOnboardingStatus('none');

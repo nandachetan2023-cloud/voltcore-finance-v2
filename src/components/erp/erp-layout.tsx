@@ -1,9 +1,10 @@
 'use client';
 
 import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed } from '@/store/erp-store';
-import { useState, useEffect, Component, type ReactNode } from 'react';
+import React, { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { useTenantBranding } from '@/hooks/use-tenant-branding';
 import {
   Building2, Users, ShoppingCart, CreditCard, FolderKanban, Package, Wrench,
   TrendingUp, Briefcase, Settings, MessageSquare, BookOpen, Zap,
@@ -78,7 +79,7 @@ class ModuleErrorBoundary extends Component<EBProps, EBState> {
 }
 
 // ── Module Renderer ─────────────────────────────────────────────
-function ModuleRenderer({ moduleKey }: { moduleKey: string }) {
+const ModuleRendererWrapper = React.memo(function ModuleRendererWrapper({ moduleKey }: { moduleKey: string }) {
   const { setActiveModule } = useERPStore();
 
   return (
@@ -86,7 +87,7 @@ function ModuleRenderer({ moduleKey }: { moduleKey: string }) {
       <LazyModuleRenderer moduleKey={moduleKey} />
     </ModuleErrorBoundary>
   );
-}
+});
 
 // ── Module Grid (Dashboard) ─────────────────────────────────────
 function ModuleGrid() {
@@ -162,6 +163,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
   const { activeModule, activeParentModule, setActiveModule, sidebarOpen, setSidebarOpen, userRole, allowedModules } = useERPStore();
   const isSubNav = EXPANDABLE_MODULES.includes(activeParentModule) && activeParentModule !== 'dashboard';
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const branding = useTenantBranding();
   const [unreadNotices, setUnreadNotices] = useState(0);
   const [userData, setUserData] = useState<{
     name: string;
@@ -228,9 +230,17 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
       <aside className={`fixed top-0 left-0 h-full z-50 w-[220px] min-w-[220px] bg-[#161c24] border-r border-[#252e3a] flex flex-col overflow-y-auto transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="px-4 py-4 border-b border-[#252e3a] flex items-center gap-3">
           <button onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#f5a623] to-[#e8891a] rounded-lg flex items-center justify-center text-sm font-extrabold text-black" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>VC</div>
+            {branding?.logoUrl ? (
+              <img src={branding.logoUrl} alt={branding.name} className="w-9 h-9 object-contain rounded-lg bg-white/5 p-1" />
+            ) : (
+              <div className="w-8 h-8 bg-gradient-to-br from-[#f5a623] to-[#e8891a] rounded-lg flex items-center justify-center text-sm font-extrabold text-black" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                {branding?.name ? branding.name.substring(0, 2).toUpperCase() : 'VC'}
+              </div>
+            )}
             <div>
-              <div className="text-[15px] font-bold text-[#f5a623] tracking-wider" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>VOLTCORE</div>
+              <div className="text-[15px] font-bold text-[#f5a623] tracking-wider truncate max-w-[140px]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                {branding?.name?.toUpperCase() || 'VOLTCORE'}
+              </div>
               <div className="text-[9px] text-[#5a6878] tracking-[2px] uppercase">ERP · HRMS</div>
             </div>
           </button>
@@ -524,6 +534,7 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
 export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
   const { activeModule } = useERPStore();
   const [mounted, setMounted] = useState(false);
+  const branding = useTenantBranding();
 
   useEffect(() => {
     // Global handler for chunk loading errors — auto-reload
@@ -569,9 +580,29 @@ export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
       <Sidebar onLogout={onLogout} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Topbar onLogout={onLogout} />
-        <main className="flex-1 overflow-y-auto">
-          <div className="animate-in fade-in duration-200">
-            {isDashboard ? <ModuleGrid /> : isSubGrid ? <SubModuleGrid moduleId={activeModule} /> : <ModuleRenderer moduleKey={activeModule} />}
+        <main className="flex-1 overflow-y-auto relative">
+          {/* Tenant logo watermark */}
+          {branding?.logoUrl && (
+            <div
+              aria-hidden
+              className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center"
+              style={{ left: '220px' }}
+            >
+              <div
+                style={{
+                  backgroundImage: `url(${branding.logoUrl})`,
+                  backgroundSize: 'contain',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'center',
+                  width: '600px',
+                  height: '600px',
+                  opacity: 0.15,
+                }}
+              />
+            </div>
+          )}
+          <div className="animate-in fade-in duration-200 relative z-10">
+            {isDashboard ? <ModuleGrid /> : isSubGrid ? <SubModuleGrid moduleId={activeModule} /> : <ModuleRendererWrapper moduleKey={activeModule} />}
           </div>
         </main>
       </div>

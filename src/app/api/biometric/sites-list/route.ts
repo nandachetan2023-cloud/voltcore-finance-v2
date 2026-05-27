@@ -12,22 +12,39 @@ export async function GET(request: NextRequest) {
     const role = request.cookies.get('erp_user_role')?.value
 
     // Superadmin: return all active sites across all tenants
-    if (role === 'superadmin' && !tenantId) {
-      const sites = await superadminDb.biometricSiteConfig.findMany({
-        where: { isActive: true },
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          siteId: true,
-          siteName: true,
-          tenantId: true,
-        },
-      })
+    if ((role === 'superadmin' || role === 'admin') && !tenantId) {
+      // For admin without tenantId, try to resolve from tenant DB URL
+      const tenantDbUrl = request.cookies.get('erp_tenant_db')?.value
+      if (tenantDbUrl) {
+        // Find the tenant by DB URL
+        try {
+          const tenant = await superadminDb.tenant.findFirst({
+            where: { dbUrl: decodeURIComponent(tenantDbUrl) },
+            select: { id: true },
+          })
+          if (tenant) {
+            const sites = await superadminDb.biometricSiteConfig.findMany({
+              where: { tenantId: tenant.id, isActive: true },
+              orderBy: { createdAt: 'asc' },
+              select: { id: true, siteId: true, siteName: true },
+            })
+            return NextResponse.json({ success: true, data: sites })
+          }
+        } catch {}
+      }
 
-      return NextResponse.json({
-        success: true,
-        data: sites,
-      })
+      // Superadmin fallback: return all sites
+      if (role === 'superadmin') {
+        const sites = await superadminDb.biometricSiteConfig.findMany({
+          where: { isActive: true },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, siteId: true, siteName: true, tenantId: true },
+        })
+        return NextResponse.json({ success: true, data: sites })
+      }
+
+      // Admin with no tenant context — return empty
+      return NextResponse.json({ success: true, data: [] })
     }
 
     if (!tenantId) {

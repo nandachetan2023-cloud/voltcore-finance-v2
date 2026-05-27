@@ -536,12 +536,21 @@ export default function PayrollNonCompliance() {
                       <button 
                         className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-medium bg-[#a78bfa]/10 text-[#a78bfa] hover:bg-[#a78bfa]/20 border border-[#a78bfa]/30 transition-colors"
                         onClick={async () => {
-                          const res = await fetch('/api/payroll/dispatch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payrollRunId: run.id }) }).then(r => r.json());
-                          if (res.success) {
-                            if (res.data.alreadyDispatched > 0 && res.data.dispatched === 0) toast.info(`All ${res.data.total} payslips already dispatched`);
-                            else toast.success(`Dispatched ${res.data.dispatched} payslip${res.data.dispatched !== 1 ? 's' : ''} to employees${res.data.alreadyDispatched > 0 ? ` (${res.data.alreadyDispatched} already sent)` : ''}`);
-                            fetchData();
-                          } else toast.error(res.error);
+                          if (!confirm(`Dispatch payslips for "${run.name}" to all employees? They will be able to view their payslips in the employee portal.`)) return;
+                          try {
+                            const res = await fetch('/api/payroll/dispatch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payrollRunId: run.id }) });
+                            const data = await res.json();
+                            if (data.success) {
+                              if (data.data.alreadyDispatched > 0 && data.data.dispatched === 0) toast.info(`All ${data.data.total} payslips already dispatched`);
+                              else toast.success(`✅ Dispatched ${data.data.dispatched} payslip${data.data.dispatched !== 1 ? 's' : ''} to employees${data.data.alreadyDispatched > 0 ? ` (${data.data.alreadyDispatched} already sent)` : ''}`);
+                              fetchData();
+                            } else {
+                              toast.error(data.error || 'Dispatch failed');
+                            }
+                          } catch (err) {
+                            toast.error('Network error — failed to dispatch payslips');
+                            console.error('Dispatch error:', err);
+                          }
                         }}
                         title="Dispatch payslips to employee dashboards"
                       >

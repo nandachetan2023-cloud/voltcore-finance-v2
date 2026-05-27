@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, Pin, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Building2, Award, Users } from 'lucide-react';
+import { Bell, Pin, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Building2, Award, Users, Briefcase, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string }> = {
@@ -16,6 +16,7 @@ type Filter = 'all' | 'unread' | 'pinned';
 
 export default function MyNotices() {
   const [notices, setNotices] = useState<any[]>([]);
+  const [jobOpenings, setJobOpenings] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
@@ -25,9 +26,13 @@ export default function MyNotices() {
   const fetchNotices = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/notices/my').then(r => r.json());
-      if (res.success) { setNotices(res.data); setUnreadCount(res.unreadCount); }
-      else if (res.error?.includes('Not linked')) setHasEmployee(false);
+      const [noticeRes, jobRes] = await Promise.all([
+        fetch('/api/notices/my').then(r => r.json()),
+        fetch('/api/recruitment/openings').then(r => r.json()).catch(() => ({ success: false, data: [] })),
+      ]);
+      if (noticeRes.success) { setNotices(noticeRes.data); setUnreadCount(noticeRes.unreadCount); }
+      else if (noticeRes.error?.includes('Not linked')) setHasEmployee(false);
+      if (jobRes.success) setJobOpenings(jobRes.data || []);
     } catch { toast.error('Failed to load notices'); }
     finally { setLoading(false); }
   }, []);
@@ -144,6 +149,43 @@ export default function MyNotices() {
           </div>
         )}
       </div>
+
+      {/* Job Openings Section */}
+      {jobOpenings.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Briefcase size={14} className="text-[#00d4ff]" />
+            <h3 className="text-[13px] font-bold text-[#e2e8f0]">Open Positions</h3>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00d4ff]/10 text-[#00d4ff] font-semibold">{jobOpenings.length}</span>
+          </div>
+          <div className="space-y-2">
+            {jobOpenings.map(job => (
+              <div key={job.id} className="bg-[#161c24] border border-[#00d4ff]/20 rounded-xl p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[13px] font-semibold text-[#e2e8f0]">{job.position}</span>
+                      <span className={`text-[9px] font-bold px-2 py-[2px] rounded-full ${
+                        job.priority === 'High' ? 'bg-[#ff3d3d]/10 text-[#ff3d3d]' :
+                        job.priority === 'Medium' ? 'bg-[#ffab40]/10 text-[#ffab40]' :
+                        'bg-[#00e676]/10 text-[#00e676]'
+                      }`}>{job.priority}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-[#5a6878]">
+                      <span className="flex items-center gap-1"><MapPin size={10} /> {job.site}</span>
+                      <span>{job.openings} opening{job.openings !== 1 ? 's' : ''}</span>
+                      <span>{job.applications} application{job.applications !== 1 ? 's' : ''}</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-[#5a6878] shrink-0">
+                    {new Date(job.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

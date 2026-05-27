@@ -210,6 +210,21 @@ function FormField({ label, children, span = false, required = false }: { label:
 const inputCls = "w-full bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-2 text-[12px] text-[#e2e8f0] outline-none transition-colors focus:border-[#f5a623]";
 const selectCls = "w-full bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-2 text-[12px] text-[#e2e8f0] outline-none transition-colors focus:border-[#f5a623] appearance-none cursor-pointer";
 
+// Form input style classes (used in employee dialog)
+const inp = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]/60 transition-colors placeholder:text-[#5a6878]';
+const sel = inp + ' appearance-none cursor-pointer';
+const lbl = 'block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5';
+
+// Form field wrapper — MUST be defined OUTSIDE the main component to avoid remounting inputs on every render
+function F({ label, children, req, span2 }: { label: string; children: React.ReactNode; req?: boolean; span2?: boolean }) {
+  return (
+    <div className={span2 ? 'col-span-2' : ''}>
+      <label className={lbl}>{label}{req && <span className="text-[#ff3d3d] ml-0.5">*</span>}</label>
+      {children}
+    </div>
+  );
+}
+
 export default function EmployeesModule() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -519,16 +534,6 @@ export default function EmployeesModule() {
       </div>
     );
   }
-
-  const inp = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]/60 transition-colors placeholder:text-[#5a6878]';
-  const sel = inp + ' appearance-none cursor-pointer';
-  const lbl = 'block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5';
-  const F = ({ label, children, req, span2 }: { label: string; children: React.ReactNode; req?: boolean; span2?: boolean }) => (
-    <div className={span2 ? 'col-span-2' : ''}>
-      <label className={lbl}>{label}{req && <span className="text-[#ff3d3d] ml-0.5">*</span>}</label>
-      {children}
-    </div>
-  );
 
   const FORM_TABS = [
     { id: 'identity', label: 'Identity' },

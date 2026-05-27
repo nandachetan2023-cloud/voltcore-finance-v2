@@ -21,12 +21,12 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, slug, dbUrl, notes } = body
+    const { name, slug, dbUrl, notes, logoUrl } = body
     if (!name || !slug || !dbUrl) {
       return NextResponse.json({ success: false, error: 'name, slug and dbUrl are required' }, { status: 400 })
     }
     const tenant = await superadminDb.tenant.create({
-      data: { name, slug: slug.toLowerCase().replace(/\s+/g, '-'), dbUrl, notes: notes || '', status: 'active' },
+      data: { name, slug: slug.toLowerCase().replace(/\s+/g, '-'), dbUrl, notes: notes || '', status: 'active', logoUrl: logoUrl || null } as any,
     })
     return NextResponse.json({ success: true, data: tenant }, { status: 201 })
   } catch (e: any) {

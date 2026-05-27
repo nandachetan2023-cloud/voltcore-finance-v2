@@ -95,6 +95,34 @@ export async function GET(request: NextRequest) {
     // Calculate working days for the month
     const workingDays = endDate.getDate(); // Total days in month (simplified)
 
+    // Fetch approved advances for the month
+    const advanceData = await db.employeeRequest.findMany({
+      where: {
+        employeeId: { in: employees.map(e => e.id) },
+        requestType: 'advance_payment',
+        status: 'approved',
+        approvedDate: {
+          gte: startDate,
+          lte: endDate,
+        },
+        isDeleted: false,
+      },
+      select: {
+        employeeId: true,
+        amount: true,
+        approvedAmount: true,
+      },
+    });
+
+    // Sum per employee: use approvedAmount if set, else amount
+    const advanceMap = new Map<number, number>();
+    advanceData.forEach(a => {
+      const effectiveAmount = a.approvedAmount !== null
+        ? parseFloat(a.approvedAmount.toString())
+        : (a.amount ? parseFloat(a.amount.toString()) : 0);
+      advanceMap.set(a.employeeId, (advanceMap.get(a.employeeId) || 0) + effectiveAmount);
+    });
+
     // Generate Excel based on format
     const workbook = XLSX.utils.book_new();
     const sheetData: any[] = [];
@@ -328,7 +356,7 @@ export async function GET(request: NextRequest) {
         const tdsDeduction = 0;
         const totalDeduction = pfDeduction + esiDeduction + ptDeduction + tdsDeduction;
         const netPay = grossEarnings - totalDeduction;
-        const advance = 0;
+        const advance = advanceMap.get(employee.id) || 0;
 
         const basicPerDay = basicSalary / workingDays;
         const earnWages = (presentDays / workingDays) * basicSalary;

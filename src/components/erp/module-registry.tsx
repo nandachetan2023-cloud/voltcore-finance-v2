@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useState, useEffect } from 'react';
+import React, { Suspense, useState, useEffect, useRef, useMemo } from 'react';
 
 // Map of module key to import path — compiled ONLY when the module is rendered
 const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType }>> = {
@@ -74,6 +74,18 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   'report-dispatch':   () => import('@/components/erp/report-dispatch'),
 };
 
+// Cache React.lazy components to prevent re-creation on re-renders
+const lazyCache = new Map<string, React.LazyExoticComponent<React.ComponentType>>();
+
+function getLazyComponent(moduleKey: string): React.LazyExoticComponent<React.ComponentType> | null {
+  if (lazyCache.has(moduleKey)) return lazyCache.get(moduleKey)!;
+  const loader = MODULE_PATHS[moduleKey];
+  if (!loader) return null;
+  const LazyComp = React.lazy(loader);
+  lazyCache.set(moduleKey, LazyComp);
+  return LazyComp;
+}
+
 function LoadingFallback() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -85,26 +97,10 @@ function LoadingFallback() {
   );
 }
 
-// Use dynamic() from next to avoid Turbopack pre-compilation
-function DynamicModule({ loader }: { loader: () => Promise<{ default: React.ComponentType }> }) {
-  const [Mod, setMod] = useState<React.ComponentType | null>(null);
+export const ModuleRenderer = React.memo(function ModuleRenderer({ moduleKey }: { moduleKey: string }) {
+  const LazyComp = getLazyComponent(moduleKey);
 
-  useEffect(() => {
-    loader().then((m) => {
-      setMod(() => m.default);
-    }).catch((err) => {
-      console.error('Failed to load module:', err);
-    });
-  }, [loader]);
-
-  if (!Mod) return <LoadingFallback />;
-  return <Mod />;
-}
-
-export function ModuleRenderer({ moduleKey }: { moduleKey: string }) {
-  const loader = MODULE_PATHS[moduleKey];
-
-  if (!loader) {
+  if (!LazyComp) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -114,5 +110,9 @@ export function ModuleRenderer({ moduleKey }: { moduleKey: string }) {
     );
   }
 
-  return <DynamicModule loader={loader} />;
-}
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <LazyComp />
+    </Suspense>
+  );
+});
