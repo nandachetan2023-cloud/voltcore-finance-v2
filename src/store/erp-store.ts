@@ -12,7 +12,7 @@ export const MODULE_TREE: Record<string, string[]> = {
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
   // A dedicated "self-service" group for employees
   'self-service': ['my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
-  system: ['system', 'reports', 'settings', 'user-management', 'requests', 'notice-board'],
+  system: ['system', 'reports', 'settings', 'user-management', 'onboarding-approvals', 'requests', 'notice-board'],
   reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
 }
 
@@ -76,6 +76,7 @@ export type ModuleId =
   | 'trash'
   // User Management (tenant admin)
   | 'user-management'
+  | 'onboarding-approvals'
   // Employee self-service
   | 'my-attendance'
   | 'my-leave'
@@ -187,6 +188,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'reports', icon: 'BarChart3', label: 'Reports', section: 'System' },
     { id: 'settings', icon: 'Settings', label: 'Settings', section: 'System' },
     { id: 'user-management', icon: 'UserCog', label: 'User Management', section: 'System' },
+    { id: 'onboarding-approvals', icon: 'UserCheck', label: 'Onboarding Approvals', section: 'System' },
     { id: 'requests', icon: 'ClipboardList', label: 'Employee Requests', section: 'System' },
     { id: 'notice-board', icon: 'Megaphone', label: 'Notice Board', section: 'System' },
   ],
@@ -284,6 +286,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   settings: { title: 'Settings', breadcrumb: 'VoltCore ERP › System Settings' },
   trash: { title: 'Recycle Bin', breadcrumb: 'Admin › Deleted Items' },
   'user-management': { title: 'User Management', breadcrumb: 'System › User Management' },
+  'onboarding-approvals': { title: 'Onboarding Approvals', breadcrumb: 'System › Onboarding Approvals' },
   'requests': { title: 'Employee Requests', breadcrumb: 'System › Employee Requests' },
   'self-service': { title: 'My Portal', breadcrumb: 'VoltCore ERP › My Portal' },
   'my-attendance': { title: 'My Attendance', breadcrumb: 'My Portal › Attendance' },

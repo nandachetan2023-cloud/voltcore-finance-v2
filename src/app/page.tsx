@@ -112,8 +112,8 @@ export default function ERPPage() {
     return <Login onLogin={handleLogin} />;
   }
 
-  // Gate: show onboarding form if status is pending or submitted (awaiting approval)
-  if (onboardingStatus === 'pending' || onboardingStatus === 'submitted') {
+  // Gate: show onboarding form if status is pending, submitted, or rejected (admin asked to resubmit)
+  if (onboardingStatus === 'pending' || onboardingStatus === 'submitted' || onboardingStatus === 'rejected') {
     return <OnboardingForm status={onboardingStatus} onSubmit={handleOnboardingSubmit} onLogout={handleLogout} />;
   }
 

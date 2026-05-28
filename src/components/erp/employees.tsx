@@ -100,6 +100,10 @@ interface EmployeeFormData {
   emergencyContactName: string;
   emergencyContactRelation: string;
   emergencyContactPhone: string;
+  // Onboarding (only used when creating with onboarding mode)
+  onboardMode: boolean;
+  password: string;
+  orgRoleId: string;
 }
 
 const emptyForm: EmployeeFormData = {
@@ -117,6 +121,7 @@ const emptyForm: EmployeeFormData = {
   panNumber: '', aadharNumber: '', uanNumber: '', esicNumber: '',
   bankName: '', bankAccount: '', bankIfsc: '',
   emergencyContactName: '', emergencyContactRelation: '', emergencyContactPhone: '',
+  onboardMode: false, password: '', orgRoleId: '',
 };
 
 const AVATAR_COLORS: Record<string, { bg: string; text: string }> = {
@@ -251,6 +256,7 @@ export default function EmployeesModule() {
   const [designations, setDesignations] = useState<Array<{ id: number; name: string }>>([]);
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
   const [branches, setBranches] = useState<Array<{ id: number; name: string }>>([]);
+  const [orgRoles, setOrgRoles] = useState<Array<{ id: string; name: string; level: number; moduleAccess: string }>>([]);
 
   useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
 
@@ -291,6 +297,8 @@ export default function EmployeesModule() {
     fetchDepartments();
     // Fetch branches
     fetch('/api/branches').then(r => r.json()).then(d => { if (d.success) setBranches(d.data); });
+    // Fetch org roles for onboarding mode
+    fetch('/api/tenant/roles').then(r => r.json()).then(d => { if (d.success) setOrgRoles(d.data); });
   }, [fetchData, fetchDesignations, fetchDepartments]);
 
   const sites = useMemo(() => Array.from(new Set(employees.map(e => e.Branch?.name).filter(Boolean))).sort(), [employees]);
@@ -398,6 +406,102 @@ export default function EmployeesModule() {
     setSubmitting(true);
     try {
       console.log('[Employee Form] Submitting...', { mode, form });
+
+      // Onboarding mode (create only): minimal admin fields + password + role
+      if (mode === 'create' && form.onboardMode) {
+        const errors = validateFields([
+          { field: 'empId', value: form.empId, label: 'Employee ID' },
+          { field: 'firstName', value: form.firstName, label: 'First Name' },
+          { field: 'lastName', value: form.lastName, label: 'Last Name' },
+          { field: 'email', value: form.email, label: 'Email' },
+          { field: 'departmentId', value: form.departmentId, label: 'Department' },
+          { field: 'designationId', value: form.designationId, label: 'Designation' },
+          { field: 'branchId', value: form.branchId, label: 'Branch' },
+          { field: 'dateOfJoining', value: form.dateOfJoining, label: 'Date of Joining' },
+          { field: 'password', value: form.password, label: 'Password' },
+          { field: 'orgRoleId', value: form.orgRoleId, label: 'Role' },
+        ]);
+        setFieldErrors(errors);
+        if (!isValid(errors)) {
+          // password and orgRoleId are in the banner above tabs — show identity tab so banner is visible
+          if (errors.password || errors.orgRoleId) {
+            setFormTab('identity');
+          } else {
+            const tabMap: Record<string, string[]> = {
+              identity: ['empId', 'firstName', 'lastName', 'email'],
+              org: ['departmentId', 'designationId', 'branchId'],
+              employment: ['dateOfJoining'],
+            };
+            for (const [tab, fields] of Object.entries(tabMap)) {
+              if (fields.some(f => errors[f])) { setFormTab(tab as any); break; }
+            }
+          }
+          const errorList = Object.values(errors).filter(Boolean);
+          toast.error(`Please fill: ${errorList.slice(0, 3).join(', ')}${errorList.length > 3 ? ` +${errorList.length - 3} more` : ''}`);
+          setSubmitting(false);
+          return;
+        }
+
+        const employeeCode = form.empId.trim().toUpperCase();
+        if (employeeCode.length < 2 || employeeCode.length > 20) {
+          toast.error('Employee ID must be 2-20 characters');
+          setSubmitting(false); return;
+        }
+        if (form.password.length < 6) {
+          toast.error('Password must be at least 6 characters');
+          setSubmitting(false); return;
+        }
+
+        const onboardBody = {
+          employeeCode,
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          email: form.email.trim(),
+          departmentId: parseInt(form.departmentId),
+          designationId: parseInt(form.designationId),
+          branchId: parseInt(form.branchId),
+          dateOfJoining: new Date(form.dateOfJoining).toISOString(),
+          employmentType: form.employmentType,
+          natureOfDesignation: form.natureOfDesignation.trim() || null,
+          gradeLabel: form.gradeId.trim() || null,
+          monthlyGrossSalary: form.monthlyGrossSalary || null,
+          password: form.password,
+          orgRoleId: form.orgRoleId,
+        };
+
+        console.log('[Employee Form] Sending onboard request:', onboardBody);
+        const res = await fetch('/api/employees/onboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(onboardBody),
+        });
+        const json = await res.json();
+        console.log('[Employee Form] API response:', { status: res.status, json });
+
+        if (json.success) {
+          toast.success(<div><div className="font-semibold">Employee Onboarded!</div><div className="text-xs mt-1">{employeeCode} — they will see the joining form on first login.</div></div>, { duration: 4000 });
+          setCreateOpen(false);
+          setForm(emptyForm);
+          await fetchData();
+        } else {
+          // Show error inline + toast — navigate to the relevant field
+          const errMsg = json.error || 'Unknown error';
+          toast.error(errMsg, { duration: 10000 });
+          // If it's a code conflict, highlight empId field and go to identity tab
+          if (errMsg.toLowerCase().includes('code') || errMsg.toLowerCase().includes('employee id')) {
+            setFieldErrors(fe => ({ ...fe, empId: errMsg }));
+            setFormTab('identity');
+          }
+          // If it's an email conflict, highlight email field and go to identity tab
+          if (errMsg.toLowerCase().includes('email')) {
+            setFieldErrors(fe => ({ ...fe, email: errMsg }));
+            setFormTab('identity');
+          }
+        }
+        return;
+      }
+
+      // Standard create/edit (no onboarding mode)
       const errors = validateFields([
         { field: 'empId', value: form.empId, label: 'Employee ID' },
         { field: 'firstName', value: form.firstName, label: 'First Name' },
@@ -510,7 +614,16 @@ export default function EmployeesModule() {
         await fetchData();
       } else {
         console.error('[Employee Form] API error:', json);
-        toast.error(<div><div className="font-semibold mb-1">Failed to {mode} employee</div><div className="text-xs">{json.error || 'Unknown error'}</div></div>, { duration: 8000 });
+        const errMsg = json.error || 'Unknown error';
+        toast.error(errMsg, { duration: 10000 });
+        if (errMsg.toLowerCase().includes('code') || errMsg.toLowerCase().includes('employee id')) {
+          setFieldErrors(fe => ({ ...fe, empId: errMsg }));
+          setFormTab('identity');
+        }
+        if (errMsg.toLowerCase().includes('email')) {
+          setFieldErrors(fe => ({ ...fe, email: errMsg }));
+          setFormTab('identity');
+        }
       }
     } catch (error) {
       console.error('[Employee Form] Caught error:', error);
@@ -568,6 +681,43 @@ export default function EmployeesModule() {
 
   const dialogContent = () => (
     <div className="space-y-3">
+      {/* Onboarding mode toggle (create only) */}
+      {!selectedId && (
+        <div className="bg-[#f5a623]/5 border border-[#f5a623]/30 rounded-lg p-3">
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={form.onboardMode}
+              onChange={e => setForm(f => ({ ...f, onboardMode: e.target.checked }))}
+              className="w-4 h-4 mt-0.5 rounded border-[#f5a623]/40 bg-[#0d1117] text-[#f5a623] focus:ring-[#f5a623]" />
+            <div className="flex-1">
+              <div className="text-[12px] font-semibold text-[#f5a623]">Onboarding Mode (recommended)</div>
+              <p className="text-[10px] text-[#8899aa] mt-0.5">
+                Only fill admin fields here (Identity, Org, Employment, Salary). The employee will fill personal/family/bank details via the joining form on first login. After admin approves, the data is auto-populated into the employee record.
+              </p>
+            </div>
+          </label>
+          {form.onboardMode && (
+            <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-[#f5a623]/20">
+              <div>
+                <label className={lbl}>Password * (for first login)</label>
+                <input className={inp + ' ' + fieldBorderError(fieldErrors.password)} type="password" value={form.password}
+                  onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setFieldErrors(fe => ({ ...fe, password: '' })); }}
+                  placeholder="Min 6 characters" />
+                <FieldError message={fieldErrors.password} />
+              </div>
+              <div>
+                <label className={lbl}>Role * (sets module access)</label>
+                <select className={sel + ' ' + fieldBorderError(fieldErrors.orgRoleId)} value={form.orgRoleId}
+                  onChange={e => { setForm(f => ({ ...f, orgRoleId: e.target.value })); setFieldErrors(fe => ({ ...fe, orgRoleId: '' })); }}>
+                  <option value="">Select role...</option>
+                  {orgRoles.map(r => <option key={r.id} value={r.id}>{r.name} (Lv.{r.level})</option>)}
+                </select>
+                <FieldError message={fieldErrors.orgRoleId} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Tab bar */}
       <div className="flex gap-1 flex-wrap border-b border-[#252e3a] pb-2">
         {FORM_TABS.map(t => (
@@ -578,7 +728,7 @@ export default function EmployeesModule() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 max-h-[55vh] overflow-y-auto pr-1">
+      <div className="grid grid-cols-2 gap-3 pr-1">
         {/* ── Identity ── */}
         {formTab === 'identity' && <>
           <F label="Employee ID" req><input className={`${inp} ${fieldBorderError(fieldErrors.empId)}`} value={form.empId} onChange={e => { setForm(f => ({ ...f, empId: e.target.value.toUpperCase() })); setFieldErrors(fe => ({ ...fe, empId: '' })); }} placeholder="UA00000001" maxLength={10} /><FieldError message={fieldErrors.empId} /></F>
@@ -856,13 +1006,15 @@ export default function EmployeesModule() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl" aria-describedby="create-employee-description">
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" aria-describedby="create-employee-description">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">Add New Employee</DialogTitle>
             <p id="create-employee-description" className="text-[11px] text-[#5a6878] mt-1">Fill in all employee details across the tabs below.</p>
           </DialogHeader>
-          {dialogContent()}
-          <DialogFooter className="gap-2">
+          <div className="flex-1 overflow-y-auto pr-1 -mr-1">
+            {dialogContent()}
+          </div>
+          <DialogFooter className="gap-2 pt-2 border-t border-[#252e3a]">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('create')}>{submitting ? 'Creating...' : 'Add Employee'}</Button>
           </DialogFooter>
@@ -871,13 +1023,15 @@ export default function EmployeesModule() {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl" aria-describedby="edit-employee-description">
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" aria-describedby="edit-employee-description">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">Edit Employee</DialogTitle>
             <p id="edit-employee-description" className="text-[11px] text-[#5a6878] mt-1">Update the employee information below.</p>
           </DialogHeader>
-          {dialogContent()}
-          <DialogFooter className="gap-2">
+          <div className="flex-1 overflow-y-auto pr-1 -mr-1">
+            {dialogContent()}
+          </div>
+          <DialogFooter className="gap-2 pt-2 border-t border-[#252e3a]">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setEditOpen(false)}>Cancel</Button>
             <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('edit')}>{submitting ? 'Saving...' : 'Save Changes'}</Button>
           </DialogFooter>

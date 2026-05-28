@@ -20,7 +20,8 @@ export async function GET(request: NextRequest) {
         onboardingStatus: true,
         onboardingData: true,
         onboardingSubmittedAt: true,
-      },
+        onboardingRejectionReason: true,
+      } as any,
     })
 
     if (!user) {
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
     }
 
-    if ((user as any).onboardingStatus !== 'pending') {
+    if ((user as any).onboardingStatus !== 'pending' && (user as any).onboardingStatus !== 'rejected') {
       return NextResponse.json({ success: false, error: 'Onboarding form already submitted or not required' }, { status: 400 })
     }
 
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
         onboardingStatus: 'submitted',
         onboardingData: formData,
         onboardingSubmittedAt: new Date(),
+        onboardingRejectionReason: null,
       } as any,
     })
 

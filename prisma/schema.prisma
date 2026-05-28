@@ -115,17 +115,17 @@ model Employee {
   middleName                String?
   lastName                  String
   email                     String                      @unique
-  phone                     String
+  phone                     String?
   alternatePhone            String?
-  dateOfBirth               DateTime
-  gender                    String
+  dateOfBirth               DateTime?
+  gender                    String?
   maritalStatus             String?
   bloodGroup                String?
   personalEmail             String?
-  currentAddress            String
-  currentCity               String
-  currentState              String
-  currentPincode            String
+  currentAddress            String?
+  currentCity               String?
+  currentState              String?
+  currentPincode            String?
   permanentAddress          String?
   permanentCity             String?
   permanentState            String?

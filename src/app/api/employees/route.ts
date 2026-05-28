@@ -419,125 +419,74 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE: Delete employee by id
+// DELETE: Soft delete employee — always preserves data, frees up email/code for reuse
 export async function DELETE(request: NextRequest) {
   const db = getDbForRequest(request)
+  const tenantId = request.cookies.get('erp_tenant_id')?.value
   try {
     const body = await request.json()
-    const { id, permanent } = body
+    const { id } = body
 
     if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'id is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     }
 
     const employeeId = parseInt(id.toString())
     if (isNaN(employeeId)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid id format' },
-        { status: 400 }
-      )
+      return NextResponse.json({ success: false, error: 'Invalid id format' }, { status: 400 })
     }
 
-    const existing = await db.employee.findUnique({ 
-      where: { id: employeeId },
-      include: {
-        AttendanceLog: { take: 1 },
-        PayrollItem: { take: 1 },
-        SalaryStructureAssignment: { take: 1 },
-      }
-    })
-    
+    const existing = await db.employee.findUnique({ where: { id: employeeId } })
     if (!existing) {
-      return NextResponse.json(
-        { success: false, error: 'Employee not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ success: false, error: 'Employee not found' }, { status: 404 })
     }
 
-    // Check if employee has related records
-    const hasRelatedRecords = 
-      existing.AttendanceLog.length > 0 || 
-      existing.PayrollItem.length > 0 || 
-      existing.SalaryStructureAssignment.length > 0
+    const ts = Date.now()
 
-    // If permanent flag is true, force hard delete
-    if (permanent === true) {
+    // 1. Soft delete the employee — free up email and code for reuse
+    await db.employee.update({
+      where: { id: employeeId },
+      data: {
+        isDeleted: true,
+        isActive: false,
+        employmentStatus: 'separated',
+        email: `${existing.email}.deleted.${ts}`,
+        employeeCode: `${existing.employeeCode}.deleted.${ts}`,
+        updatedAt: new Date(),
+      },
+    })
+
+    // 2. Deactivate the linked TenantUser in the superadmin DB (if any)
+    if (tenantId) {
       try {
-        await db.employee.delete({ where: { id: employeeId } })
-        return NextResponse.json({ 
-          success: true, 
-          data: { id: employeeId, softDeleted: false },
-          message: 'Employee permanently deleted'
-        })
-      } catch (deleteError) {
-        // If hard delete fails due to foreign key constraints, do soft delete
-        await db.employee.update({
-          where: { id: employeeId },
+        const { superadminDb } = await import('@/lib/superadmin-db')
+        await superadminDb.tenantUser.updateMany({
+          where: { tenantId, employeeId },
           data: {
-            isDeleted: true,
             isActive: false,
-            employmentStatus: 'separated',
-            // Append timestamp to email and code to allow reuse
-            email: `${existing.email}.deleted.${Date.now()}`,
-            employeeCode: `${existing.employeeCode}.deleted.${Date.now()}`,
-          },
+            email: `${existing.email}.deleted.${ts}`,
+          } as any,
         })
-        return NextResponse.json({ 
-          success: true, 
-          data: { id: employeeId, softDeleted: true },
-          message: 'Employee marked as deleted and email/code freed for reuse'
-        })
+      } catch (e) {
+        console.warn('Could not deactivate tenant user for employee:', e)
       }
     }
 
-    if (hasRelatedRecords) {
-      // Soft delete - mark as deleted and free up email/code
-      await db.employee.update({
-        where: { id: employeeId },
-        data: {
-          isDeleted: true,
-          isActive: false,
-          employmentStatus: 'separated',
-          // Append timestamp to email and code to allow reuse
-          email: `${existing.email}.deleted.${Date.now()}`,
-          employeeCode: `${existing.employeeCode}.deleted.${Date.now()}`,
-        },
-      })
-
-      return NextResponse.json({ 
-        success: true, 
-        data: { id: employeeId, softDeleted: true },
-        message: 'Employee marked as deleted. Email and employee code are now available for reuse.'
-      })
-    } else {
-      // Hard delete if no related records
-      await db.employee.delete({ where: { id: employeeId } })
-
-      return NextResponse.json({ 
-        success: true, 
-        data: { id: employeeId, softDeleted: false },
-        message: 'Employee permanently deleted'
-      })
+    // 3. Deactivate the linked User record in the tenant DB (if any)
+    if (existing.userId) {
+      await db.user.update({
+        where: { id: existing.userId },
+        data: { isActive: false },
+      }).catch(() => {})
     }
+
+    return NextResponse.json({
+      success: true,
+      data: { id: employeeId },
+      message: 'Employee deleted and linked user account deactivated. All records are preserved.',
+    })
   } catch (error) {
     console.error('Error deleting employee:', error)
-    
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Cannot delete employee with related records. Employee has been marked as inactive instead.' 
-        },
-        { status: 409 }
-      )
-    }
-    
-    return NextResponse.json(
-      { success: false, error: 'Failed to delete employee' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: 'Failed to delete employee' }, { status: 500 })
   }
 }

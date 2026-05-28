@@ -46,6 +46,7 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   biometric: () => import('@/components/erp/biometric'),
   trash: () => import('@/components/erp/trash'),
   'user-management': () => import('@/components/erp/user-management'),
+  'onboarding-approvals': () => import('@/components/erp/onboarding-approvals'),
   'my-attendance': () => import('@/components/erp/my-attendance'),
   'my-leave': () => import('@/components/erp/my-leave'),
   'my-tours': () => import('@/components/erp/my-tours'),

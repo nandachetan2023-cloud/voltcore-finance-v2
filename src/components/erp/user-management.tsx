@@ -63,10 +63,19 @@ export default function UserManagement() {
   const [showPw, setShowPw] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const emptyForm = { name: '', email: '', password: '', phone: '', orgRoleId: '', employeeId: '', requireOnboarding: true };
+  const emptyForm = { name: '', email: '', password: '', phone: '', orgRoleId: '', employeeId: '', requireOnboarding: false };
   const [form, setForm] = useState(emptyForm);
   const [empSearch, setEmpSearch] = useState('');
   const [showEmpDropdown, setShowEmpDropdown] = useState(false);
+
+  // Bulk assign state
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkRole, setBulkRole] = useState('');
+  const [bulkPassword, setBulkPassword] = useState('Welcome@123');
+  const [bulkOnboarding, setBulkOnboarding] = useState(true);
+  const [bulkSelected, setBulkSelected] = useState<number[]>([]);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [unlinkedEmployees, setUnlinkedEmployees] = useState<{ id: number; employeeCode: string; name: string; email: string; department: string }[]>([]);
 
   // Employees filtered by search
   const filteredEmployees = employees.filter(e => {
@@ -166,6 +175,43 @@ export default function UserManagement() {
     } else toast.error(data.error);
   };
 
+  // Fetch unlinked employees for bulk assign
+  const fetchUnlinked = async () => {
+    try {
+      const res = await fetch('/api/tenant/employees').then(r => r.json());
+      if (res.success) setUnlinkedEmployees(res.data || []);
+    } catch {}
+  };
+
+  const handleBulkAssign = async () => {
+    if (bulkSelected.length === 0) { toast.error('Select at least one employee'); return; }
+    if (!bulkRole) { toast.error('Select a role'); return; }
+    if (!bulkPassword || bulkPassword.length < 6) { toast.error('Password must be at least 6 characters'); return; }
+    setBulkSaving(true);
+    try {
+      const res = await fetch('/api/tenant/users/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeIds: bulkSelected,
+          orgRoleId: bulkRole,
+          defaultPassword: bulkPassword,
+          requireOnboarding: bulkOnboarding,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${data.message}`);
+        if (data.data.errors?.length > 0) {
+          toast.warning(`Skipped: ${data.data.errors.slice(0, 3).join('; ')}`, { duration: 6000 });
+        }
+        setShowBulk(false);
+        setBulkSelected([]);
+        fetchData();
+      } else toast.error(data.error);
+    } finally { setBulkSaving(false); }
+  };
+
   const openEdit = (u: TenantUser) => {
     setForm({ name: u.name, email: u.email, password: '', phone: u.phone, orgRoleId: u.orgRoleId || '', employeeId: u.employeeId ? String(u.employeeId) : '' });
     const linkedEmp = employees.find(e => e.id === u.employeeId);
@@ -200,6 +246,12 @@ export default function UserManagement() {
         <div className="flex items-center gap-2">
           <button onClick={fetchData} className="p-1.5 text-[#5a6878] hover:text-[#e2e8f0] transition-colors">
             <RefreshCw size={14} />
+          </button>
+          <button onClick={() => { setShowBulk(true); fetchUnlinked(); }}
+            disabled={roles.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-[#00d4ff] border border-[#00d4ff]/30 rounded-lg hover:bg-[#00d4ff]/10 disabled:opacity-40 transition-colors"
+            title="Create accounts for multiple employees at once">
+            <Users size={13} /> Bulk Assign
           </button>
           <button onClick={() => { setShowForm(true); setForm(emptyForm); setEditId(null); setEmpSearch(''); setShowEmpDropdown(false); }}
             disabled={roles.length === 0}
@@ -246,6 +298,89 @@ export default function UserManagement() {
           <span className="text-[11px] text-[#8899aa]">
             No roles defined yet. Contact your system administrator to set up role definitions and approval hierarchies.
           </span>
+        </div>
+      )}
+
+      {/* Bulk Assign Panel */}
+      {showBulk && (
+        <div className="mb-4 bg-[#161c24] border border-[#00d4ff]/30 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users size={14} className="text-[#00d4ff]" />
+              <span className="text-[13px] font-semibold text-[#e2e8f0]">Bulk Assign Accounts</span>
+              <span className="text-[10px] text-[#5a6878]">— select employees below, pick a role, and create accounts in one click</span>
+            </div>
+            <button onClick={() => setShowBulk(false)} className="text-[#5a6878] hover:text-[#e2e8f0]"><X size={15} /></button>
+          </div>
+
+          {/* Settings row */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">Role *</label>
+              <select className="w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#00d4ff]/60"
+                value={bulkRole} onChange={e => setBulkRole(e.target.value)}>
+                <option value="">Select role...</option>
+                {roles.map(r => <option key={r.id} value={r.id}>{r.name} (Lv.{r.level})</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">Default Password *</label>
+              <input className="w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#00d4ff]/60"
+                value={bulkPassword} onChange={e => setBulkPassword(e.target.value)} placeholder="Min 6 chars" />
+            </div>
+            <div className="flex items-end pb-1">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={bulkOnboarding} onChange={e => setBulkOnboarding(e.target.checked)}
+                  className="w-4 h-4 rounded border-[#2e3a48] bg-[#0d1117] text-[#00d4ff] focus:ring-[#00d4ff]" />
+                <span className="text-[11px] text-[#e2e8f0]">Require onboarding form</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Employee selection */}
+          <div className="border border-[#252e3a] rounded-lg overflow-hidden max-h-[250px] overflow-y-auto">
+            <div className="sticky top-0 bg-[#141920] px-3 py-2 border-b border-[#252e3a] flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-[#5a6878] uppercase">Unlinked Employees ({unlinkedEmployees.length})</span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setBulkSelected(unlinkedEmployees.map(e => e.id))}
+                  className="text-[10px] text-[#00d4ff] hover:underline">Select All</button>
+                <button onClick={() => setBulkSelected([])}
+                  className="text-[10px] text-[#5a6878] hover:underline">Clear</button>
+              </div>
+            </div>
+            {unlinkedEmployees.length === 0 ? (
+              <div className="p-4 text-center text-[11px] text-[#5a6878]">No unlinked employees found. All employees already have accounts.</div>
+            ) : (
+              unlinkedEmployees.map(emp => (
+                <label key={emp.id} className="flex items-center gap-3 px-3 py-2 hover:bg-[#1a2028] cursor-pointer border-b border-[#1e252e] last:border-0">
+                  <input type="checkbox" checked={bulkSelected.includes(emp.id)}
+                    onChange={e => {
+                      if (e.target.checked) setBulkSelected(s => [...s, emp.id]);
+                      else setBulkSelected(s => s.filter(id => id !== emp.id));
+                    }}
+                    className="w-3.5 h-3.5 rounded border-[#2e3a48] bg-[#0d1117] text-[#00d4ff] focus:ring-[#00d4ff]" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[11px] font-semibold text-[#e2e8f0]">{emp.name}</span>
+                    <span className="text-[10px] text-[#5a6878] ml-2">{emp.employeeCode} · {emp.email}</span>
+                    {emp.department && <span className="text-[10px] text-[#5a6878] ml-1">· {emp.department}</span>}
+                  </div>
+                </label>
+              ))
+            )}
+          </div>
+
+          {/* Action */}
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-[11px] text-[#00d4ff] font-semibold">{bulkSelected.length} selected</span>
+            <div className="flex gap-2">
+              <button onClick={() => setShowBulk(false)}
+                className="px-3 py-1.5 text-[11px] text-[#8899aa] border border-[#252e3a] rounded-lg hover:border-[#00d4ff] transition-colors">Cancel</button>
+              <button onClick={handleBulkAssign} disabled={bulkSaving || bulkSelected.length === 0}
+                className="px-4 py-1.5 bg-[#00d4ff] text-black text-[11px] font-bold rounded-lg hover:bg-[#00b8d4] disabled:opacity-50 transition-colors">
+                {bulkSaving ? 'Creating...' : `Create ${bulkSelected.length} Account${bulkSelected.length !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
