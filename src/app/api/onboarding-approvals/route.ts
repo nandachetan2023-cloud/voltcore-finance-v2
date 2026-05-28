@@ -91,6 +91,26 @@ export async function POST(request: NextRequest) {
           onboardingRejectionReason: rejectionReason.trim(),
         } as any,
       })
+
+      // Notify the employee
+      if (user.employeeId) {
+        try {
+          await db.notification.create({
+            data: {
+              userId: user.employeeId,
+              userEmail: (user as any).email,
+              title: 'Joining Form Rejected — Please Resubmit',
+              message: `Your joining form was rejected. Admin remarks: "${rejectionReason.trim()}". Please log in and resubmit.`,
+              type: 'warning',
+              entityType: 'onboarding',
+              link: '',
+              isRead: false,
+              createdAt: new Date(),
+            },
+          })
+        } catch (e) { console.warn('Rejection notification failed:', e) }
+      }
+
       return NextResponse.json({ success: true, message: 'Onboarding rejected. User will be asked to re-submit.' })
     }
 
@@ -277,6 +297,25 @@ export async function POST(request: NextRequest) {
             })
           }
         }
+      }
+
+      // Notify the employee that they're approved and can now access the system
+      if (user.employeeId) {
+        try {
+          await db.notification.create({
+            data: {
+              userId: user.employeeId,
+              userEmail: (user as any).email,
+              title: 'Joining Form Approved — Welcome!',
+              message: 'Your joining form has been approved. You now have full access to the system.',
+              type: 'success',
+              entityType: 'onboarding',
+              link: '',
+              isRead: false,
+              createdAt: new Date(),
+            },
+          })
+        } catch (e) { console.warn('Approval notification failed:', e) }
       }
 
       return NextResponse.json({ success: true, message: 'Onboarding approved. Employee record and documents updated.' })

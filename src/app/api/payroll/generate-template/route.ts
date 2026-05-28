@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
         Department: true,
         Designation: true,
         Branch: true,
+        Grade: true,
       },
       orderBy: [
         { Department: { name: 'asc' } },
@@ -204,7 +205,7 @@ export async function GET(request: NextRequest) {
         employee.esicNumber || '', // M: ESIC
         employee.Designation?.name || '', // N: DESIGNATION
         employee.Department?.name || '', // O: DEPARTMENT
-        employee.natureOfDesignation || '', // P: NATURE OF DESIGNATION
+        employee.natureOfDesignation || '', // P: NATURE OF DESIGNATION / GRADE
         employee.monthlyGrossSalary ? parseFloat(employee.monthlyGrossSalary.toString()) : '', // Q: MONTHLY GROSS SALARY
         attendance.present, // R: ACTUAL ATTENDANCE
         attendance.leaveDays, // S: LEAVE DAYS

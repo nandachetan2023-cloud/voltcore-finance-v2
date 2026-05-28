@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
         dateOfJoining: new Date(dateOfJoining),
         employmentType: employmentType || 'permanent',
         employmentStatus: 'active',
-        natureOfDesignation: natureOfDesignation || null,
+        natureOfDesignation: natureOfDesignation || gradeLabel || null,
         monthlyGrossSalary: monthlyGrossSalary ? parseFloat(monthlyGrossSalary) : null,
         // Use placeholders for fields we no longer require — will be filled via form
         phone: '',

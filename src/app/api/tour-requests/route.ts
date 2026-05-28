@@ -132,6 +132,25 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Notify admin of new tour request
+    try {
+      const empName = `${tourRequest.Employee.firstName} ${tourRequest.Employee.lastName}`
+      await db.notification.create({
+        data: {
+          userId: 0,
+          userEmail: '__admin_broadcast__',
+          title: 'New Tour Request — Approval Required',
+          message: `${empName} (${tourRequest.Employee.employeeCode}) applied for a tour to ${destination} from ${new Date(from).toLocaleDateString('en-IN')} to ${new Date(to).toLocaleDateString('en-IN')}.`,
+          type: 'info',
+          entityType: 'tour',
+          entityId: tourRequest.id,
+          link: '',
+          isRead: false,
+          createdAt: new Date(),
+        },
+      })
+    } catch (e) { console.warn('Tour notification failed:', e) }
+
     return NextResponse.json({ success: true, data: tourRequest }, { status: 201 })
   } catch (error) {
     console.error('Error creating tour request:', error)

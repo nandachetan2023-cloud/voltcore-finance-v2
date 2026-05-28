@@ -73,6 +73,26 @@ export async function POST(request: NextRequest) {
       } as any,
     })
 
+    // Notify admin that a joining form has been submitted
+    try {
+      const db = (await import('@/lib/db')).db
+      await db.notification.create({
+        data: {
+          userId: 0,
+          userEmail: '__admin_broadcast__',
+          title: 'Joining Form Submitted — Approval Required',
+          message: `${user.name} (${user.email}) has submitted their joining form and is awaiting your approval.`,
+          type: 'info',
+          entityType: 'onboarding',
+          link: '',
+          isRead: false,
+          createdAt: new Date(),
+        },
+      })
+    } catch (e) {
+      console.warn('Could not create onboarding notification:', e)
+    }
+
     return NextResponse.json({ success: true, message: 'Onboarding form submitted successfully' })
   } catch (error) {
     console.error('Onboarding submit error:', error)

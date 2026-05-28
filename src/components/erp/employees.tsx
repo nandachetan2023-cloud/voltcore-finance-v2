@@ -578,7 +578,7 @@ export default function EmployeesModule() {
         permanentPincode: form.permanentPincode.trim() || null,
         departmentId: parseInt(form.departmentId),
         designationId: parseInt(form.designationId),
-        natureOfDesignation: form.natureOfDesignation.trim() || null,
+        natureOfDesignation: form.gradeId.trim() || form.natureOfDesignation.trim() || null,
         branchId: parseInt(form.branchId),
         gradeId: null, // Grade FK not used — grade is entered as free text in natureOfDesignation
         reportingManagerId: form.reportingManagerId ? parseInt(form.reportingManagerId) : null,
