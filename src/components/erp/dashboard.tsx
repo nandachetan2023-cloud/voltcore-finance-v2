@@ -136,9 +136,9 @@ function getStatusColor(status: string) {
 }
 
 function getProgressColor(pct: number) {
-  if (pct >= 75) return '#00e676';
+  if (pct >= 75) return '#34a373';
   if (pct >= 40) return '#f5a623';
-  return '#ff3d3d';
+  return '#dc5a5a';
 }
 
 function timeAgo(dateStr: string) {
@@ -409,21 +409,21 @@ export default function Dashboard() {
           label="Active Projects"
           value={String(data.projects.active)}
           sub={`of ${data.projects.total} total projects`}
-          color="#00d4ff"
+          color="#5b8fb6"
         />
         <StatCard
           icon={UserCheck}
           label="Attendance Today"
           value={`${attendancePct}%`}
           sub={`${data.attendance.present} of ${data.employees.total} present`}
-          color="#00e676"
+          color="#34a373"
         />
         <StatCard
           icon={ShieldAlert}
           label="Safety Incidents"
           value={String(data.incidents.open)}
           sub={`${data.incidents.total} total (${data.incidents.open} open)`}
-          color="#ff3d3d"
+          color="#dc5a5a"
         />
       </div>
 

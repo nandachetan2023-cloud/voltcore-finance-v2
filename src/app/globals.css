@@ -463,3 +463,66 @@ html:not(.dark) textarea:focus {
 /* ── Scrollbar ────────────────────────────────────────────────── */
 html:not(.dark) ::-webkit-scrollbar-thumb { background: #d4d9e1; background-clip: content-box; }
 html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #8b94a3; background-clip: content-box; }
+
+/* ═══════════════════════════════════════════════════════════════
+   MINIMALIST ACCENT REMAP (both themes)
+   The original palette used over-saturated neon hues (cyan #00d4ff,
+   green #00e676, purple #a78bfa, red #ff3d3d, warning #ffab40).
+   We remap those raw hex utility classes to calmer, professional
+   tones so the whole app reads as restrained and enterprise-grade
+   without editing every component. Brand amber #f5a623 is untouched.
+   Muted tones:
+     green  #34a373   blue (was cyan) #5b8fb6
+     purple #8b82c9   red  #dc5a5a     amber/warn #d99632
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Solid text / icon colors ─────────────────────────────────── */
+.text-\[\#00e676\] { color: #34a373 !important; }
+.text-\[\#00d4ff\] { color: #5b8fb6 !important; }
+.text-\[\#a78bfa\] { color: #8b82c9 !important; }
+.text-\[\#ff3d3d\] { color: #dc5a5a !important; }
+.text-\[\#ffab40\] { color: #d99632 !important; }
+.dark .text-\[\#00e676\] { color: #4cb88a !important; }
+.dark .text-\[\#00d4ff\] { color: #6fa3c9 !important; }
+.dark .text-\[\#a78bfa\] { color: #9b92d6 !important; }
+.dark .text-\[\#ff3d3d\] { color: #ef6b6b !important; }
+.dark .text-\[\#ffab40\] { color: #e0a544 !important; }
+
+/* ── Solid backgrounds (badges/dots that use full opacity) ────── */
+.bg-\[\#00e676\] { background-color: #34a373 !important; }
+.bg-\[\#00d4ff\] { background-color: #5b8fb6 !important; }
+.bg-\[\#a78bfa\] { background-color: #8b82c9 !important; }
+.bg-\[\#ff3d3d\] { background-color: #dc5a5a !important; }
+.bg-\[\#ffab40\] { background-color: #d99632 !important; }
+
+/* ── Translucent backgrounds (tints) — common opacities ───────── */
+.bg-\[\#00e676\]\/5  { background-color: rgba(52,163,115,0.06) !important; }
+.bg-\[\#00e676\]\/8  { background-color: rgba(52,163,115,0.09) !important; }
+.bg-\[\#00e676\]\/10 { background-color: rgba(52,163,115,0.10) !important; }
+.bg-\[\#00e676\]\/15 { background-color: rgba(52,163,115,0.14) !important; }
+.bg-\[\#00e676\]\/20 { background-color: rgba(52,163,115,0.18) !important; }
+.bg-\[\#00d4ff\]\/5  { background-color: rgba(91,143,182,0.06) !important; }
+.bg-\[\#00d4ff\]\/8  { background-color: rgba(91,143,182,0.09) !important; }
+.bg-\[\#00d4ff\]\/10 { background-color: rgba(91,143,182,0.10) !important; }
+.bg-\[\#00d4ff\]\/15 { background-color: rgba(91,143,182,0.14) !important; }
+.bg-\[\#00d4ff\]\/20 { background-color: rgba(91,143,182,0.18) !important; }
+.bg-\[\#a78bfa\]\/10 { background-color: rgba(139,130,201,0.10) !important; }
+.bg-\[\#a78bfa\]\/15 { background-color: rgba(139,130,201,0.14) !important; }
+.bg-\[\#a78bfa\]\/20 { background-color: rgba(139,130,201,0.18) !important; }
+.bg-\[\#ff3d3d\]\/5  { background-color: rgba(220,90,90,0.06) !important; }
+.bg-\[\#ff3d3d\]\/8  { background-color: rgba(220,90,90,0.09) !important; }
+.bg-\[\#ff3d3d\]\/10 { background-color: rgba(220,90,90,0.10) !important; }
+.bg-\[\#ff3d3d\]\/15 { background-color: rgba(220,90,90,0.14) !important; }
+.bg-\[\#ff3d3d\]\/20 { background-color: rgba(220,90,90,0.18) !important; }
+.bg-\[\#ffab40\]\/5  { background-color: rgba(217,150,50,0.06) !important; }
+.bg-\[\#ffab40\]\/8  { background-color: rgba(217,150,50,0.09) !important; }
+.bg-\[\#ffab40\]\/10 { background-color: rgba(217,150,50,0.10) !important; }
+.bg-\[\#ffab40\]\/15 { background-color: rgba(217,150,50,0.14) !important; }
+.bg-\[\#ffab40\]\/20 { background-color: rgba(217,150,50,0.18) !important; }
+
+/* ── Borders ──────────────────────────────────────────────────── */
+.border-\[\#00e676\]\/20, .border-\[\#00e676\]\/30 { border-color: rgba(52,163,115,0.30) !important; }
+.border-\[\#00d4ff\]\/20, .border-\[\#00d4ff\]\/30 { border-color: rgba(91,143,182,0.30) !important; }
+.border-\[\#a78bfa\]\/20, .border-\[\#a78bfa\]\/30 { border-color: rgba(139,130,201,0.30) !important; }
+.border-\[\#ff3d3d\]\/20, .border-\[\#ff3d3d\]\/30 { border-color: rgba(220,90,90,0.30) !important; }
+.border-\[\#ffab40\]\/20, .border-\[\#ffab40\]\/30 { border-color: rgba(217,150,50,0.30) !important; }
