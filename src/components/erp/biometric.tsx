@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { RefreshCw, CheckCircle2, XCircle, Clock, Database, Calendar, Fingerprint, AlertCircle, Building2 } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, Clock, Database, Fingerprint, AlertCircle, Building2 } from 'lucide-react';
 
 interface BiometricSite {
   id: string;
@@ -12,6 +12,7 @@ interface BiometricSite {
 interface SyncLog {
   id: number;
   siteId?: string;
+  siteName?: string | null;
   lastRecord: string;
   syncType: string;
   recordsFetched: number;
@@ -34,7 +35,10 @@ interface RawLog {
   punchDate: string;
   deviceId?: string;
   siteId?: string;
+  siteName?: string | null;
   processed: boolean;
+  matched?: boolean;
+  skipReason?: string | null;
   createdAt: string;
 }
 
@@ -48,14 +52,8 @@ export default function BiometricPage() {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [logFilter, setLogFilter] = useState<'all' | 'pending' | 'processed'>('all');
+  const [logFilter, setLogFilter] = useState<'all' | 'pending' | 'matched' | 'unmatched'>('all');
   const [skippedRecords, setSkippedRecords] = useState<Array<{ empCode: string; name: string; date: string; reason: string }>>([]);
-
-  // Date range
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [dateRangeSyncing, setDateRangeSyncing] = useState(false);
-  const [showDateRange, setShowDateRange] = useState(false);
 
   useEffect(() => {
     fetchSites();
@@ -94,10 +92,10 @@ export default function BiometricPage() {
   const fetchRawLogs = async () => {
     setLoadingLogs(true);
     try {
-      const processed = logFilter === 'all' ? undefined : logFilter === 'processed';
-      let url = processed !== undefined
-        ? `/api/biometric/logs?processed=${processed}&limit=50`
-        : '/api/biometric/logs?limit=50';
+      let url = '/api/biometric/logs?limit=50';
+      if (logFilter === 'pending') url += '&processed=false';
+      else if (logFilter === 'matched') url += '&matched=true';
+      else if (logFilter === 'unmatched') url += '&processed=true&matched=false';
       if (selectedSite !== 'all') url += `&siteId=${selectedSite}`;
       const res = await fetch(url);
       const data = await res.json();
@@ -148,67 +146,39 @@ export default function BiometricPage() {
     }
   };
 
-  const handleDateRangeSync = async () => {
-    if (!fromDate || !toDate) { toast.error('Select both dates'); return; }
-    setDateRangeSyncing(true);
+  const handleRetryUnmatched = async () => {
+    setProcessing(true);
     try {
-      const body: any = { fromDate, toDate };
+      const body: any = { rematch: true };
       if (selectedSite !== 'all') body.siteId = selectedSite;
-      const res = await fetch('/api/biometric/sync/date-range', {
+      const res = await fetch('/api/biometric/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       const data = await res.json();
       if (data.success) {
-        const fetched = Array.isArray(data.data)
-          ? data.data.reduce((s: number, r: any) => s + r.result.fetched, 0)
-          : data.data?.fetched || 0;
-        toast.success(`Date range sync complete — ${fetched} records fetched.`);
-        // Capture skipped records
-        const skipped = Array.isArray(data.data)
-          ? data.data.flatMap((r: any) => r.result?.skippedRecords || [])
-          : data.data?.skippedRecords || [];
-        if (skipped.length > 0) {
-          setSkippedRecords(skipped);
-          toast.warning(`${skipped.length} record(s) skipped — see details below.`);
-        }
-        fetchSyncStatus();
-        fetchRawLogs();
-      } else {
-        toast.error(data.error || 'Date range sync failed');
-      }
-    } catch {
-      toast.error('Date range sync failed.');
-    } finally {
-      setDateRangeSyncing(false);
-    }
-  };
-
-  const handleRetryUnmatched = async () => {
-    setProcessing(true);
-    try {
-      const res = await fetch('/api/biometric/process', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
         const processed = data.data.processedCount || 0;
+        const reset = data.data.resetCount || 0;
         const skipped = data.data.skippedRecords || [];
         if (processed > 0) {
-          toast.success(`Processed ${processed} records.`);
+          toast.success(`Re-matched ${processed} record(s)${reset ? ` (re-checked ${reset})` : ''}.`);
         }
         if (skipped.length > 0) {
           setSkippedRecords(skipped);
-          toast.warning(`${skipped.length} record(s) skipped — see details below.`);
+          toast.warning(`${skipped.length} record(s) still unmatched — see details below.`);
         } else if (processed === 0) {
-          toast.info('No records to process.');
+          toast.info(reset > 0 ? 'Re-checked logs but none could be matched yet.' : 'No unmatched logs to re-check.');
+        } else {
+          setSkippedRecords([]);
         }
         fetchSyncStatus();
         fetchRawLogs();
       } else {
-        toast.error(data.error || 'Processing failed');
+        toast.error(data.error || 'Re-match failed');
       }
     } catch {
-      toast.error('Processing failed.');
+      toast.error('Re-match failed.');
     } finally {
       setProcessing(false);
     }
@@ -259,6 +229,15 @@ export default function BiometricPage() {
           >
             <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
             {syncing ? 'Syncing...' : `Sync ${selectedSite !== 'all' ? activeSiteName : 'All'}`}
+          </button>
+          <button
+            onClick={handleRetryUnmatched}
+            disabled={processing}
+            title="Re-check logs that didn't match before (e.g. after assigning a shift or creating the employee). Respects the shift's effective date."
+            className="flex items-center gap-2 px-4 py-2 bg-[#161c24] border border-[#2e3a48] text-[#e2e8f0] text-[12px] font-semibold rounded-lg hover:border-[#f5a623] disabled:opacity-50 transition-colors"
+          >
+            <Database size={14} className={processing ? 'animate-spin' : ''} />
+            {processing ? 'Re-matching...' : 'Re-match Unmatched'}
           </button>
         </div>
       </div>
@@ -373,45 +352,6 @@ export default function BiometricPage() {
         </div>
       )}
 
-      {/* Date Range Sync */}
-      <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
-        <button
-          onClick={() => setShowDateRange(v => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#1a2028] transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <Calendar size={14} className="text-[#5a6878]" />
-            <span className="text-[12px] font-semibold text-[#e2e8f0]">Sync by Date Range</span>
-            <span className="text-[10px] text-[#5a6878]">— use this to backfill missing data</span>
-          </div>
-          <span className="text-[10px] text-[#5a6878]">{showDateRange ? '▲' : '▼'}</span>
-        </button>
-        {showDateRange && (
-          <div className="px-4 pb-4 border-t border-[#252e3a] pt-3 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] text-[#5a6878] uppercase tracking-wider mb-1.5">From</label>
-                <input className={inp} type="text" placeholder="01/04/2026_00:00" value={fromDate} onChange={e => setFromDate(e.target.value)} />
-                <p className="text-[10px] text-[#5a6878] mt-1">Format: DD/MM/YYYY_HH:MM</p>
-              </div>
-              <div>
-                <label className="block text-[10px] text-[#5a6878] uppercase tracking-wider mb-1.5">To</label>
-                <input className={inp} type="text" placeholder="30/04/2026_23:59" value={toDate} onChange={e => setToDate(e.target.value)} />
-                <p className="text-[10px] text-[#5a6878] mt-1">Format: DD/MM/YYYY_HH:MM</p>
-              </div>
-            </div>
-            <button
-              onClick={handleDateRangeSync}
-              disabled={dateRangeSyncing}
-              className="flex items-center gap-2 px-4 py-2 bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/30 text-[12px] font-semibold rounded-lg hover:bg-[#00d4ff]/20 disabled:opacity-50 transition-colors"
-            >
-              <Calendar size={13} className={dateRangeSyncing ? 'animate-spin' : ''} />
-              {dateRangeSyncing ? 'Syncing...' : `Sync ${selectedSite !== 'all' ? activeSiteName : 'All Sites'}`}
-            </button>
-          </div>
-        )}
-      </div>
-
       {/* Punch Logs */}
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#252e3a]">
@@ -422,7 +362,7 @@ export default function BiometricPage() {
             )}
           </div>
           <div className="flex items-center gap-1">
-            {(['all', 'pending', 'processed'] as const).map(f => (
+            {(['all', 'pending', 'matched', 'unmatched'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setLogFilter(f)}
@@ -448,7 +388,7 @@ export default function BiometricPage() {
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b border-[#252e3a] bg-[#141920]">
-                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Employee</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Enrolled ID</th>
                   <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Punch Time</th>
                   <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Site</th>
                   <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Status</th>
@@ -458,25 +398,34 @@ export default function BiometricPage() {
                 {rawLogs.map(log => (
                   <tr key={log.id} className="border-b border-[#1e252e] hover:bg-[#1a2028] transition-colors">
                     <td className="px-4 py-2.5">
-                      <span className="font-mono text-[#f5a623]">{log.empCode}</span>
+                      {log.enrolledId
+                        ? <span className="font-mono text-[#f5a623]">{log.enrolledId}</span>
+                        : <span className="font-mono text-[#ff6b6b]" title="No enrolled ID — cannot be matched">—</span>}
                       {log.name && <span className="text-[#8899aa] ml-2">{log.name}</span>}
                     </td>
                     <td className="px-4 py-2.5 text-[#e2e8f0]">{fmt(log.punchDate)}</td>
                     <td className="px-4 py-2.5">
                       {log.siteId ? (
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00d4ff]/10 text-[#00d4ff] font-semibold">
-                          {sites.find(s => s.id === log.siteId)?.name || log.siteId}
+                          {log.siteName || sites.find(s => s.id === log.siteId)?.name || log.siteId}
                         </span>
                       ) : <span className="text-[#5a6878]">—</span>}
                     </td>
                     <td className="px-4 py-2.5">
-                      {log.processed ? (
-                        <span className="inline-flex items-center gap-1 text-[#00e676] text-[10px] font-semibold">
-                          <CheckCircle2 size={11} /> Processed
-                        </span>
-                      ) : (
+                      {!log.processed ? (
                         <span className="inline-flex items-center gap-1 text-[#ffab40] text-[10px] font-semibold">
                           <Clock size={11} /> Pending
+                        </span>
+                      ) : log.matched ? (
+                        <span className="inline-flex items-center gap-1 text-[#00e676] text-[10px] font-semibold">
+                          <CheckCircle2 size={11} /> Matched
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1 text-[#ff6b6b] text-[10px] font-semibold cursor-help"
+                          title={log.skipReason || 'No matching employee'}
+                        >
+                          <AlertCircle size={11} /> Not Matched
                         </span>
                       )}
                     </td>
@@ -513,7 +462,7 @@ export default function BiometricPage() {
                     <td className="px-4 py-2.5">
                       {log.siteId ? (
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00d4ff]/10 text-[#00d4ff] font-semibold">
-                          {sites.find(s => s.id === log.siteId)?.name || log.siteId}
+                          {log.siteName || sites.find(s => s.id === log.siteId)?.name || log.siteId}
                         </span>
                       ) : <span className="text-[#5a6878] text-[10px]">All</span>}
                     </td>

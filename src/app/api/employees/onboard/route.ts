@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
         designationId: parseInt(designationId),
         branchId: parseInt(branchId),
         dateOfJoining: new Date(dateOfJoining),
-        employmentType: employmentType || 'permanent',
+        employmentType: employmentType || null,
         employmentStatus: 'active',
         natureOfDesignation: natureOfDesignation || gradeLabel || null,
         monthlyGrossSalary: monthlyGrossSalary ? parseFloat(monthlyGrossSalary) : null,

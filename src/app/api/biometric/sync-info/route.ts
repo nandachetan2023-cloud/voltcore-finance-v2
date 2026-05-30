@@ -70,15 +70,13 @@ export async function GET(request: NextRequest) {
         explanation: {
           lastRecord: 'The MaxRecord value used for incremental sync. Format: MMMyyyy$ID',
           whyZeroRecords: 'If sync returns 0 records, it means there is no NEW data since the lastRecord. This is normal if you already synced today.',
-          howToGetNewData: 'New data will be available after employees punch in/out. Try syncing again tomorrow or use Date Range Sync for specific dates.',
+          howToGetNewData: 'New data will be available after employees punch in/out. Run the sync again later to pull new punches.',
         },
         recommendations: {
-          incrementalSync: 'Use for daily operations - only fetches new data',
-          dateRangeSync: 'Use to fetch specific date range or backfill historical data',
+          incrementalSync: 'Use for daily operations - only fetches new data and includes the Enrolled ID (EmpcardNo) used for matching',
           nextSteps: [
             'If you need today\'s data: Wait for employees to punch in/out, then sync',
-            'If you need historical data: Use Date Range Sync with specific dates',
-            'If you need to re-sync: Use Date Range Sync to re-import data',
+            'Sync is incremental and cursor-based — each run pulls only new punches since the last successful sync',
           ],
         },
       },

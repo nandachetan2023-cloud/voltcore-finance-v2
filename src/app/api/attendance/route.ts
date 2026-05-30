@@ -61,25 +61,41 @@ export async function GET(request: NextRequest) {
       db.attendanceLog.count({ where }),
     ])
 
-    // Enrich each record with hasShift flag — check if the employee
-    // had an active shift on the log date (used by UI to flag unshifted records)
-    const today = new Date()
+    // Pre-fetch branch/site names for all employees in one query.
     const uniqueEmpIds = [...new Set(attendance.map(a => a.employeeId))]
-    const shiftMap = new Map<number, boolean>()
-    for (const empId of uniqueEmpIds) {
-      const shift = await db.shiftAssignment.findFirst({
-        where: {
-          employeeId: empId,
-          effectiveFrom: { lte: today },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
-        },
-      })
-      shiftMap.set(empId, !!shift)
-    }
+    const empBranches = await db.employee.findMany({
+      where: { id: { in: uniqueEmpIds } },
+      select: { id: true, Branch: { select: { name: true } } },
+    })
+    const branchMap = new Map(empBranches.map(e => [e.id, e.Branch?.name ?? null]))
 
-    const enriched = attendance.map(a => ({
-      ...a,
-      hasShift: shiftMap.get(a.employeeId) ?? false,
+    // Enrich each record with the shift that was active ON the log date
+    // (respects the shift assignment's effective date range), including its
+    // start/end time, plus the employee's branch/site name.
+    const enriched = await Promise.all(attendance.map(async (a) => {
+      const logDate = new Date(a.logDate)
+      const assignment = await db.shiftAssignment.findFirst({
+        where: {
+          employeeId: a.employeeId,
+          effectiveFrom: { lte: logDate },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: logDate } }],
+        },
+        orderBy: { effectiveFrom: 'desc' },
+        include: { Shift: { select: { name: true, startTime: true, endTime: true } } },
+      })
+
+      const shiftName = assignment?.Shift
+        ? `${assignment.Shift.name}${assignment.Shift.startTime && assignment.Shift.endTime ? ` (${assignment.Shift.startTime}–${assignment.Shift.endTime})` : ''}`
+        : null
+
+      return {
+        ...a,
+        hasShift: !!assignment,
+        shiftName,
+        shiftStartTime: assignment?.Shift?.startTime ?? null,
+        shiftEndTime: assignment?.Shift?.endTime ?? null,
+        siteName: branchMap.get(a.employeeId) ?? null,
+      }
     }))
 
     return NextResponse.json({ 

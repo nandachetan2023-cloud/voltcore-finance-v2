@@ -395,12 +395,14 @@ function normalizeMaritalStatus(status?: string): string {
   return 'single'
 }
 
-function normalizeEmploymentType(type?: string): string {
-  if (!type) return 'permanent'
+function normalizeEmploymentType(type?: string): string | null {
+  if (!type) return null
   const t = type.toLowerCase()
   if (t.includes('contract')) return 'contract'
   if (t.includes('intern')) return 'intern'
   if (t.includes('consultant')) return 'consultant'
+  if (t.includes('probation')) return 'probation'
+  if (t.includes('part')) return 'part_time'
   return 'permanent'
 }
 

@@ -269,12 +269,12 @@ export default function AttendanceModule() {
           return {
             id: record.id.toString(),
             empId: record.employee?.employeeCode || record.employeeId?.toString() || '',
-            site: record.biometricDeviceId || 'N/A',
+            site: record.siteName || record.biometricDeviceId || 'N/A',
             date: new Date(record.logDate).toISOString().split('T')[0],
             timeIn: punchIn ? punchIn.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : null,
             timeOut: punchOut ? punchOut.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : null,
             otHours: Math.round(otHours * 10) / 10, // Round to 1 decimal
-            shift: null,
+            shift: record.shiftName || null,
             status: record.status === 'present' ? 'Present' : record.status === 'absent' ? 'Absent' : 'Present',
             employee: {
               id: record.employeeId?.toString() || '',

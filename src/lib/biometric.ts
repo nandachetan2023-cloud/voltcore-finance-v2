@@ -197,16 +197,6 @@ export class BiometricService {
     return data.PunchData || []
   }
 
-  // Fetch raw punch data with machine ID
-  async fetchRawPunchDataWithMCID(empCode: string, fromDate: string, toDate: string): Promise<PunchData[]> {
-    const data = await this.fetchFromAPI('/DownloadPunchDataMCID', {
-      Empcode: empCode,
-      FromDate: fromDate,
-      ToDate: toDate,
-    })
-    return data.PunchData || []
-  }
-
   // Fetch IN/OUT processed data (recommended for HRMS)
   async fetchInOutPunchData(empCode: string, fromDate: string, toDate: string): Promise<InOutPunchData[]> {
     const data = await this.fetchFromAPI('/DownloadInOutPunchData', {
@@ -292,11 +282,22 @@ export class BiometricService {
         const [identifier, dateStr] = key.split('|')
 
         // ── Employee matching ─────────────────────────────────────────────────
-        // Employee codes are stored as "UA00000005".
-        // Biometric EmpcardNo is stored as enrolledId = "00000005".
-        // Strip the "UA" prefix from employeeCode to get the numeric part,
-        // then compare directly with enrolledId (both are 8-digit zero-padded strings).
-        const enrolledId = logs[0]?.enrolledId || identifier
+        // We match ONLY on enrolledId (EmpcardNo from the device) because the
+        // device-assigned Empcode is NOT unique and is uneditable. enrolledId is
+        // unique + editable, set to mirror the employee code as "UA" + enrolledId.
+        // enrolledId arrives 8-digit zero-padded (e.g. "00000005") → code "UA00000005".
+        const enrolledId = logs[0]?.enrolledId || null
+
+        if (!enrolledId) {
+          const reason = `Punch has no Enrolled ID (EmpcardNo). Re-sync via the incremental endpoint which returns it.`
+          console.warn(`[Biometric] ${reason} (empCode=${logs[0]?.empCode})`)
+          skippedRecords.push({ empCode: logs[0]?.empCode || identifier, name: logs[0]?.name || 'Unknown', date: dateStr, reason })
+          await this.db.biometricRawLog.updateMany({
+            where: { id: { in: logs.map(l => l.id) } },
+            data: { processed: true, matched: false, skipReason: reason, processedAt: new Date() },
+          })
+          continue
+        }
 
         const employee = await this.db.employee.findFirst({
           where: {
@@ -307,12 +308,12 @@ export class BiometricService {
 
         if (!employee) {
           const reason = `No employee found with code "UA${enrolledId}"`
-          console.warn(`[Biometric] ${reason}. Ensure the employee exists with this ID.`)
+          console.warn(`[Biometric] ${reason}. Ensure the employee exists with this enrolled ID.`)
           skippedRecords.push({ empCode: enrolledId, name: logs[0]?.name || 'Unknown', date: dateStr, reason })
           // Mark as processed with skip reason so they don't keep retrying
           await this.db.biometricRawLog.updateMany({
             where: { id: { in: logs.map(l => l.id) } },
-            data: { processed: true, processedAt: new Date() },
+            data: { processed: true, matched: false, skipReason: reason, processedAt: new Date() },
           })
           continue
         }
@@ -356,7 +357,7 @@ export class BiometricService {
           // Mark logs as processed so they don't keep retrying
           await this.db.biometricRawLog.updateMany({
             where: { id: { in: logs.map(l => l.id) } },
-            data: { processed: true, processedAt: new Date() },
+            data: { processed: true, matched: false, skipReason: reason, processedAt: new Date() },
           })
           continue
         }
@@ -403,13 +404,15 @@ export class BiometricService {
           })
         }
 
-        // Mark logs as processed
+        // Mark logs as processed AND matched (attendance created/updated)
         await this.db.biometricRawLog.updateMany({
           where: {
             id: { in: logs.map(l => l.id) },
           },
           data: {
             processed: true,
+            matched: true,
+            skipReason: null,
             processedAt: new Date(),
           },
         })
@@ -440,14 +443,46 @@ export class BiometricService {
     return { processedCount, processedEmployees, skippedRecords }
   }
 
-  // Incremental sync (recommended for production)
+  // Re-match previously skipped/unmatched logs.
+  // Resets logs that were processed-but-NOT-matched back to unprocessed, then
+  // re-runs processing. Because matching re-evaluates the shift's effective date
+  // for each punch's date (getActiveShiftAssignment), this lets you assign a shift
+  // (or create the employee) AFTER fetching, then go back and match historical logs.
+  async rematchUnmatched(): Promise<{
+    reset: number;
+    processedCount: number;
+    processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }>;
+    skippedRecords: Array<{ empCode: string; name: string; date: string; reason: string }>;
+  }> {
+    // Reset unmatched logs for THIS site so processRawLogs picks them up again.
+    const resetResult = await this.db.biometricRawLog.updateMany({
+      where: {
+        siteId: this.config.siteId,
+        processed: true,
+        matched: false,
+      },
+      data: { processed: false, skipReason: null, processedAt: null },
+    })
+
+    const { processedCount, processedEmployees, skippedRecords } = await this.processRawLogs()
+    return { reset: resetResult.count, processedCount, processedEmployees, skippedRecords }
+  }
+
+
+  // Uses DownloadLastPunchData — the ONLY endpoint that returns EmpcardNo (enrolled ID),
+  // which is the unique, editable identifier we match employees on.
+  //
+  // IMPORTANT: An empty LastRecord returns 0 records — it only streams brand-new
+  // punches. The data is stored in monthly tables and the cursor is "MMyyyy$ID".
+  // So to fetch existing/historical data we must SEED the cursor with a month anchor
+  // ("MMyyyy$0") and page forward, walking month-by-month up to the current month.
   async syncIncremental(): Promise<{ 
     fetched: number; 
     processed: number;
     processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }>;
   }> {
     try {
-      // Get last successful sync for this site
+      // Get last successful sync for this site to retrieve the stored cursor (MaxRecord)
       const lastSync = await this.db.biometricSyncLog.findFirst({
         where: { 
           status: 'success',
@@ -456,46 +491,76 @@ export class BiometricService {
         orderBy: { createdAt: 'desc' },
       })
 
-      // Calculate date range
-      const now = new Date()
-      const fromDate = lastSync?.createdAt 
-        ? new Date(lastSync.createdAt) 
-        : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) // Default: 7 days ago
+      const storedCursor = lastSync?.lastRecord && lastSync.lastRecord.includes('$')
+        ? lastSync.lastRecord
+        : ''
 
-      // Format dates for API (DD/MM/YYYY_HH:MM)
-      const formatDate = (date: Date) => {
-        const day = String(date.getDate()).padStart(2, '0')
-        const month = String(date.getMonth() + 1).padStart(2, '0')
-        const year = date.getFullYear()
-        const hours = String(date.getHours()).padStart(2, '0')
-        const minutes = String(date.getMinutes()).padStart(2, '0')
-        return `${day}/${month}/${year}_${hours}:${minutes}`
+      // First-ever sync starts from May 1st of the current year, then every
+      // subsequent sync resumes from the stored cursor (continues where it left off).
+      // Override the anchor month/year via env if needed.
+      const anchorMonth = parseInt(process.env.BIOMETRIC_BACKFILL_START_MONTH || '5')  // May
+      const anchorYear = parseInt(process.env.BIOMETRIC_BACKFILL_START_YEAR || String(new Date().getFullYear()))
+
+      const now = new Date()
+      // Determine the first (month, year) to start walking from.
+      let startMonth: number, startYear: number
+      let firstMonthCursor: string
+      if (storedCursor) {
+        // Resume from the month encoded in the stored cursor.
+        startMonth = parseInt(storedCursor.slice(0, 2))
+        startYear = parseInt(storedCursor.slice(2, 6))
+        firstMonthCursor = storedCursor // resume mid-month from exact position
+      } else {
+        startMonth = anchorMonth
+        startYear = anchorYear
+        firstMonthCursor = `${String(startMonth).padStart(2, '0')}${startYear}$0`
       }
 
-      const fromDateStr = formatDate(fromDate)
-      const toDateStr = formatDate(now)
+      console.log(`[${this.config.siteId}] Incremental sync (DownloadLastPunchData) — start ${String(startMonth).padStart(2, '0')}/${startYear}, cursor "${firstMonthCursor}"`)
 
-      console.log(`[${this.config.siteId}] Incremental sync from ${fromDateStr} to ${toDateStr}`)
+      const MAX_PAGES_PER_MONTH = 500
+      let totalSaved = 0
+      let latestCursor = storedCursor
 
-      // Fetch data using date range
-      const punchData = await this.fetchRawPunchDataWithMCID('ALL', fromDateStr, toDateStr)
+      // Walk each month from the start month up to (and including) the current month.
+      let y = startYear, m = startMonth
+      let isFirstMonth = true
+      while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth() + 1)) {
+        let cursor = isFirstMonth ? firstMonthCursor : `${String(m).padStart(2, '0')}${y}$0`
+        let pages = 0
+        while (pages < MAX_PAGES_PER_MONTH) {
+          const response = await this.fetchLastPunchData(cursor)
+          const punchData = response.PunchData || []
+          if (punchData.length === 0) break
 
-      // Save raw logs
-      const savedCount = await this.saveRawLogs(punchData)
+          totalSaved += await this.saveRawLogs(punchData)
 
-      // Save sync log
+          const next = response.MaxRecord
+          if (!next || next === cursor) break // no progress → stop paging this month
+          cursor = next
+          latestCursor = next
+          pages++
+        }
+
+        // advance to next month
+        isFirstMonth = false
+        m++
+        if (m > 12) { m = 1; y++ }
+      }
+
+      // Persist the latest cursor for the next run (keep prior cursor if nothing new came in)
       await this.db.biometricSyncLog.create({
         data: {
           siteId: this.config.siteId,
-          lastRecord: toDateStr,
+          lastRecord: latestCursor || storedCursor || `${String(now.getMonth() + 1).padStart(2, '0')}${now.getFullYear()}$0`,
           syncType: 'incremental',
-          recordsFetched: punchData.length,
+          recordsFetched: totalSaved,
           recordsProcessed: 0, // Will be updated after processing
           status: 'success',
         },
       })
 
-      return { fetched: savedCount, processed: 0, processedEmployees: [] }
+      return { fetched: totalSaved, processed: 0, processedEmployees: [] }
     } catch (error) {
       // Log failed sync
       await this.db.biometricSyncLog.create({
@@ -503,46 +568,6 @@ export class BiometricService {
           siteId: this.config.siteId,
           lastRecord: '',
           syncType: 'incremental',
-          recordsFetched: 0,
-          recordsProcessed: 0,
-          status: 'failed',
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
-        },
-      })
-
-      throw error
-    }
-  }
-
-  // Full sync for specific date range
-  async syncDateRange(fromDate: string, toDate: string): Promise<{ 
-    fetched: number; 
-    processed: number;
-    processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }>;
-  }> {
-    try {
-      const punchData = await this.fetchRawPunchDataWithMCID('ALL', fromDate, toDate)
-      const savedCount = await this.saveRawLogs(punchData)
-      const { processedCount, processedEmployees } = await this.processRawLogs()
-
-      await this.db.biometricSyncLog.create({
-        data: {
-          siteId: this.config.siteId,
-          lastRecord: '',
-          syncType: 'full',
-          recordsFetched: punchData.length,
-          recordsProcessed: processedCount,
-          status: 'success',
-        },
-      })
-
-      return { fetched: savedCount, processed: processedCount, processedEmployees }
-    } catch (error) {
-      await this.db.biometricSyncLog.create({
-        data: {
-          siteId: this.config.siteId,
-          lastRecord: '',
-          syncType: 'full',
           recordsFetched: 0,
           recordsProcessed: 0,
           status: 'failed',
@@ -572,9 +597,10 @@ export class BiometricService {
       const month = String(date.getMonth() + 1).padStart(2, '0')
       const day = String(date.getDate()).padStart(2, '0')
       const dateKey = `${year}-${month}-${day}`
-      // Use enrolledId as the primary key when available — it is globally unique.
-      // Fall back to empCode only if enrolledId is missing (older records).
-      const identifier = log.enrolledId || log.empCode
+      // Group strictly by enrolledId (EmpcardNo) — the unique identifier we match on.
+      // Logs without an enrolledId are grouped by empCode so they can be reported
+      // as skipped (they cannot be reliably matched to an employee).
+      const identifier = log.enrolledId || `noenroll:${log.empCode}`
       const key = `${identifier}|${dateKey}`
 
       if (!grouped[key]) {

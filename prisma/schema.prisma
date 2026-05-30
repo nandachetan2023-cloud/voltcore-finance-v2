@@ -34,6 +34,8 @@ model BiometricRawLog {
   mFlag       String?
   rawJson     Json
   processed   Boolean   @default(false)
+  matched     Boolean   @default(false)   // true = attendance record created/updated
+  skipReason  String?                      // why it was processed without matching
   processedAt DateTime?
   createdAt   DateTime  @default(now())
   siteId      String?
@@ -136,7 +138,7 @@ model Employee {
   reportingManagerId        Int?
   dateOfJoining             DateTime
   confirmationDate          DateTime?
-  employmentType            String
+  employmentType            String?
   employmentStatus          String
   probationMonths           Int                         @default(6)
   noticePeriodDays          Int                         @default(30)

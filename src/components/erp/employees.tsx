@@ -115,7 +115,7 @@ const emptyForm: EmployeeFormData = {
   permanentAddress: '', permanentCity: '', permanentState: '', permanentPincode: '',
   departmentId: '', designationId: '', natureOfDesignation: '', branchId: '', gradeId: '', reportingManagerId: '',
   dateOfJoining: '', confirmationDate: '',
-  employmentType: 'permanent', employmentStatus: 'active',
+  employmentType: '', employmentStatus: 'active',
   probationMonths: '6', noticePeriodDays: '30',
   monthlyGrossSalary: '',
   panNumber: '', aadharNumber: '', uanNumber: '', esicNumber: '',
@@ -142,6 +142,18 @@ function getAvatarColor(name: string) {
 function getFullName(emp: Employee): string {
   const parts = [emp.firstName, emp.middleName, emp.lastName].filter(Boolean);
   return parts.join(' ') || 'Unknown';
+}
+
+// Validate / normalize the Employee ID (must equal the biometric Enrolled ID prefixed "UA").
+// Returns an error string ('' when valid). Accepts a bare number (auto-formats to UA + 8 digits).
+function validateEmpIdFormat(raw: string): string {
+  const value = (raw || '').trim().toUpperCase();
+  if (!value) return 'Employee ID is required';
+  const normalized = /^\d{1,8}$/.test(value) ? `UA${value.padStart(8, '0')}` : value;
+  if (!/^UA\d{8}$/.test(normalized)) {
+    return 'Format: UA + 8 digits (e.g. UA00000001). Type just the number to auto-format.';
+  }
+  return '';
 }
 
 function getInitials(emp: Employee): string {
@@ -346,12 +358,10 @@ export default function EmployeesModule() {
   useEffect(() => { setPage(1); }, [search, siteFilter, tradeFilter, statusFilter]);
 
   const openCreate = () => { 
-    const existingCodes = employees.map(e => e.employeeCode).filter(code => /^EMP\d{4}$/.test(code));
-    const numbers = existingCodes.map(code => parseInt(code.substring(3)));
-    const maxNumber = numbers.length > 0 ? Math.max(...numbers) : 0;
-    const nextNumber = maxNumber + 1;
-    const suggestedId = nextNumber <= 9999 ? `EMP${nextNumber.toString().padStart(4, '0')}` : '';
-    setForm({ ...emptyForm, empId: suggestedId }); 
+    // Employee code must equal the device Enrolled ID prefixed with "UA"
+    // (e.g. enrolled "00000005" → "UA00000005"). It is NOT auto-sequential —
+    // the admin enters the actual enrolled ID, so leave it blank with guidance.
+    setForm({ ...emptyForm, empId: '' }); 
     setFormTab('identity');
     setFieldErrors({});
     setCreateOpen(true); 
@@ -549,14 +559,16 @@ export default function EmployeesModule() {
       }
 
       let employeeCode = form.empId.trim().toUpperCase();
-      // Auto-format: if user typed just digits, prepend UA and zero-pad to 8 digits
+      // Employee code must equal the device Enrolled ID (EmpcardNo) prefixed with "UA".
+      // EmpcardNo is 8-digit zero-padded, so the code is "UA" + 8 digits.
+      // Auto-format: if the user typed just digits, prepend UA and zero-pad to 8.
       if (mode === 'create') {
         if (/^\d{1,8}$/.test(employeeCode)) {
           employeeCode = `UA${employeeCode.padStart(8, '0')}`;
         }
-        if (!/^UA\d{4,8}$/.test(employeeCode)) {
-          toast.error('Employee ID must be in format UA + digits (e.g. UA00000001). You can also just type the number and it will be auto-formatted.');
-          setFieldErrors(fe => ({ ...fe, empId: 'Format: UA00000001 (or just type the number)' }));
+        if (!/^UA\d{8}$/.test(employeeCode)) {
+          toast.error('Employee ID must be UA + 8 digits matching the biometric Enrolled ID (e.g. UA00000001). You can also type just the number and it will be auto-formatted.');
+          setFieldErrors(fe => ({ ...fe, empId: 'Format: UA + 8 digits (e.g. UA00000001)' }));
           setFormTab('identity');
           setSubmitting(false);
           return;
@@ -742,7 +754,7 @@ export default function EmployeesModule() {
       <div className="grid grid-cols-2 gap-3 pr-1">
         {/* ── Identity ── */}
         {formTab === 'identity' && <>
-          <F label="Employee ID" req><input className={`${inp} ${fieldBorderError(fieldErrors.empId)}`} value={form.empId} onChange={e => { setForm(f => ({ ...f, empId: e.target.value.toUpperCase() })); setFieldErrors(fe => ({ ...fe, empId: '' })); }} placeholder="UA00000001" maxLength={10} /><FieldError message={fieldErrors.empId} /></F>
+          <F label="Employee ID (Enrolled ID)" req><input className={`${inp} ${fieldBorderError(fieldErrors.empId)}`} value={form.empId} onChange={e => { setForm(f => ({ ...f, empId: e.target.value.toUpperCase() })); setFieldErrors(fe => ({ ...fe, empId: '' })); }} onBlur={e => { const err = validateEmpIdFormat(e.target.value); setFieldErrors(fe => ({ ...fe, empId: err })); }} placeholder="UA + biometric Enrolled ID, e.g. UA00000001" maxLength={10} /><FieldError message={fieldErrors.empId} /><p className="text-[10px] text-[#5a6878] mt-1">Must match the device Enrolled ID. Type the number to auto-format to UA + 8 digits.</p></F>
           <F label="Token Number"><input className={inp} value={form.tokenNumber} onChange={e => setForm(f => ({ ...f, tokenNumber: e.target.value.toUpperCase() }))} placeholder="TKN001" /></F>
           <F label="Workmen Sl. No."><input className={inp} value={form.workmenSlNo} onChange={e => setForm(f => ({ ...f, workmenSlNo: e.target.value.toUpperCase() }))} placeholder="WM001" /></F>
           <F label="First Name" req><input className={`${inp} ${fieldBorderError(fieldErrors.firstName)}`} value={form.firstName} onChange={e => { setForm(f => ({ ...f, firstName: e.target.value })); setFieldErrors(fe => ({ ...fe, firstName: '' })); }} placeholder="Rajesh" /><FieldError message={fieldErrors.firstName} /></F>
@@ -837,8 +849,9 @@ export default function EmployeesModule() {
         {formTab === 'employment' && <>
           <F label="Date of Joining" req><input className={`${inp} ${fieldBorderError(fieldErrors.dateOfJoining)}`} type="date" value={form.dateOfJoining} onChange={e => { setForm(f => ({ ...f, dateOfJoining: e.target.value })); setFieldErrors(fe => ({ ...fe, dateOfJoining: '' })); }} /><FieldError message={fieldErrors.dateOfJoining} /></F>
           <F label="Confirmation Date"><input className={inp} type="date" value={form.confirmationDate} onChange={e => setForm(f => ({ ...f, confirmationDate: e.target.value }))} /></F>
-          <F label="Employment Type" req>
+          <F label="Employment Type">
             <select className={sel} value={form.employmentType} onChange={e => setForm(f => ({ ...f, employmentType: e.target.value }))}>
+              <option value="">Not specified</option>
               <option value="permanent">Permanent</option>
               <option value="contract">Contract</option>
               <option value="probation">Probation</option>
@@ -975,7 +988,7 @@ export default function EmployeesModule() {
                     </div>
                     <div className="hidden md:block min-w-0"><div className="text-[10px] text-[#e2e8f0] truncate">{emp.Designation?.name || '—'}</div><div className="text-[9px] text-[#5a6878] truncate">{emp.Department?.name || '—'}</div></div>
                     <span className="hidden lg:block text-[10px] text-[#8899aa] truncate">{emp.Branch?.name || '—'}</span>
-                    <span className={`vc-badge ${emp.employmentType === 'permanent' ? 'bg-[#00e676]/10 text-[#00e676]' : 'bg-[#ffab40]/10 text-[#ffab40]'}`}>{emp.employmentType}</span>
+                    <span className={`vc-badge ${emp.employmentType === 'permanent' ? 'bg-[#00e676]/10 text-[#00e676]' : 'bg-[#ffab40]/10 text-[#ffab40]'}`}>{emp.employmentType || '—'}</span>
                     <span className="hidden sm:block text-[9px] text-[#8899aa]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{formatDate(emp.dateOfJoining)}</span>
                     <div className="hidden xl:flex items-center gap-1 flex-wrap">
                       <span className="text-[9px] text-[#5a6878]">—</span>

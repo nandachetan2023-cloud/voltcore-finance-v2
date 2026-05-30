@@ -224,7 +224,7 @@ export async function POST(request: NextRequest) {
         reportingManagerId: body.reportingManagerId ? parseInt(body.reportingManagerId) : null,
         dateOfJoining: new Date(dateOfJoining),
         confirmationDate: body.confirmationDate ? new Date(body.confirmationDate) : null,
-        employmentType: employmentType || 'permanent',
+        employmentType: employmentType || null,
         employmentStatus: employmentStatus || 'active',
         probationMonths: body.probationMonths ? parseInt(body.probationMonths) : 6,
         noticePeriodDays: body.noticePeriodDays ? parseInt(body.noticePeriodDays) : 30,

@@ -732,7 +732,14 @@ function BiometricTab({ configs, tenants, onRefresh }: { configs: BiometricConfi
         body: JSON.stringify(editId ? { id: editId, ...form } : form),
       });
       const data = await res.json();
-      if (data.success) { toast.success(editId ? 'Config updated' : 'Config created'); onRefresh(); setShowForm(false); setForm(empty); setEditId(null); }
+      if (data.success) {
+        if (editId && data.cascade && (data.cascade.rawLogs > 0 || data.cascade.syncLogs > 0)) {
+          toast.success(`Config updated · re-linked ${data.cascade.rawLogs} punch + ${data.cascade.syncLogs} sync logs`);
+        } else {
+          toast.success(editId ? 'Config updated' : 'Config created');
+        }
+        onRefresh(); setShowForm(false); setForm(empty); setEditId(null);
+      }
       else toast.error(data.error);
     } finally { setSaving(false); }
   };
@@ -789,7 +796,10 @@ function BiometricTab({ configs, tenants, onRefresh }: { configs: BiometricConfi
                 {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </Field>
-            <Field label="Site ID * (e.g. site1)"><input className={inp} value={form.siteId} onChange={e => setForm(f => ({ ...f, siteId: e.target.value }))} placeholder="site1" disabled={!!editId} /></Field>
+            <Field label="Site ID * (e.g. site1)">
+              <input className={inp} value={form.siteId} onChange={e => setForm(f => ({ ...f, siteId: e.target.value }))} placeholder="site1" />
+              {editId && <span className="text-[9px] text-[#ffab40] mt-1 block">Changing the Site ID will re-link all existing punch &amp; sync logs for this site.</span>}
+            </Field>
             <Field label="Site Name *"><input className={inp} value={form.siteName} onChange={e => setForm(f => ({ ...f, siteName: e.target.value }))} placeholder="Head Office" /></Field>
             <Field label="Corporate ID *"><input className={inp} value={form.corporateId} onChange={e => setForm(f => ({ ...f, corporateId: e.target.value }))} placeholder="UA567" /></Field>
             <Field label="Username *"><input className={inp} value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="API username" /></Field>

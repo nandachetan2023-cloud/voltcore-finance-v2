@@ -1,21 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createBiometricServiceFromDb } from '@/lib/biometric'
+import { createBiometricServiceFromDb, loadBiometricSitesFromDb } from '@/lib/biometric'
 import { getDbForRequest } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
-// POST: Process unprocessed raw logs to attendance
+// POST: Process raw logs to attendance.
+// Body: { rematch?: boolean, siteId?: string }
+//  - rematch=false (default): process only NEW (unprocessed) logs
+//  - rematch=true: also re-evaluate previously skipped/unmatched logs
+//    (used after assigning a shift or creating the employee — respects the
+//    shift's effective date for each historical punch).
 export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
   const tenantId = request.cookies.get('erp_tenant_id')?.value
   try {
-    const biometricService = await createBiometricServiceFromDb(undefined, db, tenantId)
-    const { processedCount, processedEmployees, skippedRecords } = await biometricService.processRawLogs()
+    const body = await request.json().catch(() => ({}))
+    const rematch: boolean = !!body.rematch
+    const siteId: string | undefined = body.siteId
+
+    // Determine which sites to run against.
+    let siteIds: (string | undefined)[]
+    if (siteId) {
+      siteIds = [siteId]
+    } else if (rematch) {
+      // Re-match needs to target each site individually (it filters by siteId).
+      const sites = await loadBiometricSitesFromDb(db, tenantId)
+      siteIds = sites.length > 0 ? sites.map(s => s.id) : [undefined]
+    } else {
+      siteIds = [undefined]
+    }
+
+    let totalReset = 0
+    let totalProcessed = 0
+    const processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }> = []
+    const skippedRecords: Array<{ empCode: string; name: string; date: string; reason: string }> = []
+
+    for (const sid of siteIds) {
+      const biometricService = await createBiometricServiceFromDb(sid, db, tenantId)
+      if (rematch) {
+        const r = await biometricService.rematchUnmatched()
+        totalReset += r.reset
+        totalProcessed += r.processedCount
+        processedEmployees.push(...r.processedEmployees)
+        skippedRecords.push(...r.skippedRecords)
+      } else {
+        const r = await biometricService.processRawLogs()
+        totalProcessed += r.processedCount
+        processedEmployees.push(...r.processedEmployees)
+        skippedRecords.push(...r.skippedRecords)
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Raw logs processed successfully',
-      data: { processedCount, processedEmployees, skippedRecords },
+      message: rematch ? 'Re-match completed' : 'Raw logs processed successfully',
+      data: {
+        rematch,
+        resetCount: totalReset,
+        processedCount: totalProcessed,
+        processedEmployees,
+        skippedRecords,
+      },
     })
   } catch (error) {
     console.error('Process logs error:', error)
