@@ -105,9 +105,9 @@ function ModuleGrid() {
           : allSubs.filter(s => isModuleAllowed(s.id, allowedModules));
         return (
           <button key={mod.id} onClick={() => setActiveModule(mod.id as any)}
-            className="group bg-[#161c24] border border-[#252e3a] rounded-xl p-6 text-left hover:border-[#f5a623]/40 transition-all duration-200 hover:shadow-lg hover:shadow-[#f5a623]/5">
-            <div className="w-12 h-12 bg-[#f5a623]/10 rounded-xl flex items-center justify-center mb-4 group-hover:bg-[#f5a623]/20 transition-colors">
-              <Icon size={24} className="text-[#f5a623]" />
+            className="group bg-[#161c24] border border-[#252e3a] rounded-xl p-5 text-left hover:border-[#f5a623]/50 transition-colors duration-150">
+            <div className="w-11 h-11 bg-[#f5a623]/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-[#f5a623]/15 transition-colors">
+              <Icon size={22} className="text-[#f5a623]" />
             </div>
             <div className="text-[14px] font-semibold text-[#e2e8f0] group-hover:text-[#f5a623] transition-colors">{mod.label}</div>
             {visibleSubs.length > 0 && <div className="text-[11px] text-[#5a6878] mt-1">{visibleSubs.length} sub-modules</div>}
