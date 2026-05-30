@@ -493,3 +493,60 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #718096; backgroun
   font-variant-numeric: tabular-nums !important;
   letter-spacing: -0.01em !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   SELECTIVE GLASS / FROSTED SURFACES
+   Applied ONLY to floating / static chrome (sidebar, topbar,
+   dropdowns, dialogs). Data panels & tables stay solid for
+   readability and performance. Each surface uses a translucent
+   token + backdrop-blur, with a solid fallback for browsers
+   without backdrop-filter support.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Translucent surface tokens (derived from panel colors) */
+:root {
+  --vc-glass:        rgba(255, 255, 255, 0.72);
+  --vc-glass-strong: rgba(255, 255, 255, 0.85);
+  --vc-glass-border: rgba(209, 217, 224, 0.6);
+}
+.dark {
+  --vc-glass:        rgba(22, 28, 36, 0.62);
+  --vc-glass-strong: rgba(22, 28, 36, 0.80);
+  --vc-glass-border: rgba(46, 58, 72, 0.55);
+}
+
+/* Base glass surface — solid fallback first */
+.vc-glass {
+  background: var(--vc-panel);
+}
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .vc-glass {
+    background: var(--vc-glass);
+    -webkit-backdrop-filter: saturate(150%) blur(14px);
+    backdrop-filter: saturate(150%) blur(14px);
+  }
+  .vc-glass-strong {
+    background: var(--vc-glass-strong);
+    -webkit-backdrop-filter: saturate(150%) blur(18px);
+    backdrop-filter: saturate(150%) blur(18px);
+  }
+}
+.vc-glass-strong { background: var(--vc-panel); }
+
+/* Subtle ambient tint on the app canvas so the glass has depth to
+   pick up (extremely cheap — a fixed radial gradient, no blur). */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 600px at 12% -5%, rgba(245, 166, 35, 0.05), transparent 60%),
+    radial-gradient(800px 600px at 100% 0%, rgba(0, 212, 255, 0.04), transparent 55%);
+}
+.dark body::before {
+  background:
+    radial-gradient(900px 600px at 12% -5%, rgba(245, 166, 35, 0.06), transparent 60%),
+    radial-gradient(800px 600px at 100% 0%, rgba(0, 212, 255, 0.05), transparent 55%);
+}

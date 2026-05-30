@@ -227,7 +227,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
   return (
     <>
       {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
-      <aside className={`fixed top-0 left-0 h-full z-50 w-[248px] min-w-[248px] bg-[#161c24] border-r border-[#252e3a] flex flex-col overflow-hidden transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed top-0 left-0 h-full z-50 w-[248px] min-w-[248px] vc-glass border-r border-[#252e3a] flex flex-col overflow-hidden transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="px-5 py-4 border-b border-[#252e3a] flex items-center gap-3 shrink-0">
           <button onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }} className="flex items-center gap-3 hover:opacity-80 transition-opacity min-w-0">
             {branding?.logoUrl ? (
@@ -311,7 +311,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
           </button>
 
           {showUserMenu && (
-            <div className="absolute bottom-full left-3 right-3 mb-2 bg-[#161c24] border border-[#252e3a] rounded-lg shadow-lg overflow-hidden z-50">
+            <div className="absolute bottom-full left-3 right-3 mb-2 vc-glass-strong border border-[#252e3a] rounded-lg dark-shadow-lg overflow-hidden z-50">
               <div className="p-3 border-b border-[#252e3a]">
                 <div className="text-[11px] font-semibold text-[#e2e8f0]">{userData?.name || 'User'}</div>
                 <div className="text-[10px] text-[#5a6878]">{userData?.email || ''}</div>
@@ -440,7 +440,7 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
   const hasNotifications = notifications.length > 0;
 
   return (
-    <header className="h-[60px] bg-[#161c24] border-b border-[#252e3a] flex items-center gap-3 px-6 shrink-0">
+    <header className="h-[60px] vc-glass border-b border-[#252e3a] flex items-center gap-3 px-6 shrink-0 relative z-30">
       <button className="lg:hidden text-[#8899aa] hover:text-[#e2e8f0]" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
       <div>
         <h1 className="text-[16px] font-semibold text-[#e2e8f0] tracking-tight">{config?.title || 'VoltCore ERP'}</h1>
@@ -462,7 +462,7 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
 
           {/* Notifications Dropdown */}
           {showNotifications && (
-            <div className="absolute top-full right-0 mt-2 w-[320px] bg-[#161c24] border border-[#252e3a] rounded-lg shadow-lg overflow-hidden z-50">
+            <div className="absolute top-full right-0 mt-2 w-[320px] vc-glass-strong border border-[#252e3a] rounded-lg dark-shadow-lg overflow-hidden z-50">
               <div className="p-3 border-b border-[#252e3a] flex items-center justify-between">
                 <div className="text-[12px] font-semibold text-[#e2e8f0]">Notifications</div>
                 {hasNotifications && (
@@ -577,7 +577,7 @@ export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
   const isSubGrid = SUB_GRID_MODULES.includes(activeModule);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0a0d12]">
+    <div className="flex h-screen overflow-hidden relative z-[1]">
       <Sidebar onLogout={onLogout} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Topbar onLogout={onLogout} />
