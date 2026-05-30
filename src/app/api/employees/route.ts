@@ -154,9 +154,9 @@ export async function POST(request: NextRequest) {
       employmentStatus,
     } = body
 
-    if (!employeeCode || !firstName || !lastName || !email || !phone || !dateOfBirth || !gender || !currentAddress || !currentCity || !currentState || !currentPincode || !departmentId || !designationId || !branchId || !dateOfJoining) {
+    if (!employeeCode || !firstName || !lastName || !departmentId || !designationId || !branchId || !dateOfJoining) {
       return NextResponse.json(
-        { success: false, error: 'Required fields: employeeCode, firstName, lastName, email, phone, dateOfBirth, gender, currentAddress, currentCity, currentState, currentPincode, departmentId, designationId, branchId, dateOfJoining' },
+        { success: false, error: 'Required fields: employeeCode, firstName, lastName, departmentId, designationId, branchId, dateOfJoining' },
         { status: 400 }
       )
     }
@@ -175,18 +175,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check email uniqueness (exclude soft-deleted employees)
-    const existingEmail = await db.employee.findFirst({ 
-      where: { 
-        email,
-        isDeleted: false 
-      } 
-    })
-    if (existingEmail) {
-      return NextResponse.json(
-        { success: false, error: `Email ${email} is already registered to ${existingEmail.firstName} ${existingEmail.lastName} (${existingEmail.employeeCode})` },
-        { status: 409 }
-      )
+    // Check email uniqueness (exclude soft-deleted employees) — only if email provided
+    if (email) {
+      const existingEmail = await db.employee.findFirst({ 
+        where: { 
+          email,
+          isDeleted: false 
+        } 
+      })
+      if (existingEmail) {
+        return NextResponse.json(
+          { success: false, error: `Email ${email} is already registered to ${existingEmail.firstName} ${existingEmail.lastName} (${existingEmail.employeeCode})` },
+          { status: 409 }
+        )
+      }
     }
 
     const employee = await db.employee.create({
@@ -197,8 +199,8 @@ export async function POST(request: NextRequest) {
         firstName,
         middleName: body.middleName || null,
         lastName,
-        email,
-        phone,
+        email: email || null,
+        phone: phone || null,
         alternatePhone: body.alternatePhone || null,
         personalEmail: body.personalEmail || null,
         dateOfBirth: new Date(dateOfBirth),

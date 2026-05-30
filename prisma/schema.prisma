@@ -114,7 +114,7 @@ model Employee {
   firstName                 String
   middleName                String?
   lastName                  String
-  email                     String                      @unique
+  email                     String?                     @unique
   phone                     String?
   alternatePhone            String?
   dateOfBirth               DateTime?

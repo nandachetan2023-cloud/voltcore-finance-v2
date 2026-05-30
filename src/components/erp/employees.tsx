@@ -423,7 +423,6 @@ export default function EmployeesModule() {
           { field: 'empId', value: form.empId, label: 'Employee ID' },
           { field: 'firstName', value: form.firstName, label: 'First Name' },
           { field: 'lastName', value: form.lastName, label: 'Last Name' },
-          { field: 'email', value: form.email, label: 'Email' },
           { field: 'departmentId', value: form.departmentId, label: 'Department' },
           { field: 'designationId', value: form.designationId, label: 'Designation' },
           { field: 'branchId', value: form.branchId, label: 'Branch' },
@@ -516,8 +515,6 @@ export default function EmployeesModule() {
         { field: 'empId', value: form.empId, label: 'Employee ID' },
         { field: 'firstName', value: form.firstName, label: 'First Name' },
         { field: 'lastName', value: form.lastName, label: 'Last Name' },
-        { field: 'email', value: form.email, label: 'Email' },
-        { field: 'phone', value: form.phone, label: 'Phone' },
         { field: 'dateOfBirth', value: form.dateOfBirth, label: 'Date of Birth' },
         { field: 'currentAddress', value: form.currentAddress, label: 'Current Address' },
         { field: 'currentCity', value: form.currentCity, label: 'Current City' },
@@ -751,9 +748,9 @@ export default function EmployeesModule() {
           <F label="First Name" req><input className={`${inp} ${fieldBorderError(fieldErrors.firstName)}`} value={form.firstName} onChange={e => { setForm(f => ({ ...f, firstName: e.target.value })); setFieldErrors(fe => ({ ...fe, firstName: '' })); }} placeholder="Rajesh" /><FieldError message={fieldErrors.firstName} /></F>
           <F label="Middle Name"><input className={inp} value={form.middleName} onChange={e => setForm(f => ({ ...f, middleName: e.target.value }))} placeholder="Kumar" /></F>
           <F label="Last Name" req><input className={`${inp} ${fieldBorderError(fieldErrors.lastName)}`} value={form.lastName} onChange={e => { setForm(f => ({ ...f, lastName: e.target.value })); setFieldErrors(fe => ({ ...fe, lastName: '' })); }} placeholder="Sharma" /><FieldError message={fieldErrors.lastName} /></F>
-          <F label="Work Email" req><input className={`${inp} ${fieldBorderError(fieldErrors.email)}`} type="email" value={form.email} onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setFieldErrors(fe => ({ ...fe, email: '' })); }} placeholder="rajesh@company.com" /><FieldError message={fieldErrors.email} /></F>
+          <F label="Work Email"><input className={inp} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="rajesh@company.com (optional)" /></F>
           <F label="Personal Email"><input className={inp} type="email" value={form.personalEmail} onChange={e => setForm(f => ({ ...f, personalEmail: e.target.value }))} placeholder="rajesh@gmail.com" /></F>
-          <F label="Phone" req><input className={`${inp} ${fieldBorderError(fieldErrors.phone)}`} value={form.phone} onChange={e => { setForm(f => ({ ...f, phone: e.target.value })); setFieldErrors(fe => ({ ...fe, phone: '' })); }} placeholder="+91 98765 43210" /><FieldError message={fieldErrors.phone} /></F>
+          <F label="Phone"><input className={inp} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210 (optional)" /></F>
           <F label="Alternate Phone"><input className={inp} value={form.alternatePhone} onChange={e => setForm(f => ({ ...f, alternatePhone: e.target.value }))} placeholder="+91 98765 43211" /></F>
         </>}
 
