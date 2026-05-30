@@ -80,6 +80,78 @@ function TagInput({ value, options, placeholder, onChange }: {
   );
 }
 
+/* ── Account Capacity card ─────────────────────────────────────── */
+function AccountCapacityCard({ usage }: { usage: AccountUsage }) {
+  if (usage.unlimited) {
+    return (
+      <div className="vc-panel">
+        <div className="p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-[#00e676]/10 flex items-center justify-center shrink-0">
+            <Users size={18} className="text-[#00e676]" />
+          </div>
+          <div>
+            <div className="text-[13px] font-bold text-[#e2e8f0]">Account Capacity</div>
+            <div className="text-[11px] text-[#5a6878]">
+              <span className="text-[#00e676] font-semibold">Unlimited</span> — your provider has not set a cap.
+              Currently <span className="text-[#8899aa] font-semibold">{usage.used}</span> account{usage.used !== 1 ? 's' : ''} in use.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const pct = Math.min(100, Math.round((usage.used / Math.max(1, usage.maxAccounts)) * 100));
+  const remaining = usage.remaining ?? 0;
+  const full = remaining <= 0;
+  const nearFull = !full && pct >= 80;
+  const accent = full ? '#ff3d3d' : nearFull ? '#ff9800' : '#f5a623';
+  const note = full
+    ? 'Limit reached — remove an account or ask your provider to raise the cap before adding more.'
+    : nearFull
+      ? 'You are close to your account limit.'
+      : 'You can keep adding accounts up to your limit.';
+
+  return (
+    <div className="vc-panel overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${accent}15` }}>
+              <Users size={18} style={{ color: accent }} />
+            </div>
+            <div>
+              <div className="text-[13px] font-bold text-[#e2e8f0]">Account Capacity</div>
+              <div className="text-[11px] text-[#5a6878]">{note}</div>
+            </div>
+          </div>
+          <div className="flex items-stretch gap-2">
+            {[
+              { label: 'Used', value: usage.used, color: accent },
+              { label: 'Remaining', value: remaining, color: full ? '#ff3d3d' : '#00e676' },
+              { label: 'Limit', value: usage.maxAccounts, color: '#8899aa' },
+            ].map(s => (
+              <div key={s.label} className="text-center px-3 py-1.5 rounded-lg bg-[#0d1117] border border-[#252e3a] min-w-[60px]">
+                <div className="text-[16px] font-black leading-none" style={{ color: s.color, fontFamily: "'Share Tech Mono', monospace" }}>{s.value}</div>
+                <div className="text-[9px] text-[#5a6878] uppercase tracking-wider mt-1">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="mt-3">
+          <div className="h-2.5 bg-[#0d1117] rounded-full overflow-hidden border border-[#252e3a]">
+            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: accent }} />
+          </div>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[9px] text-[#5a6878]">{pct}% used</span>
+            <span className="text-[9px] text-[#5a6878]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{usage.used} / {usage.maxAccounts}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ════════════════════════════════════════════════════════════════
    MAIN — Roles & Access (admin, under Organization)
    ════════════════════════════════════════════════════════════════ */
@@ -115,38 +187,7 @@ export default function RolesAccessModule() {
 
   return (
     <div className="space-y-4">
-      {/* Account usage banner */}
-      {usage && (
-        <div className={`vc-panel ${!usage.unlimited && usage.remaining === 0 ? 'border-[#ff3d3d]/40' : ''}`}>
-          <div className="p-4 flex items-center gap-4 flex-wrap">
-            <div className="w-10 h-10 rounded-lg bg-[#f5a623]/10 flex items-center justify-center shrink-0">
-              <Users size={18} className="text-[#f5a623]" />
-            </div>
-            <div className="flex-1 min-w-[180px]">
-              <div className="text-[12px] font-semibold text-[#e2e8f0]">Account Capacity</div>
-              <div className="text-[11px] text-[#5a6878]">
-                {usage.unlimited
-                  ? 'Unlimited accounts (no cap set by your provider)'
-                  : `${usage.used} of ${usage.maxAccounts} accounts used · ${usage.remaining} remaining`}
-              </div>
-            </div>
-            {!usage.unlimited && (
-              <div className="w-full sm:w-48">
-                <div className="h-2 bg-[#141920] rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${Math.min(100, (usage.used / Math.max(1, usage.maxAccounts)) * 100)}%`,
-                      background: usage.remaining === 0 ? '#ff3d3d' : '#f5a623',
-                    }} />
-                </div>
-                <div className="text-[9px] text-[#5a6878] mt-1 text-right" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                  {usage.used}/{usage.maxAccounts}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {usage && <AccountCapacityCard usage={usage} />}
 
       <div className="flex items-center justify-between">
         <div>
@@ -217,7 +258,7 @@ function RolesPanel({ roles, departments, designations, onRefresh }: {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] text-[#5a6878]">Define business roles and their module access. Higher level = more authority.</p>
+        <p className="text-[11px] text-[#5a6878]">Define business roles and their module access. Level 1 is the highest authority (just below admin); higher numbers are lower positions.</p>
         <button onClick={() => { setShowForm(true); setForm(empty); setEditId(null); }}
           className="vc-btn-primary flex items-center gap-1.5"><Plus size={13} /> Add Role</button>
       </div>
@@ -233,7 +274,7 @@ function RolesPanel({ roles, departments, designations, onRefresh }: {
               <input className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. HR Manager" />
             </Field>
             <Field label="Hierarchy Level *">
-              <input className={inp} type="number" min="1" max="100" value={form.level} onChange={e => setForm(f => ({ ...f, level: e.target.value }))} placeholder="1 = lowest" />
+              <input className={inp} type="number" min="1" max="100" value={form.level} onChange={e => setForm(f => ({ ...f, level: e.target.value }))} placeholder="1 = highest" />
             </Field>
             <Field label="Module Access" span2>
               <ModuleSelect value={form.moduleAccess} onChange={v => setForm(f => ({ ...f, moduleAccess: v }))} />
@@ -262,7 +303,7 @@ function RolesPanel({ roles, departments, designations, onRefresh }: {
 
       {sorted.length > 0 && (
         <div className="bg-[#0d1117] border border-[#252e3a] rounded-xl p-4">
-          <p className="text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-3">Hierarchy (lowest → highest)</p>
+          <p className="text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-3">Hierarchy (highest → lowest authority)</p>
           <div className="flex items-center gap-2 flex-wrap">
             {sorted.map((r, i) => (
               <div key={r.id} className="flex items-center gap-2">
@@ -325,6 +366,27 @@ function ChainsPanel({ chains, roles, onRefresh }: {
   const sortedRoles = [...roles].sort((a, b) => a.level - b.level);
   const roleById = (id: string) => roles.find(r => r.id === id);
 
+  const requesterRole = form.requesterRoleId ? roleById(form.requesterRoleId) : null;
+  const isLevel1Requester = !!requesterRole && requesterRole.level <= 1;
+  // Only HIGHER authority (lower level number) than the requester may approve.
+  // The requester's own level and every level below it are auto-exempted.
+  const eligibleApprovers = requesterRole
+    ? roles.filter(r => r.level < requesterRole.level).sort((a, b) => b.level - a.level)
+    : [];
+
+  // When the requester changes, drop any selected approvers that are no longer eligible.
+  useEffect(() => {
+    if (!requesterRole) return;
+    setTreeSteps(prev => {
+      const next = prev.filter(s => {
+        const role = roleById(s.roleId);
+        return role && role.level < requesterRole.level;
+      });
+      return next.length === prev.length ? prev : next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.requesterRoleId]);
+
   const addRoleToTree = (roleId: string) => {
     if (treeSteps.find(s => s.roleId === roleId)) return;
     setTreeSteps(prev => [...prev, { roleId, scope: 'universal', isRequired: true }]);
@@ -343,6 +405,8 @@ function ChainsPanel({ chains, roles, onRefresh }: {
 
   const save = async () => {
     if (!form.name.trim()) { toast.error('Chain name is required'); return; }
+    if (!form.requesterRoleId) { toast.error('Select the role this chain applies to'); return; }
+    if (isLevel1Requester) { toast.error('Level-1 roles go directly to admin — no chain needed'); return; }
     if (treeSteps.length === 0) { toast.error('Add at least one approver role'); return; }
     setSaving(true);
     try {
@@ -373,7 +437,7 @@ function ChainsPanel({ chains, roles, onRefresh }: {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] text-[#5a6878]">Build approval chains by selecting roles. Requests flow bottom → top.</p>
+        <p className="text-[11px] text-[#5a6878]">Build approval chains by selecting roles. Only higher-authority roles (lower level numbers) can approve. Requests flow from the requester upward.</p>
         <button onClick={() => { setShowForm(true); setForm(emptyChain); setTreeSteps([]); setEditId(null); }}
           className="vc-btn-primary flex items-center gap-1.5"><Plus size={13} /> Add Chain</button>
       </div>
@@ -388,7 +452,7 @@ function ChainsPanel({ chains, roles, onRefresh }: {
             <Field label="Applies to Role">
               <select className={inp} value={form.requesterRoleId} onChange={e => setForm(f => ({ ...f, requesterRoleId: e.target.value }))}>
                 <option value="">Select role...</option>
-                {sortedRoles.map(r => <option key={r.id} value={r.id}>{r.name} — Level {r.level}</option>)}
+                {sortedRoles.map(r => <option key={r.id} value={r.id}>{r.name} — Level {r.level}{r.level <= 1 ? ' (top)' : ''}</option>)}
               </select>
               <p className="text-[10px] text-[#5a6878] mt-1">Level-1 roles go directly to admin. Other roles need a chain.</p>
             </Field>
@@ -400,12 +464,28 @@ function ChainsPanel({ chains, roles, onRefresh }: {
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {isLevel1Requester && (
+            <div className="flex items-start gap-3 rounded-xl border border-[#00d4ff]/30 bg-[#00d4ff]/8 p-3">
+              <Shield size={16} className="text-[#00d4ff] shrink-0 mt-0.5" />
+              <div>
+                <div className="text-[11px] font-semibold text-[#00d4ff]">No chain needed for Level 1</div>
+                <p className="text-[10px] text-[#8899aa] mt-0.5">{requesterRole?.name} is the highest authority below admin. Their requests go directly to the admin for approval, so an approval chain isn&apos;t required.</p>
+              </div>
+            </div>
+          )}
+
+          <div className={`grid grid-cols-2 gap-4 ${isLevel1Requester ? 'hidden' : ''}`}>
             <div>
-              <label className={lbl}>Role Hierarchy — click to add</label>
+              <label className={lbl}>Eligible Approvers — click to add</label>
               <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-3 space-y-1.5 max-h-[280px] overflow-y-auto">
-                {sortedRoles.length === 0 && <p className="text-[10px] text-[#5a6878] text-center py-4">No roles defined yet.</p>}
-                {sortedRoles.map(role => {
+                {!requesterRole && <p className="text-[10px] text-[#5a6878] text-center py-4">Select the role this chain applies to first.</p>}
+                {requesterRole && isLevel1Requester && (
+                  <p className="text-[10px] text-[#5a6878] text-center py-4">Level-1 is the top authority — requests go straight to admin.</p>
+                )}
+                {requesterRole && !isLevel1Requester && eligibleApprovers.length === 0 && (
+                  <p className="text-[10px] text-[#5a6878] text-center py-4">No higher-authority roles exist above this one.</p>
+                )}
+                {requesterRole && !isLevel1Requester && eligibleApprovers.map(role => {
                   const inChain = treeSteps.some(s => s.roleId === role.id);
                   return (
                     <button key={role.id} onClick={() => inChain ? removeFromTree(role.id) : addRoleToTree(role.id)}
@@ -420,7 +500,7 @@ function ChainsPanel({ chains, roles, onRefresh }: {
                   );
                 })}
               </div>
-              <p className="text-[10px] text-[#5a6878] mt-1.5">Admin (highest level) always has final authority.</p>
+              <p className="text-[10px] text-[#5a6878] mt-1.5">Only roles above the requester are shown. Admin always has final authority.</p>
             </div>
 
             <div>
@@ -481,7 +561,7 @@ function ChainsPanel({ chains, roles, onRefresh }: {
           </div>
 
           <div className="flex gap-2 pt-1">
-            <button onClick={save} disabled={saving} className="vc-btn-primary disabled:opacity-50">{saving ? 'Saving...' : 'Save Chain'}</button>
+            <button onClick={save} disabled={saving || isLevel1Requester} className="vc-btn-primary disabled:opacity-50">{saving ? 'Saving...' : 'Save Chain'}</button>
             <button onClick={() => setShowForm(false)} className="vc-btn-ghost">Cancel</button>
           </div>
         </div>

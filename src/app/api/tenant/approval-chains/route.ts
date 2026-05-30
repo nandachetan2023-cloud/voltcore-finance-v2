@@ -39,6 +39,43 @@ async function roleBelongs(tenantId: string, roleId: string | null | undefined):
   return !!r
 }
 
+/**
+ * Validate the hierarchy of a chain. Level 1 is the HIGHEST authority (just below
+ * admin); higher numbers are lower positions. Therefore:
+ *  - A level-1 requester needs no chain (goes straight to admin).
+ *  - Only roles with a LOWER level number (higher authority) than the requester
+ *    may act as approvers. The requester's own level and everything below it are
+ *    not allowed as approvers.
+ * Returns an error string, or null when the chain is valid.
+ */
+async function validateHierarchy(
+  tenantId: string,
+  requesterRoleId: string | null | undefined,
+  steps: any[] | undefined,
+): Promise<string | null> {
+  if (!requesterRoleId) return 'Select the role this chain applies to'
+  const requester = await superadminDb.orgRole.findFirst({ where: { id: requesterRoleId, tenantId } })
+  if (!requester) return 'Invalid requester role'
+  if (requester.level <= 1) return 'Level-1 roles go directly to admin — no chain needed'
+
+  const stepRoleIds = (steps || []).map(s => s.approverRoleId).filter(Boolean)
+  if (stepRoleIds.length === 0) return 'Add at least one approver role'
+
+  const approverRoles = await superadminDb.orgRole.findMany({
+    where: { id: { in: stepRoleIds }, tenantId },
+    select: { id: true, name: true, level: true },
+  })
+  const byId = new Map(approverRoles.map(r => [r.id, r]))
+  for (const id of stepRoleIds) {
+    const r = byId.get(id)
+    if (!r) return 'Invalid approver role in chain'
+    if (r.level >= requester.level) {
+      return `"${r.name}" is not above the requester and cannot approve their requests`
+    }
+  }
+  return null
+}
+
 // POST: create chain
 export async function POST(request: NextRequest) {
   const tenantId = getTenantId(request)
@@ -58,6 +95,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Invalid approver role in chain' }, { status: 400 })
       }
     }
+
+    // Enforce hierarchy: only higher-authority roles may approve; no chain for level-1
+    const hierErr = await validateHierarchy(tenantId, requesterRoleId, steps)
+    if (hierErr) return NextResponse.json({ success: false, error: hierErr }, { status: 400 })
 
     const chain = await superadminDb.approvalChain.create({
       data: {
@@ -103,6 +144,12 @@ export async function PUT(request: NextRequest) {
 
     if (!(await roleBelongs(tenantId, requesterRoleId))) {
       return NextResponse.json({ success: false, error: 'Invalid requester role' }, { status: 400 })
+    }
+
+    // If steps are being updated, enforce hierarchy rules.
+    if (steps !== undefined) {
+      const hierErr = await validateHierarchy(tenantId, requesterRoleId ?? existing.requesterRoleId, steps)
+      if (hierErr) return NextResponse.json({ success: false, error: hierErr }, { status: 400 })
     }
 
     await superadminDb.approvalChain.update({

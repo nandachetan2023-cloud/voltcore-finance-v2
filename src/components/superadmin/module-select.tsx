@@ -2,7 +2,7 @@
 
 /**
  * Granular Module Access Selector
- * Shared between superadmin hierarchy-tab (OrgRole) and user-management (TenantUser).
+ * Shared between the admin Roles & Access module (OrgRole) and user-management (TenantUser).
  *
  * Value format: "all" | comma-separated keys
  * Keys can be group-level ("hrms") or sub-module level ("employees,attendance")
