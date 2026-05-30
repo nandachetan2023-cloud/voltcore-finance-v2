@@ -293,7 +293,6 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .vc-stat-card:hover { border-color: var(--vc-border2); box-shadow: 0 1px 3px rgba(20, 16, 8, 0.05); }
-.vc-stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--vc-accent); opacity: 0.6; }
 
 /* Shadow utilities — soft, restrained */
 .dark-shadow-sm { box-shadow: 0 1px 2px rgba(20, 16, 8, 0.05); }

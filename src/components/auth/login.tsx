@@ -17,12 +17,12 @@ function Card({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-[#0d1117] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-[#f5a623] to-[#e8891a] rounded-2xl mb-4">
-            <span className="text-2xl font-extrabold text-black">VC</span>
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#f5a623] rounded-2xl mb-4">
+            <span className="text-2xl font-bold text-[#1a1206]">VC</span>
           </div>
-          <h1 className="text-2xl font-bold text-[#e2e8f0] mb-2">VoltCore ERP</h1>
+          <h1 className="text-2xl font-bold text-[#e2e8f0] mb-2 tracking-tight">VoltCore ERP</h1>
         </div>
-        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-8 shadow-2xl">
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-8 dark-shadow-lg">
           {children}
         </div>
         <div className="mt-8 text-center">

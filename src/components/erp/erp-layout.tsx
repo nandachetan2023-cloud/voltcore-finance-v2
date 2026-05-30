@@ -227,35 +227,35 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
   return (
     <>
       {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
-      <aside className={`fixed top-0 left-0 h-full z-50 w-[248px] min-w-[248px] bg-[#161c24] border-r border-[#252e3a] flex flex-col overflow-y-auto transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="px-5 py-5 border-b border-[#252e3a] flex items-center gap-3">
-          <button onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+      <aside className={`fixed top-0 left-0 h-full z-50 w-[248px] min-w-[248px] bg-[#161c24] border-r border-[#252e3a] flex flex-col overflow-hidden transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="px-5 py-4 border-b border-[#252e3a] flex items-center gap-3 shrink-0">
+          <button onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }} className="flex items-center gap-3 hover:opacity-80 transition-opacity min-w-0">
             {branding?.logoUrl ? (
-              <img src={branding.logoUrl} alt={branding.name} className="w-9 h-9 object-contain rounded-lg bg-white/5 p-1" />
+              <img src={branding.logoUrl} alt={branding.name} className="w-12 h-12 object-contain rounded-lg shrink-0" />
             ) : (
-              <div className="w-9 h-9 bg-[#f5a623] rounded-lg flex items-center justify-center text-sm font-bold text-[#1a1206]">
+              <div className="w-12 h-12 bg-[#f5a623] rounded-lg flex items-center justify-center text-base font-bold text-[#1a1206] shrink-0">
                 {branding?.name ? branding.name.substring(0, 2).toUpperCase() : 'VC'}
               </div>
             )}
-            <div>
-              <div className="text-[14px] font-bold text-[#e2e8f0] tracking-tight truncate max-w-[150px]">
+            <div className="min-w-0">
+              <div className="text-[14px] font-bold text-[#e2e8f0] tracking-tight truncate">
                 {branding?.name?.toUpperCase() || 'VOLTCORE'}
               </div>
               <div className="text-[9px] text-[#5a6878] tracking-[2px] uppercase mt-0.5">ERP · HRMS</div>
             </div>
           </button>
-          <button className="ml-auto lg:hidden text-[#5a6878] hover:text-[#e2e8f0]" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
+          <button className="ml-auto lg:hidden text-[#5a6878] hover:text-[#e2e8f0] shrink-0" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
         </div>
 
         {/* Restricted access banner */}
         {!isDemo && userRole !== 'admin' && (
-          <div className="mx-3 mt-3 px-3 py-2 bg-[#f5a623]/10 border border-[#f5a623]/30 rounded-lg flex items-center gap-2">
+          <div className="mx-3 mt-3 px-3 py-2 bg-[#f5a623]/10 border border-[#f5a623]/30 rounded-lg flex items-center gap-2 shrink-0">
             <Shield size={12} className="text-[#f5a623] shrink-0" />
             <span className="text-[10px] text-[#f5a623] font-semibold tracking-wide">LIMITED ACCESS</span>
           </div>
         )}
 
-        <div className="flex-1 py-3 px-2.5">
+        <div className="flex-1 min-h-0 overflow-y-auto py-3 px-2.5">
           {(isSubNav || isPageModule) ? (
             <>
               <button onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-[#5a6878] hover:text-[#e2e8f0] transition-colors rounded-lg">
@@ -292,7 +292,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
           )}
         </div>
 
-        <div className="border-t border-[#252e3a] p-3 relative user-menu-container">
+        <div className="border-t border-[#252e3a] p-3 relative user-menu-container shrink-0">
           <ThemeToggle />
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
