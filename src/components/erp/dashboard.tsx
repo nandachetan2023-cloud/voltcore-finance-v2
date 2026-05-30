@@ -136,9 +136,9 @@ function getStatusColor(status: string) {
 }
 
 function getProgressColor(pct: number) {
-  if (pct >= 75) return '#4f9d77';
-  if (pct >= 40) return '#d98a24';
-  return '#d9596b';
+  if (pct >= 75) return '#00e676';
+  if (pct >= 40) return '#f5a623';
+  return '#ff3d3d';
 }
 
 function timeAgo(dateStr: string) {
@@ -395,7 +395,7 @@ export default function Dashboard() {
           label="Total Workforce"
           value={String(data.employees.total)}
           sub={`${data.employees.active} currently active`}
-          color="#d98a24"
+          color="#f5a623"
           trend="up"
         />
         <StatCard
@@ -403,21 +403,21 @@ export default function Dashboard() {
           label="Active Projects"
           value={String(data.projects.active)}
           sub={`of ${data.projects.total} total projects`}
-          color="#5b8def"
+          color="#00d4ff"
         />
         <StatCard
           icon={UserCheck}
           label="Attendance Today"
           value={`${attendancePct}%`}
           sub={`${data.attendance.present} of ${data.employees.total} present`}
-          color="#4f9d77"
+          color="#00e676"
         />
         <StatCard
           icon={ShieldAlert}
           label="Safety Incidents"
           value={String(data.incidents.open)}
           sub={`${data.incidents.total} total (${data.incidents.open} open)`}
-          color="#d9596b"
+          color="#ff3d3d"
         />
       </div>
 
@@ -511,7 +511,7 @@ export default function Dashboard() {
                           {count} <span className="text-[#5a6878]">({pct.toFixed(0)}%)</span>
                         </span>
                       </div>
-                      <ProgressBar pct={pct} color="#d98a24" height={4} />
+                      <ProgressBar pct={pct} color="#f5a623" height={4} />
                     </div>
                   );
                 })

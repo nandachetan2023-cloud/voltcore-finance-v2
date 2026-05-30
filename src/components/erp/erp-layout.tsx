@@ -490,9 +490,9 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
                           : (isModuleAllowed(mapping.self, allowedModules) ? mapping.self : isModuleAllowed(mapping.admin, allowedModules) ? mapping.admin : null))
                       : null;
                     const typeColor: Record<string, string> = {
-                      info: '#5b8def', success: '#4f9d77', warning: '#d98a24', error: '#d9596b',
+                      info: '#00d4ff', success: '#00e676', warning: '#f5a623', error: '#ff3d3d',
                     };
-                    const borderColor = typeColor[notif.type] || '#9b988e';
+                    const borderColor = typeColor[notif.type] || '#5a6878';
                     return (
                       <div
                         key={idx}
