@@ -289,7 +289,7 @@ export default function BankCash() {
   return (
     <div className="space-y-4">
       {/* Total Balance Banner */}
-      <div className="vc-panel" style={{ background: 'linear-gradient(135deg, #161c24 0%, #1a2430 100%)' }}>
+      <div className="vc-panel" style={{ background: 'var(--vc-bg3)' }}>
         <div className="p-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-[#f5a623]/10 flex items-center justify-center">

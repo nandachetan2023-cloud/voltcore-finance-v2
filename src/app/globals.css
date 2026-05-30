@@ -575,3 +575,69 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #9b988e; backgroun
   font-variant-numeric: tabular-nums !important;
   letter-spacing: -0.01em !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   FLATTEN LEGACY AMBER GRADIENT BUTTONS / AVATARS
+   Many components use `bg-gradient-to-* from-[#f5a623] to-[#e8891a]`.
+   Force them to a flat muted-amber fill (no gradient, no glow).
+   ═══════════════════════════════════════════════════════════════ */
+[class*="from-[#f5a623]"][class*="to-[#e8891a]"] {
+  background-image: none !important;
+  background-color: var(--vc-accent) !important;
+  color: var(--vc-accent-fg) !important;
+}
+[class*="from-[#f5a623]"][class*="to-[#e8891a]"]:hover {
+  background-color: var(--vc-accent2) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DARK MODE STRUCTURAL REMAP
+   Components hardcode the OLD dark hex values inline (bg-[#161c24],
+   bg-[#0a0d12], borders, etc.). Remap them to the NEW warm-charcoal
+   palette so panels/sidebar/topbar match the refreshed tokens.
+   ═══════════════════════════════════════════════════════════════ */
+.dark .bg-\[\#0a0d12\] { background-color: #0e1018 !important; }
+.dark .bg-\[\#0d1017\] { background-color: #121210 !important; }
+.dark .bg-\[\#0d1117\] { background-color: #121210 !important; }
+.dark .bg-\[\#0f1318\] { background-color: #13130f !important; }
+.dark .bg-\[\#0f1419\] { background-color: #13130f !important; }
+.dark .bg-\[\#141920\] { background-color: #1c1c18 !important; }
+.dark .bg-\[\#161b22\] { background-color: #191915 !important; }
+.dark .bg-\[\#161c24\] { background-color: #191915 !important; }
+.dark .bg-\[\#1a2028\] { background-color: #1f1f1a !important; }
+.dark .bg-\[\#1a2030\] { background-color: #1f1f1a !important; }
+.dark .bg-\[\#1a2332\] { background-color: #1f1f1a !important; }
+.dark .bg-\[\#1a2430\] { background-color: #1f1f1a !important; }
+.dark .bg-\[\#1e252e\] { background-color: #242420 !important; }
+.dark .bg-\[\#1e2530\] { background-color: #242420 !important; }
+.dark .bg-\[\#1e2630\] { background-color: #242420 !important; }
+.dark .bg-\[\#252e3a\] { background-color: #2a2a24 !important; }
+.dark .bg-\[\#2e3a48\] { background-color: #35352d !important; }
+
+.dark .border-\[\#252e3a\] { border-color: #2a2a24 !important; }
+.dark .border-\[\#2e3a48\] { border-color: #35352d !important; }
+.dark .border-\[\#1e252e\] { border-color: #242420 !important; }
+.dark .border-\[\#161c24\] { border-color: #2a2a24 !important; }
+.dark .border-\[\#161b22\] { border-color: #2a2a24 !important; }
+.dark .border-\[\#30363d\] { border-color: #35352d !important; }
+
+.dark .hover\:bg-\[\#141920\]:hover { background-color: #1c1c18 !important; }
+.dark .hover\:bg-\[\#1a2028\]:hover { background-color: #1f1f1a !important; }
+.dark .hover\:bg-\[\#1a2332\]:hover { background-color: #1f1f1a !important; }
+.dark .hover\:bg-\[\#1e2838\]:hover { background-color: #242420 !important; }
+.dark .hover\:bg-\[\#252e3a\]:hover { background-color: #2a2a24 !important; }
+
+/* text tokens that were the old cool grays → warm neutrals */
+.dark .text-\[\#e2e8f0\] { color: #e9e8e1 !important; }
+.dark .text-\[\#8899aa\] { color: #9d9b90 !important; }
+.dark .text-\[\#5a6878\] { color: #64635a !important; }
+
+/* ── Border opacity variants on the main dark border hex ──────── */
+html:not(.dark) .border-\[\#252e3a\]\/30 { border-color: rgba(227,226,218,0.7) !important; }
+html:not(.dark) .border-\[\#252e3a\]\/40 { border-color: rgba(227,226,218,0.8) !important; }
+html:not(.dark) .border-\[\#252e3a\]\/50 { border-color: rgba(227,226,218,0.9) !important; }
+html:not(.dark) .border-\[\#252e3a\]\/60 { border-color: #e4e2da !important; }
+.dark .border-\[\#252e3a\]\/30 { border-color: rgba(42,42,36,0.6) !important; }
+.dark .border-\[\#252e3a\]\/40 { border-color: rgba(42,42,36,0.7) !important; }
+.dark .border-\[\#252e3a\]\/50 { border-color: rgba(42,42,36,0.85) !important; }
+.dark .border-\[\#252e3a\]\/60 { border-color: #2a2a24 !important; }
