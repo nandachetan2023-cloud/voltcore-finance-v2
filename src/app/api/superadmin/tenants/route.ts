@@ -21,12 +21,16 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, slug, dbUrl, notes, logoUrl } = body
+    const { name, slug, dbUrl, notes, logoUrl, maxAccounts } = body
     if (!name || !slug || !dbUrl) {
       return NextResponse.json({ success: false, error: 'name, slug and dbUrl are required' }, { status: 400 })
     }
     const tenant = await superadminDb.tenant.create({
-      data: { name, slug: slug.toLowerCase().replace(/\s+/g, '-'), dbUrl, notes: notes || '', status: 'active', logoUrl: logoUrl || null } as any,
+      data: {
+        name, slug: slug.toLowerCase().replace(/\s+/g, '-'), dbUrl,
+        notes: notes || '', status: 'active', logoUrl: logoUrl || null,
+        maxAccounts: maxAccounts != null ? parseInt(String(maxAccounts)) || 0 : 0,
+      } as any,
     })
     return NextResponse.json({ success: true, data: tenant }, { status: 201 })
   } catch (e: any) {
@@ -41,6 +45,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { id, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 })
+    if (data.maxAccounts !== undefined) data.maxAccounts = parseInt(String(data.maxAccounts)) || 0
     const tenant = await superadminDb.tenant.update({ where: { id }, data })
     return NextResponse.json({ success: true, data: tenant })
   } catch (e) {

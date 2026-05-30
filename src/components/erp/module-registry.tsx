@@ -57,6 +57,7 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   'offboarding': () => import('@/components/erp/offboarding'),
   'exit-management': () => import('@/components/erp/exit-management'),
   'employee-documents': () => import('@/components/erp/employee-documents'),
+  'roles-access': () => import('@/components/erp/roles-access'),
   'notice-board':  () => import('@/components/erp/notice-board'),
   'my-profile':    () => import('@/components/erp/my-profile'),
   'my-notices':    () => import('@/components/erp/my-notices'),

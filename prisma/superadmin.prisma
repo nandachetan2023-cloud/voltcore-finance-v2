@@ -17,6 +17,7 @@ model Tenant {
   status      String   @default("active")  // active | inactive
   notes       String   @default("")
   logoUrl     String?                       // public URL or data URL for the company logo (PNG)
+  maxAccounts Int      @default(0)           // 0 = unlimited; >0 = max total tenant-admin-created accounts
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

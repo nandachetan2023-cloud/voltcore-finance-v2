@@ -6,6 +6,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { superadminDb } from '@/lib/superadmin-db'
+import { checkAccountLimit } from '@/lib/account-limit'
 import bcrypt from 'bcryptjs'
 
 export const dynamic = 'force-dynamic'
@@ -60,6 +61,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'A role must be assigned to the user.' }, { status: 400 })
     }
 
+    // Enforce the tenant's TOTAL account cap (set by superadmin)
+    const limitError = await checkAccountLimit(tenantId, 1)
+    if (limitError) {
+      return NextResponse.json({ success: false, error: limitError }, { status: 403 })
+    }
+
     // Resolve allowedModules from the OrgRole if provided
     let allowedModules = 'all'
     if (orgRoleId) {
@@ -68,23 +75,6 @@ export async function POST(request: NextRequest) {
       })
       if (role) {
         allowedModules = role.moduleAccess
-
-        // Enforce maxUsers limit (0 = unlimited)
-        if (role.maxUsers > 0) {
-          const existingCount = await superadminDb.tenantUser.count({
-            where: {
-              tenantId,
-              orgRoleId,
-              createdBySuperadmin: false, // only count tenant-admin-created users
-            },
-          })
-          if (existingCount >= role.maxUsers) {
-            return NextResponse.json({
-              success: false,
-              error: `User limit reached for role "${role.name}". Maximum ${role.maxUsers} user${role.maxUsers !== 1 ? 's' : ''} allowed. Contact your system administrator to increase the limit.`,
-            }, { status: 403 })
-          }
-        }
       }
     }
 
