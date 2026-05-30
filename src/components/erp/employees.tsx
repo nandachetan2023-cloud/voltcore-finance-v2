@@ -230,6 +230,16 @@ function F({ label, children, req, span2 }: { label: string; children: React.Rea
   );
 }
 
+const INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+  'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
+  'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
+  'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+];
+
 export default function EmployeesModule() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -542,11 +552,15 @@ export default function EmployeesModule() {
       }
 
       let employeeCode = form.empId.trim().toUpperCase();
-      // Allow any employee code format (e.g. UA00000001, EMP001, E-001, etc.)
-      // Just ensure it's not empty and reasonable length
+      // Auto-format: if user typed just digits, prepend UA and zero-pad to 8 digits
       if (mode === 'create') {
-        if (!employeeCode || employeeCode.length < 2 || employeeCode.length > 20) {
-          toast.error('Employee ID must be 2-20 characters long');
+        if (/^\d{1,8}$/.test(employeeCode)) {
+          employeeCode = `UA${employeeCode.padStart(8, '0')}`;
+        }
+        if (!/^UA\d{4,8}$/.test(employeeCode)) {
+          toast.error('Employee ID must be in format UA + digits (e.g. UA00000001). You can also just type the number and it will be auto-formatted.');
+          setFieldErrors(fe => ({ ...fe, empId: 'Format: UA00000001 (or just type the number)' }));
+          setFormTab('identity');
           setSubmitting(false);
           return;
         }
@@ -775,14 +789,14 @@ export default function EmployeesModule() {
         {formTab === 'address' && <>
           <F label="Current Address" req span2><input className={`${inp} ${fieldBorderError(fieldErrors.currentAddress)}`} value={form.currentAddress} onChange={e => { setForm(f => ({ ...f, currentAddress: e.target.value })); setFieldErrors(fe => ({ ...fe, currentAddress: '' })); }} placeholder="House No, Street, Area" /><FieldError message={fieldErrors.currentAddress} /></F>
           <F label="Current City" req><input className={`${inp} ${fieldBorderError(fieldErrors.currentCity)}`} value={form.currentCity} onChange={e => { setForm(f => ({ ...f, currentCity: e.target.value })); setFieldErrors(fe => ({ ...fe, currentCity: '' })); }} placeholder="Mumbai" /><FieldError message={fieldErrors.currentCity} /></F>
-          <F label="Current State" req><input className={`${inp} ${fieldBorderError(fieldErrors.currentState)}`} value={form.currentState} onChange={e => { setForm(f => ({ ...f, currentState: e.target.value })); setFieldErrors(fe => ({ ...fe, currentState: '' })); }} placeholder="Maharashtra" /><FieldError message={fieldErrors.currentState} /></F>
+          <F label="Current State" req><select className={`${sel} ${fieldBorderError(fieldErrors.currentState)}`} value={form.currentState} onChange={e => { setForm(f => ({ ...f, currentState: e.target.value })); setFieldErrors(fe => ({ ...fe, currentState: '' })); }}><option value="">Select state...</option>{INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}</select><FieldError message={fieldErrors.currentState} /></F>
           <F label="Current Pincode" req><input className={`${inp} ${fieldBorderError(fieldErrors.currentPincode)}`} value={form.currentPincode} onChange={e => { setForm(f => ({ ...f, currentPincode: e.target.value })); setFieldErrors(fe => ({ ...fe, currentPincode: '' })); }} placeholder="400001" maxLength={6} /><FieldError message={fieldErrors.currentPincode} /></F>
           <div className="col-span-2 border-t border-[#252e3a] pt-2 mt-1">
             <p className="text-[10px] text-[#5a6878] mb-2">Permanent Address (if different)</p>
           </div>
           <F label="Permanent Address" span2><input className={inp} value={form.permanentAddress} onChange={e => setForm(f => ({ ...f, permanentAddress: e.target.value }))} placeholder="House No, Street, Area" /></F>
           <F label="Permanent City"><input className={inp} value={form.permanentCity} onChange={e => setForm(f => ({ ...f, permanentCity: e.target.value }))} placeholder="Delhi" /></F>
-          <F label="Permanent State"><input className={inp} value={form.permanentState} onChange={e => setForm(f => ({ ...f, permanentState: e.target.value }))} placeholder="Delhi" /></F>
+          <F label="Permanent State"><select className={sel} value={form.permanentState} onChange={e => setForm(f => ({ ...f, permanentState: e.target.value }))}><option value="">Select state...</option>{INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}</select></F>
           <F label="Permanent Pincode"><input className={inp} value={form.permanentPincode} onChange={e => setForm(f => ({ ...f, permanentPincode: e.target.value }))} placeholder="110001" maxLength={6} /></F>
         </>}
 

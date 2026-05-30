@@ -399,8 +399,7 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
   };
 
   const handleNotificationClick = async (notif: any) => {
-    // Mark this notification as read
-    await markOneRead(notif.id);
+    // Navigate to the relevant module — do NOT mark as read (user must explicitly click "Mark as Read")
     setShowNotifications(false);
 
     const entityType = notif.entityType as string;
@@ -511,11 +510,14 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
                           )}
                         </div>
                         <div className="text-[10px] text-[#8899aa] mt-0.5 leading-snug">{notif.message}</div>
-                        <div className="flex items-center justify-between mt-1">
+                        <div className="flex items-center justify-between mt-1.5">
                           <span className="text-[9px] text-[#5a6878]">{notif.time}</span>
-                          {targetModule && (
-                            <span className="text-[9px] text-[#5a6878] hover:text-[#e2e8f0]">Click to open →</span>
-                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); markOneRead(notif.id); }}
+                            className="text-[9px] font-semibold text-[#f5a623] hover:text-[#e8891a] transition-colors px-1.5 py-0.5 rounded hover:bg-[#f5a623]/10"
+                          >
+                            ✓ Mark as Read
+                          </button>
                         </div>
                       </div>
                     );

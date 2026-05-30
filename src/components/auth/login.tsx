@@ -107,13 +107,16 @@ export default function Login({ onLogin }: LoginProps) {
 
   // ── Send OTP ──────────────────────────────────────────────────
   const handleSendOTP = async () => {
-    if (!validateFpEmail(fpEmail)) return;
+    const targetEmail = fpEmail || email;
+    if (!targetEmail) { setFpEmailError('No email provided. Go back and enter your email.'); return; }
+    if (!validateFpEmail(targetEmail)) return;
+    setFpEmail(targetEmail); // ensure fpEmail is set for subsequent steps
     setFpLoading(true);
     try {
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: fpEmail }),
+        body: JSON.stringify({ email: targetEmail }),
       });
       const data = await res.json();
       if (data.success) {
@@ -259,7 +262,7 @@ export default function Login({ onLogin }: LoginProps) {
     </Card>
   );
 
-  // ── Screen: Forgot Password (enter email) ─────────────────────
+  // ── Screen: Forgot Password (confirm email) ─────────────────────
   if (screen === 'forgot') return (
     <Card>
       <button onClick={() => setScreen('login')} className="flex items-center gap-2 text-sm text-[#5a6878] hover:text-[#e2e8f0] transition-colors mb-6">
@@ -271,31 +274,26 @@ export default function Login({ onLogin }: LoginProps) {
         </div>
         <div>
           <h2 className="text-lg font-semibold text-[#e2e8f0]">Reset Password</h2>
-          <p className="text-xs text-[#5a6878]">We'll send a 6-digit OTP to your email</p>
+          <p className="text-xs text-[#5a6878]">We'll send a 6-digit OTP to your login email</p>
         </div>
       </div>
 
       <div className="space-y-5">
         <div>
-          <label className="block text-sm font-medium text-[#e2e8f0] mb-2">Email Address</label>
-          <input
-            type="email"
-            value={fpEmail}
-            onChange={e => { setFpEmail(e.target.value); setFpEmailError(''); }}
-            onBlur={() => fpEmail && validateFpEmail(fpEmail)}
-            placeholder="your@email.com"
-            className={`w-full px-4 py-3 bg-[#0d1117] border rounded-lg text-[#e2e8f0] placeholder:text-[#5a6878] focus:outline-none focus:ring-2 transition-all ${fpEmailError ? 'border-red-500/50 focus:ring-red-500/50' : 'border-[#2e3a48] focus:ring-[#f5a623] focus:border-transparent'}`}
-            disabled={fpLoading}
-          />
+          <label className="block text-sm font-medium text-[#e2e8f0] mb-2">OTP will be sent to</label>
+          <div className="w-full px-4 py-3 bg-[#0d1117] border border-[#2e3a48] rounded-lg text-[#f5a623] font-medium text-sm">
+            {fpEmail || email || 'No email entered'}
+          </div>
+          {!fpEmail && !email && <p className="mt-2 text-xs text-red-400">Please enter your email on the login screen first.</p>}
           {fpEmailError && <p className="mt-2 flex items-center gap-2 text-xs text-red-400"><AlertCircle size={14} />{fpEmailError}</p>}
         </div>
 
-        <button onClick={handleSendOTP} disabled={fpLoading}
+        <button onClick={handleSendOTP} disabled={fpLoading || (!fpEmail && !email)}
           className="w-full bg-gradient-to-r from-[#f5a623] to-[#e8891a] text-black font-semibold py-3 px-4 rounded-lg hover:from-[#e8891a] hover:to-[#f5a623] transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
           {fpLoading ? (
             <><div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" /><span>Sending OTP...</span></>
           ) : (
-            <><Mail size={18} /><span>Send OTP</span></>
+            <><Mail size={18} /><span>Send OTP to this email</span></>
           )}
         </button>
       </div>
