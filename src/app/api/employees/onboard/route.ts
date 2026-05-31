@@ -1,5 +1,6 @@
 import { getDbForRequest } from '@/lib/db'
 import { superadminDb } from '@/lib/superadmin-db'
+import { checkAccountLimit } from '@/lib/account-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 
@@ -42,23 +43,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check role limit before creating anything
+    // Check role validity + the tenant's total account cap before creating anything
     const role = await superadminDb.orgRole.findFirst({
       where: { id: orgRoleId, tenantId, isActive: true },
     })
     if (!role) {
       return NextResponse.json({ success: false, error: 'Invalid role' }, { status: 400 })
     }
-    if (role.maxUsers > 0) {
-      const userCount = await superadminDb.tenantUser.count({
-        where: { tenantId, orgRoleId, createdBySuperadmin: false },
-      })
-      if (userCount >= role.maxUsers) {
-        return NextResponse.json({
-          success: false,
-          error: `User limit reached for role "${role.name}" (${userCount}/${role.maxUsers}).`,
-        }, { status: 403 })
-      }
+    const limitError = await checkAccountLimit(tenantId, 1)
+    if (limitError) {
+      return NextResponse.json({ success: false, error: limitError }, { status: 403 })
     }
 
     // Check employee code/email uniqueness

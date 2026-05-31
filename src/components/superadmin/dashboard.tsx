@@ -3,11 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Building2, Users, Fingerprint, Shield, LogOut, Plus, Pencil, Trash2,
   X, Eye, EyeOff, RefreshCw, Wifi, WifiOff,
-  AlertTriangle, Database, GitBranch, Layers
+  AlertTriangle, Database, Layers
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { toast } from 'sonner';
-import HierarchyTab from './hierarchy-tab';
 import TrashTab from './trash-tab';
 import ModuleSelect from './module-select';
 
@@ -16,6 +15,8 @@ interface Tenant {
   id: string; name: string; slug: string; dbUrl: string;
   status: string; notes: string; createdAt: string;
   logoUrl?: string;
+  maxAccounts?: number;
+  enabledModules?: string;
   _count?: { users: number; biometric: number };
 }
 
@@ -45,12 +46,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
    MAIN DASHBOARD
    ════════════════════════════════════════════════════════════════ */
 export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<'tenants' | 'users' | 'biometric' | 'hierarchy' | 'trash'>('tenants');
+  const [tab, setTab] = useState<'tenants' | 'users' | 'biometric' | 'trash'>('tenants');
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [biometric, setBiometric] = useState<BiometricConfig[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hierarchyTenant, setHierarchyTenant] = useState<Tenant | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -77,7 +77,6 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     { id: 'tenants', label: 'Tenants', icon: Building2, count: tenants.length },
     { id: 'users', label: 'Users', icon: Users, count: users.length },
     { id: 'biometric', label: 'Biometric', icon: Fingerprint, count: biometric.length },
-    { id: 'hierarchy', label: 'Hierarchy', icon: GitBranch, count: tenants.length },
     { id: 'trash', label: 'Recycle Bin', icon: Trash2, count: 0 },
   ] as const;
 
@@ -154,35 +153,10 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
           <div className="flex items-center justify-center h-48 text-[#5a6878] text-[12px]">Loading...</div>
         ) : (
           <>
-            {tab === 'tenants' && <TenantsTab tenants={tenants} onRefresh={fetchAll} onOpenHierarchy={(t) => { setHierarchyTenant(t); setTab('hierarchy'); }} />}
+            {tab === 'tenants' && <TenantsTab tenants={tenants} onRefresh={fetchAll} />}
             {tab === 'users' && <UsersTab users={users} tenants={tenants} onRefresh={fetchAll} />}
             {tab === 'biometric' && <BiometricTab configs={biometric} tenants={tenants} onRefresh={fetchAll} />}
             {tab === 'trash' && <TrashTab tenants={tenants} />}
-            {tab === 'hierarchy' && (
-              hierarchyTenant ? (
-                <HierarchyTab tenantId={hierarchyTenant.id} tenantName={hierarchyTenant.name} />
-              ) : (
-                <div className="space-y-3">
-                  <h2 className="text-[14px] font-bold text-[#e2e8f0]">Select a Tenant to Configure Hierarchy</h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {tenants.map(t => (
-                      <button key={t.id} onClick={() => setHierarchyTenant(t)}
-                        className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 text-left hover:border-[#f5a623]/40 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-[#f5a623]/10 flex items-center justify-center">
-                            <GitBranch size={16} className="text-[#f5a623]" />
-                          </div>
-                          <div>
-                            <div className="text-[13px] font-semibold text-[#e2e8f0]">{t.name}</div>
-                            <div className="text-[10px] text-[#5a6878]">{t.slug}</div>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )
-            )}
           </>
         )}
       </div>
@@ -191,8 +165,8 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
 }
 
 /* ── Tenants Tab ─────────────────────────────────────────────── */
-function TenantsTab({ tenants, onRefresh, onOpenHierarchy }: { tenants: Tenant[]; onRefresh: () => void; onOpenHierarchy: (t: Tenant) => void }) {
-  const empty = { name: '', slug: '', dbUrl: '', notes: '', status: 'active', logoUrl: '' };
+function TenantsTab({ tenants, onRefresh }: { tenants: Tenant[]; onRefresh: () => void }) {
+  const empty = { name: '', slug: '', dbUrl: '', notes: '', status: 'active', logoUrl: '', maxAccounts: '0', enabledModules: 'all' };
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -263,8 +237,36 @@ function TenantsTab({ tenants, onRefresh, onOpenHierarchy }: { tenants: Tenant[]
                 <option value="inactive">Inactive</option>
               </select>
             </Field>
+            <Field label="Max Accounts (0 = unlimited)">
+              <input className={inp} type="number" min="0" value={form.maxAccounts}
+                onChange={e => setForm(f => ({ ...f, maxAccounts: e.target.value }))} placeholder="e.g. 50" />
+              <p className="text-[10px] text-[#5a6878] mt-1">Total accounts the tenant admin can create across all roles. Superadmin-created users are exempt.</p>
+            </Field>
             <div className="col-span-2">
               <Field label="Notes"><input className={inp} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></Field>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">Enabled Modules (tenant-wide cap)</label>
+              <div className="flex items-center gap-2 mb-2">
+                <button type="button"
+                  onClick={() => setForm(f => ({ ...f, enabledModules: 'all' }))}
+                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg border transition-colors ${form.enabledModules === 'all' || !form.enabledModules ? 'bg-[#f5a623] text-black border-[#f5a623]' : 'text-[#f5a623] border-[#f5a623]/30 hover:bg-[#f5a623]/10'}`}>
+                  All Modules
+                </button>
+                <button type="button"
+                  onClick={() => setForm(f => ({ ...f, enabledModules: f.enabledModules === 'all' ? '' : f.enabledModules }))}
+                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg border transition-colors ${form.enabledModules !== 'all' && form.enabledModules !== '' ? 'bg-[#00d4ff]/20 text-[#00d4ff] border-[#00d4ff]/40' : 'text-[#00d4ff] border-[#00d4ff]/20 hover:bg-[#00d4ff]/10'}`}>
+                  Limit to Selected
+                </button>
+              </div>
+              {form.enabledModules !== 'all' && (
+                <ModuleSelect value={form.enabledModules || ''} onChange={v => setForm(f => ({ ...f, enabledModules: v }))} />
+              )}
+              <p className="text-[10px] text-[#5a6878] mt-1">
+                {form.enabledModules === 'all' || !form.enabledModules
+                  ? 'No cap — the tenant admin can grant access to any module.'
+                  : 'Absolute ceiling for this tenant. Roles and users can only be given access to these modules — nobody in the tenant can access anything outside this set, even full admins.'}
+              </p>
             </div>
             <div className="col-span-2">
               <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">Company Logo (PNG)</label>
@@ -335,6 +337,8 @@ function TenantsTab({ tenants, onRefresh, onOpenHierarchy }: { tenants: Tenant[]
                   <div className="flex items-center gap-3 mt-1 text-[10px] text-[#5a6878]">
                     <span>{t._count?.users ?? 0} users</span>
                     <span>{t._count?.biometric ?? 0} biometric sites</span>
+                    <span>Cap: <span className={(t.maxAccounts ?? 0) > 0 ? 'text-[#f5a623] font-semibold' : 'text-[#8899aa]'}>{(t.maxAccounts ?? 0) > 0 ? `${t.maxAccounts} accounts` : 'Unlimited'}</span></span>
+                    <span>Modules: <span className={(t.enabledModules && t.enabledModules !== 'all') ? 'text-[#00d4ff] font-semibold' : 'text-[#8899aa]'}>{(t.enabledModules && t.enabledModules !== 'all') ? `${t.enabledModules.split(',').filter(Boolean).length} enabled` : 'All'}</span></span>
                     {t.notes && <span className="text-[#8899aa]">{t.notes}</span>}
                   </div>
                 </div>
@@ -344,11 +348,7 @@ function TenantsTab({ tenants, onRefresh, onOpenHierarchy }: { tenants: Tenant[]
                   className="px-2.5 py-1.5 text-[10px] font-semibold text-[#00d4ff] border border-[#00d4ff]/30 rounded-lg hover:bg-[#00d4ff]/10 disabled:opacity-50 transition-colors">
                   {pushingId === t.id ? 'Pushing...' : 'Push Schema'}
                 </button>
-                <button onClick={() => onOpenHierarchy(t)}
-                  className="px-2.5 py-1.5 text-[10px] font-semibold text-[#f5a623] border border-[#f5a623]/30 rounded-lg hover:bg-[#f5a623]/10 transition-colors flex items-center gap-1">
-                  <GitBranch size={11} /> Hierarchy
-                </button>
-                <button onClick={() => { setForm({ name: t.name, slug: t.slug, dbUrl: t.dbUrl, notes: t.notes, status: t.status, logoUrl: (t as any).logoUrl || '' }); setEditId(t.id); setShowForm(true); }}
+                <button onClick={() => { setForm({ name: t.name, slug: t.slug, dbUrl: t.dbUrl, notes: t.notes, status: t.status, logoUrl: (t as any).logoUrl || '', maxAccounts: String((t as any).maxAccounts ?? 0), enabledModules: (t as any).enabledModules || 'all' }); setEditId(t.id); setShowForm(true); }}
                   className="p-1.5 text-[#5a6878] hover:text-[#f5a623] transition-colors"><Pencil size={13} /></button>
                 <button onClick={() => del(t.id, t.name)} className="p-1.5 text-[#5a6878] hover:text-[#ff3d3d] transition-colors"><Trash2 size={13} /></button>
               </div>

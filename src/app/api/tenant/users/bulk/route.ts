@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { superadminDb } from '@/lib/superadmin-db'
 import { getDbForRequest } from '@/lib/db'
+import { checkAccountLimit } from '@/lib/account-limit'
 import bcrypt from 'bcryptjs'
 
 export const dynamic = 'force-dynamic'
@@ -34,18 +35,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid role' }, { status: 400 })
     }
 
-    // Check role limit
-    if (role.maxUsers > 0) {
-      const currentCount = await superadminDb.tenantUser.count({
-        where: { tenantId, orgRoleId, createdBySuperadmin: false },
-      })
-      const remaining = role.maxUsers - currentCount
-      if (remaining < employeeIds.length) {
-        return NextResponse.json({
-          success: false,
-          error: `Role "${role.name}" only has ${remaining} slot(s) remaining (limit: ${role.maxUsers}). Cannot create ${employeeIds.length} users.`,
-        }, { status: 403 })
-      }
+    // Enforce the tenant's TOTAL account cap for the requested batch size
+    const limitError = await checkAccountLimit(tenantId, employeeIds.length)
+    if (limitError) {
+      return NextResponse.json({ success: false, error: limitError }, { status: 403 })
     }
 
     // Fetch employees
