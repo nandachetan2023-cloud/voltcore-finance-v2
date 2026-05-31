@@ -29,18 +29,18 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
   return (
     <button
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium transition-all duration-200 text-[#8899aa] hover:text-[#e2e8f0] hover:bg-[#1a2028] dark:hover:bg-[#1a2028] light:hover:bg-[#e8eaed]"
+      className="w-full flex items-center gap-2.5 px-3 py-2 mb-2 rounded-lg text-[12px] font-medium transition-colors duration-200 hover:bg-[#1a212c]"
       style={{ color: 'var(--vc-text2)' }}
     >
       <div
         className="w-8 h-4 rounded-full relative transition-colors duration-300 flex-shrink-0"
-        style={{ background: isDark ? '#252e3a' : '#d1d9e0' }}
+        style={{ background: isDark ? '#2c3645' : '#d4d9e1' }}
       >
         <div
           className="absolute top-0.5 w-3 h-3 rounded-full transition-all duration-300 flex items-center justify-center"
           style={{
             left: isDark ? '17px' : '2px',
-            background: isDark ? '#f5a623' : '#718096',
+            background: isDark ? '#f5a623' : '#8b94a3',
           }}
         />
       </div>
@@ -50,7 +50,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
       {isDark ? (
         <Moon size={12} className="ml-auto" style={{ color: '#f5a623' }} />
       ) : (
-        <Sun size={12} className="ml-auto" style={{ color: '#718096' }} />
+        <Sun size={12} className="ml-auto" style={{ color: '#8b94a3' }} />
       )}
     </button>
   );

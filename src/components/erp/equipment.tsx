@@ -118,7 +118,7 @@ function EquipmentCard({ eq, onEdit, onDelete }: { eq: EquipmentItem; onEdit: (e
             <span className="text-[12px] font-bold" style={{ fontFamily: "'Share Tech Mono', monospace", color: barColor }}>{eq.utilization}%</span>
           </div>
           <div className="h-[6px] bg-[#141920] rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(0, Math.min(100, eq.utilization))}%`, background: `linear-gradient(90deg, ${barColor}90, ${barColor})` }} />
+            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(0, Math.min(100, eq.utilization))}%`, background: barColor }} />
           </div>
         </div>
         {/* Action buttons */}

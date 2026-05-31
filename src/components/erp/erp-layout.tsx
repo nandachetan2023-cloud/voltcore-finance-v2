@@ -96,7 +96,7 @@ function ModuleGrid() {
     allowedModules === 'all' || isModuleAllowed(mod.id, allowedModules)
   );
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 p-6">
       {visibleModules.map((mod) => {
         const Icon = ICON_MAP[mod.icon] || Zap;
         const allSubs = SUB_MODULES[mod.id] || [];
@@ -105,9 +105,9 @@ function ModuleGrid() {
           : allSubs.filter(s => isModuleAllowed(s.id, allowedModules));
         return (
           <button key={mod.id} onClick={() => setActiveModule(mod.id as any)}
-            className="group bg-[#161c24] border border-[#252e3a] rounded-xl p-6 text-left hover:border-[#f5a623]/40 transition-all duration-200 hover:shadow-lg hover:shadow-[#f5a623]/5">
-            <div className="w-12 h-12 bg-[#f5a623]/10 rounded-xl flex items-center justify-center mb-4 group-hover:bg-[#f5a623]/20 transition-colors">
-              <Icon size={24} className="text-[#f5a623]" />
+            className="group bg-[#161c24] border border-[#252e3a] rounded-xl p-5 text-left hover:border-[#f5a623]/50 transition-colors duration-150">
+            <div className="w-11 h-11 bg-[#f5a623]/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-[#f5a623]/15 transition-colors">
+              <Icon size={22} className="text-[#f5a623]" />
             </div>
             <div className="text-[14px] font-semibold text-[#e2e8f0] group-hover:text-[#f5a623] transition-colors">{mod.label}</div>
             {visibleSubs.length > 0 && <div className="text-[11px] text-[#5a6878] mt-1">{visibleSubs.length} sub-modules</div>}
@@ -128,24 +128,24 @@ function SubModuleGrid({ moduleId }: { moduleId: string }) {
   const config = MODULE_CONFIG[moduleId];
   const parentInfo = MAIN_MODULE_MAP[moduleId];
   return (
-    <div className="p-4">
-      <div className="flex items-center gap-3 mb-5">
+    <div className="p-6">
+      <div className="flex items-center gap-3 mb-6">
         {parentInfo && (() => {
           const PIcon = ICON_MAP[parentInfo.icon] || Zap;
-          return <div className="w-10 h-10 bg-[#f5a623]/10 rounded-xl flex items-center justify-center"><PIcon size={20} className="text-[#f5a623]" /></div>;
+          return <div className="w-10 h-10 bg-[#f5a623]/10 rounded-lg flex items-center justify-center"><PIcon size={20} className="text-[#f5a623]" /></div>;
         })()}
         <div>
-          <h2 className="text-[18px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{config?.title || moduleId}</h2>
-          <p className="text-[11px] text-[#5a6878]">{config?.breadcrumb || ''}</p>
+          <h2 className="text-[18px] font-semibold text-[#e2e8f0] tracking-tight">{config?.title || moduleId}</h2>
+          <p className="text-[11px] text-[#5a6878] mt-0.5">{config?.breadcrumb || ''}</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
         {items.map((item) => {
           const Icon = ICON_MAP[item.icon] || Zap;
           return (
             <button key={item.id} onClick={() => setActiveModule(item.id as any)}
-              className="group bg-[#161c24] border border-[#252e3a] rounded-xl p-5 text-center hover:border-[#f5a623]/40 transition-all duration-200 hover:shadow-lg hover:shadow-[#f5a623]/5">
-              <div className="w-12 h-12 bg-[#f5a623]/10 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-[#f5a623]/20 transition-colors">
+              className="group bg-[#161c24] border border-[#252e3a] rounded-xl p-6 text-center hover:border-[#f5a623]/50 transition-colors duration-150">
+              <div className="w-12 h-12 bg-[#f5a623]/10 rounded-lg flex items-center justify-center mx-auto mb-3.5 group-hover:bg-[#f5a623]/15 transition-colors">
                 <Icon size={22} className="text-[#f5a623]" />
               </div>
               <div className="text-[13px] font-semibold text-[#e2e8f0] group-hover:text-[#f5a623] transition-colors leading-tight">{item.label}</div>
@@ -227,59 +227,58 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
   return (
     <>
       {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
-      <aside className={`fixed top-0 left-0 h-full z-50 w-[220px] min-w-[220px] bg-[#161c24] border-r border-[#252e3a] flex flex-col overflow-y-auto transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="px-4 py-4 border-b border-[#252e3a] flex items-center gap-3">
-          <button onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+      <aside className={`fixed top-0 left-0 h-full z-50 w-[248px] min-w-[248px] vc-glass border-r border-[#252e3a] flex flex-col overflow-hidden transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="px-5 py-4 border-b border-[#252e3a] flex items-center gap-3 shrink-0">
+          <button onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }} className="flex items-center gap-3 hover:opacity-80 transition-opacity min-w-0">
             {branding?.logoUrl ? (
-              <img src={branding.logoUrl} alt={branding.name} className="w-9 h-9 object-contain rounded-lg bg-white/5 p-1" />
+              <img src={branding.logoUrl} alt={branding.name} className="w-12 h-12 object-contain rounded-lg shrink-0" />
             ) : (
-              <div className="w-8 h-8 bg-gradient-to-br from-[#f5a623] to-[#e8891a] rounded-lg flex items-center justify-center text-sm font-extrabold text-black" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+              <div className="w-12 h-12 bg-[#f5a623] rounded-lg flex items-center justify-center text-base font-bold text-[#1a1206] shrink-0">
                 {branding?.name ? branding.name.substring(0, 2).toUpperCase() : 'VC'}
               </div>
             )}
-            <div>
-              <div className="text-[15px] font-bold text-[#f5a623] tracking-wider truncate max-w-[140px]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+            <div className="min-w-0">
+              <div className="text-[14px] font-bold text-[#e2e8f0] tracking-tight truncate">
                 {branding?.name?.toUpperCase() || 'VOLTCORE'}
               </div>
-              <div className="text-[9px] text-[#5a6878] tracking-[2px] uppercase">ERP · HRMS</div>
+              <div className="text-[9px] text-[#5a6878] tracking-[2px] uppercase mt-0.5">ERP · HRMS</div>
             </div>
           </button>
-          <button className="ml-auto lg:hidden text-[#5a6878] hover:text-[#e2e8f0]" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
+          <button className="ml-auto lg:hidden text-[#5a6878] hover:text-[#e2e8f0] shrink-0" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
         </div>
 
         {/* Restricted access banner */}
         {!isDemo && userRole !== 'admin' && (
-          <div className="mx-3 mt-2 px-3 py-2 bg-[#f5a623]/10 border border-[#f5a623]/30 rounded-lg flex items-center gap-2">
+          <div className="mx-3 mt-3 px-3 py-2 bg-[#f5a623]/10 border border-[#f5a623]/30 rounded-lg flex items-center gap-2 shrink-0">
             <Shield size={12} className="text-[#f5a623] shrink-0" />
             <span className="text-[10px] text-[#f5a623] font-semibold tracking-wide">LIMITED ACCESS</span>
           </div>
         )}
 
-        <div className="flex-1 py-2">
+        <div className="flex-1 min-h-0 overflow-y-auto py-3 px-2.5">
           {(isSubNav || isPageModule) ? (
             <>
-              <button onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }} className="w-full flex items-center gap-2 px-4 py-2 text-[11px] font-medium text-[#5a6878] hover:text-[#e2e8f0] transition-colors">
-                <ArrowLeft size={12} /><ChevronRight size={14} /><span>All Modules</span>
+              <button onClick={() => { setActiveModule('dashboard'); setSidebarOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-[#5a6878] hover:text-[#e2e8f0] transition-colors rounded-lg">
+                <ArrowLeft size={13} /><span>All Modules</span>
               </button>
-              <div className="mx-3 my-2 border-t border-[#252e3a]" />
-              <div className="text-[9px] tracking-[2px] uppercase text-[#f5a623] font-bold px-4 py-2">{MODULE_CONFIG[isSubNav ? activeParentModule : activeModule]?.title || activeModule}</div>
+              <div className="text-[9px] tracking-[1.5px] uppercase text-[#5a6878] font-semibold px-3 pt-3 pb-2">{MODULE_CONFIG[isSubNav ? activeParentModule : activeModule]?.title || activeModule}</div>
               {isSubNav ? subModules.map(item => {
                 const Icon = ICON_MAP[item.icon] || Zap;
                 const badge = item.id === 'my-notices' ? (unreadNotices > 0 ? unreadNotices : null) : item.badge;
                 return (
                   <button key={item.id} onClick={() => { setActiveModule(item.id as any); setSidebarOpen(false); }}
-                    className={`w-full flex items-center gap-2 px-4 py-[7px] text-left text-[12px] font-medium transition-all duration-150 border-l-[3px] ${activeModule === item.id ? 'text-[#f5a623] border-l-[#f5a623] bg-[#f5a623]/7' : 'text-[#8899aa] border-l-transparent hover:text-[#e2e8f0] hover:bg-[#141920]'}`}>
-                    <Icon size={14} className="w-4 text-center shrink-0" />
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 mb-0.5 rounded-lg text-left text-[12.5px] font-medium transition-colors duration-150 ${activeModule === item.id ? 'text-[#f5a623] bg-[#f5a623]/10' : 'text-[#8899aa] hover:text-[#e2e8f0] hover:bg-[#1a212c]'}`}>
+                    <Icon size={15} className="shrink-0" />
                     <span className="flex-1">{item.label}</span>
-                    {badge && <span className="bg-[#ff3d3d] text-white text-[9px] font-bold px-[5px] py-[1px] rounded-full">{badge > 99 ? '99+' : badge}</span>}
+                    {badge && <span className="bg-[#ff3d3d] text-white text-[9px] font-bold px-[6px] py-[1px] rounded-full">{badge > 99 ? '99+' : badge}</span>}
                   </button>
                 );
               }) : (() => {
                 const modInfo = MAIN_MODULE_MAP[activeModule];
                 const Icon = ICON_MAP[modInfo?.icon || ''] || Zap;
                 return (
-                  <button className="w-full flex items-center gap-2 px-4 py-[7px] text-left text-[12px] font-medium text-[#f5a623] border-l-[3px] border-l-[#f5a623] bg-[#f5a623]/7">
-                    <Icon size={14} className="w-4 text-center shrink-0" /><span className="flex-1">{modInfo?.label || activeModule}</span>
+                  <button className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-[12.5px] font-medium text-[#f5a623] bg-[#f5a623]/10">
+                    <Icon size={15} className="shrink-0" /><span className="flex-1">{modInfo?.label || activeModule}</span>
                     <span className="text-[9px] text-[#f5a623]/60">Active</span>
                   </button>
                 );
@@ -287,19 +286,19 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
             </>
           ) : (
             <button onClick={() => setActiveModule('dashboard')}
-              className={`w-full flex items-center gap-2 px-4 py-[7px] text-left text-[12px] font-medium transition-all duration-150 border-l-[3px] ${activeModule === 'dashboard' ? 'text-[#f5a623] border-l-[#f5a623] bg-[#f5a623]/7' : 'text-[#8899aa] border-l-transparent hover:text-[#e2e8f0] hover:bg-[#141920]'}`}>
-              <Zap size={14} className="w-4 text-center shrink-0" /><span>Dashboard</span>
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-[12.5px] font-medium transition-colors duration-150 ${activeModule === 'dashboard' ? 'text-[#f5a623] bg-[#f5a623]/10' : 'text-[#8899aa] hover:text-[#e2e8f0] hover:bg-[#1a212c]'}`}>
+              <Zap size={15} className="shrink-0" /><span>Dashboard</span>
             </button>
           )}
         </div>
 
-        <div className="border-t border-[#252e3a] p-3 relative user-menu-container">
+        <div className="border-t border-[#252e3a] p-3 relative user-menu-container shrink-0">
           <ThemeToggle />
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="w-full flex items-center gap-2 p-2 rounded-lg bg-[#141920] hover:bg-[#1a2028] transition-colors cursor-pointer"
+            className="w-full flex items-center gap-2.5 p-2.5 rounded-lg bg-[#141920] hover:bg-[#1a212c] transition-colors cursor-pointer"
           >
-            <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-[11px] font-bold text-black bg-gradient-to-br from-[#f5a623] to-[#e8891a]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+            <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center text-[11px] font-bold text-[#1a1206] bg-[#f5a623]">
               {userData ? getInitials(userData.name) : 'AD'}
             </div>
             <div className="flex-1 min-w-0">
@@ -312,7 +311,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
           </button>
 
           {showUserMenu && (
-            <div className="absolute bottom-full left-3 right-3 mb-2 bg-[#161c24] border border-[#252e3a] rounded-lg shadow-lg overflow-hidden z-50">
+            <div className="absolute bottom-full left-3 right-3 mb-2 vc-glass-strong border border-[#252e3a] rounded-lg dark-shadow-lg overflow-hidden z-50">
               <div className="p-3 border-b border-[#252e3a]">
                 <div className="text-[11px] font-semibold text-[#e2e8f0]">{userData?.name || 'User'}</div>
                 <div className="text-[10px] text-[#5a6878]">{userData?.email || ''}</div>
@@ -441,11 +440,11 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
   const hasNotifications = notifications.length > 0;
 
   return (
-    <header className="h-[50px] bg-[#161c24] border-b border-[#252e3a] flex items-center gap-3 px-4 shrink-0">
+    <header className="h-[60px] vc-glass border-b border-[#252e3a] flex items-center gap-3 px-6 shrink-0 relative z-30">
       <button className="lg:hidden text-[#8899aa] hover:text-[#e2e8f0]" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
       <div>
-        <h1 className="text-[19px] font-bold" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{config?.title || 'VoltCore ERP'}</h1>
-        <p className="text-[10px] text-[#5a6878]">{config?.breadcrumb || ''}</p>
+        <h1 className="text-[16px] font-semibold text-[#e2e8f0] tracking-tight">{config?.title || 'VoltCore ERP'}</h1>
+        <p className="text-[11px] text-[#5a6878] mt-0.5">{config?.breadcrumb || ''}</p>
       </div>
       <div className="ml-auto flex items-center gap-2">
         
@@ -463,7 +462,7 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
 
           {/* Notifications Dropdown */}
           {showNotifications && (
-            <div className="absolute top-full right-0 mt-2 w-[320px] bg-[#161c24] border border-[#252e3a] rounded-lg shadow-lg overflow-hidden z-50">
+            <div className="absolute top-full right-0 mt-2 w-[320px] vc-glass-strong border border-[#252e3a] rounded-lg dark-shadow-lg overflow-hidden z-50">
               <div className="p-3 border-b border-[#252e3a] flex items-center justify-between">
                 <div className="text-[12px] font-semibold text-[#e2e8f0]">Notifications</div>
                 {hasNotifications && (
@@ -567,7 +566,7 @@ export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0a0d12]">
         <div className="text-center">
-          <div className="text-4xl font-extrabold text-[#f5a623] mb-2" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>VOLTCORE</div>
+          <div className="text-3xl font-bold text-[#f5a623] mb-2 tracking-tight">VOLTCORE</div>
           <div className="text-sm text-[#5a6878] tracking-widest uppercase">Loading ERP System...</div>
         </div>
       </div>
@@ -578,7 +577,7 @@ export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
   const isSubGrid = SUB_GRID_MODULES.includes(activeModule);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0a0d12]">
+    <div className="flex h-screen overflow-hidden relative z-[1]">
       <Sidebar onLogout={onLogout} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Topbar onLogout={onLogout} />
@@ -588,7 +587,7 @@ export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
             <div
               aria-hidden
               className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center"
-              style={{ left: '220px' }}
+              style={{ left: '248px' }}
             >
               <div
                 style={{
@@ -598,13 +597,13 @@ export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
                   backgroundPosition: 'center',
                   width: '600px',
                   height: '600px',
-                  opacity: 0.15,
+                  opacity: 0.06,
                 }}
               />
             </div>
           )}
-          <div className="animate-in fade-in duration-200 relative z-10">
-            {isDashboard ? <ModuleGrid /> : isSubGrid ? <SubModuleGrid moduleId={activeModule} /> : <ModuleRendererWrapper moduleKey={activeModule} />}
+          <div className="animate-in fade-in duration-200 relative z-10 max-w-[1600px] mx-auto w-full">
+            {isDashboard ? <ModuleGrid /> : isSubGrid ? <SubModuleGrid moduleId={activeModule} /> : <div className="p-6"><ModuleRendererWrapper moduleKey={activeModule} /></div>}
           </div>
         </main>
       </div>
