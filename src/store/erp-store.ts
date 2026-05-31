@@ -7,7 +7,8 @@ export const MODULE_TREE: Record<string, string[]> = {
   organization: ['organization', 'departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents'],
   hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
   procurement: ['procurement', 'purchases', 'expenses'],
-  finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
+  finance: ['finance', 'finance-dashboard', 'fin-home', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'create-journal-entry', 'bank-cash', 'taxation', 'budget', 'financial-reports', 'fin-sites', 'fin-parties', 'fin-invoices', 'fin-purchase-orders', 'fin-petty-cash', 'fin-assets', 'fin-profit-loss'],
+  sales: ['sales', 'sales-tax-invoices'],
   projects: ['projects', 'project-list', 'sites'],
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
   // A dedicated "self-service" group for employees
@@ -65,6 +66,9 @@ export type ModuleId =
   // Finance sub-modules
   | 'finance-dashboard' | 'ledger' | 'accounts-payable' | 'accounts-receivable'
   | 'journal-entries' | 'bank-cash' | 'taxation' | 'budget' | 'financial-reports'
+  | 'finance' | 'fin-home' | 'create-journal-entry' | 'fin-sites' | 'fin-parties'
+  | 'fin-invoices' | 'fin-purchase-orders' | 'fin-petty-cash' | 'fin-assets' | 'fin-profit-loss'
+  | 'sales' | 'sales-tax-invoices'
   // Projects sub-modules
   | 'project-list'
   // Organization sub-modules
@@ -165,14 +169,25 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
   ],
   finance: [
     { id: 'finance-dashboard', icon: 'BarChart3', label: 'Dashboard', section: 'Finance' },
+    { id: 'fin-sites', icon: 'MapPin', label: 'Sites', section: 'Masters' },
+    { id: 'fin-parties', icon: 'Users', label: 'Parties (Clients/Vendors)', section: 'Masters' },
     { id: 'ledger', icon: 'BookOpen', label: 'Ledger Management', section: 'Finance' },
+    { id: 'journal-entries', icon: 'FileEdit', label: 'Journal Entries', section: 'Finance' },
+    { id: 'create-journal-entry', icon: 'FilePlus', label: 'Create Journal Entry', section: 'Finance' },
+    { id: 'fin-invoices', icon: 'FileText', label: 'Site Invoices', section: 'Billing' },
     { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Accounts Payable', section: 'Finance' },
     { id: 'accounts-receivable', icon: 'ArrowUpCircle', label: 'Accounts Receivable', section: 'Finance' },
-    { id: 'journal-entries', icon: 'FileEdit', label: 'Journal Entries', section: 'Finance' },
+    { id: 'fin-purchase-orders', icon: 'ShoppingCart', label: 'Purchase Orders', section: 'Procurement' },
+    { id: 'fin-petty-cash', icon: 'Wallet', label: 'Petty Cash', section: 'Cash' },
     { id: 'bank-cash', icon: 'Landmark', label: 'Bank & Cash', section: 'Finance' },
     { id: 'taxation', icon: 'Scale', label: 'Taxation & Compliance', section: 'Finance' },
     { id: 'budget', icon: 'Target', label: 'Budget & Forecasting', section: 'Finance' },
+    { id: 'fin-assets', icon: 'Package', label: 'Fixed Assets', section: 'Assets' },
+    { id: 'fin-profit-loss', icon: 'TrendingUp', label: 'Profit & Loss', section: 'Reports' },
     { id: 'financial-reports', icon: 'PieChart', label: 'Financial Reports', section: 'Finance' },
+  ],
+  sales: [
+    { id: 'sales-tax-invoices', icon: 'FileText', label: 'Tax Invoices', section: 'Sales' },
   ],
   projects: [
     { id: 'project-list', icon: 'FolderKanban', label: 'All Projects', section: 'Projects' },
@@ -258,6 +273,18 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   payroll: { title: 'Payroll', breadcrumb: 'HRMS › Payroll Processing' },
   // Finance sub-modules
   'finance-dashboard': { title: 'Finance Dashboard', breadcrumb: 'Finance › Overview' },
+  finance: { title: 'Finance', breadcrumb: 'VoltCore ERP › Finance' },
+  'fin-home': { title: 'Finance Home', breadcrumb: 'Finance › Home' },
+  'create-journal-entry': { title: 'Create Journal Entry', breadcrumb: 'Finance › New Journal Entry' },
+  'fin-sites': { title: 'Finance Sites', breadcrumb: 'Finance › Sites' },
+  'fin-parties': { title: 'Party Master', breadcrumb: 'Finance › Parties' },
+  'fin-invoices': { title: 'Site Invoices', breadcrumb: 'Finance › Invoices' },
+  'fin-purchase-orders': { title: 'Purchase Orders', breadcrumb: 'Finance › Purchase Orders' },
+  'fin-petty-cash': { title: 'Petty Cash', breadcrumb: 'Finance › Petty Cash' },
+  'fin-assets': { title: 'Fixed Assets', breadcrumb: 'Finance › Fixed Assets' },
+  'fin-profit-loss': { title: 'Profit & Loss', breadcrumb: 'Finance › Profit & Loss Account' },
+  sales: { title: 'Sales', breadcrumb: 'VoltCore ERP › Sales' },
+  'sales-tax-invoices': { title: 'Sales Tax Invoices', breadcrumb: 'Sales › Tax Invoices' },
   ledger: { title: 'Ledger Management', breadcrumb: 'Finance › General Ledger' },
   'accounts-payable': { title: 'Accounts Payable', breadcrumb: 'Finance › AP Management' },
   'accounts-receivable': { title: 'Accounts Receivable', breadcrumb: 'Finance › AR Management' },
@@ -302,7 +329,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
 };
 
 // Modules with sub-modules (clicking them shows sub-nav instead of a page)
-export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finance', 'projects', 'assets', 'system', 'self-service', 'reports'];
+export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'sales', 'finance', 'projects', 'assets', 'system', 'self-service', 'reports'];
 
 // Main modules that have their own page (no sub-nav)
 export const PAGE_MODULES = ['dashboard'];

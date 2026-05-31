@@ -85,6 +85,7 @@ model Customer {
   Invoice       Invoice[]
   Quotation     Quotation[]
   SalesOrder    SalesOrder[]
+  SalesTaxInvoice SalesTaxInvoice[]
 }
 
 model Department {
@@ -1027,3 +1028,1016 @@ model TourRequest {
   @@index([employeeId, status])
   @@index([fromDate, toDate])
 }
+
+
+// ── Finance & Accounting Models ──────────────────────────────────
+model LedgerAccount {
+  id            Int      @id @default(autoincrement())
+  accountCode   String   @unique
+  name          String
+  group         String?
+  type          String?
+  parentAccount String?
+  balance       Float    @default(0)
+  status        String   @default("Active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([accountCode])
+  @@index([group])
+  @@map("LedgerAccount")
+}
+
+model JournalEntry {
+  id          Int      @id @default(autoincrement())
+  entryNo     String
+  date        DateTime @db.Date
+  account     String
+  accountName String?
+  debit       Float    @default(0)
+  credit      Float    @default(0)
+  description String?
+  reference   String?
+  voucherType String?
+  status      String   @default("Posted")
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([entryNo])
+  @@index([date])
+  @@index([account])
+  @@map("JournalEntry")
+}
+
+model AccountsPayable {
+  id            Int       @id @default(autoincrement())
+  billNo        String    @unique
+  vendor        String
+  vendorCode    String?
+  invoiceRef    String?
+  description   String?
+  amount        Float
+  tax           Float     @default(0)
+  totalAmount   Float     @default(0)
+  dueDate       DateTime  @db.Date
+  paidDate      DateTime? @db.Date
+  paymentMethod String?
+  paymentRef    String?
+  status        String    @default("Pending")
+  remarks       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([billNo])
+  @@index([vendor])
+  @@index([status])
+  @@index([dueDate])
+  @@map("AccountsPayable")
+}
+
+model AccountsReceivable {
+  id            Int       @id @default(autoincrement())
+  invoiceNo     String    @unique
+  client        String
+  clientCode    String?
+  invoiceRef    String?
+  description   String?
+  amount        Float
+  tax           Float     @default(0)
+  totalAmount   Float     @default(0)
+  dueDate       DateTime  @db.Date
+  receivedDate  DateTime? @db.Date
+  paymentMethod String?
+  paymentRef    String?
+  status        String    @default("Pending")
+  remarks       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([invoiceNo])
+  @@index([client])
+  @@index([status])
+  @@index([dueDate])
+  @@map("AccountsReceivable")
+}
+
+model BankAccount {
+  id          Int      @id @default(autoincrement())
+  accountName String
+  bankName    String
+  branch      String?
+  accountNo   String   @unique
+  ifsc        String?
+  type        String   @default("Current")
+  balance     Float    @default(0)
+  currency    String   @default("INR")
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions BankTransaction[]
+
+  @@index([accountNo])
+  @@map("BankAccount")
+}
+
+model BankTransaction {
+  id            Int      @id @default(autoincrement())
+  bankAccountId Int
+  date          DateTime @db.Date
+  type          String?
+  amount        Float
+  balance       Float    @default(0)
+  reference     String?
+  party         String?
+  description   String?
+  category      String?
+  status        String   @default("Completed")
+  reconciled    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  @@index([bankAccountId])
+  @@index([date])
+  @@index([type])
+  @@map("BankTransaction")
+}
+
+model TaxRecord {
+  id         Int       @id @default(autoincrement())
+  taxType    String
+  period     String
+  amount     Float
+  dueDate    DateTime  @db.Date
+  paidDate   DateTime? @db.Date
+  paymentRef String?
+  status     String    @default("Pending")
+  remarks    String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([taxType])
+  @@index([period])
+  @@map("TaxRecord")
+}
+
+model BudgetItem {
+  id          Int      @id @default(autoincrement())
+  category    String
+  description String
+  planned     Float
+  actual      Float    @default(0)
+  variance    Float    @default(0)
+  period      String
+  month       String?
+  status      String   @default("On Track")
+  remarks     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([period])
+  @@map("BudgetItem")
+}
+
+
+// ── Finance – Site & AR Management ──────────────────────────────────
+model FinSite {
+  id            Int      @id @default(autoincrement())
+  siteCode      String   @unique
+  name          String
+  location      String?
+  state         String?
+  contactPerson String?
+  contactPhone  String?
+  contactEmail  String?
+  budget        Float    @default(0)
+  status        String   @default("Active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  invoices          FinInvoice[]
+  areas             FinArea[]
+  workOrders        FinWorkOrder[]
+  expenseClaims     FinExpenseClaim[]
+  purchaseOrders    FinPurchaseOrder[]
+  paymentAdvices    FinPaymentAdvice[]
+  creditNotes       FinCreditNote[]
+  outstanding       FinOutstanding[]
+  alerts            FinAlert[]
+  finJournalEntries FinJournalEntry[]
+  finBudgets        FinBudget[]
+  finAssets         FinAsset[]
+
+  @@index([siteCode])
+  @@map("FinSite")
+}
+
+
+// ── Finance Master: Party (Client/Vendor) ─────────────────────────────────────
+model FinParty {
+  id        Int      @id @default(autoincrement())
+  code      String?  @unique
+  name      String   @unique
+  gstin     String?
+  pan       String?
+  address   String?
+  state     String?
+  stateCode String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices       FinInvoice[]
+  workOrders     FinWorkOrder[]
+  paymentAdvices FinPaymentAdvice[]
+
+  @@index([name])
+  @@map("FinParty")
+}
+
+
+// ── Finance Master: Area (under a Site) ──────────────────────────────────────
+model FinArea {
+  id        Int      @id @default(autoincrement())
+  siteId    Int
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site     FinSite      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  invoices FinInvoice[]
+
+  @@unique([siteId, code])
+  @@index([siteId])
+  @@map("FinArea")
+}
+
+model FinInvoice {
+  id              Int       @id @default(autoincrement())
+  invoiceNo       String
+  trackingNo      String?
+  poNo            String?
+  siteId          Int
+  areaId          Int?
+  poId            Int?
+  partyId         Int?
+  client          String? // legacy/free-text (kept for compatibility)
+  area            String? // legacy/free-text (kept for compatibility)
+  month           String?
+  financialYear   String? // e.g. "2025-26" (for uniqueness and reporting)
+  invoiceDate     DateTime  @db.Date
+  eInvoiceDate    DateTime? @db.Date
+  dueDate         DateTime  @db.Date
+  invoiceValue    Float     @default(0)
+  gstValue        Float     @default(0)
+  grandTotal      Float     @default(0)
+  tdsDeduction    Float     @default(0)
+  kpiDeduction    Float     @default(0)
+  safetyDeduction Float     @default(0)
+  otherDeduction  Float     @default(0)
+  totalDeduction  Float     @default(0)
+  afterTdsBalance Float     @default(0)
+  amountPaid      Float     @default(0)
+  receivedAmount  Float     @default(0)
+  receivedAmount2 Float     @default(0)
+  receivedDate    DateTime? @db.Date
+  voucherNo       String?
+  roundoffAmount  Float     @default(0)
+  balanceAmount   Float     @default(0)
+  description     String?
+  remarks         String?
+  status          String    @default("Unpaid")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  party              FinParty?              @relation(fields: [partyId], references: [id])
+  site               FinSite                @relation(fields: [siteId], references: [id])
+  areaRef            FinArea?               @relation(fields: [areaId], references: [id])
+  po                 FinPurchaseOrder?      @relation(fields: [poId], references: [id])
+  payments           FinPayment[]
+  deductions         FinInvoiceDeduction[]
+  followUps          FinFollowUp[]
+  creditNotes        FinCreditNote[]
+  alerts             FinAlert[]
+  outstanding        FinOutstanding[]
+  paymentAdviceLines FinPaymentAdviceLine[]
+
+  @@unique([partyId, invoiceNo, financialYear])
+  @@index([invoiceNo])
+  @@index([partyId, financialYear])
+  @@index([siteId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("FinInvoice")
+}
+
+
+// ── Finance: Deductions (normalized; many per invoice) ───────────────────────
+model FinInvoiceDeduction {
+  id        Int      @id @default(autoincrement())
+  invoiceId Int
+  type      String // TDS | KPI | SAFETY | RETENTION | OTHER | ROUND_OFF | CREDIT_NOTE
+  amount    Float    @default(0)
+  rate      Float? // optional %
+  section   String? // e.g. TDS section
+  remarks   String?
+  createdAt DateTime @default(now())
+
+  invoice FinInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([type])
+  @@map("FinInvoiceDeduction")
+}
+
+model FinOutstanding {
+  id                Int       @id @default(autoincrement())
+  trackingNo        String?
+  poNo              String?
+  billNo            String?
+  invoiceId         Int
+  client            String?
+  area              String?
+  month             String?
+  billDate          DateTime  @db.Date
+  invoiceValue      Float     @default(0)
+  gstValue          Float     @default(0)
+  totalInvoiceValue Float     @default(0)
+  tdsDeduction      Float     @default(0)
+  kpiDeduction      Float     @default(0)
+  safetyDeduction   Float     @default(0)
+  creditNote        Float     @default(0)
+  otherDeduction    Float     @default(0)
+  totalDeduction    Float     @default(0)
+  afterTdsBalance   Float     @default(0)
+  receivedAmount    Float     @default(0)
+  receivedAmount2   Float     @default(0)
+  receivedDate      DateTime? @db.Date
+  voucherNo         String?
+  roundoffAmount    Float     @default(0)
+  balanceAmount     Float     @default(0)
+  remarks           String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  invoice FinInvoice @relation(fields: [invoiceId], references: [id])
+  site    FinSite?   @relation(fields: [siteId], references: [id])
+  siteId  Int?
+
+  @@index([invoiceId])
+  @@index([billNo])
+  @@map("FinOutstanding")
+}
+
+model FinPayment {
+  id          Int      @id @default(autoincrement())
+  invoiceId   Int
+  amount      Float    @default(0)
+  paymentDate DateTime @db.Date
+  paymentMode String   @default("Bank Transfer")
+  voucherNo   String?
+  referenceNo String?
+  remarks     String?
+  createdAt   DateTime @default(now())
+
+  invoice FinInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("FinPayment")
+}
+
+
+// ── Finance: Work Order master (from WO Excel) ───────────────────────────────
+model FinWorkOrder {
+  id                  Int       @id @default(autoincrement())
+  partyId             Int
+  siteId              Int?
+  workOrderNo         String
+  description         String?
+  initiationDate      DateTime? @db.Date
+  completionDate      DateTime? @db.Date
+  bidLessPercent      Float?
+  bgAmount            Float?
+  bgSource            String?
+  orderAmount         Float     @default(0)
+  unexecutedAmount    Float     @default(0)
+  bookedLastFY        Float     @default(0)
+  bookedCurrentFY     Float     @default(0)
+  toBeBookedEndFY     Float     @default(0)
+  billRaisedAmount    Float     @default(0)
+  receivedAgainstBill Float     @default(0)
+  workDoneNotBilled   Float     @default(0)
+  extensionLetter     String?
+  delayReason         String?
+  subcontractedTo     String?
+  financialYear       String?
+  status              String    @default("Active")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  party FinParty @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  site  FinSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  @@unique([partyId, workOrderNo])
+  @@index([financialYear])
+  @@map("FinWorkOrder")
+}
+
+
+// ── Finance: Excel template & mapping layer (controlled imports) ─────────────
+model FinExcelTemplate {
+  id           Int      @id @default(autoincrement())
+  name         String
+  workbookFile String? // e.g. "ALL SITE(2024-2026)...xlsx"
+  sheetName    String?
+  headerRow    Int      @default(1)
+  isActive     Boolean  @default(true)
+  notes        String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  columns       FinExcelColumnMap[]
+  importBatches FinImportBatch[]
+
+  @@index([workbookFile])
+  @@index([sheetName])
+  @@map("FinExcelTemplate")
+}
+
+model FinExcelColumnMap {
+  id           Int      @id @default(autoincrement())
+  templateId   Int
+  sourceColumn String // exact header text (as seen in Excel)
+  targetModel  String // e.g. "FinInvoice", "FinPayment", "FinInvoiceDeduction"
+  targetField  String // e.g. "invoiceNo", "amount"
+  transform    String   @default("identity") // identity|date|float|trim|upper|lower|...
+  required     Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  template FinExcelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, sourceColumn, targetModel, targetField])
+  @@index([templateId])
+  @@map("FinExcelColumnMap")
+}
+
+model FinImportBatch {
+  id          String   @id @default(cuid())
+  templateId  Int?
+  fileName    String
+  fileHash    String   @default("")
+  importedBy  String   @default("")
+  importedAt  DateTime @default(now())
+  status      String   @default("completed") // preview|completed|failed
+  summaryJson Json?
+
+  template FinExcelTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  rows     FinImportRow[]
+  errors   FinImportRowError[]
+
+  @@index([importedAt])
+  @@index([templateId])
+  @@map("FinImportBatch")
+}
+
+model FinImportRow {
+  id        String   @id @default(cuid())
+  batchId   String
+  sheetName String   @default("")
+  rowNumber Int      @default(0)
+  raw       Json
+  createdAt DateTime @default(now())
+
+  batch  FinImportBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  errors FinImportRowError[]
+
+  @@index([batchId])
+  @@index([sheetName])
+  @@map("FinImportRow")
+}
+
+model FinImportRowError {
+  id        String   @id @default(cuid())
+  batchId   String
+  rowId     String?
+  sheetName String   @default("")
+  rowNumber Int      @default(0)
+  column    String   @default("")
+  message   String
+  severity  String   @default("error") // error|warning
+  createdAt DateTime @default(now())
+
+  batch FinImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  row   FinImportRow?  @relation(fields: [rowId], references: [id], onDelete: SetNull)
+
+  @@index([batchId])
+  @@index([severity])
+  @@map("FinImportRowError")
+}
+
+model FinFollowUp {
+  id              Int       @id @default(autoincrement())
+  invoiceId       Int
+  clientName      String?
+  invoiceNo       String?
+  balanceAmount   Float     @default(0)
+  contactNo       String?
+  contactPerson   String?
+  matterDiscussed String?
+  followUpDate    DateTime  @db.Date
+  callBackDate    DateTime? @db.Date
+  mode            String    @default("Call")
+  remarks         String?
+  nextFollowUp    DateTime? @db.Date
+  status          String    @default("Pending")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  invoice FinInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([nextFollowUp])
+  @@index([status])
+  @@map("FinFollowUp")
+}
+
+
+// ── Finance – Site Expense Claims ───────────────────────────────────
+model FinExpenseClaim {
+  id          Int      @id @default(autoincrement())
+  claimNo     String   @unique
+  siteId      Int
+  submittedBy String
+  date        DateTime @db.Date
+  totalAmount Float    @default(0)
+  status      String   @default("Draft")
+  remarks     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  site  FinSite          @relation(fields: [siteId], references: [id])
+  items FinExpenseItem[]
+
+  @@index([claimNo])
+  @@index([siteId])
+  @@index([status])
+  @@map("FinExpenseClaim")
+}
+
+model FinExpenseItem {
+  id          Int      @id @default(autoincrement())
+  claimId     Int
+  category    String   @default("Material")
+  description String?
+  amount      Float    @default(0)
+  receiptUrl  String?
+  createdAt   DateTime @default(now())
+
+  claim FinExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+  @@map("FinExpenseItem")
+}
+
+
+// ── Finance – Petty Cash (HO) ───────────────────────────────────────
+model FinPettyCash {
+  id           Int      @id @default(autoincrement())
+  voucherNo    String   @unique
+  date         DateTime @db.Date
+  description  String
+  amount       Float
+  type         String   @default("Debit")
+  category     String?
+  authorizedBy String?
+  balance      Float    @default(0)
+  referenceNo  String?
+  remarks      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([voucherNo])
+  @@index([date])
+  @@index([type])
+  @@map("FinPettyCash")
+}
+
+
+// ── Finance – Payment Advice ────────────────────────────────────────
+model FinPaymentAdvice {
+  id          Int       @id @default(autoincrement())
+  adviceNo    String    @unique
+  partyId     Int?
+  siteId      Int?
+  poId        Int?
+  totalAmount Float
+  paymentDate DateTime  @db.Date
+  paymentMode String    @default("Bank Transfer")
+  referenceNo String?
+  notes       String?
+  emailedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  party FinParty?              @relation(fields: [partyId], references: [id])
+  site  FinSite?               @relation(fields: [siteId], references: [id])
+  po    FinPurchaseOrder?      @relation(fields: [poId], references: [id])
+  lines FinPaymentAdviceLine[]
+
+  @@index([adviceNo])
+  @@index([partyId])
+  @@map("FinPaymentAdvice")
+}
+
+model FinPaymentAdviceLine {
+  id        Int      @id @default(autoincrement())
+  adviceId  Int
+  invoiceId Int? // Link to FinInvoice
+  billNo    String? // If invoice not yet imported
+  amount    Float
+  remarks   String?
+  createdAt DateTime @default(now())
+
+  advice  FinPaymentAdvice @relation(fields: [adviceId], references: [id], onDelete: Cascade)
+  invoice FinInvoice?      @relation(fields: [invoiceId], references: [id])
+
+  @@index([adviceId])
+  @@index([invoiceId])
+  @@map("FinPaymentAdviceLine")
+}
+
+
+// ── Finance – Purchase Order ────────────────────────────────────────
+model FinPurchaseOrder {
+  id                      Int       @id @default(autoincrement())
+  poNo                    String    @unique
+  revisionNo              Int       @default(1)
+  originalPoId            Int?
+  vendorId                String
+  vendorName              String
+  vendorAddress           String?
+  siteId                  Int
+  date                    DateTime  @db.Date
+  descriptionOfWork       String?
+  orderInitiationDate     DateTime? @db.Date
+  orderCompletionDate     DateTime? @db.Date
+  orderBidPercent         String?
+  bgAmount                Float     @default(0)
+  bgSource                String?
+  totalAmount             Float     @default(0)
+  unexecutedWorkAmount    Float     @default(0)
+  amountBookedLastFY      Float     @default(0)
+  amountBookedCurrentFY   Float     @default(0)
+  amountToBeBookedByEndFY Float     @default(0)
+  billRaisedAmount        Float     @default(0)
+  amountReceivedOutOfBill Float     @default(0)
+  workDoneNotBilled       Float     @default(0)
+  delayExtensionLetter    String?
+  reasonOfDelay           String?
+  subcontractedTo         String?
+  billTo                  String?
+  termsConditions         String?
+  subtotal                Float     @default(0)
+  taxAmount               Float     @default(0)
+  status                  String    @default("Draft")
+  grnDate                 DateTime? @db.Date
+  grnRef                  String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  site           FinSite            @relation(fields: [siteId], references: [id])
+  originalPo     FinPurchaseOrder?  @relation("PORevision", fields: [originalPoId], references: [id])
+  revisions      FinPurchaseOrder[] @relation("PORevision")
+  items          FinPOItem[]
+  invoices       FinInvoice[]
+  paymentAdvices FinPaymentAdvice[]
+
+  @@index([poNo])
+  @@index([siteId])
+  @@index([status])
+  @@map("FinPurchaseOrder")
+}
+
+model FinPOItem {
+  id            Int    @id @default(autoincrement())
+  poId          Int
+  description   String
+  unitOfMeasure String @default("Nos")
+  quantity      Float
+  unitRate      Float
+  taxPercent    Float  @default(0)
+  total         Float  @default(0)
+  receivedQty   Float  @default(0)
+
+  po FinPurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+
+  @@index([poId])
+  @@map("FinPOItem")
+}
+
+
+// ── Finance – Credit Notes ──────────────────────────────────────────
+model FinCreditNote {
+  id                         Int       @id @default(autoincrement())
+  creditNoteNo               String    @unique
+  trackingNo                 String?
+  poNo                       String?
+  invoiceId                  Int
+  siteId                     Int
+  creditNoteAgainstInvoiceNo String?
+  client                     String?
+  area                       String?
+  monthWork                  String?
+  date                       DateTime  @db.Date
+  invoiceValue               Float     @default(0)
+  gstValue                   Float     @default(0)
+  totalInvoiceValue          Float     @default(0)
+  amount                     Float     @default(0)
+  afterTdsBalance            Float     @default(0)
+  receivedAmount             Float     @default(0)
+  receivedDate               DateTime? @db.Date
+  voucherNo                  String?
+  debitAmount                Float     @default(0)
+  holdAmount                 Float     @default(0)
+  reason                     String?
+  remarks                    String?
+  paymentDueDate             DateTime? @db.Date
+  status                     String    @default("Issued")
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  invoice FinInvoice @relation(fields: [invoiceId], references: [id])
+  site    FinSite    @relation(fields: [siteId], references: [id])
+
+  @@index([creditNoteNo])
+  @@index([invoiceId])
+  @@map("FinCreditNote")
+}
+
+
+// ── Finance – Alerts / Notifications ────────────────────────────────
+model FinAlert {
+  id        Int      @id @default(autoincrement())
+  type      String   @default("Overdue")
+  title     String
+  message   String
+  invoiceId Int?
+  siteId    Int?
+  amount    Float    @default(0)
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  invoice FinInvoice? @relation(fields: [invoiceId], references: [id])
+  site    FinSite?    @relation(fields: [siteId], references: [id])
+
+  @@index([isRead])
+  @@index([type])
+  @@map("FinAlert")
+}
+
+
+// ── Finance – Chart of Accounts ──────────────────────────────────────
+model FinAccount {
+  id          Int      @id @default(autoincrement())
+  accountCode String   @unique
+  name        String
+  type        String // Asset | Liability | Equity | Income | Expense
+  parentId    Int? // self-relation for hierarchy
+  isActive    Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent       FinAccount?      @relation("AccountHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     FinAccount[]     @relation("AccountHierarchy")
+  journalLines FinJournalLine[]
+  budgetLines  FinBudgetLine[]
+
+  @@index([type])
+  @@index([parentId])
+  @@map("FinAccount")
+}
+
+
+// ── Finance – Journal Entry ──────────────────────────────────────────
+model FinJournalEntry {
+  id          Int       @id @default(autoincrement())
+  entryNo     String    @unique
+  entryDate   DateTime  @db.Date
+  reference   String?
+  description String?
+  siteId      Int
+  status      String    @default("Draft") // Draft | Posted | Reversed
+  postedAt    DateTime?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  site      FinSite          @relation(fields: [finSiteId], references: [id])
+  lines     FinJournalLine[]
+  finSiteId Int
+
+  @@index([siteId])
+  @@index([entryDate])
+  @@index([status])
+  @@map("FinJournalEntry")
+}
+
+
+// ── Finance – Journal Entry Lines (debit/credit) ─────────────────────
+model FinJournalLine {
+  id          Int      @id @default(autoincrement())
+  entryId     Int
+  accountId   Int
+  description String?
+  debit       Float    @default(0)
+  credit      Float    @default(0)
+  costCenter  Int? // optional cost center reference
+  createdAt   DateTime @default(now())
+
+  entry   FinJournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account FinAccount      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([entryId])
+  @@index([accountId])
+  @@map("FinJournalLine")
+}
+
+
+// ── Finance – Budget Plan ────────────────────────────────────────────
+model FinBudget {
+  id          Int      @id @default(autoincrement())
+  fiscalYear  String // e.g. "2025-26"
+  name        String
+  siteId      Int
+  version     String // e.g. "1.0" or "1.1"
+  status      String   @default("Draft") // Draft | Approved
+  totalAmount Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  site      FinSite         @relation(fields: [finSiteId], references: [id])
+  lines     FinBudgetLine[]
+  finSiteId Int
+
+  @@unique([siteId, fiscalYear, version])
+  @@index([fiscalYear])
+  @@index([siteId])
+  @@map("FinBudget")
+}
+
+
+// ── Finance – Budget Lines (12-month grid) ────────────────────────
+model FinBudgetLine {
+  id        Int      @id @default(autoincrement())
+  budgetId  Int
+  accountId Int
+  month     Int // 1-12
+  amount    Float    @default(0)
+  createdAt DateTime @default(now())
+
+  budget  FinBudget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  account FinAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([budgetId, accountId, month])
+  @@index([budgetId])
+  @@index([accountId])
+  @@map("FinBudgetLine")
+}
+
+
+// ── Finance – Fixed Asset ───────────────────────────────────────────
+model FinAsset {
+  id                 Int      @id @default(autoincrement())
+  assetCode          String   @unique
+  name               String
+  category           String // Machinery | Office | Vehicles | IT | Land | Buildings
+  serialNo           String?
+  acquisitionDate    DateTime @db.Date
+  cost               Float    @default(0)
+  salvageValue       Float    @default(0)
+  usefulLife         Int // years
+  depreciationMethod String   @default("Straight Line") // Straight Line | Double Declining
+  siteId             Int?
+  custodian          String?
+  departmentCode     String?
+  status             String   @default("Active") // Active | Disposed | Retired
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  site              FinSite?               @relation(fields: [finSiteId], references: [id])
+  depreciationLines FinAssetDepreciation[]
+  finSiteId         Int?
+
+  @@index([siteId])
+  @@index([category])
+  @@index([status])
+  @@map("FinAsset")
+}
+
+
+// ── Finance – Fixed Asset Depreciation ───────────────────────────────
+model FinAssetDepreciation {
+  id        Int      @id @default(autoincrement())
+  assetId   Int
+  period    String // YYYY-MM for monthly records
+  amount    Float    @default(0)
+  bookValue Float    @default(0)
+  createdAt DateTime @default(now())
+
+  asset FinAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, period])
+  @@index([assetId])
+  @@map("FinAssetDepreciation")
+}
+
+
+// ── Sales – Tax Invoice ─────────────────────────────────────────────
+model SalesTaxInvoice {
+  id                Int       @id @default(autoincrement())
+  invoiceNo         String    @unique
+  invoiceDate       DateTime
+  dueDate           DateTime?
+  customerId        Int
+  customerName      String
+  customerGstin     String?
+  customerAddress   String?
+  customerState     String?
+  customerStateCode String?
+  billingAddress    String?
+  shippingAddress   String?
+  placeOfSupply     String?
+  poNo              String?
+  poDate            DateTime?
+  taxableAmount     Decimal   @default(0.00) @db.Decimal(15, 2)
+  cgstRate          Decimal   @default(0.00) @db.Decimal(5, 2)
+  sgstRate          Decimal   @default(0.00) @db.Decimal(5, 2)
+  igstRate          Decimal   @default(0.00) @db.Decimal(5, 2)
+  cgstAmount        Decimal   @default(0.00) @db.Decimal(15, 2)
+  sgstAmount        Decimal   @default(0.00) @db.Decimal(15, 2)
+  igstAmount        Decimal   @default(0.00) @db.Decimal(15, 2)
+  cessAmount        Decimal   @default(0.00) @db.Decimal(15, 2)
+  totalAmount       Decimal   @default(0.00) @db.Decimal(15, 2)
+  amountInWords     String?
+  status            String    @default("Draft")
+  terms             String?
+  declaration       String?
+  place             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime
+
+  Customer Customer              @relation(fields: [customerId], references: [id])
+  items    SalesTaxInvoiceItem[]
+
+  @@map("SalesTaxInvoice")
+}
+
+model SalesTaxInvoiceItem {
+  id           Int     @id @default(autoincrement())
+  invoiceId    Int
+  description  String
+  hsnSac       String?
+  uom          String  @default("Nos")
+  quantity     Decimal @default(1) @db.Decimal(15, 3)
+  rate         Decimal @default(0) @db.Decimal(15, 2)
+  taxableValue Decimal @default(0) @db.Decimal(15, 2)
+  cgstPercent  Decimal @default(0) @db.Decimal(5, 2)
+  sgstPercent  Decimal @default(0) @db.Decimal(5, 2)
+  igstPercent  Decimal @default(0) @db.Decimal(5, 2)
+  cgstAmount   Decimal @default(0) @db.Decimal(15, 2)
+  sgstAmount   Decimal @default(0) @db.Decimal(15, 2)
+  igstAmount   Decimal @default(0) @db.Decimal(15, 2)
+  total        Decimal @default(0) @db.Decimal(15, 2)
+
+  invoice SalesTaxInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("SalesTaxInvoiceItem")
+}
+
+
+// ── Profit & Loss Account ────────────────────────────────────────────
+model ProfitLossEntry {
+  id          Int      @id @default(autoincrement())
+  site        String   // e.g. "Atmastco", "Balco", "Birla", "Hilti", "Workshop"
+  month       String   // e.g. "April-25", "May-25"
+  side        String   // "debit" or "credit"
+  category    String   // e.g. "Purchase Accounts", "Direct Expenses", "Indirect Expenses", "Sales Accounts", "Indirect Incomes"
+  particular  String   // line item name
+  amount      Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([site])
+  @@index([month])
+  @@index([category])
+  @@map("ProfitLossEntry")
+}
+

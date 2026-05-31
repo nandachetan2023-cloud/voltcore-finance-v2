@@ -1,67 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getDbForRequest } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
-// NOTE: This module's models don't exist in current schema
-// Returning empty data until models are added
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    return NextResponse.json({
-      success: true,
-      data: [],
-      message: 'Module not yet implemented in database schema',
-    })
+    const pdb = getDbForRequest(request)
+    const records = await pdb.ledgerAccount.findMany({ orderBy: { accountCode: 'asc' } })
+    const { searchParams } = new URL(request.url)
+    if (searchParams.get('format') === 'csv') {
+      const header = 'AccountCode,AccountName,Group,Type,Balance,Status'
+      const rows = records.map(r => `${r.accountCode},"${r.name}",${r.group || ''},${r.type || ''},${r.balance},${r.status}`)
+      return new Response([header, ...rows].join('\n'), {
+        headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename=ledger.csv' },
+      })
+    }
+    return NextResponse.json({ success: true, data: records })
   } catch (error) {
-    console.error('Error fetching data:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch data' },
-      { status: 500 }
-    )
+    console.error('Error fetching ledger:', error)
+    return NextResponse.json({ success: false, error: 'Failed to fetch data' }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    return NextResponse.json(
-      { success: false, error: 'Module not yet implemented in database schema' },
-      { status: 501 }
-    )
+    const body = await request.json()
+    const pdb = getDbForRequest(request)
+    const record = await pdb.ledgerAccount.create({ data: body })
+    return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
-    console.error('Error creating record:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to create record' },
-      { status: 500 }
-    )
+    console.error('Error creating ledger account:', error)
+    return NextResponse.json({ success: false, error: 'Failed to create record' }, { status: 500 })
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    return NextResponse.json(
-      { success: false, error: 'Module not yet implemented in database schema' },
-      { status: 501 }
-    )
+    const body = await request.json()
+    const { id, ...data } = body
+    if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    const pdb = getDbForRequest(request)
+    const record = await pdb.ledgerAccount.update({ where: { id }, data })
+    return NextResponse.json({ success: true, data: record })
   } catch (error) {
-    console.error('Error updating record:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to update record' },
-      { status: 500 }
-    )
+    console.error('Error updating ledger account:', error)
+    return NextResponse.json({ success: false, error: 'Failed to update record' }, { status: 500 })
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    return NextResponse.json(
-      { success: false, error: 'Module not yet implemented in database schema' },
-      { status: 501 }
-    )
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    const pdb = getDbForRequest(request)
+    await pdb.ledgerAccount.delete({ where: { id: Number(id) } })
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error deleting record:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to delete record' },
-      { status: 500 }
-    )
+    console.error('Error deleting ledger account:', error)
+    return NextResponse.json({ success: false, error: 'Failed to delete record' }, { status: 500 })
   }
 }
