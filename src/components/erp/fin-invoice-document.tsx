@@ -79,12 +79,26 @@ export default function InvoiceDocument({ invoice, onClose }: { invoice: Invoice
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center overflow-y-auto py-8 print:bg-white print:p-0 print:block print:overflow-visible">
       <style>{`
+        /* Keep everything inside the sheet on screen and in print */
+        #invoice-printable, #invoice-printable * { box-sizing: border-box; }
+        #invoice-printable table { table-layout: fixed; width: 100%; }
+        #invoice-printable td, #invoice-printable th { overflow-wrap: anywhere; word-break: break-word; }
         @media print {
+          html, body { background: #fff !important; }
           body * { visibility: hidden !important; }
           #invoice-printable, #invoice-printable * { visibility: visible !important; }
-          #invoice-printable { position: absolute !important; left: 0; top: 0; width: 100%; box-shadow: none !important; border: none !important; }
+          #invoice-printable {
+            position: absolute !important; left: 0 !important; top: 0 !important;
+            width: 100% !important; margin: 0 !important;
+            box-shadow: none !important; border: none !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          /* Slightly tighten table text so wide GST tables never spill past the page */
+          #invoice-printable td, #invoice-printable th { font-size: 8px !important; }
           .no-print { display: none !important; }
-          @page { size: A4 portrait; margin: 8mm; }
+          /* US Letter portrait; margins keep content within the printable area */
+          @page { size: letter portrait; margin: 0.4in; }
         }
       `}</style>
 
@@ -99,7 +113,7 @@ export default function InvoiceDocument({ invoice, onClose }: { invoice: Invoice
       </div>
 
       {/* ══════════ TAX INVOICE — matches Excel layout ══════════ */}
-      <div id="invoice-printable" className="bg-white text-[#1a1a1a] w-[210mm] max-w-full shadow-2xl" style={{ fontFamily: "Arial, sans-serif", fontSize: '10px' }}>
+      <div id="invoice-printable" className="bg-white text-[#1a1a1a] max-w-full shadow-2xl" style={{ fontFamily: "Arial, sans-serif", fontSize: '10px', width: '7.7in' }}>
         <div className="border-2 border-[#1a1a1a]">
 
           {/* ── Title bar ── */}

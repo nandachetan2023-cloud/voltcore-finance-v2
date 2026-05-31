@@ -104,12 +104,27 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center overflow-y-auto py-8 print:bg-white print:p-0 print:block print:overflow-visible">
       <style>{`
+        /* Keep everything inside the sheet on screen and in print */
+        #sales-invoice-printable, #sales-invoice-printable * { box-sizing: border-box; }
+        #sales-invoice-printable table { table-layout: fixed; width: 100%; }
+        #sales-invoice-printable td, #sales-invoice-printable th { overflow-wrap: anywhere; word-break: break-word; }
         @media print {
+          html, body { background: #fff !important; }
           body * { visibility: hidden !important; }
           #sales-invoice-printable, #sales-invoice-printable * { visibility: visible !important; }
-          #sales-invoice-printable { position: absolute !important; left: 0; top: 0; width: 100%; box-shadow: none !important; border: none !important; }
+          #sales-invoice-printable {
+            position: absolute !important; left: 0 !important; top: 0 !important;
+            width: 100% !important; margin: 0 !important;
+            box-shadow: none !important; border: none !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          /* Tighten the wide 13-column GST table so it never spills past the page */
+          #sales-invoice-printable td, #sales-invoice-printable th { font-size: 7.5px !important; }
+          #sales-invoice-printable td, #sales-invoice-printable th { padding: 2px !important; }
           .no-print { display: none !important; }
-          @page { size: A4 portrait; margin: 8mm; }
+          /* US Letter portrait; margins keep content within the printable area */
+          @page { size: letter portrait; margin: 0.4in; }
         }
       `}</style>
 
@@ -123,7 +138,7 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
       </div>
 
       {/* ══════════ TAX INVOICE ══════════ */}
-      <div id="sales-invoice-printable" className="bg-white text-[#1a1a1a] w-[210mm] max-w-full shadow-2xl" style={{ fontFamily: "Arial, sans-serif", fontSize: '10px' }}>
+      <div id="sales-invoice-printable" className="bg-white text-[#1a1a1a] max-w-full shadow-2xl" style={{ fontFamily: "Arial, sans-serif", fontSize: '10px', width: '7.7in' }}>
         <div className="border-2 border-[#1a1a1a]">
 
           <div className="text-center border-b-2 border-[#1a1a1a] py-1.5 bg-[#f5a623]/15">

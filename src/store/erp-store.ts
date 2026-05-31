@@ -7,7 +7,7 @@ export const MODULE_TREE: Record<string, string[]> = {
   organization: ['organization', 'departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents'],
   hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
   procurement: ['procurement', 'purchases', 'expenses'],
-  finance: ['finance', 'finance-dashboard', 'fin-home', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'create-journal-entry', 'bank-cash', 'taxation', 'budget', 'financial-reports', 'fin-sites', 'fin-parties', 'fin-invoices', 'fin-purchase-orders', 'fin-petty-cash', 'fin-assets', 'fin-profit-loss'],
+  finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'create-journal-entry', 'bank-cash', 'taxation', 'budget', 'financial-reports', 'fin-sites', 'fin-parties', 'fin-invoices', 'fin-purchase-orders', 'fin-work-orders', 'fin-payments', 'fin-payment-advices', 'fin-petty-cash', 'fin-assets', 'fin-profit-loss'],
   sales: ['sales', 'sales-tax-invoices'],
   projects: ['projects', 'project-list', 'sites'],
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
@@ -66,8 +66,8 @@ export type ModuleId =
   // Finance sub-modules
   | 'finance-dashboard' | 'ledger' | 'accounts-payable' | 'accounts-receivable'
   | 'journal-entries' | 'bank-cash' | 'taxation' | 'budget' | 'financial-reports'
-  | 'finance' | 'fin-home' | 'create-journal-entry' | 'fin-sites' | 'fin-parties'
-  | 'fin-invoices' | 'fin-purchase-orders' | 'fin-petty-cash' | 'fin-assets' | 'fin-profit-loss'
+  | 'finance' | 'create-journal-entry' | 'fin-sites' | 'fin-parties'
+  | 'fin-invoices' | 'fin-purchase-orders' | 'fin-work-orders' | 'fin-payments' | 'fin-payment-advices' | 'fin-petty-cash' | 'fin-assets' | 'fin-profit-loss'
   | 'sales' | 'sales-tax-invoices'
   // Projects sub-modules
   | 'project-list'
@@ -130,6 +130,7 @@ export const MAIN_MODULES: NavItem[] = [
   { id: 'organization', icon: 'Building2', label: 'Organization' },
   { id: 'hrms', icon: 'Users', label: 'HRMS' },
   { id: 'procurement', icon: 'ShoppingCart', label: 'Procurement' },
+  { id: 'sales', icon: 'FileText', label: 'Sales' },
   { id: 'finance', icon: 'CreditCard', label: 'Finance' },
   { id: 'projects', icon: 'FolderKanban', label: 'Projects' },
   { id: 'assets', icon: 'Wrench', label: 'Assets' },
@@ -178,7 +179,10 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Accounts Payable', section: 'Finance' },
     { id: 'accounts-receivable', icon: 'ArrowUpCircle', label: 'Accounts Receivable', section: 'Finance' },
     { id: 'fin-purchase-orders', icon: 'ShoppingCart', label: 'Purchase Orders', section: 'Procurement' },
+    { id: 'fin-work-orders', icon: 'ClipboardList', label: 'Work Orders', section: 'Procurement' },
+    { id: 'fin-payments', icon: 'Send', label: 'Payment Center', section: 'Cash' },
     { id: 'fin-petty-cash', icon: 'Wallet', label: 'Petty Cash', section: 'Cash' },
+    { id: 'fin-payment-advices', icon: 'FileText', label: 'Payment Advices', section: 'Cash' },
     { id: 'bank-cash', icon: 'Landmark', label: 'Bank & Cash', section: 'Finance' },
     { id: 'taxation', icon: 'Scale', label: 'Taxation & Compliance', section: 'Finance' },
     { id: 'budget', icon: 'Target', label: 'Budget & Forecasting', section: 'Finance' },
@@ -274,13 +278,15 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   // Finance sub-modules
   'finance-dashboard': { title: 'Finance Dashboard', breadcrumb: 'Finance › Overview' },
   finance: { title: 'Finance', breadcrumb: 'VoltCore ERP › Finance' },
-  'fin-home': { title: 'Finance Home', breadcrumb: 'Finance › Home' },
   'create-journal-entry': { title: 'Create Journal Entry', breadcrumb: 'Finance › New Journal Entry' },
   'fin-sites': { title: 'Finance Sites', breadcrumb: 'Finance › Sites' },
   'fin-parties': { title: 'Party Master', breadcrumb: 'Finance › Parties' },
   'fin-invoices': { title: 'Site Invoices', breadcrumb: 'Finance › Invoices' },
   'fin-purchase-orders': { title: 'Purchase Orders', breadcrumb: 'Finance › Purchase Orders' },
+  'fin-work-orders': { title: 'Work Orders', breadcrumb: 'Finance › Work Orders' },
   'fin-petty-cash': { title: 'Petty Cash', breadcrumb: 'Finance › Petty Cash' },
+  'fin-payments': { title: 'Payment Center', breadcrumb: 'Finance › Payment Center' },
+  'fin-payment-advices': { title: 'Payment Advices', breadcrumb: 'Finance › Payment Advices' },
   'fin-assets': { title: 'Fixed Assets', breadcrumb: 'Finance › Fixed Assets' },
   'fin-profit-loss': { title: 'Profit & Loss', breadcrumb: 'Finance › Profit & Loss Account' },
   sales: { title: 'Sales', breadcrumb: 'VoltCore ERP › Sales' },

@@ -35,10 +35,20 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, ...data } = body
+    const { id, lines, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
-    const record = await pdb.finPaymentAdvice.update({ where: { id }, data })
+    // If lines were provided, replace them wholesale (delete + recreate)
+    if (Array.isArray(lines)) {
+      await pdb.finPaymentAdviceLine.deleteMany({ where: { adviceId: Number(id) } })
+      const record = await pdb.finPaymentAdvice.update({
+        where: { id: Number(id) },
+        data: { ...data, lines: lines.length ? { create: lines } : undefined },
+        include: { party: true, lines: true },
+      })
+      return NextResponse.json({ success: true, data: record })
+    }
+    const record = await pdb.finPaymentAdvice.update({ where: { id: Number(id) }, data })
     return NextResponse.json({ success: true, data: record })
   } catch (error) {
     console.error('Error updating:', error)

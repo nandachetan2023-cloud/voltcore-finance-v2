@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, TrendingDown, Loader2, Upload, Trash2, Search, BarChart3 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Loader2, Upload, Trash2, Search, BarChart3, Plus, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 
 interface PLEntry {
   id: number; site: string; month: string; side: string;
@@ -10,6 +12,11 @@ interface PLEntry {
 }
 
 interface Summary { sites: string[]; months: string[]; totalDebit: number; totalCredit: number; netPL: number; }
+
+interface PLForm { site: string; month: string; side: string; category: string; particular: string; amount: number; }
+const EMPTY_FORM: PLForm = { site: '', month: '', side: 'debit', category: '', particular: '', amount: 0 };
+const DEBIT_CATEGORIES = ['Purchase Accounts', 'Direct Expenses', 'Indirect Expenses'];
+const CREDIT_CATEGORIES = ['Sales Accounts', 'Direct Incomes', 'Indirect Incomes'];
 
 export default function FinProfitLoss() {
   const [records, setRecords] = useState<PLEntry[]>([]);
@@ -20,6 +27,12 @@ export default function FinProfitLoss() {
   const [monthFilter, setMonthFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'dashboard' | 'table'>('dashboard');
+  const [formOpen, setFormOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<PLEntry | null>(null);
+  const [form, setForm] = useState<PLForm>(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<PLEntry | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const fetch_ = useCallback(async () => {
     try {
@@ -62,6 +75,28 @@ export default function FinProfitLoss() {
     catch { toast.error('Delete failed'); }
   };
 
+  const openNew = () => { setEditTarget(null); setForm({ ...EMPTY_FORM, site: siteFilter !== 'all' ? siteFilter : '', month: monthFilter !== 'all' ? monthFilter : '' }); setFormOpen(true); };
+  const openEdit = (r: PLEntry) => { setEditTarget(r); setForm({ site: r.site, month: r.month, side: r.side, category: r.category, particular: r.particular, amount: r.amount }); setFormOpen(true); };
+
+  const handleSubmit = async () => {
+    if (!form.site || !form.month || !form.particular) { toast.error('Site, Month and Particular are required'); return; }
+    setSubmitting(true);
+    try {
+      const method = editTarget ? 'PUT' : 'POST';
+      const body = editTarget ? { id: editTarget.id, ...form } : form;
+      const r = await fetch('/api/fin/profit-loss', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (j.success) { toast.success(editTarget ? 'Entry updated' : 'Entry added'); setFormOpen(false); await fetch_(); }
+      else toast.error(j.error || 'Failed');
+    } catch { toast.error('Network error'); } finally { setSubmitting(false); }
+  };
+
+  const handleDeleteEntry = async () => {
+    if (!deleteTarget) return;
+    try { const r = await fetch(`/api/fin/profit-loss?id=${deleteTarget.id}`, { method: 'DELETE' }); const j = await r.json(); if (j.success) { toast.success('Entry deleted'); setDeleteOpen(false); await fetch_(); } else toast.error(j.error); }
+    catch { toast.error('Network error'); }
+  };
+
   // Derived data for dashboard
   const debitEntries = records.filter(r => r.side === 'debit');
   const creditEntries = records.filter(r => r.side === 'credit');
@@ -101,7 +136,8 @@ export default function FinProfitLoss() {
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Profit &amp; Loss Account</span>
           <div className="ml-auto flex items-center gap-2">
             <button onClick={() => setViewMode(viewMode === 'dashboard' ? 'table' : 'dashboard')} className="vc-btn-ghost text-[11px]">{viewMode === 'dashboard' ? 'Table View' : 'Dashboard'}</button>
-            <label className="vc-btn-primary flex items-center gap-1.5 cursor-pointer">{importing ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Import P&amp;L Files<input type="file" accept=".xlsx,.xls" multiple onChange={handleImport} className="hidden" disabled={importing} /></label>
+            <button onClick={openNew} className="vc-btn-primary flex items-center gap-1.5"><Plus size={13} /> New Entry</button>
+            <label className="vc-btn-ghost flex items-center gap-1.5 cursor-pointer">{importing ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Import P&amp;L Files<input type="file" accept=".xlsx,.xls" multiple onChange={handleImport} className="hidden" disabled={importing} /></label>
           </div>
         </div>
 
@@ -187,7 +223,7 @@ export default function FinProfitLoss() {
           <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
               <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
-                {['Site', 'Month', 'Side', 'Category', 'Particular', 'Amount'].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}
+                {['Site', 'Month', 'Side', 'Category', 'Particular', 'Amount', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}
               </tr></thead>
               <tbody className="divide-y divide-[#1a2028]">
                 {filteredTable.slice(0, 100).map(r => (
@@ -198,15 +234,47 @@ export default function FinProfitLoss() {
                     <td className="py-2 px-3 text-[#8899aa]">{r.category}</td>
                     <td className="py-2 px-3 text-[#e2e8f0]">{r.particular}</td>
                     <td className="py-2 px-3 text-right font-mono"><span className={r.side === 'debit' ? 'text-[#ff3d3d]' : 'text-[#00e676]'}>&#8377;{r.amount.toLocaleString('en-IN')}</span></td>
+                    <td className="py-2 px-3"><div className="flex gap-1"><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button><button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button></div></td>
                   </tr>
                 ))}
-                {filteredTable.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-[#5a6878]">No entries found.</td></tr>}
-                {filteredTable.length > 100 && <tr><td colSpan={6} className="py-3 text-center text-[#5a6878] text-[10px]">Showing first 100 of {filteredTable.length} entries. Use filters to narrow down.</td></tr>}
+                {filteredTable.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-[#5a6878]">No entries found.</td></tr>}
+                {filteredTable.length > 100 && <tr><td colSpan={7} className="py-3 text-center text-[#5a6878] text-[10px]">Showing first 100 of {filteredTable.length} entries. Use filters to narrow down.</td></tr>}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* Create / Edit Entry Dialog */}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-lg">
+          <DialogHeader><DialogTitle className="text-[#f5a623]">{editTarget ? 'Edit P&L Entry' : 'New P&L Entry'}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label><input value={form.site} onChange={e => setForm(p => ({ ...p, site: e.target.value }))} className="vc-input" placeholder="Atmastco, Balco..." list="pl-sites" /><datalist id="pl-sites">{summary.sites.map(s => <option key={s} value={s} />)}</datalist></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Month *</label><input value={form.month} onChange={e => setForm(p => ({ ...p, month: e.target.value }))} className="vc-input" placeholder="April-25" list="pl-months" /><datalist id="pl-months">{summary.months.map(m => <option key={m} value={m} />)}</datalist></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Side</label><select value={form.side} onChange={e => setForm(p => ({ ...p, side: e.target.value, category: '' }))} className="vc-input appearance-none"><option value="debit">Debit (Expense)</option><option value="credit">Credit (Income)</option></select></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Category</label><select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="vc-input appearance-none"><option value="">Select...</option>{(form.side === 'debit' ? DEBIT_CATEGORIES : CREDIT_CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+            </div>
+            <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Particular *</label><input value={form.particular} onChange={e => setForm(p => ({ ...p, particular: e.target.value }))} className="vc-input" placeholder="Line item name" /></div>
+            <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Amount (₹)</label><input type="number" value={form.amount || ''} onChange={e => setForm(p => ({ ...p, amount: Number(e.target.value) }))} className="vc-input" /></div>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setFormOpen(false)} className="vc-btn-ghost">Cancel</button>
+            <button onClick={handleSubmit} disabled={submitting} className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">{submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}{editTarget ? 'Update' : 'Create'}</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Entry Confirm */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0]">
+          <AlertDialogHeader><AlertDialogTitle className="text-[#ff3d3d]">Delete Entry</AlertDialogTitle><AlertDialogDescription className="text-[#8899aa]">Delete <strong className="text-[#f5a623]">{deleteTarget?.particular}</strong> ({deleteTarget?.site} / {deleteTarget?.month})?</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel className="vc-btn-ghost">Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteEntry} className="bg-[#ff3d3d] hover:bg-[#cc2020] text-white rounded-lg">Delete</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

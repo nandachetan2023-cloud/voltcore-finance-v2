@@ -44,6 +44,20 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { id, ...data } = body
+    if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    const pdb = getDbForRequest(request)
+    const record = await (pdb as any).profitLossEntry.update({ where: { id: Number(id) }, data })
+    return NextResponse.json({ success: true, data: record })
+  } catch (error) {
+    console.error('Error updating P&L entry:', error)
+    return NextResponse.json({ success: false, error: 'Failed to update record' }, { status: 500 })
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)

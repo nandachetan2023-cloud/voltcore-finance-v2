@@ -29,7 +29,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   AlertTriangle, Send, Plane,
 };
 
-const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'financial-reports', 'trash'];
+const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'fin-payments', 'financial-reports', 'trash'];
 const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'finance', 'projects', 'assets', 'system'];
 
 // ── Error Boundary ──────────────────────────────────────────────

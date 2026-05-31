@@ -154,7 +154,7 @@ export default function FinancialReports() {
       { url: '/api/accounts-payable', setter: setApData },
       { url: '/api/accounts-receivable', setter: setArData },
       { url: '/api/journal-entries', setter: setJournalData },
-      { url: '/api/bank-cash', setter: setBankData },
+      { url: '/api/bank-cash', setter: (d: any) => setBankData(Array.isArray(d) ? d : (d?.accounts ?? [])) },
     ];
 
     await Promise.all(
@@ -213,7 +213,7 @@ export default function FinancialReports() {
   const budgetActual = budgetData.reduce((s: number, b: any) => s + (b.actual || 0), 0);
 
   // Bank balances
-  const bankBalance = bankData.reduce((s: number, b: any) => s + (b.balance || 0), 0);
+  const bankBalance = (Array.isArray(bankData) ? bankData : []).reduce((s: number, b: any) => s + (b.balance || 0), 0);
 
   /* ── Chart Data ── */
 

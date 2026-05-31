@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Loader2, Send, Save, CheckCircle2, FileText, CircleDot, Pencil, Search, Upload } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Plus, Trash2, Loader2, Send, Save, FileText, CircleDot, Pencil, Search, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
+import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 
 interface APRecord {
   id: number; billNo: string; vendor: string; vendorCode: string | null;
@@ -30,14 +31,16 @@ export default function AccountsPayable() {
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [lines, setLines] = useState<LineItem[]>([{ id: 1, description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]);
   const [submitting, setSubmitting] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [page, setPage] = useState(1);
-  const pageSize = 15;
   const { triggerCreate } = useERPStore();
 
+  const statusFiltered = useMemo(
+    () => statusFilter === 'all' ? records : records.filter(r => r.status === statusFilter),
+    [records, statusFilter]
+  );
+  const tc = useTableControls(statusFiltered, (r) => `${r.billNo} ${r.vendor} ${r.vendorCode ?? ''} ${r.description ?? ''} ${r.status}`);
+
   useEffect(() => { if (triggerCreate > 0) openCreate(); }, [triggerCreate]);
-  useEffect(() => { setPage(1); }, [searchTerm, statusFilter]);
 
   const fetchData = useCallback(async () => {
     try { setLoading(true); const res = await fetch('/api/accounts-payable'); const json = await res.json(); if (json.success) setRecords(json.data); }
@@ -90,13 +93,13 @@ export default function AccountsPayable() {
       <div className="space-y-5">
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-[11px] text-[#f5a623] mb-1"><button onClick={() => setView('list')} className="hover:underline">Accounts Payable</button><span className="text-[#5a6878]">{' > '}</span><span className="text-[#e2e8f0]">{editTarget ? 'Edit' : 'Capture AP Invoice'}</span></div>
-            <h2 className="text-[24px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>Capture AP Invoice</h2>
-            <p className="text-[11px] text-[#5a6878] mt-0.5">Manual data entry for plant expenditure verification.</p>
+            <div className="text-[11px] text-[#f5a623] mb-1"><button onClick={() => setView('list')} className="hover:underline">Accounts Payable</button><span className="text-[#5a6878]">{' > '}</span><span className="text-[#e2e8f0]">{editTarget ? `Edit ${editTarget.billNo}` : 'New AP Invoice'}</span></div>
+            <h2 className="text-[24px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{editTarget ? 'Edit AP Invoice' : 'Capture AP Invoice'}</h2>
+            <p className="text-[11px] text-[#5a6878] mt-0.5">{editTarget ? 'Update vendor bill details and line allocations.' : 'Manual data entry for plant expenditure verification.'}</p>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => handleSubmit('Pending')} disabled={submitting} className="px-4 py-2 rounded-lg border border-[#f5a623] text-[#f5a623] text-[12px] font-semibold hover:bg-[#f5a623]/10 disabled:opacity-50 flex items-center gap-1.5"><Save size={13} /> Save Draft</button>
-            <button onClick={() => handleSubmit('Pending')} disabled={submitting} className="px-4 py-2 rounded-lg bg-[#f5a623] text-[#0a0d12] text-[12px] font-semibold hover:bg-[#e8991a] disabled:opacity-50 flex items-center gap-1.5">{submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Submit for Approval</button>
+            <button onClick={() => handleSubmit('Pending')} disabled={submitting} className="px-4 py-2 rounded-lg bg-[#f5a623] text-[#0a0d12] text-[12px] font-semibold hover:bg-[#e8991a] disabled:opacity-50 flex items-center gap-1.5">{submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} {editTarget ? 'Update Invoice' : 'Submit for Approval'}</button>
           </div>
         </div>
 
@@ -104,11 +107,11 @@ export default function AccountsPayable() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
           {/* LEFT — Form */}
           <div className="space-y-5">
-            {/* Status badges */}
+            {/* Invoice totals */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-3 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">PO Reference</span><span className="flex items-center gap-1.5 text-[12px] font-mono text-[#e2e8f0]">{form.poReference || 'N/A'}<CheckCircle2 size={13} className="text-[#00e676]" /></span></div>
-              <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-3 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Receipt Status</span><span className="flex items-center gap-1.5 text-[12px] font-mono text-[#e2e8f0]">{form.invoiceRef || 'Pending'}<CheckCircle2 size={13} className="text-[#ffab40]" /></span></div>
-              <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-3 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Match Variance</span><span className="flex items-center gap-1.5 text-[12px] font-mono text-[#00e676]">0.00%<CheckCircle2 size={13} className="text-[#00e676]" /></span></div>
+              <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Subtotal</span><span className="text-[14px] font-bold text-[#e2e8f0] font-mono">&#8377;{(lineTotal || form.totalAmount || 0).toLocaleString('en-IN')}</span></div>
+              <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">GST (18%)</span><span className="text-[14px] font-bold text-[#ffab40] font-mono">&#8377;{((lineTotal || form.totalAmount || 0) * 0.18).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+              <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Grand Total</span><span className="text-[14px] font-bold text-[#00e676] font-mono">&#8377;{((lineTotal || form.totalAmount || 0) * 1.18).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
             </div>
 
             {/* Vendor + fields */}
@@ -196,16 +199,9 @@ export default function AccountsPayable() {
   // ═══════════════════════════════════════════════════════
   // LIST VIEW with search, filter, paging
   // ═══════════════════════════════════════════════════════
-  const filtered = records.filter(r => {
-    const matchSearch = searchTerm === '' || r.billNo.toLowerCase().includes(searchTerm.toLowerCase()) || r.vendor.toLowerCase().includes(searchTerm.toLowerCase()) || (r.description || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchStatus = statusFilter === 'all' || r.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
-  const totalPages = Math.ceil(filtered.length / pageSize);
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const totalPending = filtered.filter(r => r.status === 'Pending' || r.status === 'Partially Paid').reduce((s, r) => s + r.totalAmount, 0);
-  const totalPaid = filtered.filter(r => r.status === 'Paid').reduce((s, r) => s + r.totalAmount, 0);
-  const totalOverdue = filtered.filter(r => r.status === 'Overdue').reduce((s, r) => s + r.totalAmount, 0);
+  const totalPending = statusFiltered.filter(r => r.status === 'Pending' || r.status === 'Partially Paid').reduce((s, r) => s + r.totalAmount, 0);
+  const totalPaid = statusFiltered.filter(r => r.status === 'Paid').reduce((s, r) => s + r.totalAmount, 0);
+  const totalOverdue = statusFiltered.filter(r => r.status === 'Overdue').reduce((s, r) => s + r.totalAmount, 0);
   const statuses = [...new Set(records.map(r => r.status))];
   const statusBadge = (s: string) => { if (s === 'Paid') return 'bg-[#00e676]/15 text-[#00e676]'; if (s === 'Pending') return 'bg-[#ffab40]/15 text-[#ffab40]'; if (s === 'Overdue') return 'bg-[#ff3d3d]/15 text-[#ff3d3d]'; return 'bg-[#00d4ff]/15 text-[#00d4ff]'; };
 
@@ -220,13 +216,13 @@ export default function AccountsPayable() {
       <div className="vc-panel">
         <div className="vc-panel-header"><FileText size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">AP Invoices</span><button onClick={openCreate} className="vc-btn-primary flex items-center gap-1.5 ml-auto"><Plus size={13} /> New Entry</button></div>
         <div className="px-4 py-3 border-b border-[#252e3a] flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5a6878]" /><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search bill no, vendor..." className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg pl-9 pr-3 py-2 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none min-w-[130px]"><option value="all">All Status</option>{statuses.map(s => <option key={s} value={s}>{s}</option>)}</select>
-          {(searchTerm || statusFilter !== 'all') && <button onClick={() => { setSearchTerm(''); setStatusFilter('all'); }} className="text-[11px] text-[#f5a623] hover:underline">Clear</button>}
+          <SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search bill no, vendor..." />
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-[#0f1318] border border-[#252e3a] rounded-lg px-3 py-1.5 text-[11px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none min-w-[130px]"><option value="all">All Status</option>{statuses.map(s => <option key={s} value={s}>{s}</option>)}</select>
+          {(tc.search || statusFilter !== 'all') && <button onClick={() => { tc.setSearch(''); setStatusFilter('all'); }} className="text-[11px] text-[#f5a623] hover:underline">Clear</button>}
         </div>
 
         <div className="overflow-x-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">{['Bill No', 'Vendor', 'Amount', 'Tax', 'Total', 'Due Date', 'Status', ''].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
-          <tbody className="divide-y divide-[#1a2028]">{paged.map(r => (
+          <tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => (
             <tr key={r.id} className="hover:bg-[#141920]">
               <td className="py-2.5 px-3 text-[#f5a623] font-mono font-medium">{r.billNo}</td>
               <td className="py-2.5 px-3 text-[#e2e8f0]">{r.vendor}</td>
@@ -237,18 +233,10 @@ export default function AccountsPayable() {
               <td className="py-2.5 px-3"><span className={`vc-badge ${statusBadge(r.status)}`}>{r.status}</span></td>
               <td className="py-2.5 px-3"><div className="flex gap-1"><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button><button onClick={() => handleDelete(r.id)} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button></div></td>
             </tr>
-          ))}{paged.length === 0 && <tr><td colSpan={8} className="py-10 text-center text-[#5a6878]">No records found.</td></tr>}</tbody>
+          ))}{tc.pageItems.length === 0 && <tr><td colSpan={8} className="py-10 text-center text-[#5a6878]">No records found.</td></tr>}</tbody>
         </table></div>
 
-        {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-[#252e3a] flex items-center justify-between">
-            <span className="text-[11px] text-[#5a6878]">Showing {(page-1)*pageSize+1}–{Math.min(page*pageSize, filtered.length)} of {filtered.length}</span>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1} className="px-3 py-1.5 rounded text-[11px] bg-[#0a0d12] border border-[#252e3a] text-[#e2e8f0] hover:border-[#f5a623] disabled:opacity-40">Prev</button>
-              <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page===totalPages} className="px-3 py-1.5 rounded text-[11px] bg-[#0a0d12] border border-[#252e3a] text-[#e2e8f0] hover:border-[#f5a623] disabled:opacity-40">Next</button>
-            </div>
-          </div>
-        )}
+        <PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} />
       </div>
     </div>
   );
