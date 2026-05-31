@@ -52,6 +52,18 @@ export async function POST(request: NextRequest) {
           Department: true,
           Designation: true,
           Branch: true,
+          SalaryStructureAssignment: {
+            where: { effectiveFrom: { lte: new Date(year, month - 1, 1) } },
+            orderBy: { effectiveFrom: 'desc' },
+            include: {
+              SalaryStructure: {
+                include: {
+                  SalaryStructureItem: { include: { SalaryComponent: true } },
+                },
+              },
+            },
+            take: 1,
+          },
         },
       });
       if (!emp) {
@@ -80,6 +92,18 @@ export async function POST(request: NextRequest) {
           Department: true,
           Designation: true,
           Branch: true,
+          SalaryStructureAssignment: {
+            where: { effectiveFrom: { lte: new Date(year, month - 1, 1) } },
+            orderBy: { effectiveFrom: 'desc' },
+            include: {
+              SalaryStructure: {
+                include: {
+                  SalaryStructureItem: { include: { SalaryComponent: true } },
+                },
+              },
+            },
+            take: 1,
+          },
         },
       });
     }
@@ -213,10 +237,37 @@ export async function POST(request: NextRequest) {
           shiftAssignment.Shift, // shift-driven OT config
         );
 
-        // Get salary structure (for now, use basic values from employee or defaults)
-        // In production, fetch from SalaryStructureAssignment
-        const basicSalary = 15000; // Default, should come from salary structure
-        const hra = basicSalary * 0.4;
+        // ── Resolve salary from the employee's active Salary Structure ──
+        // No hardcoded fallback: an employee without a structure (or with a
+        // zero basic) is skipped with a clear error so payroll is never built
+        // on placeholder numbers.
+        const salaryAssignment = employee.SalaryStructureAssignment?.[0];
+        let basicSalary = 0;
+        let hra = 0;
+        let conveyanceAllowance = 0;
+        let medicalAllowance = 0;
+        let specialAllowance = 0;
+
+        if (salaryAssignment) {
+          const items = salaryAssignment.SalaryStructure?.SalaryStructureItem ?? [];
+          for (const item of items) {
+            const amount = Number(item.fixedAmount) || 0;
+            const componentName = (item.SalaryComponent?.name || '').toLowerCase();
+            if (componentName.includes('basic')) basicSalary += amount;
+            else if (componentName.includes('hra') || componentName.includes('house')) hra += amount;
+            else if (componentName.includes('conveyance') || componentName.includes('transport')) conveyanceAllowance += amount;
+            else if (componentName.includes('medical')) medicalAllowance += amount;
+            else if (componentName.includes('special')) specialAllowance += amount;
+          }
+          // Fall back to the assignment's baseSalary as basic when the structure
+          // has no explicit "basic" component.
+          if (basicSalary === 0) basicSalary = Number(salaryAssignment.baseSalary) || 0;
+        }
+
+        if (!salaryAssignment || basicSalary <= 0) {
+          errors.push({ employeeId: employee.id, error: 'Skipped: no active salary structure (or zero basic). Assign a salary structure to include in payroll.' });
+          continue;
+        }
 
         const attendanceData = {
           totalDays: endDate.getDate(),
@@ -233,10 +284,9 @@ export async function POST(request: NextRequest) {
             id: employee.id,
             basicSalary,
             hra,
-            conveyanceAllowance: 1600,
-            medicalAllowance: 1250,
-            specialAllowance: 2000,
-            state: 'Maharashtra',
+            conveyanceAllowance,
+            medicalAllowance,
+            specialAllowance,
           },
           attendanceData,
           month,

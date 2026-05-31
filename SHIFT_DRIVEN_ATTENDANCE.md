@@ -50,3 +50,19 @@ fines or different thresholds.
 All fields used here already exist on the `Shift` model
 (`startTime`, `endTime`, `breakMinutes`, `crossesMidnight`, `otThresholdMin`,
 `graceMinutes`). This change only wires up fields that were previously unused.
+
+## Payroll salary now comes from the Salary Structure (no hardcoded basic)
+
+`src/app/api/payroll/generate/route.ts` previously used a hardcoded
+`basicSalary = 15000` plus fixed HRA/conveyance/medical/special. It now resolves
+each employee's pay from their active **Salary Structure Assignment**:
+
+- The employee query includes the latest `SalaryStructureAssignment` (effective on
+  or before the payroll month) with its `SalaryStructureItem`s and `SalaryComponent`s.
+- Components are mapped by name into basic / HRA / conveyance / medical / special.
+- If the structure has no explicit "basic" component, the assignment's `baseSalary`
+  is used as basic.
+- **No placeholder fallback:** an employee with no active salary structure (or a
+  zero basic) is **skipped** with a clear error, exactly like the existing
+  "no active shift" guard — payroll is never generated on fake numbers.
+- `state` for professional-tax is left to the calculator default (unchanged behavior).
