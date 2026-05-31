@@ -1,49 +1,89 @@
 import { isHoliday } from './holiday-service'
 
 /**
- * Calculate overtime hours for an attendance record
- * @param punchIn - Punch in time
- * @param punchOut - Punch out time
- * @param logDate - Date of attendance
- * @param branchId - Employee's branch ID
- * @param standardHours - Standard working hours per day (default: 8)
- * @returns Overtime hours
+ * Shift configuration used to drive OT calculation.
+ * The Shift is now the PRIMARY source for working hours + OT threshold.
+ * Attendance Rules remain only for late-fine edge cases (handled elsewhere).
+ */
+export interface ShiftOTConfig {
+  startTime: string          // "HH:mm"
+  endTime: string            // "HH:mm"
+  breakMinutes?: number | null
+  crossesMidnight?: boolean | null
+  otThresholdMin?: number | null  // minimum extra minutes before OT counts
+}
+
+const DEFAULT_STANDARD_HOURS = 8
+
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
+/**
+ * Net working hours for a shift = (end − start) − break, midnight-aware.
+ * Falls back to the default standard hours when the shift is missing/invalid.
+ */
+export function getShiftNetHours(shift?: ShiftOTConfig | null): number {
+  if (!shift?.startTime || !shift?.endTime) return DEFAULT_STANDARD_HOURS
+  const start = timeToMinutes(shift.startTime)
+  const end = timeToMinutes(shift.endTime)
+  let durationMin = end - start
+  if (shift.crossesMidnight || durationMin < 0) {
+    durationMin = (24 * 60 - start) + end
+  }
+  const netMin = durationMin - (shift.breakMinutes ?? 0)
+  if (netMin <= 0) return DEFAULT_STANDARD_HOURS
+  return netMin / 60
+}
+
+/**
+ * Calculate overtime hours for a single attendance record.
+ *
+ * Priority:
+ *  1. Holiday work → ALL worked hours are OT.
+ *  2. Regular day  → OT = worked − shift net hours, but only counted once the
+ *     overage meets the shift's `otThresholdMin`. Below the threshold → 0 OT.
+ *
+ * When no shift is supplied, falls back to the legacy 8-hour standard with no
+ * threshold (preserves previous behaviour for un-shifted data).
  */
 export async function calculateOvertimeHours(
   punchIn: Date,
   punchOut: Date,
   logDate: Date | string,
   branchId?: number | null,
-  standardHours: number = 8
+  shift?: ShiftOTConfig | null,
 ): Promise<number> {
   try {
-    // Calculate total hours worked
     const totalHours = (punchOut.getTime() - punchIn.getTime()) / (1000 * 60 * 60)
-    
-    // Check if the date is a holiday
+    if (totalHours <= 0) return 0
+
+    // Holiday → entire shift is overtime
     const holidayCheck = await isHoliday(logDate, branchId)
-    
     if (holidayCheck.isHoliday) {
-      // All hours on a holiday are overtime
-      return Math.max(0, totalHours)
+      return Math.round(Math.max(0, totalHours) * 100) / 100
     }
-    
-    // Regular day: OT is hours beyond standard hours
-    return Math.max(0, totalHours - standardHours)
+
+    const netHours = getShiftNetHours(shift)
+    const overageHours = totalHours - netHours
+    if (overageHours <= 0) return 0
+
+    // Respect the shift's OT threshold (minutes). Below it → no OT.
+    const thresholdMin = shift?.otThresholdMin ?? 0
+    if (thresholdMin > 0 && overageHours * 60 < thresholdMin) return 0
+
+    return Math.round(overageHours * 100) / 100
   } catch (error) {
     console.error('Error calculating overtime:', error)
-    // Fallback to simple calculation
     const totalHours = (punchOut.getTime() - punchIn.getTime()) / (1000 * 60 * 60)
-    return Math.max(0, totalHours - standardHours)
+    return Math.round(Math.max(0, totalHours - DEFAULT_STANDARD_HOURS) * 100) / 100
   }
 }
 
 /**
- * Calculate overtime hours for multiple attendance records
- * @param attendanceRecords - Array of attendance records
- * @param branchId - Employee's branch ID
- * @param standardHours - Standard working hours per day (default: 8)
- * @returns Total overtime hours
+ * Calculate total overtime hours across multiple attendance records, all sharing
+ * the same shift config (the employee's active shift for the period).
  */
 export async function calculateTotalOvertimeHours(
   attendanceRecords: Array<{
@@ -52,35 +92,29 @@ export async function calculateTotalOvertimeHours(
     logDate: Date
   }>,
   branchId?: number | null,
-  standardHours: number = 8
+  shift?: ShiftOTConfig | null,
 ): Promise<number> {
   let totalOT = 0
-  
   for (const record of attendanceRecords) {
     if (record.punchIn && record.punchOut) {
-      const ot = await calculateOvertimeHours(
+      totalOT += await calculateOvertimeHours(
         record.punchIn,
         record.punchOut,
         record.logDate,
         branchId,
-        standardHours
+        shift,
       )
-      totalOT += ot
     }
   }
-  
-  return totalOT
+  return Math.round(totalOT * 100) / 100
 }
 
 /**
- * Check if attendance is on a holiday
- * @param logDate - Date of attendance
- * @param branchId - Employee's branch ID
- * @returns Boolean indicating if it's holiday work
+ * Check if attendance is on a holiday.
  */
 export async function isHolidayWork(
   logDate: Date | string,
-  branchId?: number | null
+  branchId?: number | null,
 ): Promise<boolean> {
   const holidayCheck = await isHoliday(logDate, branchId)
   return holidayCheck.isHoliday

@@ -110,20 +110,24 @@ export async function applyAttendanceRules(
   scheduledTime: Date,
   actualTime: Date,
   ruleType: string = 'late',
-  dbClient?: DbClient
+  dbClient?: DbClient,
+  shiftGraceMinutes: number = 0,
 ): Promise<AttendanceRuleResult> {
   const rule = await getApplicableRule(employeeId, ruleType, dbClient);
 
+  // No scoped AttendanceRule → fall back to the SHIFT as the primary source.
+  // The shift's grace period decides late status; the shift never fines (fine = 0).
   if (!rule) {
     const diffMs = actualTime.getTime() - scheduledTime.getTime();
     const diffMinutes = Math.floor(diffMs / 60000);
+    const effectiveLateness = Math.max(0, diffMinutes - shiftGraceMinutes);
     return {
-      isLate: diffMinutes > 0,
-      lateMinutes: Math.max(0, diffMinutes),
+      isLate: effectiveLateness > 0,
+      lateMinutes: effectiveLateness,
       isHalfDay: false,
       isAbsent: false,
       fineAmount: 0,
-      status: diffMinutes > 0 ? 'late' : 'present',
+      status: effectiveLateness > 0 ? 'late' : 'present',
     };
   }
 
@@ -200,7 +204,7 @@ export async function calculateFinesForPeriod(
     const scheduledTime = new Date(log.logDate);
     scheduledTime.setHours(hours, minutes, 0, 0);
 
-    const result = await applyAttendanceRules(employeeId, scheduledTime, log.punchIn, 'late', db);
+    const result = await applyAttendanceRules(employeeId, scheduledTime, log.punchIn, 'late', db, shift.graceMinutes ?? 0);
     if (result.fineAmount > 0) {
       totalFine += result.fineAmount;
       details.push({
@@ -253,13 +257,15 @@ export async function classifyAttendance(
   const scheduledPunchIn = new Date(logDate)
   scheduledPunchIn.setHours(shiftHour, shiftMin, 0, 0)
 
-  // Apply the rule
+  // Apply the rule. Pass the shift's grace period so that when NO scoped
+  // AttendanceRule exists, the shift's own grace drives late status.
   const result = await applyAttendanceRules(
     employeeId,
     scheduledPunchIn,
     punchIn,
     'late',
-    db
+    db,
+    shift.graceMinutes ?? 0,
   )
 
   // If punchOut is provided, also check early departure / half-day by hours worked
