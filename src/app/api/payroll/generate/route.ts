@@ -238,9 +238,11 @@ export async function POST(request: NextRequest) {
         );
 
         // ── Resolve salary from the employee's active Salary Structure ──
-        // No hardcoded fallback: an employee without a structure (or with a
-        // zero basic) is skipped with a clear error so payroll is never built
-        // on placeholder numbers.
+        // Mirrors the generate-excel module: read components from the structure,
+        // default to 0 when absent (never a hardcoded placeholder). Note: your
+        // primary payroll flow is the compliance / non-compliance salary sheets
+        // and Generate Excel — those take the real basic from admin input / stored
+        // PayrollItems. This auto-generate path simply avoids inventing numbers.
         const salaryAssignment = employee.SalaryStructureAssignment?.[0];
         let basicSalary = 0;
         let hra = 0;
@@ -262,11 +264,6 @@ export async function POST(request: NextRequest) {
           // Fall back to the assignment's baseSalary as basic when the structure
           // has no explicit "basic" component.
           if (basicSalary === 0) basicSalary = Number(salaryAssignment.baseSalary) || 0;
-        }
-
-        if (!salaryAssignment || basicSalary <= 0) {
-          errors.push({ employeeId: employee.id, error: 'Skipped: no active salary structure (or zero basic). Assign a salary structure to include in payroll.' });
-          continue;
         }
 
         const attendanceData = {

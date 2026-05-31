@@ -54,15 +54,20 @@ All fields used here already exist on the `Shift` model
 ## Payroll salary now comes from the Salary Structure (no hardcoded basic)
 
 `src/app/api/payroll/generate/route.ts` previously used a hardcoded
-`basicSalary = 15000` plus fixed HRA/conveyance/medical/special. It now resolves
-each employee's pay from their active **Salary Structure Assignment**:
+`basicSalary = 15000` plus fixed HRA/conveyance/medical/special. This was the
+**only** place in the payroll code with a hardcoded salary.
 
-- The employee query includes the latest `SalaryStructureAssignment` (effective on
-  or before the payroll month) with its `SalaryStructureItem`s and `SalaryComponent`s.
-- Components are mapped by name into basic / HRA / conveyance / medical / special.
-- If the structure has no explicit "basic" component, the assignment's `baseSalary`
-  is used as basic.
-- **No placeholder fallback:** an employee with no active salary structure (or a
-  zero basic) is **skipped** with a clear error, exactly like the existing
-  "no active shift" guard — payroll is never generated on fake numbers.
-- `state` for professional-tax is left to the calculator default (unchanged behavior).
+The three payroll modules actually in use were already correct and untouched:
+- **Non-compliance** (`salary-sheet`, `generate-template`/`calculate-from-template`)
+  takes the real basic from admin-filled Excel input / stored `PayrollItem`s.
+- **Compliance** (`salary-sheet-compliance`, `generate-compliance-template`)
+  reads `basicSalary` from stored `PayrollItem`s.
+- **Generate Excel** (`generate-excel`) resolves components from the employee's
+  `SalaryStructureAssignment`, defaulting to `0` (never a placeholder).
+
+`generate/route.ts` (a secondary auto-generate path) now mirrors `generate-excel`:
+it resolves basic/HRA/conveyance/medical/special from the active
+`SalaryStructureAssignment`, falls back to the assignment's `baseSalary` as basic,
+and defaults everything to `0` when no structure exists — so it never invents a
+salary. `state` for professional-tax uses the calculator default (unchanged).
+
