@@ -24,8 +24,8 @@ export const MODULE_GROUPS: Record<string, string[]> = {
   projects: ['project-list', 'sites'],
   assets: ['equipment', 'permits', 'safety', 'subcontractors'],
   system: ['reports', 'settings', 'user-management', 'onboarding-approvals', 'requests', 'notice-board'],
-  reports: ['report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
-  'self-service': ['my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
+  reports: ['report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
+  'self-service': ['my-dashboard', 'my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
 }
 
 /**

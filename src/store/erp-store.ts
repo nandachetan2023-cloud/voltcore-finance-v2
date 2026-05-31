@@ -11,9 +11,9 @@ export const MODULE_TREE: Record<string, string[]> = {
   projects: ['projects', 'project-list', 'sites'],
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
   // A dedicated "self-service" group for employees
-  'self-service': ['my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
+  'self-service': ['my-dashboard', 'my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
   system: ['system', 'reports', 'settings', 'user-management', 'onboarding-approvals', 'requests', 'notice-board'],
-  reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
+  reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
 }
 
 // Build a reverse map: sub-module key → parent key
@@ -57,7 +57,7 @@ export type ModuleId =
   | 'reports' | 'settings'
   | 'report-manpower' | 'report-attendance' | 'report-payroll' | 'report-leave'
   | 'report-late-fine' | 'report-onboarding' | 'report-turnover' | 'report-training'
-  | 'report-notices' | 'report-dispatch'
+  | 'report-notices' | 'report-dispatch' | 'report-tour'
   // Analytics pages
   | 'employee-analytics'
   // Timesheet
@@ -78,6 +78,7 @@ export type ModuleId =
   | 'user-management'
   | 'onboarding-approvals'
   // Employee self-service
+  | 'my-dashboard'
   | 'my-attendance'
   | 'my-leave'
   | 'my-tours'
@@ -198,6 +199,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'report-attendance', icon: 'ClipboardList',  label: 'Attendance',       section: 'Reports' },
     { id: 'report-payroll',    icon: 'IndianRupee',    label: 'Payroll',          section: 'Reports' },
     { id: 'report-leave',      icon: 'CalendarDays',   label: 'Leave',            section: 'Reports' },
+    { id: 'report-tour',       icon: 'Plane',          label: 'Tour Requests',    section: 'Reports' },
     { id: 'report-late-fine',  icon: 'AlertTriangle',  label: 'Late & Fines',     section: 'Reports' },
     { id: 'report-onboarding', icon: 'UserCheck',      label: 'Onboarding',       section: 'Reports' },
     { id: 'report-turnover',   icon: 'UserX',          label: 'Turnover / Exit',  section: 'Reports' },
@@ -206,6 +208,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'report-dispatch',   icon: 'Send',           label: 'Payslip Dispatch', section: 'Reports' },
   ],
   'self-service': [
+    { id: 'my-dashboard', icon: 'BarChart3', label: 'My Dashboard', section: 'My Portal' },
     { id: 'my-attendance', icon: 'ClipboardList', label: 'My Attendance', section: 'My Portal' },
     { id: 'my-leave', icon: 'CalendarDays', label: 'Apply Leave', section: 'My Portal' },
     { id: 'my-tours', icon: 'Plane', label: 'My Tours', section: 'My Portal' },
@@ -279,6 +282,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'report-attendance': { title: 'Attendance Report',        breadcrumb: 'Reports › Attendance' },
   'report-payroll':    { title: 'Payroll Report',           breadcrumb: 'Reports › Payroll' },
   'report-leave':      { title: 'Leave Report',             breadcrumb: 'Reports › Leave' },
+  'report-tour':       { title: 'Tour Requests Report',     breadcrumb: 'Reports › Tour Requests' },
   'report-late-fine':  { title: 'Late & Fine Report',       breadcrumb: 'Reports › Late & Fines' },
   'report-onboarding': { title: 'Onboarding Status Report', breadcrumb: 'Reports › Onboarding' },
   'report-turnover':   { title: 'Turnover / Exit Report',   breadcrumb: 'Reports › Turnover' },
@@ -291,6 +295,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'onboarding-approvals': { title: 'Onboarding Approvals', breadcrumb: 'System › Onboarding Approvals' },
   'requests': { title: 'Employee Requests', breadcrumb: 'System › Employee Requests' },
   'self-service': { title: 'My Portal', breadcrumb: 'VoltCore ERP › My Portal' },
+  'my-dashboard': { title: 'My Dashboard', breadcrumb: 'My Portal › Dashboard' },
   'my-attendance': { title: 'My Attendance', breadcrumb: 'My Portal › Attendance' },
   'my-leave': { title: 'Apply for Leave', breadcrumb: 'My Portal › Leave Application' },
   'my-tours': { title: 'My Tour Requests', breadcrumb: 'My Portal › Tour Requests' },

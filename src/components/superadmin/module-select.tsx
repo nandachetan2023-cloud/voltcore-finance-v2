@@ -29,6 +29,7 @@ export const FULL_MODULE_TREE: {
       { key: 'attendance-rules',    label: 'Attendance Rules' },
       { key: 'checklist-templates', label: 'Checklist Templates' },
       { key: 'employee-documents',  label: 'Employee Documents' },
+      { key: 'roles-access',        label: 'Roles & Access' },
     ],
   },
   {
@@ -39,6 +40,7 @@ export const FULL_MODULE_TREE: {
       { key: 'attendance',         label: 'Attendance' },
       { key: 'biometric',          label: 'Biometric Sync' },
       { key: 'leave',              label: 'Leave Management' },
+      { key: 'tour-requests',      label: 'Tour Requests' },
       { key: 'shift',              label: 'Shift Roster' },
       { key: 'timesheet',          label: 'Timesheet' },
       { key: 'payroll',            label: 'Payroll' },
@@ -103,6 +105,7 @@ export const FULL_MODULE_TREE: {
       { key: 'report-attendance', label: 'Attendance' },
       { key: 'report-payroll',    label: 'Payroll' },
       { key: 'report-leave',      label: 'Leave' },
+      { key: 'report-tour',       label: 'Tour Requests' },
       { key: 'report-late-fine',  label: 'Late & Fines' },
       { key: 'report-onboarding', label: 'Onboarding' },
       { key: 'report-turnover',   label: 'Turnover / Exit' },
@@ -114,8 +117,10 @@ export const FULL_MODULE_TREE: {
   {
     key: 'self-service', label: 'My Portal',
     subModules: [
+      { key: 'my-dashboard',  label: 'My Dashboard' },
       { key: 'my-attendance', label: 'My Attendance' },
       { key: 'my-leave',      label: 'Apply Leave' },
+      { key: 'my-tours',      label: 'My Tours' },
       { key: 'my-requests',   label: 'My Requests' },
       { key: 'my-profile',    label: 'My Profile' },
       { key: 'my-notices',    label: 'My Notices' },
