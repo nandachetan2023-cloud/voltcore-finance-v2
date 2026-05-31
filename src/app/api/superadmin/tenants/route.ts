@@ -21,7 +21,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, slug, dbUrl, notes, logoUrl, maxAccounts } = body
+    const { name, slug, dbUrl, notes, logoUrl, maxAccounts, enabledModules } = body
     if (!name || !slug || !dbUrl) {
       return NextResponse.json({ success: false, error: 'name, slug and dbUrl are required' }, { status: 400 })
     }
@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
         name, slug: slug.toLowerCase().replace(/\s+/g, '-'), dbUrl,
         notes: notes || '', status: 'active', logoUrl: logoUrl || null,
         maxAccounts: maxAccounts != null ? parseInt(String(maxAccounts)) || 0 : 0,
+        enabledModules: enabledModules || 'all',
       } as any,
     })
     return NextResponse.json({ success: true, data: tenant }, { status: 201 })

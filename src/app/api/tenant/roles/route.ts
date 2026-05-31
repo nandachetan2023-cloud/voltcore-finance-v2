@@ -8,11 +8,21 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { superadminDb } from '@/lib/superadmin-db'
+import { intersectAccess } from '@/lib/module-access'
 
 export const dynamic = 'force-dynamic'
 
 function getTenantId(request: NextRequest): string | null {
   return request.cookies.get('erp_tenant_id')?.value || null
+}
+
+// Fetch the tenant-wide module cap set by the superadmin.
+async function getTenantCap(tenantId: string): Promise<string> {
+  const tenant = await superadminDb.tenant.findUnique({
+    where: { id: tenantId },
+    select: { enabledModules: true } as any,
+  })
+  return (tenant as any)?.enabledModules || 'all'
 }
 
 // GET: list roles for this tenant (+ current user count per role)
@@ -61,13 +71,17 @@ export async function POST(request: NextRequest) {
     const { name, level, moduleAccess, departments, designations, color } = body
     if (!name) return NextResponse.json({ success: false, error: 'Role name is required' }, { status: 400 })
 
+    // Clamp requested module access to the tenant-wide cap set by the superadmin.
+    const cap = await getTenantCap(tenantId)
+    const clampedAccess = intersectAccess(moduleAccess || 'all', cap)
+
     const role = await superadminDb.orgRole.create({
       data: {
         tenantId,
         name,
         level: parseInt(String(level)) || 1,
         maxUsers: 0, // deprecated — total cap is at tenant level now
-        moduleAccess: moduleAccess || 'all',
+        moduleAccess: clampedAccess,
         departments: departments || '',
         designations: designations || '',
         color: color || '#5a6878',
@@ -93,12 +107,19 @@ export async function PUT(request: NextRequest) {
     const existing = await superadminDb.orgRole.findFirst({ where: { id, tenantId } })
     if (!existing) return NextResponse.json({ success: false, error: 'Role not found' }, { status: 404 })
 
+    // Clamp requested module access to the tenant-wide cap.
+    let clampedAccess: string | undefined
+    if (moduleAccess !== undefined) {
+      const cap = await getTenantCap(tenantId)
+      clampedAccess = intersectAccess(moduleAccess || 'all', cap)
+    }
+
     const role = await superadminDb.orgRole.update({
       where: { id },
       data: {
         ...(name !== undefined ? { name } : {}),
         ...(level !== undefined ? { level: parseInt(String(level)) || 1 } : {}),
-        ...(moduleAccess !== undefined ? { moduleAccess } : {}),
+        ...(clampedAccess !== undefined ? { moduleAccess: clampedAccess } : {}),
         ...(departments !== undefined ? { departments } : {}),
         ...(designations !== undefined ? { designations } : {}),
         ...(color !== undefined ? { color } : {}),
@@ -106,10 +127,10 @@ export async function PUT(request: NextRequest) {
     })
 
     // When module access changes, propagate to users holding this role
-    if (moduleAccess !== undefined && moduleAccess !== existing.moduleAccess) {
+    if (clampedAccess !== undefined && clampedAccess !== existing.moduleAccess) {
       await superadminDb.tenantUser.updateMany({
         where: { tenantId, orgRoleId: id },
-        data: { allowedModules: moduleAccess },
+        data: { allowedModules: clampedAccess },
       })
     }
 

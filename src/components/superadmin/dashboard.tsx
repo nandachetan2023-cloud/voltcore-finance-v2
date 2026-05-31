@@ -16,6 +16,7 @@ interface Tenant {
   status: string; notes: string; createdAt: string;
   logoUrl?: string;
   maxAccounts?: number;
+  enabledModules?: string;
   _count?: { users: number; biometric: number };
 }
 
@@ -165,7 +166,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
 
 /* ── Tenants Tab ─────────────────────────────────────────────── */
 function TenantsTab({ tenants, onRefresh }: { tenants: Tenant[]; onRefresh: () => void }) {
-  const empty = { name: '', slug: '', dbUrl: '', notes: '', status: 'active', logoUrl: '', maxAccounts: '0' };
+  const empty = { name: '', slug: '', dbUrl: '', notes: '', status: 'active', logoUrl: '', maxAccounts: '0', enabledModules: 'all' };
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -245,6 +246,29 @@ function TenantsTab({ tenants, onRefresh }: { tenants: Tenant[]; onRefresh: () =
               <Field label="Notes"><input className={inp} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></Field>
             </div>
             <div className="col-span-2">
+              <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">Enabled Modules (tenant-wide cap)</label>
+              <div className="flex items-center gap-2 mb-2">
+                <button type="button"
+                  onClick={() => setForm(f => ({ ...f, enabledModules: 'all' }))}
+                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg border transition-colors ${form.enabledModules === 'all' || !form.enabledModules ? 'bg-[#f5a623] text-black border-[#f5a623]' : 'text-[#f5a623] border-[#f5a623]/30 hover:bg-[#f5a623]/10'}`}>
+                  All Modules
+                </button>
+                <button type="button"
+                  onClick={() => setForm(f => ({ ...f, enabledModules: f.enabledModules === 'all' ? '' : f.enabledModules }))}
+                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg border transition-colors ${form.enabledModules !== 'all' && form.enabledModules !== '' ? 'bg-[#00d4ff]/20 text-[#00d4ff] border-[#00d4ff]/40' : 'text-[#00d4ff] border-[#00d4ff]/20 hover:bg-[#00d4ff]/10'}`}>
+                  Limit to Selected
+                </button>
+              </div>
+              {form.enabledModules !== 'all' && (
+                <ModuleSelect value={form.enabledModules || ''} onChange={v => setForm(f => ({ ...f, enabledModules: v }))} />
+              )}
+              <p className="text-[10px] text-[#5a6878] mt-1">
+                {form.enabledModules === 'all' || !form.enabledModules
+                  ? 'No cap — the tenant admin can grant access to any module.'
+                  : 'Absolute ceiling for this tenant. Roles and users can only be given access to these modules — nobody in the tenant can access anything outside this set, even full admins.'}
+              </p>
+            </div>
+            <div className="col-span-2">
               <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">Company Logo (PNG)</label>
               <div className="flex items-center gap-3">
                 {form.logoUrl ? (
@@ -314,6 +338,7 @@ function TenantsTab({ tenants, onRefresh }: { tenants: Tenant[]; onRefresh: () =
                     <span>{t._count?.users ?? 0} users</span>
                     <span>{t._count?.biometric ?? 0} biometric sites</span>
                     <span>Cap: <span className={(t.maxAccounts ?? 0) > 0 ? 'text-[#f5a623] font-semibold' : 'text-[#8899aa]'}>{(t.maxAccounts ?? 0) > 0 ? `${t.maxAccounts} accounts` : 'Unlimited'}</span></span>
+                    <span>Modules: <span className={(t.enabledModules && t.enabledModules !== 'all') ? 'text-[#00d4ff] font-semibold' : 'text-[#8899aa]'}>{(t.enabledModules && t.enabledModules !== 'all') ? `${t.enabledModules.split(',').filter(Boolean).length} enabled` : 'All'}</span></span>
                     {t.notes && <span className="text-[#8899aa]">{t.notes}</span>}
                   </div>
                 </div>
@@ -323,7 +348,7 @@ function TenantsTab({ tenants, onRefresh }: { tenants: Tenant[]; onRefresh: () =
                   className="px-2.5 py-1.5 text-[10px] font-semibold text-[#00d4ff] border border-[#00d4ff]/30 rounded-lg hover:bg-[#00d4ff]/10 disabled:opacity-50 transition-colors">
                   {pushingId === t.id ? 'Pushing...' : 'Push Schema'}
                 </button>
-                <button onClick={() => { setForm({ name: t.name, slug: t.slug, dbUrl: t.dbUrl, notes: t.notes, status: t.status, logoUrl: (t as any).logoUrl || '', maxAccounts: String((t as any).maxAccounts ?? 0) }); setEditId(t.id); setShowForm(true); }}
+                <button onClick={() => { setForm({ name: t.name, slug: t.slug, dbUrl: t.dbUrl, notes: t.notes, status: t.status, logoUrl: (t as any).logoUrl || '', maxAccounts: String((t as any).maxAccounts ?? 0), enabledModules: (t as any).enabledModules || 'all' }); setEditId(t.id); setShowForm(true); }}
                   className="p-1.5 text-[#5a6878] hover:text-[#f5a623] transition-colors"><Pencil size={13} /></button>
                 <button onClick={() => del(t.id, t.name)} className="p-1.5 text-[#5a6878] hover:text-[#ff3d3d] transition-colors"><Trash2 size={13} /></button>
               </div>

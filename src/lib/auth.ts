@@ -1,5 +1,6 @@
 import { superadminDb } from '@/lib/superadmin-db'
 import bcrypt from 'bcryptjs'
+import { intersectAccess } from '@/lib/module-access'
 
 export type UserRole = 'superadmin' | 'admin' | 'demo'
 
@@ -86,6 +87,12 @@ export async function authenticateUser(email: string, password: string): Promise
             orgRoleName = orgRole.name
           }
         }
+
+        // 3. Apply the tenant-wide module cap set by the superadmin. This is an
+        //    absolute ceiling — even full-admin users only get what the tenant
+        //    is licensed for. effective = intersection(role access, tenant cap).
+        const tenantCap = (tenantUser.tenant as any).enabledModules || 'all'
+        modules = intersectAccess(modules, tenantCap)
 
         // Fetch employee code if linked
         let employeeCode: string | undefined

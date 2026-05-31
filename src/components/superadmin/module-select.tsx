@@ -9,7 +9,7 @@
  * isModuleAllowed() in erp-store handles both.
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Check, ChevronDown, ChevronUp, ChevronRight, Layers, X } from 'lucide-react';
 
 /* ── Full module tree with labels ─────────────────────────────── */
@@ -158,12 +158,38 @@ interface Props {
   value: string;
   onChange: (val: string) => void;
   placeholder?: string;
+  /**
+   * Optional tenant-wide cap. When set (and not 'all'), the selector only shows
+   * modules within this cap — used so a tenant admin can never grant access
+   * beyond what the superadmin enabled for the tenant.
+   * Value format identical to `value`: "all" | comma-separated keys.
+   */
+  cap?: string;
 }
 
-export default function ModuleSelect({ value, onChange, placeholder = 'Select modules...' }: Props) {
+/** Build the visible tree, filtered to the cap when one is set. */
+function buildVisibleTree(cap?: string): typeof FULL_MODULE_TREE {
+  if (!cap || cap === 'all') return FULL_MODULE_TREE;
+  const allowed = new Set(cap.split(',').map(s => s.trim()).filter(Boolean));
+  const result: typeof FULL_MODULE_TREE = [];
+  for (const group of FULL_MODULE_TREE) {
+    const groupAllowed = allowed.has(group.key);
+    if (group.subModules.length === 0) {
+      if (groupAllowed) result.push(group);
+      continue;
+    }
+    const subs = group.subModules.filter(s => groupAllowed || allowed.has(s.key));
+    if (subs.length > 0) result.push({ ...group, subModules: subs });
+  }
+  return result;
+}
+
+export default function ModuleSelect({ value, onChange, placeholder = 'Select modules...', cap }: Props) {
   const [open, setOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const ref = useRef<HTMLDivElement>(null);
+
+  const tree = useMemo(() => buildVisibleTree(cap), [cap]);
 
   const isAll = !value || value === 'all';
   const selected = parseValue(value);
@@ -209,7 +235,7 @@ export default function ModuleSelect({ value, onChange, placeholder = 'Select mo
       // If currently "all modules", expand to all groups then deselect this one
       if (isAll) {
         const next = new Set<string>();
-        FULL_MODULE_TREE.forEach(g => {
+        tree.forEach(g => {
           if (g.key !== group.key) next.add(g.key);
         });
         onChange(serializeValue(next));
@@ -231,12 +257,12 @@ export default function ModuleSelect({ value, onChange, placeholder = 'Select mo
   };
 
   const toggleSubModule = (groupKey: string, subKey: string) => {
-    const group = FULL_MODULE_TREE.find(g => g.key === groupKey)!;
+    const group = tree.find(g => g.key === groupKey)!;
 
     // If currently "all modules", expand to all groups first
     if (isAll) {
       const next = new Set<string>();
-      FULL_MODULE_TREE.forEach(g => next.add(g.key));
+      tree.forEach(g => next.add(g.key));
       // Now expand the clicked group to sub-modules and toggle the sub
       next.delete(groupKey);
       group.subModules.forEach(s => {
@@ -277,7 +303,7 @@ export default function ModuleSelect({ value, onChange, placeholder = 'Select mo
   const selectedCount = (() => {
     if (isAll) return 'All Modules';
     let count = 0;
-    for (const group of FULL_MODULE_TREE) {
+    for (const group of tree) {
       if (selected.has(group.key)) {
         count += Math.max(1, group.subModules.length);
       } else {
@@ -320,7 +346,7 @@ export default function ModuleSelect({ value, onChange, placeholder = 'Select mo
 
           {/* Groups */}
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {FULL_MODULE_TREE.map(group => {
+            {tree.map(group => {
               const state = getGroupState(group);
               const isExpanded = expandedGroups.has(group.key);
               const hasSubModules = group.subModules.length > 0;
@@ -388,7 +414,7 @@ export default function ModuleSelect({ value, onChange, placeholder = 'Select mo
           {!isAll && selected.size > 0 && (
             <div className="px-3 py-2 border-t border-[#252e3a] bg-[#141920] shrink-0">
               <div className="flex flex-wrap gap-1 max-h-[48px] overflow-y-auto">
-                {FULL_MODULE_TREE.flatMap(g => {
+                {tree.flatMap(g => {
                   if (selected.has(g.key)) {
                     return [{ key: g.key, label: g.label, groupKey: g.key }];
                   }

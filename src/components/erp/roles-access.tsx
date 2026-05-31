@@ -23,7 +23,7 @@ interface ApprovalChain {
   id: string; name: string; description: string; isActive: boolean;
   steps: ApprovalStep[]; requesterRoleId?: string | null; requesterRole?: OrgRole | null;
 }
-interface AccountUsage { maxAccounts: number; used: number; remaining: number | null; unlimited: boolean }
+interface AccountUsage { maxAccounts: number; used: number; remaining: number | null; unlimited: boolean; enabledModules?: string }
 
 const SCOPE_OPTIONS = [
   { value: 'universal', label: 'Universal (any dept)' },
@@ -213,7 +213,7 @@ export default function RolesAccessModule() {
       {loading ? (
         <div className="text-center py-10 text-[#5a6878] text-[12px]">Loading...</div>
       ) : subTab === 'roles' ? (
-        <RolesPanel roles={roles} departments={departments} designations={designations} onRefresh={fetchData} />
+        <RolesPanel roles={roles} departments={departments} designations={designations} moduleCap={usage?.enabledModules || 'all'} onRefresh={fetchData} />
       ) : (
         <ChainsPanel chains={chains} roles={roles} onRefresh={fetchData} />
       )}
@@ -222,8 +222,8 @@ export default function RolesAccessModule() {
 }
 
 /* ── Roles Panel ─────────────────────────────────────────────── */
-function RolesPanel({ roles, departments, designations, onRefresh }: {
-  roles: OrgRole[]; departments: string[]; designations: string[]; onRefresh: () => void;
+function RolesPanel({ roles, departments, designations, moduleCap, onRefresh }: {
+  roles: OrgRole[]; departments: string[]; designations: string[]; moduleCap: string; onRefresh: () => void;
 }) {
   const empty = { name: '', level: '1', moduleAccess: 'all', departments: '', designations: '', color: '#f5a623' };
   const [form, setForm] = useState(empty);
@@ -277,7 +277,10 @@ function RolesPanel({ roles, departments, designations, onRefresh }: {
               <input className={inp} type="number" min="1" max="100" value={form.level} onChange={e => setForm(f => ({ ...f, level: e.target.value }))} placeholder="1 = highest" />
             </Field>
             <Field label="Module Access" span2>
-              <ModuleSelect value={form.moduleAccess} onChange={v => setForm(f => ({ ...f, moduleAccess: v }))} />
+              <ModuleSelect value={form.moduleAccess} onChange={v => setForm(f => ({ ...f, moduleAccess: v }))} cap={moduleCap} />
+              {moduleCap && moduleCap !== 'all' && (
+                <p className="text-[10px] text-[#5a6878] mt-1">Only modules enabled for your company are shown. Contact your provider to enable more.</p>
+              )}
             </Field>
             <Field label="Badge Color">
               <div className="flex items-center gap-2">
