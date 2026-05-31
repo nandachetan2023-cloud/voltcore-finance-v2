@@ -214,6 +214,33 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: true, data: runs })
       }
 
+      // ── 11. Tour Requests ────────────────────────────────────────
+      case 'tour': {
+        const where: any = { isDeleted: false }
+        if (startDate || endDate) {
+          where.fromDate = {}
+          if (startDate) where.fromDate.gte = new Date(startDate)
+          if (endDate) { const e = new Date(endDate); e.setHours(23, 59, 59, 999); where.fromDate.lte = e }
+        }
+        const tours = await db.tourRequest.findMany({
+          where,
+          select: {
+            id: true, fromDate: true, toDate: true, days: true,
+            destination: true, purpose: true, status: true, appliedDate: true,
+            Employee: {
+              select: {
+                employeeCode: true, firstName: true, lastName: true,
+                Department: { select: { name: true } },
+                Branch: { select: { name: true } },
+              },
+            },
+          },
+          orderBy: { appliedDate: 'desc' },
+          take: 2000,
+        })
+        return NextResponse.json({ success: true, data: tours })
+      }
+
       default:
         return NextResponse.json({ success: false, error: 'Unknown report type' }, { status: 400 })
     }
