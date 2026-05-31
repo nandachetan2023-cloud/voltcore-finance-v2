@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
           OR: [{ effectiveTo: null }, { effectiveTo: { gte: logDate } }],
         },
         orderBy: { effectiveFrom: 'desc' },
-        include: { Shift: { select: { name: true, startTime: true, endTime: true } } },
+        include: { Shift: { select: { name: true, startTime: true, endTime: true, breakMinutes: true, crossesMidnight: true, otThresholdMin: true } } },
       })
 
       const shiftName = assignment?.Shift
@@ -94,6 +94,9 @@ export async function GET(request: NextRequest) {
         shiftName,
         shiftStartTime: assignment?.Shift?.startTime ?? null,
         shiftEndTime: assignment?.Shift?.endTime ?? null,
+        shiftBreakMinutes: assignment?.Shift?.breakMinutes ?? null,
+        shiftCrossesMidnight: assignment?.Shift?.crossesMidnight ?? null,
+        shiftOtThresholdMin: assignment?.Shift?.otThresholdMin ?? null,
         siteName: branchMap.get(a.employeeId) ?? null,
       }
     }))

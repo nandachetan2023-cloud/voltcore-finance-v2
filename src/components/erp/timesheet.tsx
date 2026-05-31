@@ -29,6 +29,11 @@ interface AttendanceRecord {
   biometricDeviceId: string | null;
   lateMinutes?: number;
   fineAmount?: number;
+  shiftStartTime?: string | null;
+  shiftEndTime?: string | null;
+  shiftBreakMinutes?: number | null;
+  shiftCrossesMidnight?: boolean | null;
+  shiftOtThresholdMin?: number | null;
   Employee: {
     employeeCode: string;
     firstName: string;
@@ -95,8 +100,30 @@ function calcHours(punchIn: string | null, punchOut: string | null): number {
   }
 }
 
-function calcOtHours(totalHours: number): number {
-  return Math.round(Math.max(0, totalHours - 8) * 100) / 100;
+function timeToMins(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+/** Net working hours from a record's shift (end − start − break, midnight-aware). Defaults to 8h. */
+function shiftNetHours(rec: AttendanceRecord): number {
+  if (!rec.shiftStartTime || !rec.shiftEndTime) return 8;
+  const start = timeToMins(rec.shiftStartTime);
+  const end = timeToMins(rec.shiftEndTime);
+  let dur = end - start;
+  if (rec.shiftCrossesMidnight || dur < 0) dur = (24 * 60 - start) + end;
+  const net = dur - (rec.shiftBreakMinutes ?? 0);
+  return net > 0 ? net / 60 : 8;
+}
+
+/** Shift-driven OT: hours beyond the shift's net hours, gated by the shift's OT threshold (minutes). */
+function calcOtHours(totalHours: number, rec?: AttendanceRecord): number {
+  const net = rec ? shiftNetHours(rec) : 8;
+  const overage = totalHours - net;
+  if (overage <= 0) return 0;
+  const thresholdMin = rec?.shiftOtThresholdMin ?? 0;
+  if (thresholdMin > 0 && overage * 60 < thresholdMin) return 0;
+  return Math.round(overage * 100) / 100;
 }
 
 function getStatusStyle(status: string) {
@@ -267,7 +294,7 @@ export default function TimesheetModule() {
     rangeRecords.forEach(a => {
       if (['present', 'late'].includes(a.status.toLowerCase()) && a.punchIn && a.punchOut) {
         const hours = calcHours(a.punchIn, a.punchOut);
-        totalOt += calcOtHours(hours);
+        totalOt += calcOtHours(hours, a);
       }
     });
     
@@ -367,7 +394,7 @@ export default function TimesheetModule() {
         
         if (record && record.status.toLowerCase() === 'present' && record.punchIn && record.punchOut) {
           const hrs = calcHours(record.punchIn, record.punchOut);
-          const ot = calcOtHours(hrs);
+          const ot = calcOtHours(hrs, record);
           totalHrs += hrs;
           totalOt += ot;
           daysPresent++;
@@ -636,7 +663,7 @@ export default function TimesheetModule() {
                           </td>
                           <td className="py-2.5 px-2 text-center">
                             <span className="text-[12px] font-bold text-[#00d4ff] font-mono">
-                              {record.punchIn && record.punchOut ? `${calcOtHours(calcHours(record.punchIn, record.punchOut)).toFixed(2)}h` : '—'}
+                              {record.punchIn && record.punchOut ? `${calcOtHours(calcHours(record.punchIn, record.punchOut), record).toFixed(2)}h` : '—'}
                             </span>
                           </td>
                           <td className="py-2.5 px-2 text-center">
@@ -680,7 +707,7 @@ export default function TimesheetModule() {
 
                       if (record && record.status.toLowerCase() === 'present' && record.punchIn && record.punchOut) {
                         const hrs = calcHours(record.punchIn, record.punchOut);
-                        const ot = calcOtHours(hrs);
+                        const ot = calcOtHours(hrs, record);
                         totalHrs += hrs;
                         totalOt += ot;
                         daysPresent++;

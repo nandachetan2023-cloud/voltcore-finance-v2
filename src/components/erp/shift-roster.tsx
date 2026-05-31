@@ -508,7 +508,7 @@ export default function ShiftRosterModule() {
           value={shiftForm.graceMinutes}
           onChange={e => setShiftForm(f => ({ ...f, graceMinutes: parseInt(e.target.value) || 0 }))}
         />
-        <p className="text-[9px] text-[#5a6878] mt-1">Late arrival grace period</p>
+        <p className="text-[9px] text-[#5a6878] mt-1">Late arrival grace period — drives Late status unless an Attendance Rule overrides it</p>
       </div>
 
       <div>
@@ -559,7 +559,7 @@ export default function ShiftRosterModule() {
           value={shiftForm.otThresholdMin}
           onChange={e => setShiftForm(f => ({ ...f, otThresholdMin: parseInt(e.target.value) || 0 }))}
         />
-        <p className="text-[9px] text-[#5a6878] mt-1">Minimum minutes for OT</p>
+        <p className="text-[9px] text-[#5a6878] mt-1">Extra minutes beyond shift hours before OT starts counting (0 = count all extra time)</p>
       </div>
 
       <div className="md:col-span-2">

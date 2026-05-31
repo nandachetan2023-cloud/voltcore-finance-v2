@@ -200,7 +200,9 @@ export async function POST(request: NextRequest) {
           paidLeaveDays += days; // Tour days count as paid days (same as leave)
         }
 
-        // Calculate OT hours (includes holiday work as full OT)
+        // Calculate OT hours — driven by the employee's shift (net working hours
+        // + OT threshold). Holiday work counts fully as OT. Falls back to 8h if
+        // the shift is somehow missing.
         const totalOTHours = await calculateTotalOvertimeHours(
           attendanceLogs.map(log => ({
             punchIn: log.punchIn,
@@ -208,7 +210,7 @@ export async function POST(request: NextRequest) {
             logDate: log.logDate
           })),
           employee.branchId,
-          8 // Standard hours
+          shiftAssignment.Shift, // shift-driven OT config
         );
 
         // Get salary structure (for now, use basic values from employee or defaults)
