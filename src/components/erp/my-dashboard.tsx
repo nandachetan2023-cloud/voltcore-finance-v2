@@ -4,9 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   CalendarDays, Clock, IndianRupee, Bell, FileText, Plane,
   CheckCircle2, AlertTriangle, RefreshCw, TrendingUp, CalendarClock,
-  Briefcase, ArrowRight, Sun, Coffee, ShieldCheck,
+  Briefcase, ArrowRight, Sun, Coffee, ShieldCheck, UserX,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
 
 /* ── Types ── */
@@ -49,16 +48,31 @@ function greeting(): string {
 export default function MyDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [notLinked, setNotLinked] = useState(false);
   const setActiveModule = useERPStore(s => s.setActiveModule);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setErrorMsg(null);
+    setNotLinked(false);
     try {
       const res = await fetch('/api/employee-self/dashboard');
       const json = await res.json();
-      if (json.success) setData(json.data);
-      else toast.error(json.error || 'Failed to load dashboard');
-    } catch { toast.error('Failed to load dashboard'); }
+      if (json.success) {
+        setData(json.data);
+      } else {
+        setData(null);
+        setErrorMsg(json.error || 'Failed to load dashboard');
+        // 400 with "not linked" message → dedicated friendly state
+        if (res.status === 400 && /not linked/i.test(json.error || '')) {
+          setNotLinked(true);
+        }
+      }
+    } catch {
+      setData(null);
+      setErrorMsg('We couldn\u2019t reach the server. Check your connection and try again.');
+    }
     finally { setLoading(false); }
   }, []);
 
@@ -78,11 +92,42 @@ export default function MyDashboard() {
     );
   }
 
+  // ── Account not linked to an employee record ──
+  if (notLinked) {
+    return (
+      <div className="p-4">
+        <div className="vc-panel max-w-xl mx-auto mt-8">
+          <div className="p-6 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-[#00d4ff]/10 flex items-center justify-center mx-auto mb-4">
+              <UserX size={26} className="text-[#00d4ff]" />
+            </div>
+            <h2 className="text-[16px] font-bold text-[#e2e8f0]">Account not linked yet</h2>
+            <p className="text-[12px] text-[#8899aa] mt-2 leading-relaxed">
+              Your login isn&apos;t connected to an employee profile, so we can&apos;t show your attendance,
+              leave, payslips or shifts yet.
+            </p>
+            <div className="mt-4 rounded-xl border border-[#252e3a] bg-[#0d1117] p-4 text-left">
+              <div className="text-[11px] font-semibold text-[#e2e8f0] mb-2">What to do</div>
+              <ul className="space-y-1.5 text-[11px] text-[#8899aa]">
+                <li className="flex gap-2"><span className="text-[#f5a623]">1.</span> Ask your HR / admin to link your account to your employee record.</li>
+                <li className="flex gap-2"><span className="text-[#f5a623]">2.</span> They can do this in <span className="text-[#e2e8f0]">User Management</span> by selecting your employee profile for this login.</li>
+                <li className="flex gap-2"><span className="text-[#f5a623]">3.</span> Once linked, refresh this page — your personal dashboard will appear.</li>
+              </ul>
+            </div>
+            <button onClick={fetchData} className="vc-btn-ghost mt-4 inline-flex items-center gap-1.5">
+              <RefreshCw size={13} /> Check again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!data) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <AlertTriangle size={28} className="text-[#ffab40]" />
-        <p className="text-[13px] text-[#8899aa]">Couldn&apos;t load your dashboard.</p>
+        <p className="text-[13px] text-[#8899aa] text-center max-w-sm">{errorMsg || 'Couldn\u2019t load your dashboard.'}</p>
         <button onClick={fetchData} className="vc-btn-primary flex items-center gap-1.5"><RefreshCw size={13} /> Retry</button>
       </div>
     );
