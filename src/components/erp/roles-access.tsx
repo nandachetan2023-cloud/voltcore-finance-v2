@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Pencil, Trash2, X, ChevronDown, ChevronUp,
-  ArrowRight, Shield, GitBranch, Check, RefreshCw, Users, UserCog,
+  ArrowRight, Shield, GitBranch, Check, RefreshCw, Users, UserCog, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ModuleSelect from '@/components/superadmin/module-select';
@@ -238,6 +238,10 @@ function RolesPanel({ roles, departments, designations, moduleCap, onRefresh }: 
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; count: number } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const save = async () => {
     if (!form.name.trim()) { toast.error('Role name is required'); return; }
@@ -254,11 +258,31 @@ function RolesPanel({ roles, departments, designations, moduleCap, onRefresh }: 
     } finally { setSaving(false); }
   };
 
-  const del = async (id: string, name: string) => {
-    if (!confirm(`Delete role "${name}"?`)) return;
-    const res = await fetch('/api/tenant/roles', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-    const data = await res.json();
-    if (data.success) { toast.success('Role deleted'); onRefresh(); } else toast.error(data.error);
+  const confirmDelete = (r: OrgRole) => {
+    setDeleteTarget({ id: r.id, name: r.name, count: r.currentCount ?? 0 });
+    setDeleteError(null);
+  };
+
+  const del = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch('/api/tenant/roles', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: deleteTarget.id }) });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Role deleted');
+        setDeleteTarget(null);
+        onRefresh();
+      } else {
+        // Show the reason inline — don't dismiss the dialog
+        setDeleteError(data.error || 'Failed to delete role');
+      }
+    } catch {
+      setDeleteError('Network error — please try again.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const sorted = [...roles].sort((a, b) => a.level - b.level);
@@ -329,6 +353,52 @@ function RolesPanel({ roles, departments, designations, moduleCap, onRefresh }: 
         </div>
       )}
 
+      {/* ── Delete confirmation panel ── */}
+      {deleteTarget && (
+        <div className="bg-[#0d1117] border border-[#ff3d3d]/40 rounded-xl p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-[#ff3d3d]/10 flex items-center justify-center shrink-0 mt-0.5">
+              <AlertTriangle size={15} className="text-[#ff3d3d]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-semibold text-[#e2e8f0]">
+                Delete &ldquo;{deleteTarget.name}&rdquo;?
+              </div>
+              {deleteTarget.count > 0 ? (
+                <p className="text-[11px] text-[#8899aa] mt-0.5">
+                  This role has <span className="text-[#ffab40] font-semibold">{deleteTarget.count} user{deleteTarget.count !== 1 ? 's' : ''}</span> assigned to it. You&apos;ll need to reassign or remove them in <span className="text-[#e2e8f0]">User Management</span> before this role can be deleted.
+                </p>
+              ) : (
+                <p className="text-[11px] text-[#8899aa] mt-0.5">This action cannot be undone.</p>
+              )}
+              {/* Inline error from API (e.g. linked to approval chain) */}
+              {deleteError && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg bg-[#ff3d3d]/8 border border-[#ff3d3d]/30 px-3 py-2">
+                  <AlertTriangle size={12} className="text-[#ff3d3d] shrink-0 mt-0.5" />
+                  <span className="text-[11px] text-[#ff3d3d]">{deleteError}</span>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              onClick={() => { setDeleteTarget(null); setDeleteError(null); }}
+              className="vc-btn-ghost text-[11px] px-3 py-1.5"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={del}
+              disabled={deleting || (deleteTarget.count > 0)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#ff3d3d] text-white hover:bg-[#e63535] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title={deleteTarget.count > 0 ? 'Reassign users before deleting this role' : ''}
+            >
+              <Trash2 size={11} /> {deleting ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         {sorted.map(r => (
           <div key={r.id} className="bg-[#0d1117] border border-[#252e3a] rounded-xl p-3">
@@ -351,7 +421,7 @@ function RolesPanel({ roles, departments, designations, moduleCap, onRefresh }: 
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button onClick={() => { setForm({ name: r.name, level: String(r.level), moduleAccess: r.moduleAccess, departments: r.departments, designations: r.designations, color: r.color }); setEditId(r.id); setShowForm(true); }} className="p-1.5 text-[#5a6878] hover:text-[#f5a623] transition-colors"><Pencil size={12} /></button>
-                <button onClick={() => del(r.id, r.name)} className="p-1.5 text-[#5a6878] hover:text-[#ff3d3d] transition-colors"><Trash2 size={12} /></button>
+                <button onClick={() => confirmDelete(r)} className="p-1.5 text-[#5a6878] hover:text-[#ff3d3d] transition-colors"><Trash2 size={12} /></button>
               </div>
             </div>
           </div>
