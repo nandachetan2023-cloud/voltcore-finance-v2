@@ -8,6 +8,7 @@ import OnboardingForm from '@/components/auth/onboarding-form';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
 import { clearTenantBrandingCache } from '@/hooks/use-tenant-branding';
+import { useIdleLogout } from '@/hooks/use-idle-logout';
 
 export default function ERPPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -100,6 +101,12 @@ export default function ERPPage() {
     }
   };
 
+  // ── Idle auto-logout (30 min inactivity) ──────────────────────
+  const { showWarning, secondsLeft, stayLoggedIn } = useIdleLogout({
+    onLogout: handleLogout,
+    enabled: isAuthenticated,
+  });
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#0d1117] flex items-center justify-center">
@@ -117,5 +124,45 @@ export default function ERPPage() {
     return <OnboardingForm status={onboardingStatus} onSubmit={handleOnboardingSubmit} onLogout={handleLogout} />;
   }
 
-  return <ERPLayout onLogout={handleLogout} />;
+  return (
+    <>
+      <ERPLayout onLogout={handleLogout} />
+
+      {/* ── Idle session warning overlay ── */}
+      {showWarning && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl text-center space-y-4">
+            <div className="w-14 h-14 rounded-full bg-[#ffab40]/10 flex items-center justify-center mx-auto">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffab40" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-[15px] font-bold text-[#e2e8f0]">Still there?</h3>
+              <p className="text-[12px] text-[#8899aa] mt-1">
+                You&apos;ve been inactive for a while. For your security, you&apos;ll be logged out in
+              </p>
+              <div className="text-[36px] font-black text-[#ffab40] mt-2 leading-none" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                {secondsLeft}s
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={stayLoggedIn}
+                className="flex-1 vc-btn-primary text-[13px]"
+              >
+                Stay logged in
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex-1 vc-btn-ghost text-[13px]"
+              >
+                Log out now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
