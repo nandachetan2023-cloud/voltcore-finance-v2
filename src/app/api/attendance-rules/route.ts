@@ -121,16 +121,13 @@ export async function PUT(request: NextRequest) {
       updateData.absentAfterMinutes = parseInt(updateData.absentAfterMinutes) || 0;
     }
 
-    // Convert IDs to integers
-    if (updateData.applyToShiftId) {
-      updateData.applyToShiftId = parseInt(updateData.applyToShiftId);
-    }
-    if (updateData.applyToDepartmentId) {
-      updateData.applyToDepartmentId = parseInt(updateData.applyToDepartmentId);
-    }
-    if (updateData.applyToBranchId) {
-      updateData.applyToBranchId = parseInt(updateData.applyToBranchId);
-    }
+    // Convert IDs to integers or null (empty string → null)
+    updateData.applyToShiftId = updateData.applyToShiftId
+      ? parseInt(updateData.applyToShiftId) : null;
+    updateData.applyToDepartmentId = updateData.applyToDepartmentId
+      ? parseInt(updateData.applyToDepartmentId) : null;
+    updateData.applyToBranchId = updateData.applyToBranchId
+      ? parseInt(updateData.applyToBranchId) : null;
 
     const rule = await db.attendanceRule.update({
       where: { id: parseInt(id) },
