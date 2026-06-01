@@ -47,7 +47,15 @@ function TagInput({ value, options, placeholder, onChange }: {
   const tags = value ? value.split(',').map(s => s.trim()).filter(Boolean) : [];
   const toggle = (opt: string) => {
     const next = new Set(tags);
-    if (next.has(opt)) next.delete(opt); else next.add(opt);
+    const wasSelected = next.has(opt);
+    if (wasSelected) {
+      next.delete(opt);
+      // Deselecting — keep dropdown open so user can adjust further
+    } else {
+      next.add(opt);
+      // New selection — close dropdown immediately (single-select UX)
+      setOpen(false);
+    }
     onChange([...next].join(','));
   };
   return (
