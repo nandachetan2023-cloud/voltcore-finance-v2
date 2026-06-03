@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Users, UserX, CalendarOff, Clock, Plus, Pencil, Trash2,
-  AlertTriangle, Loader2, Search, Info, X
+  AlertTriangle, Loader2, Search, Info, X, ChevronDown
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -233,6 +233,9 @@ export default function AttendanceModule() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState(() => new Date().toISOString().split('T')[0]);
+  const [search, setSearch] = useState('');
+  const [siteFilter, setSiteFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [employeeList, setEmployeeList] = useState<EmployeeInfo[]>([]);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -352,7 +355,27 @@ export default function AttendanceModule() {
   const filteredRecords = useMemo(() => {
     if (!dateFilter) return records;
     
-    const filtered = records.filter(r => r.date === dateFilter);
+    let filtered = records.filter(r => r.date === dateFilter);
+    
+    // Search by name or employee code
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(r =>
+        r.employee.name.toLowerCase().includes(q) ||
+        r.employee.empId.toLowerCase().includes(q) ||
+        (r.empId || '').toLowerCase().includes(q)
+      );
+    }
+
+    // Site / branch filter
+    if (siteFilter !== 'all') {
+      filtered = filtered.filter(r => r.site === siteFilter);
+    }
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(r => r.status.toLowerCase() === statusFilter.toLowerCase());
+    }
     
     // For future dates, show all employees with "—" status
     if (isFutureDate(dateFilter)) {
@@ -384,7 +407,7 @@ export default function AttendanceModule() {
     }
     
     return filtered;
-  }, [records, dateFilter, employeeList]);
+  }, [records, dateFilter, search, siteFilter, statusFilter, employeeList]);
 
   // Calculate statistics
   const stats = useMemo(() => {
@@ -406,6 +429,13 @@ export default function AttendanceModule() {
     
     return { presentToday, absent, onLeave, otWorkers };
   }, [filteredRecords, employeeList]);
+
+  // Dynamic filter options derived from loaded records
+  const siteOptions = useMemo(() =>
+    [...new Set(records.map(r => r.site).filter(s => s && s !== 'N/A' && s !== '—'))].sort(),
+  [records]);
+
+  const statusOptions = ['Present', 'Absent', 'Late', 'On Leave', 'Half Day'];
 
   const { presentToday, absent, onLeave, otWorkers } = stats;
 
@@ -744,6 +774,44 @@ export default function AttendanceModule() {
             <span className="text-[10px] text-[#5a6878]">{filteredRecords.length} records</span>
           </div>
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={openCreate}><Plus size={13} /> New Record</button>
+        </div>
+        {/* ── Search & filter toolbar ── */}
+        <div className="px-4 py-3 border-b border-[#252e3a] flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-lg px-3 py-[6px] flex-1 min-w-[180px] max-w-[320px]">
+            <Search size={13} className="text-[#5a6878] shrink-0" />
+            <input
+              type="text"
+              placeholder="Search by name or emp ID…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="bg-transparent border-none text-[#e2e8f0] outline-none text-[12px] w-full placeholder:text-[#5a6878]"
+            />
+            {search && <button onClick={() => setSearch('')} className="text-[#5a6878] hover:text-[#e2e8f0]"><X size={12} /></button>}
+          </div>
+          {[
+            { value: siteFilter,   set: setSiteFilter,   label: 'All Sites',   options: siteOptions },
+            { value: statusFilter, set: setStatusFilter, label: 'All Status',  options: statusOptions },
+          ].map((f, i) => (
+            <div key={i} className="relative">
+              <select
+                value={f.value}
+                onChange={e => f.set(e.target.value)}
+                className="vc-input appearance-none pr-7 min-w-[130px] cursor-pointer text-[12px]"
+              >
+                <option value="all">{f.label}</option>
+                {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+              <ChevronDown size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#5a6878] pointer-events-none" />
+            </div>
+          ))}
+          {(search || siteFilter !== 'all' || statusFilter !== 'all') && (
+            <button
+              onClick={() => { setSearch(''); setSiteFilter('all'); setStatusFilter('all'); }}
+              className="text-[10px] text-[#5a6878] hover:text-[#ff3d3d] transition-colors"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
         <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
           <table className="w-full text-[11px]">

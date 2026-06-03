@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { RefreshCw, CheckCircle2, XCircle, Clock, Database, Fingerprint, AlertCircle, Building2 } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, Clock, Database, Fingerprint, AlertCircle, Building2, Search, X } from 'lucide-react';
 
 interface BiometricSite {
   id: string;
@@ -31,6 +31,7 @@ interface SyncStatus {
 interface RawLog {
   id: number;
   empCode: string;
+  enrolledId?: string;
   name: string;
   punchDate: string;
   deviceId?: string;
@@ -53,6 +54,7 @@ export default function BiometricPage() {
   const [syncing, setSyncing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [logFilter, setLogFilter] = useState<'all' | 'pending' | 'matched' | 'unmatched'>('all');
+  const [logSearch, setLogSearch] = useState('');
   const [skippedRecords, setSkippedRecords] = useState<Array<{ empCode: string; name: string; date: string; reason: string }>>([]);
 
   useEffect(() => {
@@ -190,6 +192,18 @@ export default function BiometricPage() {
   const lastSync = syncStatus?.lastSuccessfulSync;
   const unprocessed = syncStatus?.unprocessedCount || 0;
   const activeSiteName = selectedSite === 'all' ? 'All Sites' : (sites.find(s => s.id === selectedSite)?.name || selectedSite);
+
+  // Client-side search on top of the server-filtered logFilter/siteId results
+  const filteredLogs = logSearch.trim()
+    ? rawLogs.filter(log => {
+        const q = logSearch.toLowerCase();
+        return (
+          (log.empCode || '').toLowerCase().includes(q) ||
+          (log.enrolledId || '').toLowerCase().includes(q) ||
+          (log.name || '').toLowerCase().includes(q)
+        );
+      })
+    : rawLogs;
 
   return (
     <div className="p-4 space-y-5">
@@ -354,26 +368,46 @@ export default function BiometricPage() {
 
       {/* Punch Logs */}
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#252e3a]">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#252e3a] flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-semibold text-[#e2e8f0]">Punch Logs</span>
             {selectedSite !== 'all' && (
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f5a623]/10 text-[#f5a623] font-semibold">{activeSiteName}</span>
             )}
+            <span className="text-[10px] text-[#5a6878]">{filteredLogs.length} records</span>
           </div>
-          <div className="flex items-center gap-1">
-            {(['all', 'pending', 'matched', 'unmatched'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setLogFilter(f)}
-                className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-colors capitalize ${logFilter === f ? 'bg-[#f5a623] text-black' : 'text-[#5a6878] hover:text-[#e2e8f0]'}`}
-              >
-                {f}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Search */}
+            <div className="flex items-center gap-1.5 bg-[#0d1117] border border-[#2e3a48] rounded-lg px-2.5 py-[5px] min-w-[160px]">
+              <Search size={12} className="text-[#5a6878] shrink-0" />
+              <input
+                type="text"
+                placeholder="Search by name or ID…"
+                value={logSearch}
+                onChange={e => setLogSearch(e.target.value)}
+                className="bg-transparent border-none outline-none text-[11px] text-[#e2e8f0] placeholder:text-[#5a6878] w-full"
+              />
+              {logSearch && (
+                <button onClick={() => setLogSearch('')} className="text-[#5a6878] hover:text-[#e2e8f0]">
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+            {/* Status filter pills */}
+            <div className="flex items-center gap-1">
+              {(['all', 'pending', 'matched', 'unmatched'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setLogFilter(f)}
+                  className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-colors capitalize ${logFilter === f ? 'bg-[#f5a623] text-black' : 'text-[#5a6878] hover:text-[#e2e8f0]'}`}
+                >
+                  {f}
+                </button>
+              ))}
+              <button onClick={fetchRawLogs} className="ml-1 p-1 text-[#5a6878] hover:text-[#e2e8f0] transition-colors">
+                <RefreshCw size={12} className={loadingLogs ? 'animate-spin' : ''} />
               </button>
-            ))}
-            <button onClick={fetchRawLogs} className="ml-2 p-1 text-[#5a6878] hover:text-[#e2e8f0] transition-colors">
-              <RefreshCw size={12} className={loadingLogs ? 'animate-spin' : ''} />
-            </button>
+            </div>
           </div>
         </div>
 
@@ -395,7 +429,9 @@ export default function BiometricPage() {
                 </tr>
               </thead>
               <tbody>
-                {rawLogs.map(log => (
+                {filteredLogs.length === 0 ? (
+                  <tr><td colSpan={4} className="text-center py-8 text-[#5a6878] text-[11px]">No records match your search.</td></tr>
+                ) : filteredLogs.map(log => (
                   <tr key={log.id} className="border-b border-[#1e252e] hover:bg-[#1a2028] transition-colors">
                     <td className="px-4 py-2.5">
                       {log.enrolledId
