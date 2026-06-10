@@ -105,6 +105,9 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
 
     try {
       setValidating(true);
+      setValidationResult(null);
+      setShowResults(false);
+      
       const formData = new FormData();
       formData.append('file', file);
       formData.append('sheetName', selectedSheet);
@@ -117,15 +120,55 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
 
       const data = await response.json();
 
+      if (!response.ok) {
+        throw new Error(data.error || data.details || 'Validation failed');
+      }
+
       if (data.success) {
         setValidationResult(data);
         setShowResults(true);
-        toast.success('Validation complete');
+        
+        if (data.summary.errorRows > 0) {
+          toast.error(`Validation found ${data.summary.errorRows} errors. Please fix them before importing.`, {
+            duration: 5000
+          });
+        } else if (data.summary.validRows === 0) {
+          toast.error('No valid rows found in the file. Please check the template format.', {
+            duration: 5000
+          });
+        } else {
+          toast.success(`Validation complete: ${data.summary.validRows} valid rows, ${data.warnings.length} warnings`);
+        }
       } else {
-        toast.error(data.error || 'Validation failed');
+        throw new Error(data.error || 'Validation failed');
       }
     } catch (error) {
-      toast.error('Validation failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      console.error('Validation error:', error);
+      const message = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error('Validation failed: ' + message, {
+        duration: 6000
+      });
+      
+      // Show a generic result to help user understand what went wrong
+      setValidationResult({
+        success: false,
+        summary: {
+          totalRows: 0,
+          validRows: 0,
+          importedRows: 0,
+          skippedRows: 0,
+          errorRows: 1,
+        },
+        errors: [{
+          row: 0,
+          employeeCode: 'N/A',
+          field: 'system',
+          message: message
+        }],
+        warnings: [],
+        imported: [],
+      });
+      setShowResults(true);
     } finally {
       setValidating(false);
     }
@@ -139,6 +182,16 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
 
     if (!selectedSheet) {
       toast.error('Please select a sheet');
+      return;
+    }
+    
+    if (!validationResult) {
+      toast.error('Please validate the file first before importing');
+      return;
+    }
+    
+    if (validationResult.summary.errorRows > 0) {
+      toast.error('Cannot import: Please fix all validation errors first');
       return;
     }
 
@@ -156,19 +209,29 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
 
       const data = await response.json();
 
+      if (!response.ok) {
+        throw new Error(data.error || data.details || 'Import failed');
+      }
+
       if (data.success) {
         setValidationResult(data);
         setShowResults(true);
-        toast.success(`Successfully imported ${data.summary.importedRows} employees!`);
+        toast.success(`Successfully imported ${data.summary.importedRows} employees!`, {
+          duration: 5000
+        });
         
         if (onImportComplete) {
           onImportComplete();
         }
       } else {
-        toast.error(data.error || 'Import failed');
+        throw new Error(data.error || 'Import failed');
       }
     } catch (error) {
-      toast.error('Import failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      console.error('Import error:', error);
+      const message = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error('Import failed: ' + message, {
+        duration: 6000
+      });
     } finally {
       setUploading(false);
     }
@@ -180,11 +243,11 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
     const headers = [
       'Employee ID*',
       'First Name*', 'Middle Name', 'Last Name*',
-      'Work Email*', 'Personal Email', 'Phone*', 'Alternate Phone',
+      'Work Email', 'Personal Email', 'Phone*', 'Alternate Phone',
       'Date of Birth* (YYYY-MM-DD)', 'Gender* (male/female/other)',
       'Marital Status (single/married/divorced/widowed)', 'Blood Group (A+/A-/B+/B-/AB+/AB-/O+/O-)',
       "Father's Name",
-      'Current Address*', 'Current City*', 'Current State*', 'Current Pincode*',
+      'Current Address', 'Current City', 'Current State', 'Current Pincode',
       'Permanent Address', 'Permanent City', 'Permanent State', 'Permanent Pincode',
       'Department* (exact name from system)', 'Designation* (exact name from system)', 'Branch*', 'Grade',
       'Reporting Manager (Employee Code)',
@@ -204,7 +267,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
       '1990-01-15', 'male',
       'single', 'O+',
       'Parent Name',
-      '123 Main Street', 'City Name', 'State Name', '400001',
+      '123 Main Street', 'Mumbai', 'Maharashtra', '400001',
       '', '', '', '',
       'Engineering', 'Engineer', 'Main Office', 'L1',
       '',
@@ -229,9 +292,12 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
       ['  Names are case-insensitive — "engineering", "Engineering", "ENGINEERING" are all treated the same.'],
       [''],
       ['REQUIRED FIELDS (marked with *)'],
-      ['  Employee ID, First Name, Last Name, Work Email, Phone,'],
-      ['  Date of Birth, Date of Joining, Current Address, Current City, Current State, Current Pincode,'],
-      ['  Department, Designation, Branch, Employment Status'],
+      ['  Employee ID, First Name, Last Name, Phone,'],
+      ['  Date of Birth, Date of Joining, Department, Designation, Branch, Employment Status'],
+      [''],
+      ['OPTIONAL FIELDS'],
+      ['  All other fields are optional including Work Email, Current Address, City, State, Pincode'],
+      ['  If not provided, default or empty values will be used'],
       [''],
       ['DATE FORMAT'],
       ['  All dates must be in YYYY-MM-DD format (e.g. 2024-01-15)'],
@@ -272,11 +338,11 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
       const headers = [
         'Employee ID*',
         'First Name*', 'Middle Name', 'Last Name*',
-        'Work Email*', 'Personal Email', 'Phone*', 'Alternate Phone',
+        'Work Email', 'Personal Email', 'Phone*', 'Alternate Phone',
         'Date of Birth* (YYYY-MM-DD)', 'Gender* (male/female/other)',
         'Marital Status (single/married/divorced/widowed)', 'Blood Group (A+/A-/B+/B-/AB+/AB-/O+/O-)',
         "Father's Name",
-        'Current Address*', 'Current City*', 'Current State*', 'Current Pincode*',
+        'Current Address', 'Current City', 'Current State', 'Current Pincode',
         'Permanent Address', 'Permanent City', 'Permanent State', 'Permanent Pincode',
         'Department* (exact name from system)', 'Designation* (exact name from system)', 'Branch*', 'Grade',
         'Reporting Manager (Employee Code)',
