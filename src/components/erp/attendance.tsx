@@ -233,6 +233,13 @@ export default function AttendanceModule() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dateRangeMode, setDateRangeMode] = useState(false);
+  const [fromDate, setFromDate] = useState(() => {
+    const date = new Date();
+    date.setDate(1); // First day of current month
+    return date.toISOString().split('T')[0];
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -353,9 +360,18 @@ export default function AttendanceModule() {
   useEffect(() => { fetchData(); fetchEmployees(); fetchShifts(); fetchBiometricSites(); }, [fetchData, fetchEmployees, fetchShifts, fetchBiometricSites]);
 
   const filteredRecords = useMemo(() => {
-    if (!dateFilter) return records;
+    let filtered = records;
     
-    let filtered = records.filter(r => r.date === dateFilter);
+    // Apply date filter based on mode
+    if (dateRangeMode) {
+      // Date range mode: filter between fromDate and toDate (inclusive)
+      filtered = filtered.filter(r => r.date >= fromDate && r.date <= toDate);
+    } else {
+      // Single date mode: filter by exact date
+      if (dateFilter) {
+        filtered = filtered.filter(r => r.date === dateFilter);
+      }
+    }
     
     // Search by name or employee code
     if (search.trim()) {
@@ -377,8 +393,8 @@ export default function AttendanceModule() {
       filtered = filtered.filter(r => r.status.toLowerCase() === statusFilter.toLowerCase());
     }
     
-    // For future dates, show all employees with "—" status
-    if (isFutureDate(dateFilter)) {
+    // For future dates in single-date mode, show all employees with "—" status
+    if (!dateRangeMode && dateFilter && isFutureDate(dateFilter)) {
       // Create attendance records for all employees with pending status
       const employeeRecordsMap = new Map(filtered.map(r => [r.empId, r]));
       
@@ -407,7 +423,7 @@ export default function AttendanceModule() {
     }
     
     return filtered;
-  }, [records, dateFilter, search, siteFilter, statusFilter, employeeList]);
+  }, [records, dateFilter, dateRangeMode, fromDate, toDate, search, siteFilter, statusFilter, employeeList]);
 
   // Calculate statistics
   const stats = useMemo(() => {
@@ -767,10 +783,60 @@ export default function AttendanceModule() {
           <Clock size={14} className="text-[#f5a623]" />
           <span className="text-[13px] font-semibold" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>ATTENDANCE LOG</span>
           <div className="ml-auto flex items-center gap-2">
-            <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-1">
-              <span className="text-[10px] text-[#5a6878]">Date:</span>
-              <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="bg-transparent border-none text-[#e2e8f0] outline-none text-[11px]" />
+            {/* Date filter mode toggle */}
+            <div className="flex items-center gap-1 bg-[#141920] border border-[#2e3a48] rounded-md p-0.5">
+              <button
+                onClick={() => setDateRangeMode(false)}
+                className={`px-2.5 py-1 rounded text-[9px] font-semibold uppercase tracking-wide transition-all ${
+                  !dateRangeMode
+                    ? 'bg-[#f5a623] text-black'
+                    : 'text-[#8899aa] hover:text-[#e2e8f0]'
+                }`}
+              >
+                Single Date
+              </button>
+              <button
+                onClick={() => setDateRangeMode(true)}
+                className={`px-2.5 py-1 rounded text-[9px] font-semibold uppercase tracking-wide transition-all ${
+                  dateRangeMode
+                    ? 'bg-[#f5a623] text-black'
+                    : 'text-[#8899aa] hover:text-[#e2e8f0]'
+                }`}
+              >
+                Date Range
+              </button>
             </div>
+            
+            {/* Date inputs */}
+            {dateRangeMode ? (
+              <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-1">
+                <span className="text-[10px] text-[#5a6878]">From:</span>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={e => setFromDate(e.target.value)}
+                  className="bg-transparent border-none text-[#e2e8f0] outline-none text-[11px] w-[110px]"
+                />
+                <span className="text-[10px] text-[#5a6878]">To:</span>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={e => setToDate(e.target.value)}
+                  className="bg-transparent border-none text-[#e2e8f0] outline-none text-[11px] w-[110px]"
+                />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-1">
+                <span className="text-[10px] text-[#5a6878]">Date:</span>
+                <input
+                  type="date"
+                  value={dateFilter}
+                  onChange={e => setDateFilter(e.target.value)}
+                  className="bg-transparent border-none text-[#e2e8f0] outline-none text-[11px]"
+                />
+              </div>
+            )}
+            
             <span className="text-[10px] text-[#5a6878]">{filteredRecords.length} records</span>
           </div>
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={openCreate}><Plus size={13} /> New Record</button>
@@ -817,6 +883,7 @@ export default function AttendanceModule() {
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 bg-[#161c24] z-10">
               <tr className="border-b border-[#252e3a]">
+                <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Date</th>
                 <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Emp ID</th>
                 <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Employee</th>
                 <th className="text-center py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Site</th>
@@ -830,14 +897,34 @@ export default function AttendanceModule() {
             </thead>
             <tbody>
               {filteredRecords.length === 0 ? (
-                <tr><td colSpan={9} className="py-8 text-center text-[#5a6878] text-[11px]">No attendance records for this date.</td></tr>
+                <tr><td colSpan={10} className="py-8 text-center text-[#5a6878] text-[11px]">No attendance records for this {dateRangeMode ? 'date range' : 'date'}.</td></tr>
               ) : filteredRecords.map(r => {
                 const statusLabel = getStatusLabel(r);
                 const statusColorClass = statusColor(r);
                 const shouldShowStatus = statusLabel !== '—';
                 
+                // Format date for display (e.g., "15 Jan" or "15 Jan 2024" if not current year)
+                const recordDate = new Date(r.date);
+                const currentYear = new Date().getFullYear();
+                const dateDisplay = recordDate.toLocaleDateString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  ...(recordDate.getFullYear() !== currentYear ? { year: 'numeric' } : {})
+                });
+                
+                // Highlight today's date
+                const isDateToday = r.date === new Date().toISOString().split('T')[0];
+                
                 return (
                   <tr key={r.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors group">
+                    <td className="py-2.5 px-3 text-[10px] font-medium" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+                      <span className={isDateToday ? 'text-[#00e676] font-semibold' : 'text-[#8899aa]'}>
+                        {dateDisplay}
+                      </span>
+                      {isDateToday && (
+                        <span className="ml-1 text-[8px] text-[#00e676] uppercase tracking-wider">Today</span>
+                      )}
+                    </td>
                     <td className="py-2.5 px-3 text-[10px] text-[#8899aa]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{r.employee.empId}</td>
                     <td className="py-2.5 px-3 text-[#e2e8f0] font-medium">{r.employee.name}</td>
                     <td className="py-2.5 px-3 text-[#8899aa] text-center">{r.site}</td>
