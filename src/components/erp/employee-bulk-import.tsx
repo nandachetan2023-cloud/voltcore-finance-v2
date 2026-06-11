@@ -261,7 +261,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
     ];
 
     const sampleRow = [
-      'EMP001',
+      'UA00000001',  // Or just type "1" - it will auto-format to UA00000001
       'John', '', 'Doe',
       'john.doe@company.com', 'john.personal@email.com', '9876543210', '',
       '1990-01-15', 'male',
@@ -283,8 +283,11 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
       ['Employee Bulk Import Template — Instructions'],
       [''],
       ['COLUMN 1 — Employee ID*'],
-      ['  Enter the unique employee code exactly as you want it stored (e.g. EMP001, EMP002).'],
-      ['  This is the permanent unique identifier for the employee. Must not already exist in the system.'],
+      ['  Enter the employee code in format: UA + last 4 digits of biometric Enrolled ID'],
+      ['  Examples: UA0001, UA0005, UA0023, UA1234'],
+      ['  TIP: You can type just the number (e.g. "5" becomes "UA0005" automatically)'],
+      ['  The last 4 digits of the 8-digit Enrolled ID (EmpcardNo) from the biometric device'],
+      ['  Example: If Enrolled ID is 00000005, use UA0005'],
       [''],
       ['DEPARTMENT & DESIGNATION ASSIGNMENT'],
       ['  Simply type the department and designation name you want.'],

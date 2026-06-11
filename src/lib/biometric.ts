@@ -282,10 +282,9 @@ export class BiometricService {
         const [identifier, dateStr] = key.split('|')
 
         // ── Employee matching ─────────────────────────────────────────────────
-        // We match ONLY on enrolledId (EmpcardNo from the device) because the
-        // device-assigned Empcode is NOT unique and is uneditable. enrolledId is
-        // unique + editable, set to mirror the employee code as "UA" + enrolledId.
-        // enrolledId arrives 8-digit zero-padded (e.g. "00000005") → code "UA00000005".
+        // We match on enrolledId (EmpcardNo from the device) formatted as "UA" + last 4 digits.
+        // enrolledId arrives 8-digit zero-padded (e.g. "00000005") → code "UA0005".
+        // We try both the full 8-digit format and the last-4-digit format for compatibility.
         const enrolledId = logs[0]?.enrolledId || null
 
         if (!enrolledId) {
@@ -299,16 +298,26 @@ export class BiometricService {
           continue
         }
 
+        // Try to match using the last 4 digits of enrolledId (UA + last 4 digits)
+        const last4Digits = enrolledId.slice(-4)
+        const employeeCodeLast4 = `UA${last4Digits}`
+        
+        // Also try the full 8-digit format for backward compatibility
+        const employeeCodeFull8 = `UA${enrolledId}`
+
         const employee = await this.db.employee.findFirst({
           where: {
-            employeeCode: `UA${enrolledId}`,
+            OR: [
+              { employeeCode: employeeCodeLast4 },   // Try last 4 digits (e.g., UA0005)
+              { employeeCode: employeeCodeFull8 },   // Try full 8 digits (e.g., UA00000005)
+            ],
           },
           select: { id: true, employeeCode: true, firstName: true, lastName: true },
         })
 
         if (!employee) {
-          const reason = `No employee found with code "UA${enrolledId}"`
-          console.warn(`[Biometric] ${reason}. Ensure the employee exists with this enrolled ID.`)
+          const reason = `No employee found with code "${employeeCodeLast4}" or "${employeeCodeFull8}"`
+          console.warn(`[Biometric] ${reason}. Ensure the employee exists with enrolled ID ${enrolledId} (last 4: ${last4Digits}).`)
           skippedRecords.push({ empCode: enrolledId, name: logs[0]?.name || 'Unknown', date: dateStr, reason })
           // Mark as processed with skip reason so they don't keep retrying
           await this.db.biometricRawLog.updateMany({
@@ -319,6 +328,8 @@ export class BiometricService {
         }
 
         const employeeName = `${employee.firstName} ${employee.lastName}`
+
+        console.log(`[Biometric] Matched enrolledId=${enrolledId} → ${employee.employeeCode} (${employeeName})`)
 
         // Sort logs by time
         const sortedLogs = logs.sort((a, b) => 
@@ -349,10 +360,35 @@ export class BiometricService {
         const punchOut = sortedLogs.length > 1 ? new Date(lastPunch.punchDate) : null
 
         // ── Shift guard: skip employees without an active shift ──
+        // First, let's check what shift assignments exist for this employee
+        const allShiftAssignments = await this.db.shiftAssignment.findMany({
+          where: { employeeId: employee.id },
+          include: { Shift: true },
+          orderBy: { effectiveFrom: 'desc' },
+        })
+        
+        console.log(`[Biometric] Employee ${employee.employeeCode} (${employeeName}) - Checking shift for ${dateStr}`)
+        console.log(`[Biometric] - logDate: ${logDate.toISOString()} (UTC: ${logDate.toUTCString()})`)
+        console.log(`[Biometric] - Total shift assignments: ${allShiftAssignments.length}`)
+        
+        if (allShiftAssignments.length > 0) {
+          console.log(`[Biometric] - Shift assignments:`)
+          allShiftAssignments.forEach((sa, idx) => {
+            console.log(`[Biometric]   ${idx + 1}. Shift: ${sa.Shift.name}, From: ${sa.effectiveFrom.toISOString()}, To: ${sa.effectiveTo ? sa.effectiveTo.toISOString() : 'null (ongoing)'}`)
+            console.log(`[Biometric]      Check: effectiveFrom <= logDate? ${sa.effectiveFrom <= logDate} (${sa.effectiveFrom} <= ${logDate})`)
+            if (sa.effectiveTo) {
+              console.log(`[Biometric]      Check: effectiveTo >= logDate? ${sa.effectiveTo >= logDate} (${sa.effectiveTo} >= ${logDate})`)
+            }
+          })
+        }
+        
         const shiftAssignment = await getActiveShiftAssignment(employee.id, logDate, this.db)
+        
         if (!shiftAssignment) {
-          const reason = `No active shift assignment for ${employee.employeeCode} (${employeeName})`
-          console.log(`[Biometric] Skipping: ${reason}`)
+          const reason = allShiftAssignments.length === 0 
+            ? `No shift assignments found for ${employee.employeeCode} (${employeeName})`
+            : `No ACTIVE shift assignment for ${employee.employeeCode} (${employeeName}) on ${dateStr}. ${allShiftAssignments.length} assignment(s) exist but none are active for this date. Check effectiveFrom/To dates.`
+          console.log(`[Biometric] ❌ Skipping: ${reason}`)
           skippedRecords.push({ empCode: employee.employeeCode, name: employeeName, date: dateStr, reason })
           // Mark logs as processed so they don't keep retrying
           await this.db.biometricRawLog.updateMany({
@@ -361,6 +397,8 @@ export class BiometricService {
           })
           continue
         }
+        
+        console.log(`[Biometric] ✅ Found active shift: ${shiftAssignment.Shift.name} (${shiftAssignment.Shift.startTime}-${shiftAssignment.Shift.endTime})`)
 
         // Apply attendance rules to classify the record
         const classification = await classifyAttendance(

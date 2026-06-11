@@ -377,8 +377,17 @@ async function validateAndImport(
     const rowErrors: string[] = []
     const rowWarnings: string[] = []
 
+    // Normalize employee ID: accept bare numbers and format as UA + last 4 digits
+    let normalizedEmployeeId = data.employeeId?.trim().toUpperCase() || ''
+    if (normalizedEmployeeId && /^\d{1,4}$/.test(normalizedEmployeeId)) {
+      normalizedEmployeeId = `UA${normalizedEmployeeId.padStart(4, '0')}`
+    }
+
     // Validate required fields
-    if (!data.employeeId) rowErrors.push('Employee ID is required')
+    if (!normalizedEmployeeId) rowErrors.push('Employee ID is required')
+    else if (!/^UA\d{4}$/.test(normalizedEmployeeId)) {
+      rowErrors.push('Employee ID must be UA + 4 digits (e.g. UA0001, UA0023) or just the number (auto-formatted)')
+    }
     if (!data.firstName) rowErrors.push('First Name is required')
     if (!data.lastName) rowErrors.push('Last Name is required')
     if (!data.phone) rowErrors.push('Phone is required')
@@ -387,8 +396,8 @@ async function validateAndImport(
     if (!data.department) rowErrors.push('Department is required')
     if (!data.designation) rowErrors.push('Designation is required')
 
-    // Validate duplicates
-    if (data.employeeId && existingCodes.has(data.employeeId)) {
+    // Validate duplicates using normalized employee ID
+    if (normalizedEmployeeId && existingCodes.has(normalizedEmployeeId)) {
       rowErrors.push('Employee ID already exists in database')
     }
     if (data.email && existingEmails.has(data.email)) {
@@ -459,11 +468,11 @@ async function validateAndImport(
 
     // Prepare employee data for import
     const employeeData = {
-      employeeCode: data.employeeId!,
+      employeeCode: normalizedEmployeeId,  // Use normalized ID (UA + 8 digits)
       firstName: data.firstName!,
       middleName: data.middleName || null,
       lastName: data.lastName!,
-      email: data.email || `${data.employeeId}@temp.local`, // Use temporary email if not provided
+      email: data.email || `${normalizedEmployeeId}@temp.local`, // Use normalized ID for temp email
       personalEmail: data.personalEmail || null,
       phone: data.phone ? String(data.phone) : '',
       alternatePhone: data.alternatePhone ? String(data.alternatePhone) : null,

@@ -144,14 +144,14 @@ function getFullName(emp: Employee): string {
   return parts.join(' ') || 'Unknown';
 }
 
-// Validate / normalize the Employee ID (must equal the biometric Enrolled ID prefixed "UA").
-// Returns an error string ('' when valid). Accepts a bare number (auto-formats to UA + 8 digits).
+// Validate / normalize the Employee ID (must equal the biometric Enrolled ID last 4 digits prefixed "UA").
+// Returns an error string ('' when valid). Accepts a bare number (auto-formats to UA + 4 digits).
 function validateEmpIdFormat(raw: string): string {
   const value = (raw || '').trim().toUpperCase();
   if (!value) return 'Employee ID is required';
-  const normalized = /^\d{1,8}$/.test(value) ? `UA${value.padStart(8, '0')}` : value;
-  if (!/^UA\d{8}$/.test(normalized)) {
-    return 'Format: UA + 8 digits (e.g. UA00000001). Type just the number to auto-format.';
+  const normalized = /^\d{1,4}$/.test(value) ? `UA${value.padStart(4, '0')}` : value;
+  if (!/^UA\d{4}$/.test(normalized)) {
+    return 'Format: UA + 4 digits (e.g. UA0001, UA0023). Type just the number to auto-format.';
   }
   return '';
 }
@@ -559,16 +559,16 @@ export default function EmployeesModule() {
       }
 
       let employeeCode = form.empId.trim().toUpperCase();
-      // Employee code must equal the device Enrolled ID (EmpcardNo) prefixed with "UA".
-      // EmpcardNo is 8-digit zero-padded, so the code is "UA" + 8 digits.
-      // Auto-format: if the user typed just digits, prepend UA and zero-pad to 8.
+      // Employee code must equal the last 4 digits of the device Enrolled ID (EmpcardNo) prefixed with "UA".
+      // EmpcardNo is 8-digit zero-padded (e.g. "00000005"), we use last 4 → code "UA0005".
+      // Auto-format: if the user typed just digits (1-4), prepend UA and zero-pad to 4.
       if (mode === 'create') {
-        if (/^\d{1,8}$/.test(employeeCode)) {
-          employeeCode = `UA${employeeCode.padStart(8, '0')}`;
+        if (/^\d{1,4}$/.test(employeeCode)) {
+          employeeCode = `UA${employeeCode.padStart(4, '0')}`;
         }
-        if (!/^UA\d{8}$/.test(employeeCode)) {
-          toast.error('Employee ID must be UA + 8 digits matching the biometric Enrolled ID (e.g. UA00000001). You can also type just the number and it will be auto-formatted.');
-          setFieldErrors(fe => ({ ...fe, empId: 'Format: UA + 8 digits (e.g. UA00000001)' }));
+        if (!/^UA\d{4}$/.test(employeeCode)) {
+          toast.error('Employee ID must be UA + last 4 digits of biometric Enrolled ID (e.g. UA0001, UA0005). Type just the number to auto-format.');
+          setFieldErrors(fe => ({ ...fe, empId: 'Format: UA + 4 digits (e.g. UA0005)' }));
           setFormTab('identity');
           setSubmitting(false);
           return;
@@ -754,7 +754,7 @@ export default function EmployeesModule() {
       <div className="grid grid-cols-2 gap-3 pr-1">
         {/* ── Identity ── */}
         {formTab === 'identity' && <>
-          <F label="Employee ID (Enrolled ID)" req><input className={`${inp} ${fieldBorderError(fieldErrors.empId)}`} value={form.empId} onChange={e => { setForm(f => ({ ...f, empId: e.target.value.toUpperCase() })); setFieldErrors(fe => ({ ...fe, empId: '' })); }} onBlur={e => { const err = validateEmpIdFormat(e.target.value); setFieldErrors(fe => ({ ...fe, empId: err })); }} placeholder="UA + biometric Enrolled ID, e.g. UA00000001" maxLength={10} /><FieldError message={fieldErrors.empId} /><p className="text-[10px] text-[#5a6878] mt-1">Must match the device Enrolled ID. Type the number to auto-format to UA + 8 digits.</p></F>
+          <F label="Employee ID (Enrolled ID)" req><input className={`${inp} ${fieldBorderError(fieldErrors.empId)}`} value={form.empId} onChange={e => { setForm(f => ({ ...f, empId: e.target.value.toUpperCase() })); setFieldErrors(fe => ({ ...fe, empId: '' })); }} onBlur={e => { const err = validateEmpIdFormat(e.target.value); setFieldErrors(fe => ({ ...fe, empId: err })); }} placeholder="UA + last 4 digits of Enrolled ID, e.g. UA0005" maxLength={6} /><FieldError message={fieldErrors.empId} /><p className="text-[10px] text-[#5a6878] mt-1">Must match the LAST 4 DIGITS of the biometric device Enrolled ID. Type just the number to auto-format (e.g. "5" → "UA0005").</p></F>
           <F label="Token Number"><input className={inp} value={form.tokenNumber} onChange={e => setForm(f => ({ ...f, tokenNumber: e.target.value.toUpperCase() }))} placeholder="TKN001" /></F>
           <F label="Workmen Sl. No."><input className={inp} value={form.workmenSlNo} onChange={e => setForm(f => ({ ...f, workmenSlNo: e.target.value.toUpperCase() }))} placeholder="WM001" /></F>
           <F label="First Name" req><input className={`${inp} ${fieldBorderError(fieldErrors.firstName)}`} value={form.firstName} onChange={e => { setForm(f => ({ ...f, firstName: e.target.value })); setFieldErrors(fe => ({ ...fe, firstName: '' })); }} placeholder="Rajesh" /><FieldError message={fieldErrors.firstName} /></F>
