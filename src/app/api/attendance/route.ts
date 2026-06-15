@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
         shiftBreakMinutes: assignment?.Shift?.breakMinutes ?? null,
         shiftCrossesMidnight: assignment?.Shift?.crossesMidnight ?? null,
         shiftOtThresholdMin: assignment?.Shift?.otThresholdMin ?? null,
-        siteName: branchMap.get(a.employeeId) ?? null,
+        siteName: branchMap.get(a.employeeId) || null,
       }
     }))
 

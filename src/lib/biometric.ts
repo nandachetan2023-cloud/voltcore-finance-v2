@@ -312,7 +312,7 @@ export class BiometricService {
               { employeeCode: employeeCodeFull8 },   // Try full 8 digits (e.g., UA00000005)
             ],
           },
-          select: { id: true, employeeCode: true, firstName: true, lastName: true },
+          select: { id: true, employeeCode: true, firstName: true, lastName: true, branchId: true, Branch: { select: { name: true } } },
         })
 
         if (!employee) {
@@ -325,6 +325,31 @@ export class BiometricService {
             data: { processed: true, matched: false, skipReason: reason, processedAt: new Date() },
           })
           continue
+        }
+
+        // ── Site/Branch filter: only process employees assigned to THIS site ──
+        // If multiple biometric sites have the same API credentials (same device data),
+        // each site should only create attendance for employees assigned to its branch.
+        // Match by comparing the employee's Branch name with this site's siteName.
+        const employeeBranchName = employee.Branch?.name || ''
+        const currentSiteName = this.config.siteName || ''
+        
+        if (currentSiteName && employeeBranchName) {
+          const branchMatch = employeeBranchName.toLowerCase().trim() === currentSiteName.toLowerCase().trim()
+          if (!branchMatch) {
+            // This employee belongs to a different site — skip silently (don't mark as error,
+            // the correct site will process them).
+            // Don't mark processed — let the other site's processRawLogs pick it up.
+            // However, since raw logs are filtered by siteId, and both sites store the same
+            // punch data under their own siteId, each site has its own copy. Mark as processed.
+            const reason = `Employee ${employee.employeeCode} is assigned to branch "${employeeBranchName}", not this site "${currentSiteName}". Skipped.`
+            console.log(`[Biometric] ${reason}`)
+            await this.db.biometricRawLog.updateMany({
+              where: { id: { in: logs.map(l => l.id) } },
+              data: { processed: true, matched: false, skipReason: reason, processedAt: new Date() },
+            })
+            continue
+          }
         }
 
         const employeeName = `${employee.firstName} ${employee.lastName}`

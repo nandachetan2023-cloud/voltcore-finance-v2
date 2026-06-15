@@ -432,7 +432,6 @@ export default function EmployeesModule() {
         const errors = validateFields([
           { field: 'empId', value: form.empId, label: 'Employee ID' },
           { field: 'firstName', value: form.firstName, label: 'First Name' },
-          { field: 'lastName', value: form.lastName, label: 'Last Name' },
           { field: 'departmentId', value: form.departmentId, label: 'Department' },
           { field: 'designationId', value: form.designationId, label: 'Designation' },
           { field: 'branchId', value: form.branchId, label: 'Branch' },
@@ -447,7 +446,7 @@ export default function EmployeesModule() {
             setFormTab('identity');
           } else {
             const tabMap: Record<string, string[]> = {
-              identity: ['empId', 'firstName', 'lastName', 'email'],
+              identity: ['empId', 'firstName', 'email'],
               org: ['departmentId', 'designationId', 'branchId'],
               employment: ['dateOfJoining'],
             };
@@ -474,7 +473,7 @@ export default function EmployeesModule() {
         const onboardBody = {
           employeeCode,
           firstName: form.firstName.trim(),
-          lastName: form.lastName.trim(),
+          lastName: form.lastName.trim() || '',
           email: form.email.trim(),
           departmentId: parseInt(form.departmentId),
           designationId: parseInt(form.designationId),
@@ -524,7 +523,6 @@ export default function EmployeesModule() {
       const errors = validateFields([
         { field: 'empId', value: form.empId, label: 'Employee ID' },
         { field: 'firstName', value: form.firstName, label: 'First Name' },
-        { field: 'lastName', value: form.lastName, label: 'Last Name' },
         { field: 'dateOfBirth', value: form.dateOfBirth, label: 'Date of Birth' },
         { field: 'currentAddress', value: form.currentAddress, label: 'Current Address' },
         { field: 'currentCity', value: form.currentCity, label: 'Current City' },
@@ -540,7 +538,7 @@ export default function EmployeesModule() {
       if (!isValid(errors)) {
         // Navigate to the first tab that has an error so the user can see it
         const tabFieldMap: Record<string, string[]> = {
-          identity: ['empId', 'firstName', 'lastName', 'email', 'phone'],
+          identity: ['empId', 'firstName', 'email', 'phone'],
           personal: ['dateOfBirth'],
           address: ['currentAddress', 'currentCity', 'currentState', 'currentPincode'],
           org: ['departmentId', 'designationId', 'branchId'],
@@ -581,7 +579,7 @@ export default function EmployeesModule() {
         workmenSlNo: form.workmenSlNo.trim() || null,
         firstName: form.firstName.trim(),
         middleName: form.middleName.trim() || null,
-        lastName: form.lastName.trim(),
+        lastName: form.lastName.trim() || '',
         email: form.email.trim(),
         phone: form.phone.trim(),
         alternatePhone: form.alternatePhone.trim() || null,
@@ -759,7 +757,7 @@ export default function EmployeesModule() {
           <F label="Workmen Sl. No."><input className={inp} value={form.workmenSlNo} onChange={e => setForm(f => ({ ...f, workmenSlNo: e.target.value.toUpperCase() }))} placeholder="WM001" /></F>
           <F label="First Name" req><input className={`${inp} ${fieldBorderError(fieldErrors.firstName)}`} value={form.firstName} onChange={e => { setForm(f => ({ ...f, firstName: e.target.value })); setFieldErrors(fe => ({ ...fe, firstName: '' })); }} placeholder="Rajesh" /><FieldError message={fieldErrors.firstName} /></F>
           <F label="Middle Name"><input className={inp} value={form.middleName} onChange={e => setForm(f => ({ ...f, middleName: e.target.value }))} placeholder="Kumar" /></F>
-          <F label="Last Name" req><input className={`${inp} ${fieldBorderError(fieldErrors.lastName)}`} value={form.lastName} onChange={e => { setForm(f => ({ ...f, lastName: e.target.value })); setFieldErrors(fe => ({ ...fe, lastName: '' })); }} placeholder="Sharma" /><FieldError message={fieldErrors.lastName} /></F>
+          <F label="Last Name"><input className={inp} value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} placeholder="Sharma (optional)" /></F>
           <F label="Work Email"><input className={inp} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="rajesh@company.com (optional)" /></F>
           <F label="Personal Email"><input className={inp} type="email" value={form.personalEmail} onChange={e => setForm(f => ({ ...f, personalEmail: e.target.value }))} placeholder="rajesh@gmail.com" /></F>
           <F label="Phone"><input className={inp} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210 (optional)" /></F>
@@ -883,10 +881,10 @@ export default function EmployeesModule() {
 
         {/* ── Statutory ── */}
         {formTab === 'statutory' && <>
-          <F label="PAN Number"><input className={inp} value={form.panNumber} onChange={e => setForm(f => ({ ...f, panNumber: e.target.value.toUpperCase() }))} placeholder="ABCDE1234F" maxLength={10} /></F>
-          <F label="Aadhar Number"><input className={inp} value={form.aadharNumber} onChange={e => setForm(f => ({ ...f, aadharNumber: e.target.value }))} placeholder="1234 5678 9012" maxLength={14} /></F>
-          <F label="UAN Number"><input className={inp} value={form.uanNumber} onChange={e => setForm(f => ({ ...f, uanNumber: e.target.value }))} placeholder="100123456789" maxLength={12} /></F>
-          <F label="ESIC IP Number"><input className={inp} value={form.esicNumber} onChange={e => setForm(f => ({ ...f, esicNumber: e.target.value }))} placeholder="1234567890" /></F>
+          <F label="PAN Number"><input className={inp} value={form.panNumber} onChange={e => setForm(f => ({ ...f, panNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))} placeholder="ABCDE1234F" maxLength={10} /></F>
+          <F label="Aadhar Number"><input className={inp} value={form.aadharNumber} onChange={e => setForm(f => ({ ...f, aadharNumber: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="123456789012" maxLength={12} /></F>
+          <F label="UAN Number"><input className={inp} value={form.uanNumber} onChange={e => setForm(f => ({ ...f, uanNumber: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="100123456789" maxLength={12} /></F>
+          <F label="ESIC IP Number"><input className={inp} value={form.esicNumber} onChange={e => setForm(f => ({ ...f, esicNumber: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="1234567890" maxLength={10} /></F>
         </>}
 
         {/* ── Bank ── */}

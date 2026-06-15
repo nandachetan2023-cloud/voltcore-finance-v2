@@ -35,11 +35,13 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({ success: true, user })
 
+    // Session cookies — no maxAge means they expire when browser is closed.
+    // Client-side inactivity timer handles the 30-minute auto-logout.
     const cookieOpts = {
       httpOnly: true,
       sameSite: 'lax' as const,
       path: '/',
-      maxAge: 60 * 60 * 24, // 24 hours
+      // No maxAge → session cookie → cleared on browser close
     }
 
     // Role cookie (superadmin | admin | demo)

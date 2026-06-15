@@ -18,13 +18,16 @@ export interface AttendanceRuleResult {
 }
 
 // ── Get the active shift for an employee on a given date ──────────
+// If multiple shifts are assigned, and a punchIn time is provided,
+// picks the shift whose startTime is closest to the actual punch-in.
 export async function getEmployeeShiftForDate(
   employeeId: number,
   date: Date,
-  dbClient?: DbClient
+  dbClient?: DbClient,
+  punchIn?: Date | null
 ) {
   const db = dbClient ?? defaultDb
-  const assignment = await db.shiftAssignment.findFirst({
+  const assignments = await db.shiftAssignment.findMany({
     where: {
       employeeId,
       effectiveFrom: { lte: date },
@@ -33,7 +36,49 @@ export async function getEmployeeShiftForDate(
     include: { Shift: true },
     orderBy: { effectiveFrom: 'desc' },
   })
-  return assignment?.Shift ?? null
+
+  if (assignments.length === 0) return null
+  if (assignments.length === 1) return assignments[0].Shift
+
+  // Multiple shifts assigned — pick closest to punchIn
+  if (punchIn) {
+    return pickClosestShift(assignments.map(a => a.Shift), punchIn, date)
+  }
+
+  // No punchIn available — return the most recently assigned shift
+  return assignments[0].Shift
+}
+
+// Helper: Given multiple shifts and a punch-in time, return the shift
+// whose startTime is closest to the actual punch-in on that day.
+function pickClosestShift(shifts: any[], punchIn: Date, logDate: Date): any {
+  let bestShift = shifts[0]
+  let bestDiff = Infinity
+
+  for (const shift of shifts) {
+    const [h, m] = shift.startTime.split(':').map(Number)
+    const shiftStart = new Date(logDate)
+    shiftStart.setHours(h, m, 0, 0)
+
+    // For cross-midnight shifts, if punchIn is in the evening, the shift start
+    // is today. If punchIn is early morning, the shift might have started yesterday.
+    let diff = Math.abs(punchIn.getTime() - shiftStart.getTime())
+
+    // Also check if the shift start should be considered as previous day (for night shifts)
+    if (shift.crossesMidnight) {
+      const shiftStartYesterday = new Date(shiftStart)
+      shiftStartYesterday.setDate(shiftStartYesterday.getDate() - 1)
+      const diffYesterday = Math.abs(punchIn.getTime() - shiftStartYesterday.getTime())
+      diff = Math.min(diff, diffYesterday)
+    }
+
+    if (diff < bestDiff) {
+      bestDiff = diff
+      bestShift = shift
+    }
+  }
+
+  return bestShift
 }
 
 export async function getApplicableRule(
@@ -178,17 +223,6 @@ export async function calculateFinesForPeriod(
       employeeId,
       logDate: { gte: startDate, lte: endDate },
     },
-    include: {
-      Employee: {
-        include: {
-          ShiftAssignment: {
-            where: { isActive: true },
-            include: { Shift: true },
-            take: 1,
-          },
-        },
-      },
-    },
     orderBy: { logDate: 'asc' },
   });
 
@@ -197,7 +231,9 @@ export async function calculateFinesForPeriod(
 
   for (const log of logs) {
     if (!log.punchIn) continue;
-    const shift = log.Employee.ShiftAssignment[0]?.Shift;
+    
+    // Get the shift closest to the punchIn time (handles multiple shifts)
+    const shift = await getEmployeeShiftForDate(employeeId, log.logDate, db, log.punchIn);
     if (!shift) continue;
 
     const [hours, minutes] = shift.startTime.split(':').map(Number);
@@ -244,8 +280,8 @@ export async function classifyAttendance(
     return { status: 'absent', lateMinutes: 0, fineAmount: 0 }
   }
 
-  // Get the employee's shift for this date
-  const shift = await getEmployeeShiftForDate(employeeId, logDate, db)
+  // Get the employee's shift for this date (uses punchIn to pick closest shift if multiple assigned)
+  const shift = await getEmployeeShiftForDate(employeeId, logDate, db, punchIn)
 
   if (!shift) {
     // No shift assigned — just mark present, no rule to apply
@@ -299,9 +335,10 @@ export async function classifyAttendance(
 }
 
 // ── Check if an employee has an active shift assignment ───────────
-// Returns the shift if assigned, null if not.
-// Used as a gate: employees without a shift are excluded from
+// Returns the first matching shift assignment if any exist, null if not.
+// Used as a gate: employees without ANY shift are excluded from
 // attendance, timesheet, and payroll processing.
+// When multiple shifts are active, returns the most recently assigned one.
 export async function getActiveShiftAssignment(
   employeeId: number,
   date: Date = new Date(),

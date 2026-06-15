@@ -458,7 +458,29 @@ export async function DELETE(request: NextRequest) {
       },
     })
 
-    // 2. Deactivate the linked TenantUser in the superadmin DB (if any)
+    // 2. Remove shift assignments (attendance logs are kept for historical records)
+    await db.shiftAssignment.deleteMany({
+      where: { employeeId },
+    }).catch(() => {})
+
+    // 3. Remove salary structure assignments
+    await db.salaryStructureAssignment.deleteMany({
+      where: { employeeId },
+    }).catch(() => {})
+
+    // 4. Cancel pending leave requests
+    await db.leaveRequest.updateMany({
+      where: { employeeId, status: 'pending' },
+      data: { status: 'cancelled' },
+    }).catch(() => {})
+
+    // 5. Cancel pending tour requests
+    await db.tourRequest.updateMany({
+      where: { employeeId, status: 'pending' },
+      data: { status: 'cancelled' },
+    }).catch(() => {})
+
+    // 6. Deactivate the linked TenantUser in the superadmin DB (if any)
     if (tenantId) {
       try {
         const { superadminDb } = await import('@/lib/superadmin-db')
@@ -474,7 +496,7 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
-    // 3. Deactivate the linked User record in the tenant DB (if any)
+    // 7. Deactivate the linked User record in the tenant DB (if any)
     if (existing.userId) {
       await db.user.update({
         where: { id: existing.userId },
@@ -485,7 +507,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: { id: employeeId },
-      message: 'Employee deleted and linked user account deactivated. All records are preserved.',
+      message: 'Employee deleted. Shift assignments removed, attendance logs preserved.',
     })
   } catch (error) {
     console.error('Error deleting employee:', error)

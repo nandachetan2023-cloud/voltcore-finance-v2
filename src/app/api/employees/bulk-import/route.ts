@@ -67,6 +67,7 @@ interface EmployeeRow {
   'Permanent Pincode'?: string
   'Department* (exact name from system)'?: string
   'Designation* (exact name from system)'?: string
+  'Site / Branch*'?: string
   'Branch*'?: string
   'Grade'?: string
   'Reporting Manager (Employee Code)'?: string
@@ -87,6 +88,7 @@ interface EmployeeRow {
   'Emergency Contact Phone'?: string
   "Father's Name (old)"?: string
   "Father's Name (new)"?: string
+  "Father's Name"?: string
   'Permanent Address (old)'?: string
 }
 
@@ -119,6 +121,10 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File
     const sheetName = formData.get('sheetName') as string
     const dryRun = formData.get('dryRun') === 'true'
+    const overrideBranchId = formData.get('branchId') as string | null
+    // Per-employee branch mapping: JSON string like {"UA0001": 2, "UA0002": 5}
+    const branchMappingStr = formData.get('branchMapping') as string | null
+    const branchMapping: Record<string, number> = branchMappingStr ? JSON.parse(branchMappingStr) : {}
 
     if (!file) {
       return NextResponse.json(
@@ -155,7 +161,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate and prepare data
-    const result = await validateAndImport(db, data, dryRun)
+    const result = await validateAndImport(db, data, dryRun, overrideBranchId ? parseInt(overrideBranchId) : undefined, branchMapping)
 
     return NextResponse.json(result)
   } catch (error) {
@@ -208,7 +214,7 @@ function normalizeRow(row: EmployeeRow) {
       gender: row['Gender* (male/female/other)'],
       maritalStatus: row['Marital Status (single/married/divorced/widowed)'],
       bloodGroup: row['Blood Group (A+/A-/B+/B-/AB+/AB-/O+/O-)'],
-      fatherName: row["Father's Name (new)"],
+      fatherName: row["Father's Name"] || row["Father's Name (new)"],
       currentAddress: row['Current Address'],
       currentCity: row['Current City'],
       currentState: row['Current State'],
@@ -219,7 +225,7 @@ function normalizeRow(row: EmployeeRow) {
       permanentPincode: row['Permanent Pincode'],
       department: row['Department* (exact name from system)'],
       designation: row['Designation* (exact name from system)'],
-      branch: row['Branch*'],
+      branch: row['Site / Branch*'] || row['Branch*'],
       grade: row['Grade'],
       reportingManager: row['Reporting Manager (Employee Code)'],
       dateOfJoining: row['Date of Joining* (YYYY-MM-DD)'],
@@ -296,8 +302,10 @@ function normalizeRow(row: EmployeeRow) {
 async function validateAndImport(
   db: any,
   rows: EmployeeRow[],
-  dryRun: boolean
-): Promise<ImportResult> {
+  dryRun: boolean,
+  overrideBranchId?: number,
+  branchMapping?: Record<string, number>
+): Promise<ImportResult & { validatedEmployees?: any[] }> {
   const errors: ValidationError[] = []
   const warnings: ValidationError[] = []
   const validRows: any[] = []
@@ -448,12 +456,19 @@ async function validateAndImport(
     // Resolve designation — auto-create if not found (case-insensitive)
     const designationId = await getOrCreateDesig(data.designation!)
 
-    // Resolve branch
-    let branchId = defaultBranchId
-    if (data.branch) {
+    // Resolve branch — priority: per-employee mapping > global override > Excel column > default
+    let branchId: number | undefined
+    if (branchMapping && branchMapping[normalizedEmployeeId]) {
+      branchId = branchMapping[normalizedEmployeeId]
+    } else if (overrideBranchId) {
+      branchId = overrideBranchId
+    } else if (data.branch) {
       const branchIdentifier = data.branch.toLowerCase()
       const branch = branches.find(b => b.name.toLowerCase() === branchIdentifier)
       if (branch) branchId = branch.id
+      else branchId = defaultBranchId
+    } else {
+      branchId = defaultBranchId
     }
 
     if (!branchId) {
@@ -461,7 +476,7 @@ async function validateAndImport(
         row: rowNum, 
         employeeCode: data.employeeId!, 
         field: 'branch', 
-        message: 'No branch found. Please create at least one branch in the system first.' 
+        message: 'No branch/site found. Please select a site in the mapping step or create one in Settings.' 
       })
       continue
     }
@@ -559,6 +574,14 @@ async function validateAndImport(
     errors,
     warnings,
     imported: dryRun ? [] : imported,
+    // Return validated employees list for site mapping step (dry run only)
+    validatedEmployees: dryRun ? validRows.map((emp, idx) => ({
+      index: idx,
+      employeeCode: emp.employeeCode,
+      firstName: emp.firstName,
+      lastName: emp.lastName,
+      department: emp.departmentId, // ID — frontend won't need this detail
+    })) : [],
   }
 }
 
