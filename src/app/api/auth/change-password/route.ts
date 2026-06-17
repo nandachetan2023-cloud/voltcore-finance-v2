@@ -37,10 +37,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find user by employeeCode
-    const tenantUser = await superadminDb.tenantUser.findFirst({
-      where: { employeeCode, isActive: true },
+    // Find user by employeeCode or email
+    const loginId = employeeCode
+    const loginIdLower = loginId.toLowerCase()
+    let tenantUser = await superadminDb.tenantUser.findFirst({
+      where: { employeeCode: loginId, isActive: true },
     })
+    if (!tenantUser) {
+      tenantUser = await superadminDb.tenantUser.findFirst({
+        where: { email: loginIdLower, isActive: true },
+      })
+    }
 
     if (!tenantUser) {
       return NextResponse.json(

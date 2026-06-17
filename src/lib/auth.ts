@@ -84,9 +84,10 @@ export async function authenticateUser(loginId: string, password: string): Promi
   }
 
   // 2. Fallback: try by email (catches superadmin and legacy tenant users)
+  const loginIdLower = loginId.toLowerCase()
   try {
     const sa = await superadminDb.superAdminUser.findUnique({
-      where: { email: loginId },
+      where: { email: loginIdLower },
     })
     if (sa && sa.isActive) {
       const valid = await bcrypt.compare(password, sa.password)
@@ -110,10 +111,10 @@ export async function authenticateUser(loginId: string, password: string): Promi
     console.error('SuperAdmin auth error:', e)
   }
 
-  // 3. Legacy: try tenant user by email
+  // 3. Legacy: try tenant user by email (case-insensitive)
   try {
     const tenantUser = await superadminDb.tenantUser.findFirst({
-      where: { email: loginId, isActive: true },
+      where: { email: loginIdLower, isActive: true },
       include: { tenant: true },
     })
 
