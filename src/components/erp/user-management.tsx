@@ -13,7 +13,7 @@ interface TenantUser {
   id: string; name: string; email: string; phone: string;
   allowedModules: string; orgRoleId?: string; isActive: boolean;
   lastActiveAt?: string; createdAt: string; employeeId?: number;
-  onboardingStatus?: string;
+  employeeCode?: string; onboardingStatus?: string;
 }
 
 interface OrgRole {
@@ -590,7 +590,11 @@ export default function UserManagement() {
                     {u.employeeId && (
                       <div className="text-[10px] text-[#00d4ff] mt-0.5 flex items-center gap-1">
                         <span>🔗</span>
-                        <span>Linked to employee #{u.employeeId} — {employees.find(e => e.id === u.employeeId)?.name || 'Employee'}</span>
+                        <span className="font-semibold">Emp #{u.employeeId}</span>
+                        <span>·</span>
+                        <span>{u.employeeCode || '—'}</span>
+                        <span>·</span>
+                        <span>{employees.find(e => e.id === u.employeeId)?.name || 'Unknown'}</span>
                       </div>
                     )}
                     {u.lastActiveAt && (
