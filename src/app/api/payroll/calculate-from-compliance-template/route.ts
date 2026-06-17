@@ -65,28 +65,12 @@ export async function POST(request: NextRequest) {
         const otHours   = getNum(9);   // col 9: OT Hours
         const otherCash = getNum(15);  // col 15: Other Cash Payment
 
-        // Read salary data from the note on Employee ID cell (stored during template generation)
-        let basic = 0, hra = 0, da = 0, workingDays = 26;
-        try {
-          const empCell = row.getCell(2);
-          if (empCell.note) {
-            const noteText = typeof empCell.note === 'string'
-              ? empCell.note
-              : (empCell.note as any).texts?.map((t: any) => t.text).join('') || '';
-            const parsed = JSON.parse(noteText);
-            basic = parsed.basic || 0;
-            hra = parsed.hra || 0;
-            da = parsed.da || 0;
-            workingDays = parsed.workingDays || 26;
-          }
-        } catch { /* use defaults */ }
-
-        // If no salary data from note, try to derive from existing calculated values
-        // or use a reasonable default
-        if (basic === 0) {
-          // Fallback: read from col 12 if already filled
-          basic = getNum(12);
-        }
+        // Read salary data from hidden columns (26=basic, 27=hra, 28=da, 29=workingDays)
+        let basic = getNum(26);
+        let hra = getNum(27);
+        let da = getNum(28);
+        let workingDays = getNum(29);
+        if (workingDays === 0) workingDays = 26;
 
         // ===== CALCULATIONS =====
 
@@ -110,8 +94,8 @@ export async function POST(request: NextRequest) {
         // EPF = 12% of basic wages
         const epf = Math.ceil(basicWages * 0.12);
 
-        // ESI = 0.75% of total wages
-        const esi = Math.ceil(totalWagesESI * 0.0075);
+        // ESI = 0.75% of basic wages (not total wages)
+        const esi = Math.ceil(basicWages * 0.0075);
 
         // House rent = HRA proportional to days worked
         const houseRent = workingDays > 0 ? Math.round((hra / workingDays) * daysWorked * 100) / 100 : 0;

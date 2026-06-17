@@ -88,8 +88,9 @@ export async function POST(request: NextRequest) {
         // ===== CALCULATIONS =====
 
         // Detailed Earnings (U, W, X)
-        const U = Math.round(Q / 24 * (R + T)); // ACTUAL EARN WAGES
-        const W = Math.round((Q / Z / 8) * (V + (S * 8))); // ACTUAL OT AMOUNT
+        const actualWorkingDays = (Z + (T || 0)) > 0 ? (Z + (T || 0)) : 26;
+        const U = Math.round(Q / actualWorkingDays * (R + (T || 0))); // ACTUAL EARN WAGES
+        const W = Math.round((Q / actualWorkingDays / 8) * (V || 0)); // ACTUAL OT AMOUNT (excludes leave days)
         const X = U + W; // GROSS EARN WAGES
 
         // Payroll Calculation (AD-AN)
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
         const AN = AI - AM; // NETT PAYBLE
 
         // Non-Compliance (AR, AU, AV)
-        const AR = X - AM - AN; // TOTAL NON COMPLIANCE AMOUNT
+        const AR = Math.max(0, X - AI); // TOTAL NON COMPLIANCE AMOUNT
         const AU = AR - AS + AT; // NETT PAYBLE NON COMPLIANCE
         const AV = AN + AU; // GRAND TOTAL NETT PAYBLE SALARY
 

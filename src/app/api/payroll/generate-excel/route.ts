@@ -93,7 +93,44 @@ export async function GET(request: NextRequest) {
     );
 
     // Calculate working days for the month
-    const workingDays = endDate.getDate(); // Total days in month (simplified)
+    const workingDays = 26; // Standard working days per month
+
+    // Fetch approved tour requests (count as present)
+    const tourData = await db.tourRequest.findMany({
+      where: {
+        employeeId: { in: employees.map(e => e.id) },
+        status: 'approved',
+        fromDate: { lte: endDate },
+        toDate: { gte: startDate },
+        isDeleted: false,
+      },
+      select: { employeeId: true, days: true },
+    });
+    tourData.forEach(t => {
+      const current = attendanceMap.get(t.employeeId) || 0;
+      attendanceMap.set(t.employeeId, current + Number(t.days));
+    });
+
+    // Fetch approved paid leave requests
+    const leaveData = await db.leaveRequest.findMany({
+      where: {
+        employeeId: { in: employees.map(e => e.id) },
+        status: 'approved',
+        fromDate: { lte: endDate },
+        toDate: { gte: startDate },
+        isDeleted: false,
+      },
+      select: { employeeId: true, days: true },
+    });
+    const leaveMap = new Map<number, number>();
+    leaveData.forEach(l => {
+      leaveMap.set(l.employeeId, (leaveMap.get(l.employeeId) || 0) + Number(l.days));
+    });
+    // Add leave days to attendance count (paid leave counts as present)
+    leaveData.forEach(l => {
+      const current = attendanceMap.get(l.employeeId) || 0;
+      attendanceMap.set(l.employeeId, current + Number(l.days));
+    });
 
     // Fetch approved advances for the month
     const advanceData = await db.employeeRequest.findMany({
@@ -178,6 +215,7 @@ export async function GET(request: NextRequest) {
         // Get salary structure
         const salaryAssignment = employee.SalaryStructureAssignment[0];
         let basicSalary = 0;
+        let dearnessAllowance = 0;
         let hra = 0;
         let conveyance = 0;
         let medical = 0;
@@ -190,11 +228,17 @@ export async function GET(request: NextRequest) {
             const componentName = item.SalaryComponent.name.toLowerCase();
             
             if (componentName.includes('basic')) basicSalary = amount;
+            else if (componentName.includes('da') || componentName.includes('dearness')) dearnessAllowance = amount;
             else if (componentName.includes('hra') || componentName.includes('house')) hra = amount;
             else if (componentName.includes('conveyance') || componentName.includes('transport')) conveyance = amount;
             else if (componentName.includes('medical')) medical = amount;
             else if (componentName.includes('special')) special = amount;
           });
+        }
+        
+        // If no separate DA component, compute as sum of allowances
+        if (dearnessAllowance === 0) {
+          dearnessAllowance = hra + conveyance + medical + special;
         }
         
         // Get attendance
@@ -204,7 +248,6 @@ export async function GET(request: NextRequest) {
         
         // Calculate
         const dailyRate = basicSalary / workingDays;
-        const dearnessAllowance = hra + conveyance + medical + special;
         const otherCashPayment = 0;
         const totalWagesForESI = basicSalary + dearnessAllowance + otAmount + otherCashPayment;
         
@@ -343,6 +386,7 @@ export async function GET(request: NextRequest) {
         }
         
         const presentDays = attendanceMap.get(employee.id) || 0;
+        const leaveDays = leaveMap.get(employee.id) || 0;
         const otHours = 0;
         const otAmount = 0;
         const phAmount = 0;
@@ -368,7 +412,7 @@ export async function GET(request: NextRequest) {
           index + 1,                    // SL NO.
           employee.employeeCode,        // EMPLOYEE ID
           index + 1,                    // WORKMEN SL. NO.
-          employee.employeeCode,        // TOKEN NO.
+          employee.tokenNumber || employee.employeeCode, // TOKEN NO.
           fullName,
           employee.fatherName || '',
           employee.dateOfJoining ? new Date(employee.dateOfJoining).toLocaleDateString('en-IN') : '',
@@ -381,10 +425,10 @@ export async function GET(request: NextRequest) {
           employee.esicNumber || '',
           employee.Designation?.name || '',
           employee.Department?.name || '',
-          'High Skilled',
+          employee.natureOfDesignation || 'High Skilled',
           Math.round(grossEarnings * 100) / 100,
           presentDays,
-          0,
+          leaveDays,
           phDays,
           Math.round(earnWages * 100) / 100,
           otHours,

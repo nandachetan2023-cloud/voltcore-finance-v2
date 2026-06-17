@@ -51,12 +51,70 @@ export async function GET(request: NextRequest) {
       _count: { id: true },
     });
 
+    // Also fetch approved tour requests (count as present)
+    const tourData = await db.tourRequest.findMany({
+      where: {
+        employeeId: { in: employees.map(e => e.id) },
+        status: 'approved',
+        fromDate: { lte: endDate },
+        toDate: { gte: startDate },
+        isDeleted: false,
+      },
+      select: { employeeId: true, days: true },
+    });
+
+    // Fetch approved leave requests (paid leave counts as present)
+    const leaveData = await db.leaveRequest.findMany({
+      where: {
+        employeeId: { in: employees.map(e => e.id) },
+        status: 'approved',
+        fromDate: { lte: endDate },
+        toDate: { gte: startDate },
+        isDeleted: false,
+      },
+      select: { employeeId: true, days: true },
+    });
+
     const attendanceMap = new Map<number, number>();
     attendanceData.forEach(a => {
       if (a.status === 'present' || a.status === 'half-day') {
         attendanceMap.set(a.employeeId, (attendanceMap.get(a.employeeId) || 0) + (a._count?.id || 0));
       }
     });
+    tourData.forEach(t => {
+      attendanceMap.set(t.employeeId, (attendanceMap.get(t.employeeId) || 0) + Number(t.days));
+    });
+    leaveData.forEach(l => {
+      attendanceMap.set(l.employeeId, (attendanceMap.get(l.employeeId) || 0) + Number(l.days));
+    });
+
+    // Fetch shift assignments for working days calculation
+    const shiftAssignments = await db.shiftAssignment.findMany({
+      where: {
+        employeeId: { in: employees.map(e => e.id) },
+        effectiveFrom: { lte: endDate },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: startDate } }],
+      },
+      include: { Shift: { select: { weekOffDays: true } } },
+      orderBy: { effectiveFrom: 'desc' },
+    });
+
+    const shiftWeekOffDaysMap = new Map<number, number[]>();
+    for (const sa of shiftAssignments) {
+      if (!shiftWeekOffDaysMap.has(sa.employeeId) && sa.Shift?.weekOffDays) {
+        shiftWeekOffDaysMap.set(sa.employeeId, sa.Shift.weekOffDays);
+      }
+    }
+
+    function computeMonthlyWorkingDays(month: number, year: number, weekOffDays: number[]): number {
+      const totalDays = new Date(year, month, 0).getDate();
+      let count = 0;
+      for (let d = 1; d <= totalDays; d++) {
+        const dow = new Date(year, month - 1, d).getDay();
+        if (!weekOffDays.includes(dow)) count++;
+      }
+      return count;
+    }
 
     // Fetch salary structures
     const salaryAssignments = await db.salaryStructureAssignment.findMany({
@@ -133,12 +191,14 @@ export async function GET(request: NextRequest) {
       border: { top: { style: 'thin' as const }, left: { style: 'thin' as const }, bottom: { style: 'thin' as const }, right: { style: 'thin' as const } },
     };
 
-    const workingDays = new Date(year, month, 0).getDate();
-
     employees.forEach((emp, index) => {
       const fullName = `${emp.firstName} ${emp.middleName || ''} ${emp.lastName}`.trim().toUpperCase();
       const presentDays = attendanceMap.get(emp.id) || 0;
       const salary = salaryMap.get(emp.id) || { basic: 0, hra: 0, da: 0 };
+      const weekOffDays = shiftWeekOffDaysMap.get(emp.id) || null;
+      const workingDays = weekOffDays
+        ? computeMonthlyWorkingDays(month, year, weekOffDays)
+        : 26;
 
       const row = worksheet.addRow([
         index + 1,                          // col 1: Sl. No.
@@ -166,12 +226,11 @@ export async function GET(request: NextRequest) {
         '',                                 // col 23: Time/Date (USER INPUT)
         '',                                 // col 24: Place (USER INPUT)
         '',                                 // col 25: Signature (USER INPUT)
+        salary.basic,                       // col 26: HIDDEN - basic salary
+        salary.hra,                         // col 27: HIDDEN - HRA
+        salary.da,                          // col 28: HIDDEN - DA
+        workingDays,                        // col 29: HIDDEN - working days
       ]);
-
-      // Store salary data in hidden columns for calculation reference
-      // We'll embed basic/hra/da as notes on the employee ID cell
-      const empCell = row.getCell(2);
-      empCell.note = JSON.stringify({ basic: salary.basic, hra: salary.hra, da: salary.da, workingDays });
 
       // Apply styles
       // cols 1-7: auto-filled (blue, editable — user can override)
@@ -223,7 +282,15 @@ export async function GET(request: NextRequest) {
       { width: 16 }, // Time/Date
       { width: 14 }, // Place
       { width: 20 }, // Signature
+      { width: 0 },  // col 26: HIDDEN - basic
+      { width: 0 },  // col 27: HIDDEN - hra
+      { width: 0 },  // col 28: HIDDEN - da
+      { width: 0 },  // col 29: HIDDEN - workingDays
     ];
+    // Hide the reference data columns
+    for (let c = 26; c <= 29; c++) {
+      worksheet.getColumn(c).hidden = true;
+    }
 
     // Style header row
     const headerRow = worksheet.getRow(1);

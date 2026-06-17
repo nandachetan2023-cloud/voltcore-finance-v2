@@ -165,6 +165,7 @@ export async function POST(request: NextRequest) {
       const totalDeduction = Number(item.totalDeduction);
       const netPay = Number(item.netPay);
       const advance = Number(item.otherDeductions) || 0;
+      const paidLeaveDays = Number(item.paidLeaveDays) || 0;
 
       const basicPerDay = basicSalary / workingDays;
       const earnWages = (attendance / workingDays) * basicSalary;
@@ -176,7 +177,7 @@ export async function POST(request: NextRequest) {
         employee.employeeCode, // EMPLOYEE ID  ← NEW
         index + 1, // SL NO
         index + 1, // WORKMEN SL NO
-        employee.employeeCode, // TOKEN NO
+        employee.tokenNumber || employee.employeeCode, // TOKEN NO
         fullName, // NAME
         employee.fatherName || '', // FATHER'S NAME
         employee.dateOfJoining ? new Date(employee.dateOfJoining).toLocaleDateString('en-IN') : '',
@@ -189,10 +190,10 @@ export async function POST(request: NextRequest) {
         employee.esicNumber || '',
         employee.Designation?.name || '',
         employee.Department?.name || '',
-        'High Skilled', // Default nature
+        employee.natureOfDesignation || 'High Skilled',
         grossEarnings, // MONTHLY GROSS SALARY
         attendance, // ACTUAL ATTENDANCE
-        0, // LEAVE DAYS
+        paidLeaveDays, // LEAVE DAYS
         phDays, // PH DAYS
         earnWages, // ACTUAL EARN WAGES
         otHours, // ACTUAL OT HRS

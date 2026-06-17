@@ -258,6 +258,9 @@ export async function POST(request: NextRequest) {
           },
         });
 
+        const leaveDays = salaryData.leaveDays || 0;
+        const lopDays = Math.max(0, salaryData.monthlyWorkingDays - salaryData.actualAttendance - leaveDays);
+
         if (existing) {
           // Update existing
           await db.payrollItem.update({
@@ -265,8 +268,8 @@ export async function POST(request: NextRequest) {
             data: {
               workingDays: salaryData.monthlyWorkingDays,
               presentDays: salaryData.actualAttendance,
-              paidLeaveDays: 0,
-              lopDays: salaryData.monthlyWorkingDays - salaryData.actualAttendance,
+              paidLeaveDays: leaveDays,
+              lopDays,
               otHours: salaryData.actualOtHrs,
               basicSalary: salaryData.monthlyBasicSalary,
               hra: salaryData.monthlyHRA,
@@ -300,8 +303,8 @@ export async function POST(request: NextRequest) {
               employeeId: employee.id,
               workingDays: salaryData.monthlyWorkingDays,
               presentDays: salaryData.actualAttendance,
-              paidLeaveDays: 0,
-              lopDays: salaryData.monthlyWorkingDays - salaryData.actualAttendance,
+              paidLeaveDays: leaveDays,
+              lopDays,
               otHours: salaryData.actualOtHrs,
               basicSalary: salaryData.monthlyBasicSalary,
               hra: salaryData.monthlyHRA,
