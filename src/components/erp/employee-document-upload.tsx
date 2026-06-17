@@ -123,7 +123,7 @@ export default function EmployeeDocumentUpload() {
 
   return (
     <div className="space-y-4">
-      <div className="vc-panel">
+      <div className="vc-panel" style={{ overflow: 'visible' }}>
         <div className="vc-panel-header">
           <Upload size={14} className="text-[#f5a623]" />
           <span className="text-[13px] font-semibold" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>UPLOAD EMPLOYEE DOCUMENT</span>
@@ -155,7 +155,7 @@ export default function EmployeeDocumentUpload() {
                     </button>
                   )}
                   {showDropdown && !selectedEmployee && (
-                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#0d1117] border border-[#2e3a48] rounded-lg shadow-2xl max-h-[220px] overflow-y-auto">
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#0d1117] border border-[#2e3a48] rounded-lg shadow-2xl max-h-[360px] overflow-y-auto">
                       {filtered.length === 0 ? (
                         <div className="px-3 py-4 text-[11px] text-[#5a6878] text-center">No employees found</div>
                       ) : (
