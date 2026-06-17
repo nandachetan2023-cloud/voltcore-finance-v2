@@ -147,6 +147,11 @@ export default function PayrollModule() {
 
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
   const [employees, setEmployees] = useState<Array<{ id: number; employeeCode: string; firstName: string; lastName: string }>>([]);
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [yearFilter, setYearFilter] = useState<number | ''>('');
+  const [monthFilter, setMonthFilter] = useState<number | ''>('');
 
   const { triggerCreate } = useERPStore();
 
@@ -195,6 +200,25 @@ export default function PayrollModule() {
       totalNet: completed.reduce((s, r) => s + Number(r.totalNet), 0),
     };
   }, [payrollRuns]);
+
+  // Filtered payroll runs based on search & filters
+  const filteredRuns = useMemo(() => {
+    let list = payrollRuns;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(run => run.name.toLowerCase().includes(q));
+    }
+    if (statusFilter !== 'all') {
+      list = list.filter(run => run.status === statusFilter);
+    }
+    if (yearFilter !== '') {
+      list = list.filter(run => run.year === yearFilter);
+    }
+    if (monthFilter !== '') {
+      list = list.filter(run => run.month === monthFilter);
+    }
+    return list;
+  }, [payrollRuns, searchQuery, statusFilter, yearFilter, monthFilter]);
 
   // Get available months and years from payroll runs
   const availableMonthsYears = useMemo(() => {
@@ -603,7 +627,7 @@ export default function PayrollModule() {
         <div className="vc-panel-header">
           <IndianRupee size={15} className="text-[#f5a623]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Payroll Runs</span>
-          <span className="ml-auto text-[10px] text-[#5a6878]">{payrollRuns.length} runs</span>
+          <span className="ml-auto text-[10px] text-[#5a6878]">{filteredRuns.length}{filteredRuns.length !== payrollRuns.length ? ` / ${payrollRuns.length}` : ''} runs</span>
           <SalaryComplianceBulkImport onImportComplete={fetchData} />
           <button className="vc-btn-secondary ml-2 flex items-center gap-1" onClick={() => setGenerateOpen(true)}>
             <Plus size={13} /> Generate Payroll Excel
@@ -613,6 +637,70 @@ export default function PayrollModule() {
           </button>
         </div>
         
+        {/* Search & Filter Toolbar */}
+        <div className="flex flex-wrap gap-3 items-center px-4 py-3 border-b border-[#252e3a]">
+          <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-lg px-3 py-[6px] flex-1 min-w-[200px] max-w-[320px]">
+            <Filter size={13} className="text-[#5a6878] shrink-0" />
+            <input
+              type="text"
+              placeholder="Search by run name..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="bg-transparent border-none text-[12px] text-[#e2e8f0] outline-none w-full placeholder:text-[#5a6878]"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="text-[#5a6878] hover:text-[#e2e8f0]">
+                ✕
+              </button>
+            )}
+          </div>
+          <div className="relative">
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="vc-input appearance-none pr-7 min-w-[120px] text-[11px] cursor-pointer"
+            >
+              <option value="all">All Status</option>
+              <option value="completed">Completed</option>
+              <option value="processing">Processing</option>
+              <option value="draft">Draft</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+          <div className="relative">
+            <select
+              value={yearFilter}
+              onChange={e => setYearFilter(e.target.value ? parseInt(e.target.value) : '')}
+              className="vc-input appearance-none pr-7 min-w-[100px] text-[11px] cursor-pointer"
+            >
+              <option value="">All Years</option>
+              {YEARS.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          <div className="relative">
+            <select
+              value={monthFilter}
+              onChange={e => setMonthFilter(e.target.value ? parseInt(e.target.value) : '')}
+              className="vc-input appearance-none pr-7 min-w-[120px] text-[11px] cursor-pointer"
+            >
+              <option value="">All Months</option>
+              {MONTHS.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          {(searchQuery || statusFilter !== 'all' || yearFilter !== '' || monthFilter !== '') && (
+            <button
+              onClick={() => { setSearchQuery(''); setStatusFilter('all'); setYearFilter(''); setMonthFilter(''); }}
+              className="text-[10px] text-[#f5a623] hover:text-[#e8891a] font-semibold uppercase tracking-wider"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 bg-[#161c24] z-10">
@@ -623,9 +711,9 @@ export default function PayrollModule() {
               </tr>
             </thead>
             <tbody>
-              {payrollRuns.length === 0 ? (
-                <tr><td colSpan={7} className="py-8 text-center text-[#5a6878] text-[11px]">No payroll runs found. Click "Generate Payroll" to create one.</td></tr>
-              ) : payrollRuns.map(run => (
+              {filteredRuns.length === 0 ? (
+                <tr><td colSpan={7} className="py-8 text-center text-[#5a6878] text-[11px]">{payrollRuns.length === 0 ? 'No payroll runs found. Click "Generate Payroll" to create one.' : 'No runs match your filters.'}</td></tr>
+              ) : filteredRuns.map(run => (
                 <tr key={run.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors group">
                   <td className="py-[10px] px-3 font-semibold text-[#e2e8f0]">{run.name}</td>
                   <td className="py-[10px] px-3 text-[#8899aa]">{MONTHS[run.month - 1].label} {run.year}</td>

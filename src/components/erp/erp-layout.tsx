@@ -396,11 +396,49 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
     attendance: { admin: 'attendance',      self: 'my-attendance' },
     payroll:    { admin: 'payroll',         self: 'my-payslips' },
     notice:     { admin: 'notice-board',    self: 'my-notices' },
+    onboarding: { admin: 'onboarding-approvals', self: 'onboarding' },
+  };
+
+  const isApprovalRequestNotification = (notif: any) => {
+    if (notif.entityType !== 'request') return false;
+    const text = `${notif.title || ''} ${notif.message || ''}`.toLowerCase();
+    return (
+      text.includes('approval required') ||
+      text.includes('needs your approval') ||
+      text.includes('requires your approval') ||
+      text.includes('new general request') ||
+      text.includes('new advance payment') ||
+      text.includes('no approver found') ||
+      text.includes('escalated')
+    );
+  };
+
+  const resolveNotificationTarget = (notif: any): string | null => {
+    if (notif.link && isModuleAllowed(notif.link, allowedModules)) {
+      return notif.link;
+    }
+
+    const mapping = ENTITY_MODULE_MAP[notif.entityType as string];
+    if (!mapping) return null;
+
+    const shouldPreferAdminModule = userRole === 'admin' || isApprovalRequestNotification(notif);
+    const preferred = shouldPreferAdminModule ? mapping.admin : mapping.self;
+    const fallback = shouldPreferAdminModule ? mapping.self : mapping.admin;
+
+    if (isModuleAllowed(preferred, allowedModules)) return preferred;
+    if (isModuleAllowed(fallback, allowedModules)) return fallback;
+    return null;
   };
 
   const handleNotificationClick = async (notif: any) => {
     // Navigate to the relevant module — do NOT mark as read (user must explicitly click "Mark as Read")
     setShowNotifications(false);
+
+    const targetModule = resolveNotificationTarget(notif);
+    if (targetModule) {
+      setActiveModule(targetModule as any);
+      return;
+    }
 
     const entityType = notif.entityType as string;
     const mapping = ENTITY_MODULE_MAP[entityType];
@@ -483,13 +521,7 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
                   </div>
                 ) : (
                   notifications.map((notif, idx) => {
-                    const mapping = ENTITY_MODULE_MAP[notif.entityType as string];
-                    const isAdmin = userRole === 'admin';
-                    const targetModule = mapping
-                      ? (isAdmin
-                          ? (isModuleAllowed(mapping.admin, allowedModules) ? mapping.admin : isModuleAllowed(mapping.self, allowedModules) ? mapping.self : null)
-                          : (isModuleAllowed(mapping.self, allowedModules) ? mapping.self : isModuleAllowed(mapping.admin, allowedModules) ? mapping.admin : null))
-                      : null;
+                    const targetModule = resolveNotificationTarget(notif);
                     const typeColor: Record<string, string> = {
                       info: '#00d4ff', success: '#00e676', warning: '#f5a623', error: '#ff3d3d',
                     };

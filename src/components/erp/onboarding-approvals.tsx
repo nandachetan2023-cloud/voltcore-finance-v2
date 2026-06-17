@@ -379,7 +379,6 @@ export default function OnboardingApprovals() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleApprove = async (userId: string, name: string) => {
-    if (!confirm(`Approve onboarding for "${name}"? This will copy form data into the employee record.`)) return;
     setProcessing(userId);
     try {
       const res = await fetch('/api/onboarding-approvals', {
@@ -390,7 +389,10 @@ export default function OnboardingApprovals() {
       const data = await res.json();
       if (data.success) {
         toast.success(`✅ ${data.message}`);
-        fetchData();
+        // Update local state so the admin sees the badge change immediately
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, onboardingStatus: 'approved', onboardingApprovedAt: new Date().toISOString() } : u));
+        // After a moment, re-fetch to clean up approved items from the list
+        setTimeout(fetchData, 2000);
       } else toast.error(data.error);
     } finally { setProcessing(null); }
   };
@@ -411,9 +413,12 @@ export default function OnboardingApprovals() {
       const data = await res.json();
       if (data.success) {
         toast.success(data.message);
+        // Update local state so the admin sees the badge change immediately
+        setUsers(prev => prev.map(u => u.id === rejectId ? { ...u, onboardingStatus: 'rejected', onboardingRejectionReason: rejectReason.trim() } : u));
         setRejectId(null);
         setRejectReason('');
-        fetchData();
+        // After a moment, re-fetch
+        setTimeout(fetchData, 2000);
       } else toast.error(data.error);
     } finally { setProcessing(null); }
   };

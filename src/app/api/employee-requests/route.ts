@@ -313,7 +313,7 @@ export async function POST(request: NextRequest) {
           data: { userId: parseInt(employeeId), userEmail: '__admin_broadcast__',
             title: `New ${typeLabel} — Admin Approval Required`,
             message: `${empName} submitted: "${subject}"`,
-            type: 'info', link: '', entityType: 'request', entityId: req.id },
+            type: 'info', link: 'requests', entityType: 'request', entityId: req.id },
         }).catch(() => {})
       } else {
         // Non-level-1 → chain is guaranteed to exist (pre-checked above)
@@ -323,13 +323,13 @@ export async function POST(request: NextRequest) {
         if (approvers.length > 0) {
           await notifyUsers(db, approvers, `New ${typeLabel} — Step 1 Approval`,
             `${empName} submitted: "${subject}"${deptName ? ` (${deptName})` : ''}`,
-            req.id, 'request', '')
+            req.id, 'request', 'requests')
         } else {
           await db.notification.create({
             data: { userId: parseInt(employeeId), userEmail: '__admin_broadcast__',
               title: `New ${typeLabel} — No Approver Found`,
               message: `${empName} submitted: "${subject}". No users found for step-1 approver role.`,
-              type: 'warning', link: '', entityType: 'request', entityId: req.id },
+              type: 'warning', link: 'requests', entityType: 'request', entityId: req.id },
           }).catch(() => {})
         }
       }
@@ -337,7 +337,7 @@ export async function POST(request: NextRequest) {
       await db.notification.create({
         data: { userId: parseInt(employeeId), userEmail: '__admin_broadcast__',
           title: `New ${typeLabel}`, message: `${empName} submitted: "${subject}"`,
-          type: 'info', link: '', entityType: 'request', entityId: req.id },
+          type: 'info', link: 'requests', entityType: 'request', entityId: req.id },
       }).catch(() => {})
     }
 
@@ -453,7 +453,7 @@ export async function PATCH(request: NextRequest) {
           title: 'Request Rejected',
           message: `Your request "${existing.subject}" was rejected.${rejectionNote ? ` Reason: ${rejectionNote}` : ''}`,
           type: 'error',
-          link: '',
+          link: 'my-requests',
           entityType: 'request',
           entityId: existing.id,
         },
@@ -557,7 +557,7 @@ export async function PATCH(request: NextRequest) {
           title: 'Request Approved ✓',
           message: approvalMessage,
           type: 'success',
-          link: '',
+          link: 'my-requests',
           entityType: 'request',
           entityId: existing.id,
         },
@@ -568,10 +568,19 @@ export async function PATCH(request: NextRequest) {
 
     // Intermediate approval — advance to next step
     const nextStep = currentStep + 1
+
+    // Persist approvedAmount if the approver adjusted it, so the next
+    // approver sees the correct amount. Use null explicitly so existing
+    // approvedAmount is cleared if the approver removed it.
+    const approvedAmountValue = approvedAmount !== undefined && approvedAmount !== null && approvedAmount !== ''
+      ? parseFloat(String(approvedAmount))
+      : null;
+
     const updated = await db.employeeRequest.update({
       where: { id: parseInt(id) },
       data: {
         currentStep: nextStep,
+        ...(approvedAmountValue !== null && { approvedAmount: approvedAmountValue }),
         updatedAt: new Date(),
         // Keep status as 'pending' — still needs more approvals
       },
@@ -585,7 +594,7 @@ export async function PATCH(request: NextRequest) {
         title: `Request — Step ${currentStep} Approved`,
         message: `Your request "${existing.subject}" passed step ${currentStep} of ${totalSteps}. Awaiting step ${nextStep} approval.`,
         type: 'info',
-        link: '',
+        link: 'my-requests',
         entityType: 'request',
         entityId: existing.id,
       },
@@ -599,11 +608,15 @@ export async function PATCH(request: NextRequest) {
           tenantId!, nextStepDef.approverRoleId, nextStepDef.scope, deptName
         )
         if (nextApprovers.length > 0) {
+          // Build amount context for advance payment requests
+          const amountMsg = existing.requestType === 'advance_payment' && existing.amount
+            ? ` Amount: ₹${Number(existing.amount).toLocaleString('en-IN')}${approvedAmountValue !== null && approvedAmountValue !== Number(existing.amount) ? ` (adjusted to ₹${approvedAmountValue.toLocaleString('en-IN')} at step ${currentStep})` : ''}.`
+            : '';
           await notifyUsers(
             db, nextApprovers,
             `Request Needs Your Approval — Step ${nextStep}`,
-            `${empName}'s request "${existing.subject}" has been approved at step ${currentStep} and now requires your approval.${deptName ? ` (${deptName})` : ''}`,
-            existing.id, 'request', ''
+            `${empName}'s request "${existing.subject}" has been approved at step ${currentStep} and now requires your approval.${amountMsg}${deptName ? ` (${deptName})` : ''}`,
+            existing.id, 'request', 'requests'
           )
         } else {
           // No users found for next role — fallback to admin broadcast
@@ -614,7 +627,7 @@ export async function PATCH(request: NextRequest) {
               title: `Request Escalated — Step ${nextStep}`,
               message: `${empName}'s request "${existing.subject}" needs step ${nextStep} approval. No users found for the required role.`,
               type: 'warning',
-              link: '',
+              link: 'requests',
               entityType: 'request',
               entityId: existing.id,
             },

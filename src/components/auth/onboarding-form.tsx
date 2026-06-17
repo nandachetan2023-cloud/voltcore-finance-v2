@@ -30,6 +30,7 @@ export default function OnboardingForm({ status, onSubmit, onLogout }: Onboardin
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+  const [adminData, setAdminData] = useState<Record<string, any> | null>(null);
   const [form, setForm] = useState({
     // Personal
     firstName: '', middleName: '', lastName: '',
@@ -69,7 +70,7 @@ export default function OnboardingForm({ status, onSubmit, onLogout }: Onboardin
     declarationAgreed: false,
   });
 
-  // Load existing onboarding data (for rejected resubmissions)
+  // Load existing onboarding data + admin-provided employee data
   useEffect(() => {
     fetch('/api/onboarding-form').then(r => r.json()).then(res => {
       if (res.success && res.data) {
@@ -78,6 +79,17 @@ export default function OnboardingForm({ status, onSubmit, onLogout }: Onboardin
         }
         if (res.data.onboardingData) {
           setForm(prev => ({ ...prev, ...res.data.onboardingData, declarationAgreed: false }));
+        }
+        // Store admin-provided fields — these take priority and cannot be overwritten
+        if (res.data.employeeData) {
+          setAdminData(res.data.employeeData);
+          // Pre-fill form with admin values for overlapping fields so the form always reflects what admin set
+          const emp = res.data.employeeData;
+          setForm(prev => ({
+            ...prev,
+            firstName: emp.firstName || prev.firstName,
+            lastName: emp.lastName || prev.lastName,
+          }));
         }
       }
     }).catch(() => {});
@@ -290,7 +302,7 @@ export default function OnboardingForm({ status, onSubmit, onLogout }: Onboardin
               <span className="text-[10px] text-[#5a6878] ml-auto">Step {step + 1} of {STEPS.length}</span>
             </div>
 
-            {step === 0 && <PersonalStep form={form} update={updateForm} />}
+            {step === 0 && <PersonalStep form={form} update={updateForm} adminData={adminData} />}
             {step === 1 && <AddressStep form={form} update={updateForm} />}
             {step === 2 && <FamilyStep form={form} update={updateForm} />}
             {step === 3 && <EmploymentStep form={form} update={updateForm} />}
@@ -335,17 +347,30 @@ function Field({ label, children, required, span2 }: { label: string; children: 
   );
 }
 
-function PersonalStep({ form, update }: { form: any; update: (f: string, v: any) => void }) {
+function PersonalStep({ form, update, adminData }: { form: any; update: (f: string, v: any) => void; adminData?: Record<string, any> | null }) {
+  const isAdminField = (field: string) => adminData && adminData[field] && adminData[field] !== ''
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <Field label="First Name" required>
-        <input className={inp} value={form.firstName} onChange={e => update('firstName', e.target.value)} placeholder="First name" />
+        <input className={inp} value={form.firstName}
+          onChange={e => { if (!isAdminField('firstName')) update('firstName', e.target.value) }}
+          placeholder="First name"
+          disabled={isAdminField('firstName')} />
+        {isAdminField('firstName') && <p className="text-[9px] text-[#f5a623] mt-0.5">Set by admin — cannot be changed</p>}
       </Field>
       <Field label="Middle Name">
-        <input className={inp} value={form.middleName} onChange={e => update('middleName', e.target.value)} placeholder="Middle name (optional)" />
+        <input className={inp} value={form.middleName}
+          onChange={e => { if (!isAdminField('middleName')) update('middleName', e.target.value) }}
+          placeholder="Middle name (optional)"
+          disabled={isAdminField('middleName')} />
+        {isAdminField('middleName') && <p className="text-[9px] text-[#f5a623] mt-0.5">Set by admin — cannot be changed</p>}
       </Field>
       <Field label="Last Name" required>
-        <input className={inp} value={form.lastName} onChange={e => update('lastName', e.target.value)} placeholder="Last name" />
+        <input className={inp} value={form.lastName}
+          onChange={e => { if (!isAdminField('lastName')) update('lastName', e.target.value) }}
+          placeholder="Last name"
+          disabled={isAdminField('lastName')} />
+        {isAdminField('lastName') && <p className="text-[9px] text-[#f5a623] mt-0.5">Set by admin — cannot be changed</p>}
       </Field>
       <Field label="Date of Birth" required>
         <input className={inp} type="date" value={form.dateOfBirth} onChange={e => update('dateOfBirth', e.target.value)} />

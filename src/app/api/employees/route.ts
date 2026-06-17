@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (include === 'attendance') {
-      selectBase.attendanceLogs = {
+      selectBase.AttendanceLog = {
         select: {
           id: true,
           logDate: true,
@@ -132,8 +132,9 @@ export async function GET(request: NextRequest) {
 // POST: Create employee
 export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
+  let body: any = {}
   try {
-    const body = await request.json()
+    body = await request.json()
     const {
       employeeCode,
       firstName,

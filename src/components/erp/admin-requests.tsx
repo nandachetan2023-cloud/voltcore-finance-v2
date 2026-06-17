@@ -263,9 +263,11 @@ export default function AdminRequests() {
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button onClick={() => {
                           setActionTarget({ request: r, action: 'approve' });
-                          // Pre-fill approved amount with requested amount for advance payments
-                          if (r.requestType === 'advance_payment' && r.amount) {
-                            setApprovedAmount(String(Number(r.amount)));
+                          // Pre-fill approved amount: use previously adjusted amount if set,
+                          // otherwise fall back to the original requested amount
+                          if (r.requestType === 'advance_payment') {
+                            const prefill = r.approvedAmount ?? r.amount;
+                            setApprovedAmount(prefill ? String(Number(prefill)) : '');
                           } else {
                             setApprovedAmount('');
                           }

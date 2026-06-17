@@ -220,7 +220,7 @@ export async function GET(request: NextRequest) {
         '', // AB: ATTENDANCE (USER INPUT)
         '', // AC: PH (USER INPUT)
         '', // AD-AN: CALCULATED
-        '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+        '', '', '', '', '', '', '', '', '', '', '', '',
         '',      // col 45: TOTAL NON COMPLIANCE AMOUNT (CALCULATED)
         advance, // col 46: ADVANCE (EDITABLE AUTO-FILL)
         '',      // col 47: ARREARS (USER INPUT)
