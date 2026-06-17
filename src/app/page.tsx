@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import ERPLayout from '@/components/erp/erp-layout';
 import Login from '@/components/auth/login';
@@ -148,7 +148,7 @@ export default function ERPPage() {
 
   return (
     <>
-      <ERPLayout onLogout={handleLogout} />
+      <Suspense fallback={null}><ERPLayout onLogout={handleLogout} /></Suspense>
 
       {/* ── Idle session warning overlay ── */}
       {showWarning && (
