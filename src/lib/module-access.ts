@@ -17,7 +17,7 @@
 // Canonical module tree: group key → its sub-module keys.
 // Keep in sync with MODULE_TREE in src/store/erp-store.ts and FULL_MODULE_TREE in module-select.tsx.
 export const MODULE_GROUPS: Record<string, string[]> = {
-  organization: ['departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents', 'roles-access'],
+  organization: ['departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-document-upload', 'employee-documents', 'roles-access'],
   hrms: ['employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
   procurement: ['purchases', 'expenses'],
   finance: ['finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
