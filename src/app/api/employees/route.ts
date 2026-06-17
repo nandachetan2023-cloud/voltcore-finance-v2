@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
     const employees = await db.employee.findMany({
       where,
       select: selectBase,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { employeeCode: 'asc' },
       take: limit,
       skip: offset,
     })

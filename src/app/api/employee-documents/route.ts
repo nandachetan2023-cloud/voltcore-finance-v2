@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         Designation: { select: { name: true } },
         employmentStatus: true,
       },
-      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+      orderBy: { employeeCode: 'asc' },
     })
 
     // Fetch onboarding tasks that have documents
