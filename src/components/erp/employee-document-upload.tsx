@@ -16,6 +16,7 @@ interface Employee {
 
 interface DocEntry {
   id: number; type: string; title: string; fileName: string | null; downloadUrl: string | null;
+  employeeVerifiedAt?: string | null; employeeRemark?: string | null;
 }
 
 const inpCls = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]/60 transition-colors placeholder:text-[#5a6878]';
@@ -214,12 +215,18 @@ export default function EmployeeDocumentUpload() {
                 {existingDocs.map(doc => (
                   <div key={doc.id} className="flex items-center justify-between bg-[#0d1117] border border-[#2e3a48] rounded-lg px-4 py-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-[#f5a623]/10 flex items-center justify-center shrink-0">
-                        <CheckCircle2 size={16} className="text-[#00e676]" />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${doc.employeeVerifiedAt ? 'bg-[#00e676]/15' : doc.employeeRemark ? 'bg-[#ff3d3d]/15' : 'bg-[#f5a623]/10'}`}>
+                        <CheckCircle2 size={16} className={doc.employeeVerifiedAt ? 'text-[#00e676]' : doc.employeeRemark ? 'text-[#ff3d3d]' : 'text-[#5a6878]'} />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[12px] font-semibold text-[#e2e8f0]">{doc.title}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[12px] font-semibold text-[#e2e8f0]">{doc.title}</p>
+                          <span className={`text-[8px] px-1.5 py-[1px] rounded font-semibold ${doc.employeeVerifiedAt ? 'bg-[#00e676]/15 text-[#00e676]' : doc.employeeRemark ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : 'bg-[#5a6878]/15 text-[#5a6878]'}`}>
+                            {doc.employeeVerifiedAt ? 'Verified' : doc.employeeRemark ? 'Issue' : 'Pending'}
+                          </span>
+                        </div>
                         {doc.fileName && <p className="text-[10px] text-[#5a6878] truncate">{doc.fileName}</p>}
+                        {doc.employeeRemark && <p className="text-[9px] text-[#ff3d3d] mt-0.5">Remark: {doc.employeeRemark}</p>}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

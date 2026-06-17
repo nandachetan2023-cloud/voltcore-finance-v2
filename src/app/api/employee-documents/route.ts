@@ -43,6 +43,8 @@ export async function GET(request: NextRequest) {
         documentPath: true,
         documentMimeType: true,
         completedAt: true,
+        employeeVerifiedAt: true,
+        employeeRemark: true,
         checklist: {
           select: {
             employeeId: true,
@@ -88,6 +90,8 @@ export async function GET(request: NextRequest) {
         fileName: doc.documentPath,
         mimeType: doc.documentMimeType,
         uploadedAt: doc.completedAt,
+        employeeVerifiedAt: doc.employeeVerifiedAt,
+        employeeRemark: doc.employeeRemark,
         downloadUrl: `/api/onboarding/document?taskId=${doc.id}`,
       })
     }

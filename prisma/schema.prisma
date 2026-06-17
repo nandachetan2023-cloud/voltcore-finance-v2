@@ -900,6 +900,8 @@ model OnboardingTask {
   completedBy      Int?
   completedAt      DateTime?
   notes            String?
+  employeeVerifiedAt DateTime?
+  employeeRemark    String?
   documentPath     String?                // filename for display
   documentData     Bytes?                 // file content stored in DB (Option 1)
   documentMimeType String?                // e.g. "application/pdf", "image/jpeg"

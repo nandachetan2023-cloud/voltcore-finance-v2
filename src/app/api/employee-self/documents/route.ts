@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
       where: { checklist: { employeeId }, documentPath: { not: null } },
       select: {
         id: true, documentPath: true, documentMimeType: true, completedAt: true,
+        employeeVerifiedAt: true, employeeRemark: true,
         templateTask: { select: { title: true, description: true } },
       },
     })
@@ -42,6 +43,8 @@ export async function GET(request: NextRequest) {
         fileName: d.documentPath,
         mimeType: d.documentMimeType,
         uploadedAt: d.completedAt,
+        employeeVerifiedAt: d.employeeVerifiedAt,
+        employeeRemark: d.employeeRemark,
         downloadUrl: `/api/onboarding/document?taskId=${d.id}`,
       })),
       ...certs.map((c: any) => ({

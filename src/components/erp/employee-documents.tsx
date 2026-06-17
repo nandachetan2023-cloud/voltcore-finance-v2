@@ -210,8 +210,8 @@ export default function EmployeeDocuments() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-[12px] font-semibold text-[#e2e8f0]">{doc.title}</span>
-                              <span className={`text-[9px] px-1.5 py-[1px] rounded font-semibold ${doc.type === 'certificate' ? 'bg-[#f5a623]/10 text-[#f5a623]' : 'bg-[#00e676]/10 text-[#00e676]'}`}>
-                                {doc.type === 'certificate' ? 'Certificate' : 'Onboarding'}
+                              <span className={`text-[9px] px-1.5 py-[1px] rounded font-semibold ${doc.type === 'certificate' ? 'bg-[#f5a623]/10 text-[#f5a623]' : doc.employeeVerifiedAt ? 'bg-[#00e676]/15 text-[#00e676]' : doc.employeeRemark ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : 'bg-[#00e676]/10 text-[#00e676]'}`}>
+                                {doc.type === 'certificate' ? 'Certificate' : doc.employeeVerifiedAt ? 'Confirmed' : doc.employeeRemark ? 'Issue Reported' : 'Onboarding'}
                               </span>
                               {doc.status && (
                                 <span className="text-[9px] px-1.5 py-[1px] rounded font-semibold" style={{ background: `${STATUS_COLORS[doc.status] || '#5a6878'}15`, color: STATUS_COLORS[doc.status] || '#5a6878' }}>
@@ -224,6 +224,16 @@ export default function EmployeeDocuments() {
                               {doc.uploadedAt && (
                                 <span className="text-[9px] text-[#3a4a5a]">
                                   {doc.type === 'certificate' ? 'Issued' : 'Uploaded'}: {new Date(doc.uploadedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                </span>
+                              )}
+                              {doc.employeeVerifiedAt && (
+                                <span className="text-[9px] text-[#00e676]">
+                                  Confirmed: {new Date(doc.employeeVerifiedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                </span>
+                              )}
+                              {doc.employeeRemark && (
+                                <span className="text-[9px] text-[#ff3d3d]" title={doc.employeeRemark}>
+                                  Remark: {doc.employeeRemark.length > 40 ? doc.employeeRemark.slice(0, 40) + '…' : doc.employeeRemark}
                                 </span>
                               )}
                               {doc.expiryDate && (
