@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import ERPLayout from '@/components/erp/erp-layout';
 import Login from '@/components/auth/login';
@@ -17,28 +17,50 @@ export default function ERPPage() {
   const { setUserRole, setAllowedModules } = useERPStore();
   const router = useRouter();
 
-  useEffect(() => {
-    const authUser = localStorage.getItem('erp_auth_user');
-    if (authUser) {
-      try {
-        const user = JSON.parse(authUser);
-        // Only redirect to superadmin if we're NOT already coming from there
-        // (i.e. don't redirect if the user explicitly navigated to /)
-        if (user.role === 'superadmin') {
-          // Don't auto-redirect — just show the ERP login
-          // Superadmin must log in separately via /superadmin
-          localStorage.removeItem('erp_auth_user');
-          setIsLoading(false);
-          return;
-        }
-        setUserRole(user.role);
-        setAllowedModules(user.allowedModules || 'all');
-        setOnboardingStatus(user.onboardingStatus || 'none');
-        setIsAuthenticated(true);
-      } catch {}
+  const validateSession = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/session', { cache: 'no-store' });
+      if (!res.ok) {
+        // Session cookies are gone — clear stale localStorage
+        localStorage.removeItem('erp_auth_user');
+        localStorage.removeItem('erp_employee_id');
+        return false;
+      }
+      return true;
+    } catch {
+      localStorage.removeItem('erp_auth_user');
+      localStorage.removeItem('erp_employee_id');
+      return false;
     }
-    setIsLoading(false);
-  }, [setUserRole, setAllowedModules, router]);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const authUser = localStorage.getItem('erp_auth_user');
+      if (authUser) {
+        try {
+          const user = JSON.parse(authUser);
+          if (user.role === 'superadmin') {
+            localStorage.removeItem('erp_auth_user');
+            setIsLoading(false);
+            return;
+          }
+
+          const sessionValid = await validateSession();
+          if (!sessionValid) {
+            setIsLoading(false);
+            return;
+          }
+
+          setUserRole(user.role);
+          setAllowedModules(user.allowedModules || 'all');
+          setOnboardingStatus(user.onboardingStatus || 'none');
+          setIsAuthenticated(true);
+        } catch {}
+      }
+      setIsLoading(false);
+    })();
+  }, [setUserRole, setAllowedModules, router, validateSession]);
 
   const handleLogin = async (email: string, password: string): Promise<boolean> => {
     try {

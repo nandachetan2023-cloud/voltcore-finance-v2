@@ -5,7 +5,6 @@ import React, { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useTenantBranding } from '@/hooks/use-tenant-branding';
-import SessionTimer from '@/components/session-timer';
 import {
   Building2, Users, ShoppingCart, CreditCard, FolderKanban, Package, Wrench,
   TrendingUp, Briefcase, Settings, MessageSquare, BookOpen, Zap,
@@ -611,7 +610,6 @@ export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
 
   return (
     <div className="flex h-screen overflow-hidden relative z-[1]">
-      <SessionTimer onLogout={onLogout} />
       <Sidebar onLogout={onLogout} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Topbar onLogout={onLogout} />
