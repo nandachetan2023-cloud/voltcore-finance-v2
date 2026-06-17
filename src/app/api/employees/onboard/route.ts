@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
         allowedModules: role.moduleAccess,
         orgRoleId,
         employeeId: employee.id,
+        employeeCode: employee.employeeCode,
         createdBySuperadmin: false,
         onboardingStatus: 'pending',
       } as any,

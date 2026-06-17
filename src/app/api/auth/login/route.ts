@@ -6,11 +6,11 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, password } = body
+    const { employeeCode, password } = body
 
-    if (!email || !password) {
+    if (!employeeCode || !password) {
       return NextResponse.json(
-        { success: false, error: 'Email and password are required' },
+        { success: false, error: 'User ID and password are required' },
         { status: 400 }
       )
     }
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { user, error } = await authenticateUser(email, password)
+    const { user, error } = await authenticateUser(employeeCode, password)
 
     if (!user) {
       return NextResponse.json(
@@ -35,39 +35,29 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({ success: true, user })
 
-    // Session cookies — no maxAge means they expire when browser is closed.
-    // Client-side inactivity timer handles the 30-minute auto-logout.
     const cookieOpts = {
       httpOnly: true,
       sameSite: 'lax' as const,
       path: '/',
-      // No maxAge → session cookie → cleared on browser close
     }
 
-    // Role cookie (superadmin | admin | demo)
     response.cookies.set('erp_user_role', user.role, cookieOpts)
 
-    // Tenant DB URL cookie (empty for superadmin)
     if (user.dbUrl) {
       response.cookies.set('erp_tenant_db', encodeURIComponent(user.dbUrl), cookieOpts)
     } else {
       response.cookies.delete('erp_tenant_db')
     }
 
-    // Tenant ID cookie (for biometric and other superadmin-DB lookups)
     if (user.tenantId) {
       response.cookies.set('erp_tenant_id', user.tenantId, cookieOpts)
     } else {
       response.cookies.delete('erp_tenant_id')
     }
 
-    // Allowed modules cookie (for frontend store)
     response.cookies.set('erp_allowed_modules', user.allowedModules, cookieOpts)
-
-    // User email cookie (for notification lookup)
     response.cookies.set('erp_user_email', user.email, cookieOpts)
 
-    // Employee ID cookie (for self-service modules)
     if (user.employeeId) {
       response.cookies.set('erp_employee_id', String(user.employeeId), cookieOpts)
     } else {
@@ -77,15 +67,14 @@ export async function POST(request: NextRequest) {
     return response
   } catch (error: any) {
     console.error('Login error:', error)
-    
-    // Return specific error messages for common issues
+
     if (error.code === 'P2021') {
       return NextResponse.json(
         { success: false, error: 'Database not configured. Please run database migrations.' },
         { status: 500 }
       )
     }
-    
+
     return NextResponse.json(
       { success: false, error: 'Login failed. Please try again.' },
       { status: 500 }

@@ -188,6 +188,7 @@ export async function POST(request: NextRequest) {
           onboardingApprovedAt: new Date(),
           onboardingRejectionReason: null,
           phone: formData.phone || (user as any).phone || '',
+          employeeCode: currentEmployee?.employeeCode || null,
         } as any,
       })
 

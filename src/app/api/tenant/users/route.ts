@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
         allowedModules,
         orgRoleId: orgRoleId || null,
         employeeId: body.employeeId ? parseInt(body.employeeId) : null,
+        employeeCode: body.employeeCode || null,
         createdBySuperadmin: false,
         onboardingStatus: body.requireOnboarding ? 'pending' : 'none',
       } as any,

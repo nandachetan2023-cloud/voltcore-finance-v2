@@ -128,7 +128,8 @@ export default function UserManagement() {
     if (!form.orgRoleId) { toast.error('A role must be assigned'); return; }
     setSaving(true);
     try {
-      const payload = editId ? { id: editId, ...form } : form;
+      const selectedEmp = employees.find(e => String(e.id) === form.employeeId);
+      const payload = { ...(editId ? { id: editId, ...form } : form), employeeCode: selectedEmp?.employeeCode || '' };
       const res = await fetch('/api/tenant/users', {
         method: editId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
