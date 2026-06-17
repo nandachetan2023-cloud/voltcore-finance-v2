@@ -524,10 +524,6 @@ export default function EmployeesModule() {
         { field: 'empId', value: form.empId, label: 'Employee ID' },
         { field: 'firstName', value: form.firstName, label: 'First Name' },
         { field: 'dateOfBirth', value: form.dateOfBirth, label: 'Date of Birth' },
-        { field: 'currentAddress', value: form.currentAddress, label: 'Current Address' },
-        { field: 'currentCity', value: form.currentCity, label: 'Current City' },
-        { field: 'currentState', value: form.currentState, label: 'Current State' },
-        { field: 'currentPincode', value: form.currentPincode, label: 'Current Pincode' },
         { field: 'departmentId', value: form.departmentId, label: 'Department' },
         { field: 'designationId', value: form.designationId, label: 'Designation' },
         { field: 'branchId', value: form.branchId, label: 'Branch' },
@@ -540,7 +536,6 @@ export default function EmployeesModule() {
         const tabFieldMap: Record<string, string[]> = {
           identity: ['empId', 'firstName', 'email', 'phone'],
           personal: ['dateOfBirth'],
-          address: ['currentAddress', 'currentCity', 'currentState', 'currentPincode'],
           org: ['departmentId', 'designationId', 'branchId'],
           employment: ['dateOfJoining'],
         };
@@ -794,10 +789,10 @@ export default function EmployeesModule() {
 
         {/* ── Address ── */}
         {formTab === 'address' && <>
-          <F label="Current Address" req span2><input className={`${inp} ${fieldBorderError(fieldErrors.currentAddress)}`} value={form.currentAddress} onChange={e => { setForm(f => ({ ...f, currentAddress: e.target.value })); setFieldErrors(fe => ({ ...fe, currentAddress: '' })); }} placeholder="House No, Street, Area" /><FieldError message={fieldErrors.currentAddress} /></F>
-          <F label="Current City" req><input className={`${inp} ${fieldBorderError(fieldErrors.currentCity)}`} value={form.currentCity} onChange={e => { setForm(f => ({ ...f, currentCity: e.target.value })); setFieldErrors(fe => ({ ...fe, currentCity: '' })); }} placeholder="Mumbai" /><FieldError message={fieldErrors.currentCity} /></F>
-          <F label="Current State" req><select className={`${sel} ${fieldBorderError(fieldErrors.currentState)}`} value={form.currentState} onChange={e => { setForm(f => ({ ...f, currentState: e.target.value })); setFieldErrors(fe => ({ ...fe, currentState: '' })); }}><option value="">Select state...</option>{INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}</select><FieldError message={fieldErrors.currentState} /></F>
-          <F label="Current Pincode" req><input className={`${inp} ${fieldBorderError(fieldErrors.currentPincode)}`} value={form.currentPincode} onChange={e => { setForm(f => ({ ...f, currentPincode: e.target.value })); setFieldErrors(fe => ({ ...fe, currentPincode: '' })); }} placeholder="400001" maxLength={6} /><FieldError message={fieldErrors.currentPincode} /></F>
+          <F label="Current Address" span2><input className={`${inp} ${fieldBorderError(fieldErrors.currentAddress)}`} value={form.currentAddress} onChange={e => { setForm(f => ({ ...f, currentAddress: e.target.value })); setFieldErrors(fe => ({ ...fe, currentAddress: '' })); }} placeholder="House No, Street, Area" /><FieldError message={fieldErrors.currentAddress} /></F>
+          <F label="Current City"><input className={`${inp} ${fieldBorderError(fieldErrors.currentCity)}`} value={form.currentCity} onChange={e => { setForm(f => ({ ...f, currentCity: e.target.value })); setFieldErrors(fe => ({ ...fe, currentCity: '' })); }} placeholder="Mumbai" /><FieldError message={fieldErrors.currentCity} /></F>
+          <F label="Current State"><select className={`${sel} ${fieldBorderError(fieldErrors.currentState)}`} value={form.currentState} onChange={e => { setForm(f => ({ ...f, currentState: e.target.value })); setFieldErrors(fe => ({ ...fe, currentState: '' })); }}><option value="">Select state...</option>{INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}</select><FieldError message={fieldErrors.currentState} /></F>
+          <F label="Current Pincode"><input className={`${inp} ${fieldBorderError(fieldErrors.currentPincode)}`} value={form.currentPincode} onChange={e => { setForm(f => ({ ...f, currentPincode: e.target.value })); setFieldErrors(fe => ({ ...fe, currentPincode: '' })); }} placeholder="400001" maxLength={6} /><FieldError message={fieldErrors.currentPincode} /></F>
           <div className="col-span-2 border-t border-[#252e3a] pt-2 mt-1">
             <p className="text-[10px] text-[#5a6878] mb-2">Permanent Address (if different)</p>
           </div>

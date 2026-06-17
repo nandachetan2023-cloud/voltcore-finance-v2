@@ -382,8 +382,8 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
       const headers = [
         'Employee ID*',
         'Token Number', 'Workmen Sl. No.',
-        'First Name*', 'Middle Name', 'Last Name*',
-        'Work Email', 'Personal Email', 'Phone*', 'Alternate Phone',
+        'First Name*', 'Middle Name', 'Last Name',
+'Work Email', 'Personal Email', 'Phone', 'Alternate Phone',
         'Date of Birth* (YYYY-MM-DD)', 'Gender* (male/female/other)',
         'Marital Status (single/married/divorced/widowed)', 'Blood Group (A+/A-/B+/B-/AB+/AB-/O+/O-)',
         "Father's Name",

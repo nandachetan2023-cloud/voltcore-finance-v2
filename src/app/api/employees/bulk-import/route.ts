@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
 // Helper to normalize row data from different template formats
 function normalizeRow(row: EmployeeRow) {
   // Detect which format is being used
-  const isNewFormat = 'Employee ID*' in row || 'First Name*' in row
+  const isNewFormat = 'Employee ID*' in row || 'First Name*' in row || 'Last Name' in row
   
   if (isNewFormat) {
     // New format - direct mapping
@@ -211,10 +211,10 @@ function normalizeRow(row: EmployeeRow) {
       workmenSlNo: row['Workmen Sl. No.'],
       firstName: row['First Name*'],
       middleName: row['Middle Name'],
-      lastName: row['Last Name*'],
+      lastName: row['Last Name'] || row['Last Name*'],
       email: row['Work Email'],
       personalEmail: row['Personal Email'],
-      phone: row['Phone*'],
+      phone: row['Phone'] || row['Phone*'],
       alternatePhone: row['Alternate Phone'],
       dateOfBirth: row['Date of Birth* (YYYY-MM-DD)'],
       gender: row['Gender* (male/female/other)'],
@@ -409,8 +409,6 @@ async function validateAndImport(
       rowErrors.push('Employee ID must be UA + 4 digits (e.g. UA0001, UA0023) or just the number (auto-formatted)')
     }
     if (!data.firstName) rowErrors.push('First Name is required')
-    if (!data.lastName) rowErrors.push('Last Name is required')
-    if (!data.phone) rowErrors.push('Phone is required')
     if (!data.dateOfBirth) rowErrors.push('Date of Birth is required')
     if (!data.dateOfJoining) rowErrors.push('Date of Joining is required')
     if (!data.department) rowErrors.push('Department is required')
@@ -500,7 +498,7 @@ async function validateAndImport(
       workmenSlNo: data.workmenSlNo || null,
       firstName: data.firstName!,
       middleName: data.middleName || null,
-      lastName: data.lastName!,
+      lastName: data.lastName || '',
       email: data.email || `${normalizedEmployeeId}@temp.local`, // Use normalized ID for temp email
       personalEmail: data.personalEmail || null,
       phone: data.phone ? String(data.phone) : '',
