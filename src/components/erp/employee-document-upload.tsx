@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Upload, Search, Trash2, FileText, CheckCircle2, AlertTriangle, HardHat } from 'lucide-react';
+import { Upload, Search, Trash2, FileText, CheckCircle2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DOC_TYPES = [
@@ -19,14 +19,15 @@ interface DocEntry {
 }
 
 const inpCls = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]/60 transition-colors placeholder:text-[#5a6878]';
-const selCls = inpCls + ' appearance-none cursor-pointer';
 const lblCls = 'block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5';
 
 export default function EmployeeDocumentUpload() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [empSearch, setEmpSearch] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
   const [selectedEmpId, setSelectedEmpId] = useState<string>('');
+  const [selectedEmpLabel, setSelectedEmpLabel] = useState('');
   const [docType, setDocType] = useState(DOC_TYPES[0]);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -53,10 +54,30 @@ export default function EmployeeDocumentUpload() {
 
   useEffect(() => { fetchDocs(selectedEmpId); }, [selectedEmpId, fetchDocs]);
 
+  const clearSelection = () => {
+    setSelectedEmpId('');
+    setSelectedEmpLabel('');
+    setEmpSearch('');
+    setShowDropdown(false);
+  };
+
+  const selectEmployee = (emp: Employee) => {
+    setSelectedEmpId(String(emp.id));
+    setSelectedEmpLabel(`${emp.employeeCode} — ${emp.firstName} ${emp.lastName}${emp.Department ? ` (${emp.Department.name})` : ''}`);
+    setEmpSearch('');
+    setShowDropdown(false);
+  };
+
   const filtered = employees.filter(e => {
-    const q = search.toLowerCase();
-    return !q || `${e.firstName} ${e.lastName} ${e.employeeCode}`.toLowerCase().includes(q);
+    const q = empSearch.toLowerCase();
+    return !q ||
+      e.firstName.toLowerCase().includes(q) ||
+      e.lastName.toLowerCase().includes(q) ||
+      e.employeeCode.toLowerCase().includes(q) ||
+      (e.Department?.name || '').toLowerCase().includes(q);
   });
+
+  const selectedEmployee = selectedEmpId ? employees.find(e => String(e.id) === selectedEmpId) : null;
 
   const handleUpload = async () => {
     if (!selectedEmpId || !file) { toast.error('Select an employee and a file'); return; }
@@ -113,26 +134,50 @@ export default function EmployeeDocumentUpload() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className={lblCls}>Search Employee</label>
+                <label className={lblCls}>Search & Select Employee *</label>
                 <div className="relative">
-                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#5a6878]" />
-                  <input className={inpCls + ' pl-7'} value={search} onChange={e => setSearch(e.target.value)} placeholder="Name or code..." />
+                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#5a6878] pointer-events-none" />
+                  <input
+                    className={inpCls + ' pl-7' + (selectedEmployee ? ' pr-8' : '')}
+                    value={selectedEmployee ? selectedEmpLabel : empSearch}
+                    onChange={e => {
+                      if (selectedEmployee) clearSelection();
+                      setEmpSearch(e.target.value);
+                      setShowDropdown(true);
+                    }}
+                    onFocus={() => { if (!selectedEmployee) setShowDropdown(true); }}
+                    placeholder="Search by name, code or department..."
+                  />
+                  {selectedEmployee && (
+                    <button type="button" onClick={clearSelection}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#5a6878] hover:text-[#ff3d3d] transition-colors">
+                      <X size={13} />
+                    </button>
+                  )}
+                  {showDropdown && !selectedEmployee && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#0d1117] border border-[#2e3a48] rounded-lg shadow-2xl max-h-[220px] overflow-y-auto">
+                      {filtered.length === 0 ? (
+                        <div className="px-3 py-4 text-[11px] text-[#5a6878] text-center">No employees found</div>
+                      ) : (
+                        filtered.map(emp => (
+                          <button key={emp.id} type="button" onClick={() => selectEmployee(emp)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-[#161c24] transition-colors border-b border-[#1e252e] last:border-0">
+                            <div className="text-[11px] font-semibold text-[#e2e8f0]">{emp.firstName} {emp.lastName}</div>
+                            <div className="text-[10px] text-[#5a6878] flex items-center gap-2 mt-0.5">
+                              <span>{emp.employeeCode}</span>
+                              {emp.Department?.name && <><span>·</span><span>{emp.Department.name}</span></>}
+                              {emp.Designation?.name && <><span>·</span><span>{emp.Designation.name}</span></>}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <div>
-                <label className={lblCls}>Employee *</label>
-                <select className={selCls} value={selectedEmpId} onChange={e => setSelectedEmpId(e.target.value)}>
-                  <option value="">Select employee...</option>
-                  {filtered.map(e => (
-                    <option key={e.id} value={e.id}>
-                      {e.employeeCode} — {e.firstName} {e.lastName} {e.Department ? `(${e.Department.name})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
                 <label className={lblCls}>Document Type *</label>
-                <select className={selCls} value={docType} onChange={e => setDocType(e.target.value)}>
+                <select className={inpCls + ' appearance-none cursor-pointer'} value={docType} onChange={e => setDocType(e.target.value)}>
                   {DOC_TYPES.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
@@ -141,14 +186,14 @@ export default function EmployeeDocumentUpload() {
                 <input className={inpCls + ' file:border-0 file:bg-[#1e2630] file:text-[#e2e8f0] file:rounded file:px-2 file:py-0.5 file:mr-2 file:text-[11px]'} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
                   onChange={e => setFile(e.target.files?.[0] || null)} />
               </div>
+              <div className="flex items-end">
+                <button onClick={handleUpload} disabled={uploading || !selectedEmpId || !file}
+                  className="w-full flex items-center justify-center gap-1.5 px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50 transition-colors">
+                  <Upload size={14} /> {uploading ? 'Uploading...' : 'Upload Document'}
+                </button>
+              </div>
             </div>
           )}
-          <div className="flex justify-end mt-4">
-            <button onClick={handleUpload} disabled={uploading || !selectedEmpId || !file}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50 transition-colors">
-              <Upload size={14} /> {uploading ? 'Uploading...' : 'Upload Document'}
-            </button>
-          </div>
         </div>
       </div>
 
