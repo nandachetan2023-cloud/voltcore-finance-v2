@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
           select: {
             employeeId: true,
             Employee: { select: { employeeCode: true } },
+            template: { select: { name: true } },
           },
         },
         templateTask: { select: { title: true, description: true } },
@@ -85,6 +86,7 @@ export async function GET(request: NextRequest) {
       onboardingByEmpId[empId].push({
         id: doc.id,
         type: 'onboarding',
+        source: doc.checklist?.template?.name === 'Employee Documents' ? 'admin' : 'onboarding',
         title: doc.templateTask?.title || 'Onboarding Document',
         description: doc.templateTask?.description || null,
         fileName: doc.documentPath,

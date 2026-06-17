@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
         id: true, documentPath: true, documentMimeType: true, completedAt: true,
         employeeVerifiedAt: true, employeeRemark: true,
         templateTask: { select: { title: true, description: true } },
+        checklist: { select: { template: { select: { name: true } } } },
       },
     })
 
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
       ...onboardingDocs.map(d => ({
         id: d.id,
         type: 'onboarding' as const,
+        source: d.checklist?.template?.name === 'Employee Documents' ? 'admin' : 'onboarding',
         title: d.templateTask?.title || 'Onboarding Document',
         description: d.templateTask?.description || null,
         fileName: d.documentPath,

@@ -105,9 +105,10 @@ export default function MyDocuments() {
       <div className="space-y-2">
         {filtered.map(doc => {
           const isOnboarding = doc.type === 'onboarding';
-          const canVerify = isOnboarding && !doc.employeeVerifiedAt && !doc.employeeRemark;
-          const isVerified = isOnboarding && doc.employeeVerifiedAt;
-          const isDisputed = isOnboarding && doc.employeeRemark;
+          const isAdminDoc = isOnboarding && doc.source === 'admin';
+          const canVerify = isAdminDoc && !doc.employeeVerifiedAt && !doc.employeeRemark;
+          const isVerified = isAdminDoc && doc.employeeVerifiedAt;
+          const isDisputed = isAdminDoc && doc.employeeRemark;
 
           return (
             <div key={`${doc.type}-${doc.id}`} className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-start gap-3 hover:bg-[#1a2028] transition-colors">
@@ -117,8 +118,8 @@ export default function MyDocuments() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-0.5">
                   <span className="text-[13px] font-semibold text-[#e2e8f0]">{doc.title}</span>
-                  <span className={`text-[9px] font-bold px-1.5 py-[1px] rounded ${doc.type === 'certificate' ? 'bg-[#f5a623]/15 text-[#f5a623]' : isVerified ? 'bg-[#00e676]/15 text-[#00e676]' : isDisputed ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : 'bg-[#00e676]/15 text-[#00e676]'}`}>
-                    {doc.type === 'certificate' ? 'Certificate' : isVerified ? 'Confirmed' : isDisputed ? 'Issue Reported' : 'Onboarding'}
+                  <span className={`text-[9px] font-bold px-1.5 py-[1px] rounded ${doc.type === 'certificate' ? 'bg-[#f5a623]/15 text-[#f5a623]' : isVerified ? 'bg-[#00e676]/15 text-[#00e676]' : isDisputed ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : isAdminDoc ? 'bg-[#00d4ff]/15 text-[#00d4ff]' : 'bg-[#00e676]/15 text-[#00e676]'}`}>
+                    {doc.type === 'certificate' ? 'Certificate' : isVerified ? 'Confirmed' : isDisputed ? 'Issue Reported' : isAdminDoc ? 'Admin Upload' : 'Onboarding'}
                   </span>
                   {doc.status && (
                     <span className="text-[9px] font-bold px-1.5 py-[1px] rounded" style={{ background: `${STATUS_COLORS[doc.status] || '#5a6878'}15`, color: STATUS_COLORS[doc.status] || '#5a6878' }}>
