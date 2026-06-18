@@ -32,7 +32,11 @@ DELETE FROM "TourRequest";
 DELETE FROM "EmployeeRequest";
 DELETE FROM "OnboardingChecklist";
 
--- Employees themselves
+-- Employees themselves (this also removes the Employee->User link via userId)
 DELETE FROM "Employee";
+
+-- User accounts and their workflow audit trail
+DELETE FROM "WorkflowAction";
+DELETE FROM "User";
 
 COMMIT;
