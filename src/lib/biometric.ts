@@ -4,6 +4,7 @@ import { superadminDb } from './superadmin-db'
 import { PrismaClient } from '@prisma/client'
 import { classifyAttendance } from './services/attendance-rule-service'
 import { getActiveShiftAssignment } from './services/attendance-rule-service'
+import { decrypt } from './crypto'
 
 type DbClient = PrismaClient
 
@@ -69,7 +70,7 @@ export async function loadBiometricSitesFromDb(dbClient?: DbClient, tenantId?: s
             baseUrl: c.baseUrl,
             corporateId: c.corporateId,
             username: c.username,
-            password: c.password,
+            password: decrypt(c.password),
             siteId: c.siteId,
             siteName: c.siteName,
           },

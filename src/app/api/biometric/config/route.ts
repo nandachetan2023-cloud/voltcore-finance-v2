@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { encrypt } from '@/lib/crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
         baseUrl: baseUrl || 'https://api.etimeoffice.com/api',
         corporateId,
         username,
-        password,
+        password: encrypt(password),
         isActive: true,
         updatedAt: new Date(),
       },
@@ -84,7 +85,7 @@ export async function PUT(request: NextRequest) {
     const updateData: any = { ...rest, updatedAt: new Date() }
     // Only update password if explicitly provided
     if (password && password.trim() !== '') {
-      updateData.password = password
+      updateData.password = encrypt(password)
     }
 
     const config = await db.biometricSiteConfig.update({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { superadminDb } from '@/lib/superadmin-db'
 import { PrismaClient } from '@prisma/client'
+import { encrypt } from '@/lib/crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
       data: {
         tenantId, siteId, siteName,
         baseUrl: baseUrl || 'https://api.etimeoffice.com/api',
-        corporateId, username, password,
+        corporateId, username, password: encrypt(password),
         isActive: true,
       },
     })
@@ -60,7 +61,7 @@ export async function PUT(request: NextRequest) {
     if (!existing) return NextResponse.json({ success: false, error: 'Config not found' }, { status: 404 })
 
     const data: any = { ...rest }
-    if (password && password.trim()) data.password = password
+    if (password && password.trim()) data.password = encrypt(password)
 
     const newSiteId: string | undefined = typeof rest.siteId === 'string' ? rest.siteId.trim() : undefined
     const siteIdChanged = !!newSiteId && newSiteId !== existing.siteId

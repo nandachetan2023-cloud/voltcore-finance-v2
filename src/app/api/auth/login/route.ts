@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateUser } from '@/lib/auth'
+import { checkRateLimit, recordAttempt } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,14 +25,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Rate limiting: 5 failed attempts → 30 minute lockout
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown'
+    const rateCheck = checkRateLimit(ip, employeeCode)
+    if (!rateCheck.allowed) {
+      const minutesLeft = Math.ceil((rateCheck.lockedUntil! - Date.now()) / 60000)
+      return NextResponse.json(
+        { success: false, error: `Too many attempts. Try again in ${minutesLeft} minute${minutesLeft !== 1 ? 's' : ''}.` },
+        { status: 429 }
+      )
+    }
+
     const { user, error } = await authenticateUser(employeeCode, password)
 
     if (!user) {
+      recordAttempt(ip, employeeCode, false)
       return NextResponse.json(
         { success: false, error: error || 'Invalid credentials' },
         { status: 401 }
       )
     }
+
+    recordAttempt(ip, employeeCode, true)
 
     const response = NextResponse.json({ success: true, user })
 
