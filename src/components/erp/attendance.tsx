@@ -10,8 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
-import { calculateAttendanceStatus, getDisplayStatus, isFutureDate, isToday } from '@/lib/attendance-utils';
 import { downloadExcel } from './report-utils';
+import { calculateAttendanceStatus, getDisplayStatus, isFutureDate, isToday } from '@/lib/attendance-utils';
 
 interface EmployeeInfo { id: string; empId: string; name: string; shiftId?: number; }
 
@@ -229,6 +229,8 @@ function EmployeeSearchSelect({
   )
 }
 
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
 export default function AttendanceModule() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -258,6 +260,7 @@ export default function AttendanceModule() {
   });
   const [downloadEmpTo, setDownloadEmpTo] = useState(() => new Date().toISOString().split('T')[0]);
   const [downloadEmpMonth, setDownloadEmpMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [downloadByEmpLoading, setDownloadByEmpLoading] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -654,6 +657,23 @@ export default function AttendanceModule() {
     finally { setSubmitting(false); }
   };
 
+  const buildExportRows = (data: any[], isEmployeeExport: boolean) => {
+    return data.map((r: any) => {
+      const emp = r.Employee || r.employee || {}
+      const punchIn = r.punchIn ? new Date(r.punchIn).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '—'
+      const punchOut = r.punchOut ? new Date(r.punchOut).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '—'
+      const date = new Date(r.logDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      const status = r.status ? r.status.charAt(0).toUpperCase() + r.status.slice(1) : 'Present'
+      if (isEmployeeExport) {
+        return [date, punchIn, punchOut, r.lateMinutes ?? 0, r.fineAmount ?? 0, status]
+      }
+      const empCode = emp.employeeCode || r.employeeId?.toString() || ''
+      const empName = emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : 'Unknown'
+      const site = r.siteName || r.biometricDeviceId || 'N/A'
+      return [date, empCode, empName, site, punchIn, punchOut, r.lateMinutes ?? 0, r.fineAmount ?? 0, status]
+    })
+  }
+
   const handleExport = async (mode: 'current' | 'date' | 'range' | 'month') => {
     try {
       let apiUrl = '/api/attendance?limit=50000'
@@ -676,29 +696,21 @@ export default function AttendanceModule() {
         return
       }
 
-      const rows = json.data.map((r: any) => {
-        const punchIn = r.punchIn ? new Date(r.punchIn).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '—'
-        const punchOut = r.punchOut ? new Date(r.punchOut).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '—'
-        const date = new Date(r.logDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-        const empCode = r.Employee?.employeeCode || r.employeeId?.toString() || ''
-        const empName = r.Employee ? `${r.Employee.firstName} ${r.Employee.lastName}` : 'Unknown'
-        const status = r.status ? r.status.charAt(0).toUpperCase() + r.status.slice(1) : 'Present'
-        const site = r.siteName || r.biometricDeviceId || 'N/A'
-        return [date, empCode, empName, site, punchIn, punchOut, r.lateMinutes ?? 0, r.fineAmount ?? 0, status]
-      })
-
+      const rows = buildExportRows(json.data, false)
       const label = mode === 'current'
         ? `${filterMode === 'month' ? monthFilter : filterMode === 'range' ? `${fromDate}_to_${toDate}` : dateFilter}`
         : `${mode === 'month' ? monthFilter : mode === 'range' ? `${fromDate}_to_${toDate}` : dateFilter}`
 
       downloadExcel(rows, ['Date', 'Emp Code', 'Employee', 'Site', 'Time In', 'Time Out', 'Late (min)', 'Fine (₹)', 'Status'], `Attendance_${label}.xlsx`)
-    } catch {
+    } catch (e) {
+      console.error('Export failed:', e)
       toast.error('Failed to export attendance')
     }
   }
 
   const handleDownloadByEmployee = async () => {
     if (!downloadEmpId) { toast.error('Please select an employee'); return }
+    setDownloadByEmpLoading(true)
     try {
       let apiUrl = `/api/attendance?limit=50000&employeeId=${downloadEmpId}`
       if (downloadEmpFilterMode === 'month') apiUrl += `&month=${downloadEmpMonth}`
@@ -714,20 +726,16 @@ export default function AttendanceModule() {
 
       const emp = employeeList.find(e => e.id === downloadEmpId)
       const empLabel = emp ? `${emp.empId}_${emp.name.replace(/\s+/g, '_')}` : downloadEmpId
-
-      const rows = json.data.map((r: any) => {
-        const punchIn = r.punchIn ? new Date(r.punchIn).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '—'
-        const punchOut = r.punchOut ? new Date(r.punchOut).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '—'
-        const date = new Date(r.logDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-        const status = r.status ? r.status.charAt(0).toUpperCase() + r.status.slice(1) : 'Present'
-        return [date, punchIn, punchOut, r.lateMinutes ?? 0, r.fineAmount ?? 0, status]
-      })
-
+      const rows = buildExportRows(json.data, true)
       const label = downloadEmpFilterMode === 'month' ? downloadEmpMonth : downloadEmpFilterMode === 'range' ? `${downloadEmpFrom}_to_${downloadEmpTo}` : downloadEmpDate
+
       downloadExcel(rows, ['Date', 'Time In', 'Time Out', 'Late (min)', 'Fine (₹)', 'Status'], `Attendance_${empLabel}_${label}.xlsx`)
       setDownloadByEmpOpen(false)
-    } catch {
+    } catch (e) {
+      console.error('Employee export failed:', e)
       toast.error('Failed to export attendance')
+    } finally {
+      setDownloadByEmpLoading(false)
     }
   }
 
@@ -935,13 +943,26 @@ export default function AttendanceModule() {
             {/* Date inputs */}
             {filterMode === 'month' ? (
               <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-1">
+                <span className="text-[10px] text-[#5a6878]">Year:</span>
+                <select
+                  value={monthFilter.slice(0, 4)}
+                  onChange={e => setMonthFilter(`${e.target.value}-${monthFilter.slice(5)}`)}
+                  className="bg-transparent border border-[#2e3a48] text-[#e2e8f0] outline-none text-[11px] w-[80px] rounded px-1 py-0.5 appearance-none"
+                >
+                  {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
                 <span className="text-[10px] text-[#5a6878]">Month:</span>
-                <input
-                  type="month"
-                  value={monthFilter}
-                  onChange={e => setMonthFilter(e.target.value)}
-                  className="bg-transparent border-none text-[#e2e8f0] outline-none text-[11px] w-[130px]"
-                />
+                <select
+                  value={monthFilter.slice(5)}
+                  onChange={e => setMonthFilter(`${monthFilter.slice(0, 5)}${e.target.value}`)}
+                  className="bg-transparent border border-[#2e3a48] text-[#e2e8f0] outline-none text-[11px] w-[110px] rounded px-1 py-0.5 appearance-none"
+                >
+                  {MONTHS.map((m, i) => (
+                    <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>
+                  ))}
+                </select>
               </div>
             ) : filterMode === 'range' ? (
               <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-1">
@@ -1260,7 +1281,26 @@ export default function AttendanceModule() {
             {downloadEmpFilterMode === 'month' ? (
               <div>
                 <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">Month</label>
-                <input type="month" className={inputCls} value={downloadEmpMonth} onChange={e => setDownloadEmpMonth(e.target.value)} />
+                <div className="flex gap-2">
+                  <select
+                    value={downloadEmpMonth.slice(0, 4)}
+                    onChange={e => setDownloadEmpMonth(`${e.target.value}-${downloadEmpMonth.slice(5)}`)}
+                    className={inputCls + ' w-[90px] appearance-none'}
+                  >
+                    {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={downloadEmpMonth.slice(5)}
+                    onChange={e => setDownloadEmpMonth(`${downloadEmpMonth.slice(0, 5)}${e.target.value}`)}
+                    className={inputCls + ' w-[120px] appearance-none'}
+                  >
+                    {MONTHS.map((m, i) => (
+                      <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             ) : downloadEmpFilterMode === 'range' ? (
               <div className="flex gap-3">
@@ -1282,8 +1322,8 @@ export default function AttendanceModule() {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setDownloadByEmpOpen(false)}>Cancel</Button>
-            <Button className="bg-[#00e676] text-black hover:bg-[#00c864] font-semibold flex items-center gap-1.5" onClick={handleDownloadByEmployee}>
-              <Download size={13} /> Download
+            <Button disabled={downloadByEmpLoading} className="bg-[#00e676] text-black hover:bg-[#00c864] font-semibold flex items-center gap-1.5 disabled:opacity-50" onClick={handleDownloadByEmployee}>
+              {downloadByEmpLoading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} Download
             </Button>
           </DialogFooter>
         </DialogContent>
