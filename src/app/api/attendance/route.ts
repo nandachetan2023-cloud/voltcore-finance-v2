@@ -13,6 +13,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '100')
     const offset = parseInt(searchParams.get('offset') || '0')
     const date = searchParams.get('date')
+    const fromDate = searchParams.get('fromDate')
+    const toDate = searchParams.get('toDate')
     const employeeId = searchParams.get('employeeId')
 
     // Build where clause
@@ -26,10 +28,24 @@ export async function GET(request: NextRequest) {
         gte: targetDate,
         lt: nextDate,
       }
+    } else if (fromDate) {
+      const gte = new Date(fromDate)
+      gte.setHours(0, 0, 0, 0)
+      if (toDate) {
+        const lte = new Date(toDate)
+        lte.setHours(23, 59, 59, 999)
+        where.logDate = { gte, lte }
+      } else {
+        where.logDate = { gte }
+      }
     }
     if (employeeId) {
       where.employeeId = parseInt(employeeId)
     }
+
+    // When date filters are provided, use a larger limit so older records aren't
+    // silently dropped from the response.
+    const effectiveLimit = (date || fromDate) ? 50000 : limit
 
     // Fetch attendance with optimized query
     const [attendance, total] = await Promise.all([
@@ -55,7 +71,7 @@ export async function GET(request: NextRequest) {
           },
         },
         orderBy: { logDate: 'desc' },
-        take: limit,
+        take: effectiveLimit,
         skip: offset,
       }),
       db.attendanceLog.count({ where }),

@@ -260,7 +260,15 @@ export default function AttendanceModule() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/attendance');
+      // Build API URL with date filters so the server returns only relevant records
+      let apiUrl = '/api/attendance?limit=50000'
+      if (dateRangeMode) {
+        apiUrl += `&fromDate=${fromDate}`
+        if (toDate) apiUrl += `&toDate=${toDate}`
+      } else if (dateFilter) {
+        apiUrl += `&date=${dateFilter}`
+      }
+      const res = await fetch(apiUrl);
       if (!res.ok) throw new Error('Failed to fetch attendance');
       const json = await res.json();
       if (json.success) {
@@ -298,7 +306,7 @@ export default function AttendanceModule() {
       else throw new Error(json.error || 'Unknown error');
     } catch (err) { setError(err instanceof Error ? err.message : 'Something went wrong'); }
     finally { setLoading(false); }
-  }, []);
+  }, [dateFilter, dateRangeMode, fromDate, toDate]);
 
   const fetchEmployees = useCallback(async () => {
     try {
