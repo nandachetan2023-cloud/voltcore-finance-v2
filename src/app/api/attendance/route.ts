@@ -15,11 +15,17 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get('date')
     const fromDate = searchParams.get('fromDate')
     const toDate = searchParams.get('toDate')
+    const month = searchParams.get('month')
     const employeeId = searchParams.get('employeeId')
 
     // Build where clause
     const where: any = {}
-    if (date) {
+    if (month) {
+      const [year, mon] = month.split('-').map(Number)
+      const gte = new Date(year, mon - 1, 1)
+      const lte = new Date(year, mon, 0, 23, 59, 59, 999)
+      where.logDate = { gte, lte }
+    } else if (date) {
       const targetDate = new Date(date)
       targetDate.setHours(0, 0, 0, 0)
       const nextDate = new Date(targetDate)
@@ -45,7 +51,7 @@ export async function GET(request: NextRequest) {
 
     // When date filters are provided, use a larger limit so older records aren't
     // silently dropped from the response.
-    const effectiveLimit = (date || fromDate) ? 50000 : limit
+    const effectiveLimit = (date || fromDate || month) ? 50000 : limit
 
     // Fetch attendance with optimized query
     const [attendance, total] = await Promise.all([

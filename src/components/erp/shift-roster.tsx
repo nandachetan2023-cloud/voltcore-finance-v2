@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Clock, Calendar, Plus, Pencil, Trash2, AlertTriangle, Loader2,
-  Sun, Moon, Coffee, Users, ArrowRightLeft, RefreshCw
+  Sun, Moon, Coffee, Users, ArrowRightLeft, RefreshCw, Search, X
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -133,6 +133,7 @@ export default function ShiftRosterModule() {
   const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState(new Date().toISOString().split('T')[0]);
   const [shiftFieldErrors, setShiftFieldErrors] = useState<FieldErrors>({});
   const [bulkFieldErrors, setBulkFieldErrors] = useState<FieldErrors>({});
+  const [employeeSearch, setEmployeeSearch] = useState('');
 
   const { triggerCreate } = useERPStore();
 
@@ -939,9 +940,26 @@ export default function ShiftRosterModule() {
                   </button>
                 </div>
               </div>
+              <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-lg px-3 py-[6px] mb-2">
+                <Search size={13} className="text-[#5a6878] shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search employees by name or code…"
+                  value={employeeSearch}
+                  onChange={e => setEmployeeSearch(e.target.value)}
+                  className="bg-transparent border-none text-[#e2e8f0] outline-none text-[12px] w-full placeholder:text-[#5a6878]"
+                />
+                {employeeSearch && <button onClick={() => setEmployeeSearch('')} className="text-[#5a6878] hover:text-[#e2e8f0]"><X size={12} /></button>}
+              </div>
               <div className="bg-[#0f1318] border border-[#2e3a48] rounded-lg p-3 max-h-[300px] overflow-y-auto">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {employees.map(emp => {
+                  {employees
+                    .filter(emp =>
+                      !employeeSearch.trim() ||
+                      emp.name.toLowerCase().includes(employeeSearch.toLowerCase()) ||
+                      emp.employeeCode.toLowerCase().includes(employeeSearch.toLowerCase())
+                    )
+                    .map(emp => {
                     const current = currentAssignmentMap.get(emp.id);
                     const isSelected = selectedEmployees.includes(emp.id);
                     const willGetAdditional = isSelected && current && bulkShiftIds.length > 0 && !bulkShiftIds.every(id => employeeShiftIds.get(emp.id)?.has(id));
@@ -989,9 +1007,16 @@ export default function ShiftRosterModule() {
                     );
                   })}
                 </div>
-                {employees.length === 0 && (
+                {employees.length === 0 ? (
                   <div className="text-center py-4 text-[#5a6878] text-[11px]">
                     No active employees found. Please add employees first.
+                  </div>
+                ) : employeeSearch && employees.filter(emp =>
+                    emp.name.toLowerCase().includes(employeeSearch.toLowerCase()) ||
+                    emp.employeeCode.toLowerCase().includes(employeeSearch.toLowerCase())
+                  ).length === 0 && (
+                  <div className="text-center py-4 text-[#5a6878] text-[11px]">
+                    No employees match "{employeeSearch}"
                   </div>
                 )}
               </div>
