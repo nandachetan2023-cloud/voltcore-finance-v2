@@ -130,7 +130,24 @@ export default function PayrollModule() {
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [calculating, setCalculating] = useState(false);
   const templateFileInputRef = useRef<HTMLInputElement>(null);
-  
+
+  // Restore previously uploaded template file after page refresh
+  useEffect(() => {
+    const saved = localStorage.getItem('payroll_nc_template');
+    if (saved) {
+      try {
+        const { name, type, data } = JSON.parse(saved);
+        const byteString = atob(data.split(',')[1]);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        setTemplateFile(new File([new Blob([ab], { type })], name, { type }));
+      } catch {
+        localStorage.removeItem('payroll_nc_template');
+      }
+    }
+  }, []);
+
   const [generateForm, setGenerateForm] = useState({
     mode: 'bulk' as 'single' | 'bulk',
     month: new Date().getMonth() + 1,
@@ -520,6 +537,13 @@ export default function PayrollModule() {
     const file = e.target.files?.[0];
     if (file) {
       setTemplateFile(file);
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          localStorage.setItem('payroll_nc_template', JSON.stringify({ name: file.name, type: file.type, data: reader.result }));
+        } catch { /* storage full — ignore */ }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -576,6 +600,7 @@ export default function PayrollModule() {
 
         setUploadCalculateOpen(false);
         setTemplateFile(null);
+        localStorage.removeItem('payroll_nc_template');
         if (templateFileInputRef.current) {
           templateFileInputRef.current.value = '';
         }
@@ -1028,6 +1053,7 @@ export default function PayrollModule() {
               onClick={() => {
                 setUploadCalculateOpen(false);
                 setTemplateFile(null);
+                localStorage.removeItem('payroll_nc_template');
                 if (templateFileInputRef.current) {
                   templateFileInputRef.current.value = '';
                 }

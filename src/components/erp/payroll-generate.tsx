@@ -73,6 +73,28 @@ export default function PayrollGenerateModule() {
   const complianceFileInputRef = React.useRef<HTMLInputElement>(null);
   const [complianceFiltersLocked, setComplianceFiltersLocked] = useState(false);
 
+  // Restore previously uploaded template files after page refresh
+  useEffect(() => {
+    for (const [key, setter] of [
+      ['payroll_gen_nc_template', setTemplateFile],
+      ['payroll_gen_c_template', setComplianceTemplateFile],
+    ] as const) {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        try {
+          const { name, type, data } = JSON.parse(saved);
+          const byteString = atob(data.split(',')[1]);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+          setter(new File([new Blob([ab], { type })], name, { type }));
+        } catch {
+          localStorage.removeItem(key);
+        }
+      }
+    }
+  }, []);
+
   const [filters, setFilters] = useState({
     format: 'non-compliance' as 'compliance' | 'non-compliance',
     month: new Date().getMonth() + 1,
@@ -181,6 +203,8 @@ export default function PayrollGenerateModule() {
     setComplianceFiltersLocked(false);
     setTemplateFile(null);
     setComplianceTemplateFile(null);
+    localStorage.removeItem('payroll_gen_nc_template');
+    localStorage.removeItem('payroll_gen_c_template');
     if (templateFileInputRef.current) templateFileInputRef.current.value = '';
     if (complianceFileInputRef.current) complianceFileInputRef.current.value = '';
   };
@@ -245,7 +269,16 @@ export default function PayrollGenerateModule() {
 
   const handleTemplateFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setTemplateFile(file);
+    if (file) {
+      setTemplateFile(file);
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          localStorage.setItem('payroll_gen_nc_template', JSON.stringify({ name: file.name, type: file.type, data: reader.result }));
+        } catch { /* storage full — ignore */ }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Compliance 2-Step Handlers
@@ -294,7 +327,16 @@ export default function PayrollGenerateModule() {
 
   const handleComplianceFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setComplianceTemplateFile(file);
+    if (file) {
+      setComplianceTemplateFile(file);
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          localStorage.setItem('payroll_gen_c_template', JSON.stringify({ name: file.name, type: file.type, data: reader.result }));
+        } catch { /* storage full — ignore */ }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleComplianceUploadAndCalculate = async () => {
@@ -348,6 +390,7 @@ export default function PayrollGenerateModule() {
 
         setComplianceUploadOpen(false);
         setComplianceTemplateFile(null);
+        localStorage.removeItem('payroll_gen_c_template');
         if (complianceFileInputRef.current) complianceFileInputRef.current.value = '';
         setComplianceFiltersLocked(false);
       } else {
@@ -435,6 +478,7 @@ export default function PayrollGenerateModule() {
 
         setUploadCalculateOpen(false);
         setTemplateFile(null);
+        localStorage.removeItem('payroll_gen_nc_template');
         if (templateFileInputRef.current) {
           templateFileInputRef.current.value = '';
         }
@@ -859,6 +903,7 @@ export default function PayrollGenerateModule() {
               onClick={() => {
                 setUploadCalculateOpen(false);
                 setTemplateFile(null);
+                localStorage.removeItem('payroll_gen_nc_template');
                 if (templateFileInputRef.current) {
                   templateFileInputRef.current.value = '';
                 }
@@ -866,7 +911,7 @@ export default function PayrollGenerateModule() {
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" 
               disabled={!templateFile || calculating}
               onClick={handleUploadAndCalculate}
@@ -937,6 +982,7 @@ export default function PayrollGenerateModule() {
               onClick={() => {
                 setComplianceUploadOpen(false);
                 setComplianceTemplateFile(null);
+                localStorage.removeItem('payroll_gen_c_template');
                 if (complianceFileInputRef.current) complianceFileInputRef.current.value = '';
               }}
             >
