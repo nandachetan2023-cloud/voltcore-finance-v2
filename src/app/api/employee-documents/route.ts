@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         Designation: { select: { name: true } },
         employmentStatus: true,
       },
-      orderBy: { employeeCode: 'asc' },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
     })
 
     // Fetch onboarding tasks that have documents
@@ -43,13 +43,10 @@ export async function GET(request: NextRequest) {
         documentPath: true,
         documentMimeType: true,
         completedAt: true,
-        employeeVerifiedAt: true,
-        employeeRemark: true,
         checklist: {
           select: {
             employeeId: true,
             Employee: { select: { employeeCode: true } },
-            template: { select: { name: true } },
           },
         },
         templateTask: { select: { title: true, description: true } },
@@ -86,14 +83,11 @@ export async function GET(request: NextRequest) {
       onboardingByEmpId[empId].push({
         id: doc.id,
         type: 'onboarding',
-        source: doc.checklist?.template?.name === 'Employee Documents' ? 'admin' : 'onboarding',
         title: doc.templateTask?.title || 'Onboarding Document',
         description: doc.templateTask?.description || null,
         fileName: doc.documentPath,
         mimeType: doc.documentMimeType,
         uploadedAt: doc.completedAt,
-        employeeVerifiedAt: doc.employeeVerifiedAt,
-        employeeRemark: doc.employeeRemark,
         downloadUrl: `/api/onboarding/document?taskId=${doc.id}`,
       })
     }

@@ -66,15 +66,14 @@ export function isToday(dateStr: string): boolean {
 }
 
 /**
- * Calculate attendance status based on shift timing and punch data.
- * Respects the stored status when no punch data contradicts it.
+ * Calculate attendance status based on shift timing and punch data
  */
 export function calculateAttendanceStatus(record: AttendanceRecord): {
   status: string;
   reason: string;
   shouldShow: boolean;
 } {
-  const { date, punchIn, punchOut, shiftTiming, status: storedStatus } = record;
+  const { date, punchIn, punchOut, shiftTiming } = record;
   
   // Rule 1: Future dates should not show any status
   if (isFutureDate(date)) {
@@ -85,7 +84,7 @@ export function calculateAttendanceStatus(record: AttendanceRecord): {
     };
   }
 
-  // If employee punched in, calculate from punch data
+  // If employee punched in, they are at least present (or late)
   if (punchIn) {
     // If no shift timing, just mark as present
     if (!shiftTiming) {
@@ -117,15 +116,6 @@ export function calculateAttendanceStatus(record: AttendanceRecord): {
         shouldShow: true,
       };
     }
-  }
-
-  // No punch in — respect manually-set stored status if present
-  if (storedStatus && storedStatus !== 'present' && storedStatus !== 'pending') {
-    return {
-      status: storedStatus,
-      reason: `Manual status: ${storedStatus}`,
-      shouldShow: true,
-    };
   }
 
   // No punch in - check if we should mark absent

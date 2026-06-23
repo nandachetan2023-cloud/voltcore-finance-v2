@@ -80,17 +80,22 @@ export async function POST(request: NextRequest) {
         const S = getNum(20); // col 20: LEAVE DAYS
 
         // Validate required user inputs
-        if (!Y || !Z || !AB) {
-          errors.push(`Row ${rowNumber}: Missing required inputs (BASIC WAGES/DAY, MONTHLY WORKING DAYS, or ATTENDANCE)`);
+        // Use getVal(...) === null to distinguish "cell is blank" from "cell contains 0"
+        // (0 is a valid value for ATTENDANCE — an absent-all-month employee)
+        const missingFields: string[] = [];
+        if (!Y) missingFields.push('BASIC WAGES/DAY');
+        if (!Z) missingFields.push('MONTHLY WORKING DAYS');
+        if (getVal(29) === null) missingFields.push('ATTENDANCE');
+        if (missingFields.length > 0) {
+          errors.push(`Row ${rowNumber}: Missing required field(s): ${missingFields.join(', ')}`);
           return;
         }
 
         // ===== CALCULATIONS =====
 
         // Detailed Earnings (U, W, X)
-        const actualWorkingDays = (Z + (T || 0)) > 0 ? (Z + (T || 0)) : 26;
-        const U = Math.round(Q / actualWorkingDays * (R + (T || 0))); // ACTUAL EARN WAGES
-        const W = Math.round((Q / actualWorkingDays / 8) * (V || 0)); // ACTUAL OT AMOUNT (excludes leave days)
+        const U = Math.round(Q / 24 * (R + T)); // ACTUAL EARN WAGES
+        const W = Math.round((Q / Z / 8) * (V + (S * 8))); // ACTUAL OT AMOUNT
         const X = U + W; // GROSS EARN WAGES
 
         // Payroll Calculation (AD-AN)
@@ -111,7 +116,7 @@ export async function POST(request: NextRequest) {
         const AN = AI - AM; // NETT PAYBLE
 
         // Non-Compliance (AR, AU, AV)
-        const AR = Math.max(0, X - AI); // TOTAL NON COMPLIANCE AMOUNT
+        const AR = X - AM - AN; // TOTAL NON COMPLIANCE AMOUNT
         const AU = AR - AS + AT; // NETT PAYBLE NON COMPLIANCE
         const AV = AN + AU; // GRAND TOTAL NETT PAYBLE SALARY
 
@@ -189,34 +194,46 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    if (errors.length > 0) {
+    if (calculatedData.length === 0 && errors.length === 0) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Validation errors found', 
-          details: errors 
+        { success: false, error: 'No employee rows found in the template. Make sure the sheet has data rows below the header.' },
+        { status: 400 }
+      );
+    }
+
+    if (calculatedData.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `All ${errors.length} row(s) failed validation — no rows could be calculated.`,
+          details: errors
         },
         { status: 400 }
       );
     }
 
-    // Generate final Excel
+    // Generate final Excel (includes successfully calculated rows; failed rows are left blank)
     const finalBuffer = await workbook.xlsx.writeBuffer();
 
     const timestamp = Date.now();
     const filename = `Payroll_Calculated_${timestamp}.xlsx`;
 
-    return new NextResponse(finalBuffer, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'X-Calculated-Rows': calculatedData.length.toString(),
-      },
-    });
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'X-Calculated-Rows': calculatedData.length.toString(),
+    };
+    if (errors.length > 0) {
+      headers['X-Calculation-Errors'] = errors.length.toString();
+      headers['X-Calculation-Error-Details'] = JSON.stringify(errors.slice(0, 20));
+    }
+
+    return new NextResponse(finalBuffer, { headers });
   } catch (error) {
     console.error('Error calculating payroll:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, error: 'Failed to calculate payroll from template' },
+      { success: false, error: `Failed to calculate payroll: ${message}` },
       { status: 500 }
     );
   }

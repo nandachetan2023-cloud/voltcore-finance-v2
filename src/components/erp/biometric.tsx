@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { RefreshCw, CheckCircle2, XCircle, Clock, Database, Fingerprint, AlertCircle, Building2, Search, X, RotateCcw } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, Clock, Database, Fingerprint, AlertCircle, Building2, Search, X } from 'lucide-react';
 
 interface BiometricSite {
   id: string;
@@ -53,7 +53,6 @@ export default function BiometricPage() {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [forceProcessing, setForceProcessing] = useState(false);
   const [logFilter, setLogFilter] = useState<'all' | 'pending' | 'matched' | 'unmatched'>('all');
   const [logSearch, setLogSearch] = useState('');
   const [logDate, setLogDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -189,46 +188,6 @@ export default function BiometricPage() {
     }
   };
 
-  const handleForceRematch = async () => {
-    const confirmed = window.confirm('Force re-process ALL biometric logs? This will re-evaluate every processed log (including already-matched ones) and recreate attendance records for any that now have a valid shift assignment. Continue?');
-    if (!confirmed) return;
-    setForceProcessing(true);
-    try {
-      const body: any = { rematch: true, force: true };
-      if (selectedSite !== 'all') body.siteId = selectedSite;
-      const res = await fetch('/api/biometric/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (data.success) {
-        const processed = data.data.processedCount || 0;
-        const reset = data.data.resetCount || 0;
-        const skipped = data.data.skippedRecords || [];
-        if (processed > 0) {
-          toast.success(`Force re-processed ${processed} record(s) (reset ${reset}).`);
-        }
-        if (skipped.length > 0) {
-          setSkippedRecords(skipped);
-          toast.warning(`${skipped.length} record(s) still could not be matched — see details.`);
-        } else if (processed === 0) {
-          toast.info('All logs were already processed. No attendance needed updates.');
-        } else {
-          setSkippedRecords([]);
-        }
-        fetchSyncStatus();
-        fetchRawLogs();
-      } else {
-        toast.error(data.error || 'Force re-match failed');
-      }
-    } catch {
-      toast.error('Force re-match failed.');
-    } finally {
-      setForceProcessing(false);
-    }
-  };
-
   const fmt = (d: string) => new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   const fmtTime = (d: string) => new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -344,15 +303,6 @@ export default function BiometricPage() {
           >
             <Database size={14} className={processing ? 'animate-spin' : ''} />
             {processing ? 'Re-matching...' : 'Re-match Unmatched'}
-          </button>
-          <button
-            onClick={handleForceRematch}
-            disabled={forceProcessing}
-            title="Force re-process ALL logs (including already-matched ones). Use this after fixing shift assignments or if attendance records were deleted."
-            className="flex items-center gap-2 px-4 py-2 bg-[#ff3d3d]/10 border border-[#ff3d3d]/30 text-[#ff6b6b] text-[12px] font-semibold rounded-lg hover:bg-[#ff3d3d]/20 disabled:opacity-50 transition-colors"
-          >
-            <RotateCcw size={14} className={forceProcessing ? 'animate-spin' : ''} />
-            {forceProcessing ? 'Force Re-processing...' : 'Force Re-process'}
           </button>
         </div>
       </div>

@@ -98,24 +98,30 @@ export async function POST(request: NextRequest) {
       const fullName = `${employee.firstName} ${employee.middleName || ''} ${employee.lastName}`.trim().toUpperCase();
       
       const basicSalary = Number(item.basicSalary) || 0;
-      const dearnessAllowance = Number(item.dearnessAllowance) || 0;
       const hra = Number(item.hra) || 0;
+      const conveyance = Number(item.conveyanceAllowance) || 0;
+      const medical = Number(item.medicalAllowance) || 0;
+      const special = Number(item.specialAllowance) || 0;
       const otAmount = Number(item.otAmount) || 0;
       const otHours = Number(item.otHours) || 0;
       const presentDays = Number(item.presentDays) || 0;
       const workingDays = Number(item.workingDays) || 26;
       
+      const grossEarnings = Number(item.grossEarning);
       const pfDeduction = Number(item.pfDeduction) || 0;
       const esiDeduction = Number(item.esiDeduction) || 0;
       const ptDeduction = Number(item.ptDeduction) || 0;
       const totalDeduction = Number(item.totalDeduction);
       const netPay = Number(item.netPay);
       
-      // Daily rate = earned basic / days worked (basicSalary is stored as earned basic)
-      const dailyRate = presentDays > 0 ? basicSalary / presentDays : 0;
+      // Calculate daily rate
+      const dailyRate = basicSalary / workingDays;
       
-      // Other cash payment (use specialAllowance as other cash)
-      const otherCashPayment = Number(item.specialAllowance) || 0;
+      // Dearness allowance (HRA + other allowances)
+      const dearnessAllowance = hra + conveyance + medical + special;
+      
+      // Other cash payment (if any)
+      const otherCashPayment = 0;
       
       // Total wages for ESI deduction
       const totalWagesForESI = basicSalary + dearnessAllowance + otAmount + otherCashPayment;

@@ -5,21 +5,17 @@ import { getDbForRequest } from '@/lib/db'
 export const dynamic = 'force-dynamic'
 
 // POST: Process raw logs to attendance.
-// Body: { rematch?: boolean, siteId?: string, force?: boolean }
+// Body: { rematch?: boolean, siteId?: string }
 //  - rematch=false (default): process only NEW (unprocessed) logs
 //  - rematch=true: also re-evaluate previously skipped/unmatched logs
 //    (used after assigning a shift or creating the employee — respects the
 //    shift's effective date for each historical punch).
-//  - force=true (with rematch=true): ALSO resets already-matched logs so ALL
-//    processed raw logs are reprocessed (use when attendance records were
-//    deleted but raw logs are still marked matched=true).
 export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
   const tenantId = request.cookies.get('erp_tenant_id')?.value
   try {
     const body = await request.json().catch(() => ({}))
     const rematch: boolean = !!body.rematch
-    const force: boolean = !!body.force
     const siteId: string | undefined = body.siteId
 
     // Determine which sites to run against.
@@ -42,7 +38,7 @@ export async function POST(request: NextRequest) {
     for (const sid of siteIds) {
       const biometricService = await createBiometricServiceFromDb(sid, db, tenantId)
       if (rematch) {
-        const r = await biometricService.rematchUnmatched(force)
+        const r = await biometricService.rematchUnmatched()
         totalReset += r.reset
         totalProcessed += r.processedCount
         processedEmployees.push(...r.processedEmployees)
@@ -57,10 +53,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: force ? 'Force re-match completed — all processed logs were re-evaluated' : (rematch ? 'Re-match completed' : 'Raw logs processed successfully'),
+      message: rematch ? 'Re-match completed' : 'Raw logs processed successfully',
       data: {
         rematch,
-        force,
         resetCount: totalReset,
         processedCount: totalProcessed,
         processedEmployees,

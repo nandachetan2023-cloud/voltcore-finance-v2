@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
           Designation: { select: { name: true } },
           Department: { select: { name: true } },
         },
-        orderBy: { employeeCode: 'asc' },
+        orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
         take: 50,
       })
 

@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateUser } from '@/lib/auth'
-import { checkRateLimit, recordAttempt } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { employeeCode, password } = body
+    const { email, password } = body
 
-    if (!employeeCode || !password) {
+    if (!email || !password) {
       return NextResponse.json(
-        { success: false, error: 'User ID and password are required' },
+        { success: false, error: 'Email and password are required' },
         { status: 400 }
       )
     }
@@ -25,54 +24,50 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Rate limiting: 5 failed attempts → 30 minute lockout
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown'
-    const rateCheck = checkRateLimit(ip, employeeCode)
-    if (!rateCheck.allowed) {
-      const minutesLeft = Math.ceil((rateCheck.lockedUntil! - Date.now()) / 60000)
-      return NextResponse.json(
-        { success: false, error: `Too many attempts. Try again in ${minutesLeft} minute${minutesLeft !== 1 ? 's' : ''}.` },
-        { status: 429 }
-      )
-    }
-
-    const { user, error } = await authenticateUser(employeeCode, password)
+    const { user, error } = await authenticateUser(email, password)
 
     if (!user) {
-      recordAttempt(ip, employeeCode, false)
       return NextResponse.json(
         { success: false, error: error || 'Invalid credentials' },
         { status: 401 }
       )
     }
 
-    recordAttempt(ip, employeeCode, true)
-
     const response = NextResponse.json({ success: true, user })
 
+    // Session cookies — no maxAge means they expire when browser is closed.
+    // Client-side inactivity timer handles the 30-minute auto-logout.
     const cookieOpts = {
       httpOnly: true,
       sameSite: 'lax' as const,
       path: '/',
+      // No maxAge → session cookie → cleared on browser close
     }
 
+    // Role cookie (superadmin | admin | demo)
     response.cookies.set('erp_user_role', user.role, cookieOpts)
 
+    // Tenant DB URL cookie (empty for superadmin)
     if (user.dbUrl) {
       response.cookies.set('erp_tenant_db', encodeURIComponent(user.dbUrl), cookieOpts)
     } else {
       response.cookies.delete('erp_tenant_db')
     }
 
+    // Tenant ID cookie (for biometric and other superadmin-DB lookups)
     if (user.tenantId) {
       response.cookies.set('erp_tenant_id', user.tenantId, cookieOpts)
     } else {
       response.cookies.delete('erp_tenant_id')
     }
 
+    // Allowed modules cookie (for frontend store)
     response.cookies.set('erp_allowed_modules', user.allowedModules, cookieOpts)
+
+    // User email cookie (for notification lookup)
     response.cookies.set('erp_user_email', user.email, cookieOpts)
 
+    // Employee ID cookie (for self-service modules)
     if (user.employeeId) {
       response.cookies.set('erp_employee_id', String(user.employeeId), cookieOpts)
     } else {
@@ -82,14 +77,15 @@ export async function POST(request: NextRequest) {
     return response
   } catch (error: any) {
     console.error('Login error:', error)
-
+    
+    // Return specific error messages for common issues
     if (error.code === 'P2021') {
       return NextResponse.json(
         { success: false, error: 'Database not configured. Please run database migrations.' },
         { status: 500 }
       )
     }
-
+    
     return NextResponse.json(
       { success: false, error: 'Login failed. Please try again.' },
       { status: 500 }

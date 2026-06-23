@@ -64,6 +64,9 @@ export async function GET(request: NextRequest) {
       emergencyContactName: true,
       emergencyContactRelation: true,
       emergencyContactPhone: true,
+      nomineeName: true,
+      nomineeRelation: true,
+      nomineeAddress: true,
       isActive: true,
       isDeleted: true,
       employmentType: true,
@@ -114,7 +117,7 @@ export async function GET(request: NextRequest) {
     const employees = await db.employee.findMany({
       where,
       select: selectBase,
-      orderBy: { employeeCode: 'asc' },
+      orderBy: { createdAt: 'desc' },
       take: limit,
       skip: offset,
     })
@@ -240,6 +243,9 @@ export async function POST(request: NextRequest) {
         emergencyContactName: body.emergencyContactName || null,
         emergencyContactRelation: body.emergencyContactRelation || null,
         emergencyContactPhone: body.emergencyContactPhone || null,
+        nomineeName: body.nomineeName || null,
+        nomineeRelation: body.nomineeRelation || null,
+        nomineeAddress: body.nomineeAddress || null,
         isActive: true,
         updatedAt: new Date(),
       },

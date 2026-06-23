@@ -13,7 +13,7 @@ interface TenantUser {
   id: string; name: string; email: string; phone: string;
   allowedModules: string; orgRoleId?: string; isActive: boolean;
   lastActiveAt?: string; createdAt: string; employeeId?: number;
-  employeeCode?: string; onboardingStatus?: string;
+  onboardingStatus?: string;
 }
 
 interface OrgRole {
@@ -128,8 +128,7 @@ export default function UserManagement() {
     if (!form.orgRoleId) { toast.error('A role must be assigned'); return; }
     setSaving(true);
     try {
-      const selectedEmp = employees.find(e => String(e.id) === form.employeeId);
-      const payload = { ...(editId ? { id: editId, ...form } : form), employeeCode: selectedEmp?.employeeCode || '' };
+      const payload = editId ? { id: editId, ...form } : form;
       const res = await fetch('/api/tenant/users', {
         method: editId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -590,11 +589,7 @@ export default function UserManagement() {
                     {u.employeeId && (
                       <div className="text-[10px] text-[#00d4ff] mt-0.5 flex items-center gap-1">
                         <span>🔗</span>
-                        <span className="font-semibold">Emp #{u.employeeId}</span>
-                        <span>·</span>
-                        <span>{u.employeeCode || '—'}</span>
-                        <span>·</span>
-                        <span>{employees.find(e => e.id === u.employeeId)?.name || 'Unknown'}</span>
+                        <span>Linked to employee #{u.employeeId} — {employees.find(e => e.id === u.employeeId)?.name || 'Employee'}</span>
                       </div>
                     )}
                     {u.lastActiveAt && (

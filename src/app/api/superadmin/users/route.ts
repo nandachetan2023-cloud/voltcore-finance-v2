@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { tenantId, name, email, password, phone, allowedModules, createdBySuperadmin, employeeId, employeeCode } = body
+    const { tenantId, name, email, password, phone, allowedModules, createdBySuperadmin, employeeId } = body
     if (!tenantId || !name || !email || !password) {
       return NextResponse.json({ success: false, error: 'tenantId, name, email and password are required' }, { status: 400 })
     }
@@ -41,7 +41,6 @@ export async function POST(request: NextRequest) {
         allowedModules: allowedModules || 'all',
         createdBySuperadmin: createdBySuperadmin !== false, // default true unless explicitly false
         employeeId: employeeId || null,
-        employeeCode: employeeCode || null,
       },
     })
     const { password: _, ...safe } = user

@@ -4,7 +4,7 @@ import { getDbForRequest } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
-// GET: Fetch current user's onboarding data + admin-provided employee data
+// GET: Fetch current user's onboarding data
 export async function GET(request: NextRequest) {
   const userEmail = request.cookies.get('erp_user_email')?.value
   const tenantId = request.cookies.get('erp_tenant_id')?.value
@@ -18,7 +18,6 @@ export async function GET(request: NextRequest) {
       where: { email: userEmail, tenantId },
       select: {
         id: true,
-        employeeId: true,
         onboardingStatus: true,
         onboardingData: true,
         onboardingSubmittedAt: true,
@@ -30,61 +29,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
     }
 
-    // Also fetch the employee record so the form knows which fields were set by admin
-    let employeeData: Record<string, any> | null = null
-    if ((user as any).employeeId) {
-      try {
-        const db = getDbForRequest(request)
-        const employee = await db.employee.findUnique({
-          where: { id: (user as any).employeeId as number },
-          select: {
-            firstName: true,
-            middleName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-            dateOfBirth: true,
-            gender: true,
-            maritalStatus: true,
-            bloodGroup: true,
-            fatherName: true,
-            currentAddress: true,
-            currentCity: true,
-            currentState: true,
-            currentPincode: true,
-            permanentAddress: true,
-            permanentCity: true,
-            permanentState: true,
-            permanentPincode: true,
-            bankName: true,
-            bankAccount: true,
-            bankIfsc: true,
-            panNumber: true,
-            aadharNumber: true,
-            uanNumber: true,
-            esicNumber: true,
-            emergencyContactName: true,
-            emergencyContactRelation: true,
-            emergencyContactPhone: true,
-            departmentId: true,
-            designationId: true,
-            branchId: true,
-            dateOfJoining: true,
-            employmentType: true,
-            employmentStatus: true,
-            natureOfDesignation: true,
-            monthlyGrossSalary: true,
-          },
-        })
-        if (employee) {
-          employeeData = employee as any
-        }
-      } catch (e) {
-        console.warn('Could not fetch employee data for onboarding form:', e)
-      }
-    }
-
-    return NextResponse.json({ success: true, data: { ...(user as any), employeeData } })
+    return NextResponse.json({ success: true, data: user })
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Failed to fetch onboarding data' }, { status: 500 })
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ERPLayout from '@/components/erp/erp-layout';
 import Login from '@/components/auth/login';
@@ -17,57 +17,35 @@ export default function ERPPage() {
   const { setUserRole, setAllowedModules } = useERPStore();
   const router = useRouter();
 
-  const validateSession = useCallback(async () => {
-    try {
-      const res = await fetch('/api/auth/session', { cache: 'no-store' });
-      if (!res.ok) {
-        // Session cookies are gone — clear stale localStorage
-        localStorage.removeItem('erp_auth_user');
-        localStorage.removeItem('erp_employee_id');
-        return false;
-      }
-      return true;
-    } catch {
-      localStorage.removeItem('erp_auth_user');
-      localStorage.removeItem('erp_employee_id');
-      return false;
-    }
-  }, []);
-
   useEffect(() => {
-    (async () => {
-      const authUser = localStorage.getItem('erp_auth_user');
-      if (authUser) {
-        try {
-          const user = JSON.parse(authUser);
-          if (user.role === 'superadmin') {
-            localStorage.removeItem('erp_auth_user');
-            setIsLoading(false);
-            return;
-          }
+    const authUser = localStorage.getItem('erp_auth_user');
+    if (authUser) {
+      try {
+        const user = JSON.parse(authUser);
+        // Only redirect to superadmin if we're NOT already coming from there
+        // (i.e. don't redirect if the user explicitly navigated to /)
+        if (user.role === 'superadmin') {
+          // Don't auto-redirect — just show the ERP login
+          // Superadmin must log in separately via /superadmin
+          localStorage.removeItem('erp_auth_user');
+          setIsLoading(false);
+          return;
+        }
+        setUserRole(user.role);
+        setAllowedModules(user.allowedModules || 'all');
+        setOnboardingStatus(user.onboardingStatus || 'none');
+        setIsAuthenticated(true);
+      } catch {}
+    }
+    setIsLoading(false);
+  }, [setUserRole, setAllowedModules, router]);
 
-          const sessionValid = await validateSession();
-          if (!sessionValid) {
-            setIsLoading(false);
-            return;
-          }
-
-          setUserRole(user.role);
-          setAllowedModules(user.allowedModules || 'all');
-          setOnboardingStatus(user.onboardingStatus || 'none');
-          setIsAuthenticated(true);
-        } catch {}
-      }
-      setIsLoading(false);
-    })();
-  }, [setUserRole, setAllowedModules, router, validateSession]);
-
-  const handleLogin = async (employeeCode: string, password: string): Promise<boolean> => {
+  const handleLogin = async (email: string, password: string): Promise<boolean> => {
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employeeCode, password }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();
@@ -148,7 +126,7 @@ export default function ERPPage() {
 
   return (
     <>
-      <Suspense fallback={null}><ERPLayout onLogout={handleLogout} /></Suspense>
+      <ERPLayout onLogout={handleLogout} />
 
       {/* ── Idle session warning overlay ── */}
       {showWarning && (

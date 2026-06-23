@@ -1,16 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { LogIn, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle, KeyRound, ArrowLeft } from 'lucide-react';
+import { LogIn, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle, Mail, KeyRound, ArrowLeft, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 interface LoginProps {
-  onLogin: (employeeCode: string, password: string) => Promise<boolean>;
+  onLogin: (email: string, password: string) => Promise<boolean>;
 }
 
-type Screen = 'login' | 'change-password' | 'change-done'
+type Screen = 'login' | 'forgot' | 'otp' | 'reset' | 'done'
 
+// ── Shared card wrapper — defined OUTSIDE Login to prevent remounting ──
 function Card({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#0d1117] flex items-center justify-center p-4">
@@ -37,42 +38,65 @@ function Card({ children }: { children: React.ReactNode }) {
 
 export default function Login({ onLogin }: LoginProps) {
   // Login state
-  const [userId, setUserId] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginSuccess, setLoginSuccess] = useState(false);
 
-  // Change password state
+  // Forgot password state
   const [screen, setScreen] = useState<Screen>('login');
-  const [oldPw, setOldPw] = useState('');
-  const [newPw, setNewPw] = useState('');
-  const [confirmPw, setConfirmPw] = useState('');
-  const [showOldPw, setShowOldPw] = useState(false);
-  const [showNewPw, setShowNewPw] = useState(false);
-  const [showConfirmPw, setShowConfirmPw] = useState(false);
-  const [cpError, setCpError] = useState('');
-  const [cpLoading, setCpLoading] = useState(false);
+  const [fpEmail, setFpEmail] = useState('');
+  const [fpEmailError, setFpEmailError] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [fpLoading, setFpLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Email validation
+  const validateEmail = (val: string): boolean => {
+    if (!val) { setEmailError('Email is required'); return false; }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(val)) { setEmailError('Please enter a valid email address'); return false; }
+    const suspiciousDomains = ['gmial.com', 'gmai.com', 'yahooo.com', 'outlok.com'];
+    const domain = val.split('@')[1]?.toLowerCase();
+    if (suspiciousDomains.includes(domain)) { setEmailError('Check your email spelling'); return false; }
+    setEmailError('');
+    return true;
+  };
+
+  const validateFpEmail = (val: string): boolean => {
+    if (!val) { setFpEmailError('Email is required'); return false; }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(val)) { setFpEmailError('Please enter a valid email address'); return false; }
+    setFpEmailError('');
+    return true;
+  };
 
   // ── Login submit ──────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
     setLoginSuccess(false);
-    if (!userId) { setLoginError('User ID is required'); return; }
+    if (!validateEmail(email)) return;
     if (!password) { setLoginError('Password is required'); return; }
+    if (password.length < 6) { setLoginError('Password must be at least 6 characters'); return; }
 
     setLoading(true);
     try {
-      // Normalize: uppercase the userId for consistency
-      const normalizedId = userId.trim().toUpperCase();
-      const success = await onLogin(normalizedId, password);
+      const success = await onLogin(email, password);
       if (success) {
         setLoginSuccess(true);
         setLoginError('');
       } else {
-        setLoginError('Invalid User ID or password. Please check your credentials and try again.');
+        setLoginError('Invalid email or password. Please check your credentials and try again.');
       }
     } catch {
       setLoginError('Unable to connect to server. Please try again later.');
@@ -81,37 +105,83 @@ export default function Login({ onLogin }: LoginProps) {
     }
   };
 
-  // ── Change Password ───────────────────────────────────────────
-  const handleChangePassword = async () => {
-    setCpError('');
-    if (!oldPw) { setCpError('Current password is required'); return; }
-    if (!newPw || newPw.length < 8) { setCpError('New password must be at least 8 characters'); return; }
-    if (newPw !== confirmPw) { setCpError('Passwords do not match'); return; }
-    if (oldPw === newPw) { setCpError('New password must be different from current password'); return; }
-
-    const normalizedId = userId.trim().toUpperCase();
-    if (!normalizedId) { setCpError('Please enter your User ID first on the login screen.'); return; }
-
-    setCpLoading(true);
+  // ── Send OTP ──────────────────────────────────────────────────
+  const handleSendOTP = async () => {
+    const targetEmail = fpEmail || email;
+    if (!targetEmail) { setFpEmailError('No email provided. Go back and enter your email.'); return; }
+    if (!validateFpEmail(targetEmail)) return;
+    setFpEmail(targetEmail); // ensure fpEmail is set for subsequent steps
+    setFpLoading(true);
     try {
-      const res = await fetch('/api/auth/change-password', {
+      const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employeeCode: normalizedId, oldPassword: oldPw, newPassword: newPw }),
+        body: JSON.stringify({ email: targetEmail }),
       });
       const data = await res.json();
       if (data.success) {
-        setScreen('change-done');
-        toast.success('Password changed successfully!');
+        setScreen('otp');
+        toast.success('OTP sent! Check your email.');
+        // Start 60s resend cooldown
+        setResendCooldown(60);
+        const interval = setInterval(() => {
+          setResendCooldown(prev => {
+            if (prev <= 1) { clearInterval(interval); return 0; }
+            return prev - 1;
+          });
+        }, 1000);
       } else {
-        setCpError(data.error || 'Failed to change password');
+        setFpEmailError(data.error || 'Failed to send OTP');
       }
     } catch {
-      setCpError('Unable to connect. Please try again.');
+      setFpEmailError('Unable to connect. Please try again.');
     } finally {
-      setCpLoading(false);
+      setFpLoading(false);
     }
   };
+
+  // ── Verify OTP ────────────────────────────────────────────────
+  const handleVerifyOTP = async () => {
+    if (!otp || otp.length !== 6) { setOtpError('Enter the 6-digit OTP'); return; }
+    setOtpError('');
+    setScreen('reset');
+  };
+
+  // ── Reset Password ────────────────────────────────────────────
+  const handleResetPassword = async () => {
+    setResetError('');
+    if (!newPassword || newPassword.length < 8) {
+      setResetError('Password must be at least 8 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setResetError('Passwords do not match');
+      return;
+    }
+    setFpLoading(true);
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: fpEmail, otp, newPassword }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setScreen('done');
+        toast.success('Password reset successfully!');
+      } else {
+        setResetError(data.error || 'Failed to reset password');
+        if (data.error?.includes('OTP')) setScreen('otp');
+      }
+    } catch {
+      setResetError('Unable to connect. Please try again.');
+    } finally {
+      setFpLoading(false);
+    }
+  };
+
+  // ── Shared card wrapper ───────────────────────────────────────
+  // (defined outside this component — see top of file)
 
   // ── Screen: Login ─────────────────────────────────────────────
   if (screen === 'login') return (
@@ -140,15 +210,17 @@ export default function Login({ onLogin }: LoginProps) {
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className="block text-sm font-medium text-[#e2e8f0] mb-2">User ID</label>
+          <label className="block text-sm font-medium text-[#e2e8f0] mb-2">Email Address</label>
           <input
-            type="text"
-            value={userId}
-            onChange={e => { setUserId(e.target.value); setLoginError(''); }}
-            placeholder="UA0001"
-            className="w-full px-4 py-3 bg-[#0d1117] border border-[#2e3a48] rounded-lg text-[#e2e8f0] placeholder:text-[#5a6878] focus:outline-none focus:ring-2 focus:ring-[#f5a623] focus:border-transparent transition-all"
+            type="email"
+            value={email}
+            onChange={e => { setEmail(e.target.value); setEmailError(''); setLoginError(''); }}
+            onBlur={() => email && validateEmail(email)}
+            placeholder="admin@voltcore.com"
+            className={`w-full px-4 py-3 bg-[#0d1117] border rounded-lg text-[#e2e8f0] placeholder:text-[#5a6878] focus:outline-none focus:ring-2 transition-all ${emailError ? 'border-red-500/50 focus:ring-red-500/50' : 'border-[#2e3a48] focus:ring-[#f5a623] focus:border-transparent'}`}
             disabled={loading}
           />
+          {emailError && <p className="mt-2 flex items-center gap-2 text-xs text-red-400"><AlertCircle size={14} />{emailError}</p>}
         </div>
 
         <div>
@@ -170,9 +242,9 @@ export default function Login({ onLogin }: LoginProps) {
         </div>
 
         <div className="flex justify-end">
-          <button type="button" onClick={() => { setScreen('change-password'); setOldPw(''); setNewPw(''); setConfirmPw(''); setCpError(''); }}
+          <button type="button" onClick={() => { setScreen('forgot'); setFpEmail(email); }}
             className="text-xs text-[#f5a623] hover:text-[#e8891a] transition-colors">
-            Change password
+            Forgot password?
           </button>
         </div>
 
@@ -190,71 +262,135 @@ export default function Login({ onLogin }: LoginProps) {
     </Card>
   );
 
-  // ── Screen: Change Password ───────────────────────────────────
-  if (screen === 'change-password') return (
+  // ── Screen: Forgot Password (confirm email) ─────────────────────
+  if (screen === 'forgot') return (
     <Card>
       <button onClick={() => setScreen('login')} className="flex items-center gap-2 text-sm text-[#5a6878] hover:text-[#e2e8f0] transition-colors mb-6">
         <ArrowLeft size={16} /> Back to login
       </button>
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 bg-[#f5a623]/10 rounded-lg flex items-center justify-center">
-          <KeyRound className="text-[#f5a623]" size={20} />
+          <Mail className="text-[#f5a623]" size={20} />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-[#e2e8f0]">Change Password</h2>
-          <p className="text-xs text-[#5a6878]">Enter your current password and choose a new one</p>
+          <h2 className="text-lg font-semibold text-[#e2e8f0]">Reset Password</h2>
+          <p className="text-xs text-[#5a6878]">We'll send a 6-digit OTP to your login email</p>
         </div>
       </div>
 
-      {cpError && (
+      <div className="space-y-5">
+        <div>
+          <label className="block text-sm font-medium text-[#e2e8f0] mb-2">OTP will be sent to</label>
+          <div className="w-full px-4 py-3 bg-[#0d1117] border border-[#2e3a48] rounded-lg text-[#f5a623] font-medium text-sm">
+            {fpEmail || email || 'No email entered'}
+          </div>
+          {!fpEmail && !email && <p className="mt-2 text-xs text-red-400">Please enter your email on the login screen first.</p>}
+          {fpEmailError && <p className="mt-2 flex items-center gap-2 text-xs text-red-400"><AlertCircle size={14} />{fpEmailError}</p>}
+        </div>
+
+        <button onClick={handleSendOTP} disabled={fpLoading || (!fpEmail && !email)}
+          className="w-full bg-gradient-to-r from-[#f5a623] to-[#e8891a] text-black font-semibold py-3 px-4 rounded-lg hover:from-[#e8891a] hover:to-[#f5a623] transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+          {fpLoading ? (
+            <><div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" /><span>Sending OTP...</span></>
+          ) : (
+            <><Mail size={18} /><span>Send OTP to this email</span></>
+          )}
+        </button>
+      </div>
+    </Card>
+  );
+
+  // ── Screen: Enter OTP ─────────────────────────────────────────
+  if (screen === 'otp') return (
+    <Card>
+      <button onClick={() => setScreen('forgot')} className="flex items-center gap-2 text-sm text-[#5a6878] hover:text-[#e2e8f0] transition-colors mb-6">
+        <ArrowLeft size={16} /> Back
+      </button>
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-[#f5a623]/10 rounded-lg flex items-center justify-center">
+          <KeyRound className="text-[#f5a623]" size={20} />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-[#e2e8f0]">Enter OTP</h2>
+          <p className="text-xs text-[#5a6878]">Sent to <span className="text-[#f5a623]">{fpEmail}</span></p>
+        </div>
+      </div>
+
+      <div className="space-y-5">
+        <div>
+          <label className="block text-sm font-medium text-[#e2e8f0] mb-2">6-Digit OTP</label>
+          <input
+            type="text"
+            value={otp}
+            onChange={e => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setOtpError(''); }}
+            placeholder="000000"
+            maxLength={6}
+            className={`w-full px-4 py-3 bg-[#0d1117] border rounded-lg text-[#e2e8f0] placeholder:text-[#5a6878] focus:outline-none focus:ring-2 transition-all text-center text-2xl tracking-[0.5em] font-mono ${otpError ? 'border-red-500/50 focus:ring-red-500/50' : 'border-[#2e3a48] focus:ring-[#f5a623] focus:border-transparent'}`}
+          />
+          {otpError && <p className="mt-2 flex items-center gap-2 text-xs text-red-400"><AlertCircle size={14} />{otpError}</p>}
+          <p className="mt-2 text-xs text-[#5a6878]">⏱ OTP expires in 10 minutes</p>
+        </div>
+
+        <button onClick={handleVerifyOTP} disabled={otp.length !== 6}
+          className="w-full bg-gradient-to-r from-[#f5a623] to-[#e8891a] text-black font-semibold py-3 px-4 rounded-lg hover:from-[#e8891a] hover:to-[#f5a623] transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+          <KeyRound size={18} /><span>Verify OTP</span>
+        </button>
+
+        <button onClick={handleSendOTP} disabled={resendCooldown > 0 || fpLoading}
+          className="w-full flex items-center justify-center gap-2 text-sm text-[#5a6878] hover:text-[#e2e8f0] transition-colors disabled:opacity-40 disabled:cursor-not-allowed py-2">
+          <RefreshCw size={14} />
+          {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
+        </button>
+      </div>
+    </Card>
+  );
+
+  // ── Screen: Set New Password ──────────────────────────────────
+  if (screen === 'reset') return (
+    <Card>
+      <button onClick={() => setScreen('otp')} className="flex items-center gap-2 text-sm text-[#5a6878] hover:text-[#e2e8f0] transition-colors mb-6">
+        <ArrowLeft size={16} /> Back
+      </button>
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-[#f5a623]/10 rounded-lg flex items-center justify-center">
+          <KeyRound className="text-[#f5a623]" size={20} />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-[#e2e8f0]">Set New Password</h2>
+          <p className="text-xs text-[#5a6878]">Choose a strong password</p>
+        </div>
+      </div>
+
+      {resetError && (
         <div className="mb-5 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
           <XCircle className="text-red-500 flex-shrink-0 mt-0.5" size={18} />
-          <p className="text-sm text-red-400">{cpError}</p>
+          <p className="text-sm text-red-400">{resetError}</p>
         </div>
       )}
 
       <div className="space-y-5">
-        {/* Current Password */}
-        <div>
-          <label className="block text-sm font-medium text-[#e2e8f0] mb-2">Current Password</label>
-          <div className="relative">
-            <input
-              type={showOldPw ? 'text' : 'password'}
-              value={oldPw}
-              onChange={e => { setOldPw(e.target.value); setCpError(''); }}
-              placeholder="Enter current password"
-              className="w-full px-4 py-3 pr-12 bg-[#0d1117] border border-[#2e3a48] rounded-lg text-[#e2e8f0] placeholder:text-[#5a6878] focus:outline-none focus:ring-2 focus:ring-[#f5a623] focus:border-transparent transition-all"
-              disabled={cpLoading}
-            />
-            <button type="button" onClick={() => setShowOldPw(!showOldPw)} tabIndex={-1}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a6878] hover:text-[#e2e8f0] transition-colors">
-              {showOldPw ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
-        </div>
-
-        {/* New Password */}
         <div>
           <label className="block text-sm font-medium text-[#e2e8f0] mb-2">New Password</label>
           <div className="relative">
             <input
-              type={showNewPw ? 'text' : 'password'}
-              value={newPw}
-              onChange={e => { setNewPw(e.target.value); setCpError(''); }}
+              type={showNewPassword ? 'text' : 'password'}
+              value={newPassword}
+              onChange={e => { setNewPassword(e.target.value); setResetError(''); }}
               placeholder="Min. 8 characters"
               className="w-full px-4 py-3 pr-12 bg-[#0d1117] border border-[#2e3a48] rounded-lg text-[#e2e8f0] placeholder:text-[#5a6878] focus:outline-none focus:ring-2 focus:ring-[#f5a623] focus:border-transparent transition-all"
-              disabled={cpLoading}
+              disabled={fpLoading}
             />
-            <button type="button" onClick={() => setShowNewPw(!showNewPw)} tabIndex={-1}
+            <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} tabIndex={-1}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a6878] hover:text-[#e2e8f0] transition-colors">
-              {showNewPw ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
-          {newPw && (
+          {/* Password strength indicator */}
+          {newPassword && (
             <div className="mt-2 flex gap-1">
               {[1,2,3,4].map(i => (
                 <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${
-                  newPw.length >= i * 3
+                  newPassword.length >= i * 3
                     ? i <= 1 ? 'bg-red-500' : i <= 2 ? 'bg-yellow-500' : i <= 3 ? 'bg-blue-500' : 'bg-green-500'
                     : 'bg-[#252e3a]'
                 }`} />
@@ -263,56 +399,55 @@ export default function Login({ onLogin }: LoginProps) {
           )}
         </div>
 
-        {/* Confirm New Password */}
         <div>
-          <label className="block text-sm font-medium text-[#e2e8f0] mb-2">Confirm New Password</label>
+          <label className="block text-sm font-medium text-[#e2e8f0] mb-2">Confirm Password</label>
           <div className="relative">
             <input
-              type={showConfirmPw ? 'text' : 'password'}
-              value={confirmPw}
-              onChange={e => { setConfirmPw(e.target.value); setCpError(''); }}
-              placeholder="Re-enter new password"
+              type={showConfirmPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={e => { setConfirmPassword(e.target.value); setResetError(''); }}
+              placeholder="Re-enter password"
               className={`w-full px-4 py-3 pr-12 bg-[#0d1117] border rounded-lg text-[#e2e8f0] placeholder:text-[#5a6878] focus:outline-none focus:ring-2 transition-all ${
-                confirmPw && confirmPw !== newPw
+                confirmPassword && confirmPassword !== newPassword
                   ? 'border-red-500/50 focus:ring-red-500/50'
-                  : confirmPw && confirmPw === newPw
+                  : confirmPassword && confirmPassword === newPassword
                   ? 'border-green-500/50 focus:ring-green-500/50'
                   : 'border-[#2e3a48] focus:ring-[#f5a623] focus:border-transparent'
               }`}
-              disabled={cpLoading}
+              disabled={fpLoading}
             />
-            <button type="button" onClick={() => setShowConfirmPw(!showConfirmPw)} tabIndex={-1}
+            <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} tabIndex={-1}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a6878] hover:text-[#e2e8f0] transition-colors">
-              {showConfirmPw ? <EyeOff size={18} /> : <Eye size={18} />}
+              {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
-          {confirmPw && confirmPw === newPw && (
+          {confirmPassword && confirmPassword === newPassword && (
             <p className="mt-2 flex items-center gap-2 text-xs text-green-400"><CheckCircle2 size={14} />Passwords match</p>
           )}
         </div>
 
-        <button onClick={handleChangePassword} disabled={cpLoading || !oldPw || !newPw || !confirmPw}
+        <button onClick={handleResetPassword} disabled={fpLoading || !newPassword || !confirmPassword}
           className="w-full bg-gradient-to-r from-[#f5a623] to-[#e8891a] text-black font-semibold py-3 px-4 rounded-lg hover:from-[#e8891a] hover:to-[#f5a623] transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-          {cpLoading ? (
-            <><div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" /><span>Changing...</span></>
+          {fpLoading ? (
+            <><div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" /><span>Resetting...</span></>
           ) : (
-            <><KeyRound size={18} /><span>Change Password</span></>
+            <><CheckCircle2 size={18} /><span>Reset Password</span></>
           )}
         </button>
       </div>
     </Card>
   );
 
-  // ── Screen: Change Done ───────────────────────────────────────
+  // ── Screen: Done ──────────────────────────────────────────────
   return (
     <Card>
       <div className="text-center py-4">
         <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle2 className="text-green-500" size={36} />
         </div>
-        <h2 className="text-xl font-semibold text-[#e2e8f0] mb-2">Password Changed!</h2>
+        <h2 className="text-xl font-semibold text-[#e2e8f0] mb-2">Password Reset!</h2>
         <p className="text-sm text-[#5a6878] mb-8">Your password has been updated successfully. You can now login with your new password.</p>
-        <button onClick={() => { setScreen('login'); setPassword(''); setOldPw(''); setNewPw(''); setConfirmPw(''); }}
+        <button onClick={() => { setScreen('login'); setEmail(fpEmail); setPassword(''); setOtp(''); setNewPassword(''); setConfirmPassword(''); }}
           className="w-full bg-gradient-to-r from-[#f5a623] to-[#e8891a] text-black font-semibold py-3 px-4 rounded-lg hover:from-[#e8891a] hover:to-[#f5a623] transition-all duration-200 flex items-center justify-center gap-2">
           <LogIn size={18} /><span>Back to Login</span>
         </button>

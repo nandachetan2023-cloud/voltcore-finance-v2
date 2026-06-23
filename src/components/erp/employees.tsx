@@ -100,6 +100,10 @@ interface EmployeeFormData {
   emergencyContactName: string;
   emergencyContactRelation: string;
   emergencyContactPhone: string;
+  // Nominee
+  nomineeName: string;
+  nomineeRelation: string;
+  nomineeAddress: string;
   // Onboarding (only used when creating with onboarding mode)
   onboardMode: boolean;
   password: string;
@@ -121,6 +125,7 @@ const emptyForm: EmployeeFormData = {
   panNumber: '', aadharNumber: '', uanNumber: '', esicNumber: '',
   bankName: '', bankAccount: '', bankIfsc: '',
   emergencyContactName: '', emergencyContactRelation: '', emergencyContactPhone: '',
+  nomineeName: '', nomineeRelation: '', nomineeAddress: '',
   onboardMode: false, password: '', orgRoleId: '',
 };
 
@@ -414,6 +419,9 @@ export default function EmployeesModule() {
       emergencyContactName: emp.emergencyContactName || '',
       emergencyContactRelation: emp.emergencyContactRelation || '',
       emergencyContactPhone: emp.emergencyContactPhone || '',
+      nomineeName: emp.nomineeName || '',
+      nomineeRelation: emp.nomineeRelation || '',
+      nomineeAddress: emp.nomineeAddress || '',
     });
     setSelectedId(emp.id.toString());
     setFormTab('identity');
@@ -524,6 +532,10 @@ export default function EmployeesModule() {
         { field: 'empId', value: form.empId, label: 'Employee ID' },
         { field: 'firstName', value: form.firstName, label: 'First Name' },
         { field: 'dateOfBirth', value: form.dateOfBirth, label: 'Date of Birth' },
+        { field: 'currentAddress', value: form.currentAddress, label: 'Current Address' },
+        { field: 'currentCity', value: form.currentCity, label: 'Current City' },
+        { field: 'currentState', value: form.currentState, label: 'Current State' },
+        { field: 'currentPincode', value: form.currentPincode, label: 'Current Pincode' },
         { field: 'departmentId', value: form.departmentId, label: 'Department' },
         { field: 'designationId', value: form.designationId, label: 'Designation' },
         { field: 'branchId', value: form.branchId, label: 'Branch' },
@@ -536,6 +548,7 @@ export default function EmployeesModule() {
         const tabFieldMap: Record<string, string[]> = {
           identity: ['empId', 'firstName', 'email', 'phone'],
           personal: ['dateOfBirth'],
+          address: ['currentAddress', 'currentCity', 'currentState', 'currentPincode'],
           org: ['departmentId', 'designationId', 'branchId'],
           employment: ['dateOfJoining'],
         };
@@ -615,6 +628,9 @@ export default function EmployeesModule() {
         emergencyContactName: form.emergencyContactName.trim() || null,
         emergencyContactRelation: form.emergencyContactRelation.trim() || null,
         emergencyContactPhone: form.emergencyContactPhone.trim() || null,
+        nomineeName: form.nomineeName.trim() || null,
+        nomineeRelation: form.nomineeRelation.trim() || null,
+        nomineeAddress: form.nomineeAddress.trim() || null,
       };
 
       const body = mode === 'edit' ? { id: parseInt(selectedId || '0'), ...apiBody } : apiBody;
@@ -693,6 +709,7 @@ export default function EmployeesModule() {
     { id: 'statutory', label: 'Statutory' },
     { id: 'bank', label: 'Bank' },
     { id: 'emergency', label: 'Emergency' },
+    { id: 'nominee', label: 'Nominee' },
   ] as const;
 
   const dialogContent = () => (
@@ -789,10 +806,10 @@ export default function EmployeesModule() {
 
         {/* ── Address ── */}
         {formTab === 'address' && <>
-          <F label="Current Address" span2><input className={`${inp} ${fieldBorderError(fieldErrors.currentAddress)}`} value={form.currentAddress} onChange={e => { setForm(f => ({ ...f, currentAddress: e.target.value })); setFieldErrors(fe => ({ ...fe, currentAddress: '' })); }} placeholder="House No, Street, Area" /><FieldError message={fieldErrors.currentAddress} /></F>
-          <F label="Current City"><input className={`${inp} ${fieldBorderError(fieldErrors.currentCity)}`} value={form.currentCity} onChange={e => { setForm(f => ({ ...f, currentCity: e.target.value })); setFieldErrors(fe => ({ ...fe, currentCity: '' })); }} placeholder="Mumbai" /><FieldError message={fieldErrors.currentCity} /></F>
-          <F label="Current State"><select className={`${sel} ${fieldBorderError(fieldErrors.currentState)}`} value={form.currentState} onChange={e => { setForm(f => ({ ...f, currentState: e.target.value })); setFieldErrors(fe => ({ ...fe, currentState: '' })); }}><option value="">Select state...</option>{INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}</select><FieldError message={fieldErrors.currentState} /></F>
-          <F label="Current Pincode"><input className={`${inp} ${fieldBorderError(fieldErrors.currentPincode)}`} value={form.currentPincode} onChange={e => { setForm(f => ({ ...f, currentPincode: e.target.value })); setFieldErrors(fe => ({ ...fe, currentPincode: '' })); }} placeholder="400001" maxLength={6} /><FieldError message={fieldErrors.currentPincode} /></F>
+          <F label="Current Address" req span2><input className={`${inp} ${fieldBorderError(fieldErrors.currentAddress)}`} value={form.currentAddress} onChange={e => { setForm(f => ({ ...f, currentAddress: e.target.value })); setFieldErrors(fe => ({ ...fe, currentAddress: '' })); }} placeholder="House No, Street, Area" /><FieldError message={fieldErrors.currentAddress} /></F>
+          <F label="Current City" req><input className={`${inp} ${fieldBorderError(fieldErrors.currentCity)}`} value={form.currentCity} onChange={e => { setForm(f => ({ ...f, currentCity: e.target.value })); setFieldErrors(fe => ({ ...fe, currentCity: '' })); }} placeholder="Mumbai" /><FieldError message={fieldErrors.currentCity} /></F>
+          <F label="Current State" req><select className={`${sel} ${fieldBorderError(fieldErrors.currentState)}`} value={form.currentState} onChange={e => { setForm(f => ({ ...f, currentState: e.target.value })); setFieldErrors(fe => ({ ...fe, currentState: '' })); }}><option value="">Select state...</option>{INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}</select><FieldError message={fieldErrors.currentState} /></F>
+          <F label="Current Pincode" req><input className={`${inp} ${fieldBorderError(fieldErrors.currentPincode)}`} value={form.currentPincode} onChange={e => { setForm(f => ({ ...f, currentPincode: e.target.value })); setFieldErrors(fe => ({ ...fe, currentPincode: '' })); }} placeholder="400001" maxLength={6} /><FieldError message={fieldErrors.currentPincode} /></F>
           <div className="col-span-2 border-t border-[#252e3a] pt-2 mt-1">
             <p className="text-[10px] text-[#5a6878] mb-2">Permanent Address (if different)</p>
           </div>
@@ -894,6 +911,27 @@ export default function EmployeesModule() {
           <F label="Contact Name" span2><input className={inp} value={form.emergencyContactName} onChange={e => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} placeholder="Spouse / Parent name" /></F>
           <F label="Relation"><input className={inp} value={form.emergencyContactRelation} onChange={e => setForm(f => ({ ...f, emergencyContactRelation: e.target.value }))} placeholder="Spouse / Father / Mother" /></F>
           <F label="Phone"><input className={inp} value={form.emergencyContactPhone} onChange={e => setForm(f => ({ ...f, emergencyContactPhone: e.target.value }))} placeholder="+91 98765 43210" /></F>
+        </>}
+
+        {/* ── Nominee ── */}
+        {formTab === 'nominee' && <>
+          <div className="col-span-2 text-[10px] text-[#8899aa] pb-1">Nomination (Form No. 25) — In the event of death, the balance of pay shall be paid to:</div>
+          <F label="Nominee Name" span2><input className={inp} value={form.nomineeName} onChange={e => setForm(f => ({ ...f, nomineeName: e.target.value }))} placeholder="Full name of nominee" /></F>
+          <F label="Relationship">
+            <select className={inp} value={form.nomineeRelation} onChange={e => setForm(f => ({ ...f, nomineeRelation: e.target.value }))}>
+              <option value="">Select</option>
+              <option value="Father">Father</option>
+              <option value="Mother">Mother</option>
+              <option value="Husband">Husband</option>
+              <option value="Wife">Wife</option>
+              <option value="Son">Son</option>
+              <option value="Daughter">Daughter</option>
+              <option value="Brother">Brother</option>
+              <option value="Sister">Sister</option>
+              <option value="Other">Other</option>
+            </select>
+          </F>
+          <F label="Nominee Address" span2><input className={inp} value={form.nomineeAddress} onChange={e => setForm(f => ({ ...f, nomineeAddress: e.target.value }))} placeholder="Full address of nominee" /></F>
         </>}
       </div>
 

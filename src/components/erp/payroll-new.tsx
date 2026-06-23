@@ -552,33 +552,53 @@ export default function PayrollModule() {
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        
+
         const calculatedRows = res.headers.get('X-Calculated-Rows') || '0';
+        const errCount = res.headers.get('X-Calculation-Errors');
+        const errDetails: string[] = errCount
+          ? JSON.parse(res.headers.get('X-Calculation-Error-Details') || '[]')
+          : [];
+
         toast.success(
           <div>
             <div className="font-semibold">Calculation Complete!</div>
             <div className="text-xs mt-1">{calculatedRows} employees processed. Upload this file to "Non-Compliance Bulk Import" to save to database.</div>
+            {errCount && (
+              <div className="text-xs mt-2 text-yellow-400">
+                <div className="font-semibold">⚠ {errCount} row(s) skipped (missing required fields):</div>
+                {errDetails.slice(0, 3).map((e, i) => <div key={i}>• {e}</div>)}
+                {errDetails.length > 3 && <div>... and {errDetails.length - 3} more</div>}
+              </div>
+            )}
           </div>,
-          { duration: 6000 }
+          { duration: errCount ? 10000 : 6000 }
         );
-        
+
         setUploadCalculateOpen(false);
         setTemplateFile(null);
         if (templateFileInputRef.current) {
           templateFileInputRef.current.value = '';
         }
       } else {
-        const json = await res.json();
+        let errorMsg = 'Unknown error';
+        let details: string[] = [];
+        try {
+          const json = await res.json();
+          errorMsg = json.error || errorMsg;
+          details = json.details || [];
+        } catch {
+          errorMsg = `Server error (HTTP ${res.status})`;
+        }
         toast.error(
           <div>
             <div className="font-semibold">Calculation Failed</div>
-            <div className="text-xs mt-1">{json.error || 'Unknown error'}</div>
-            {json.details && json.details.length > 0 && (
+            <div className="text-xs mt-1">{errorMsg}</div>
+            {details.length > 0 && (
               <div className="text-xs mt-2 max-h-32 overflow-y-auto">
-                {json.details.slice(0, 5).map((err: string, idx: number) => (
+                {details.slice(0, 5).map((err: string, idx: number) => (
                   <div key={idx}>• {err}</div>
                 ))}
-                {json.details.length > 5 && <div>... and {json.details.length - 5} more errors</div>}
+                {details.length > 5 && <div>... and {details.length - 5} more errors</div>}
               </div>
             )}
           </div>,
@@ -586,7 +606,7 @@ export default function PayrollModule() {
         );
       }
     } catch (error) {
-      toast.error('Failed to calculate payroll');
+      toast.error(`Failed to calculate payroll: ${error instanceof Error ? error.message : 'Unknown error'}`);
       console.error(error);
     } finally {
       setCalculating(false);

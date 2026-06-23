@@ -3,14 +3,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Users, UserX, CalendarOff, Clock, Plus, Pencil, Trash2,
-  AlertTriangle, Loader2, Search, Info, X, ChevronDown, Download
+  AlertTriangle, Loader2, Search, Info, X, ChevronDown
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
-import { downloadExcel } from './report-utils';
 import { calculateAttendanceStatus, getDisplayStatus, isFutureDate, isToday } from '@/lib/attendance-utils';
 
 interface EmployeeInfo { id: string; empId: string; name: string; shiftId?: number; }
@@ -229,38 +228,22 @@ function EmployeeSearchSelect({
   )
 }
 
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
 export default function AttendanceModule() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState(() => new Date().toISOString().split('T')[0]);
-  const [filterMode, setFilterMode] = useState<'date' | 'range' | 'month'>('date');
+  const [dateRangeMode, setDateRangeMode] = useState(false);
   const [fromDate, setFromDate] = useState(() => {
     const date = new Date();
-    date.setDate(1);
+    date.setDate(1); // First day of current month
     return date.toISOString().split('T')[0];
   });
   const [toDate, setToDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [monthFilter, setMonthFilter] = useState(() => new Date().toISOString().slice(0, 7));
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [employeeList, setEmployeeList] = useState<EmployeeInfo[]>([]);
-  const [downloadOpen, setDownloadOpen] = useState(false);
-  const downloadRef = useRef<HTMLDivElement>(null);
-  const [downloadByEmpOpen, setDownloadByEmpOpen] = useState(false);
-  const [downloadEmpId, setDownloadEmpId] = useState('');
-  const [downloadEmpSearch, setDownloadEmpSearch] = useState('');
-  const [downloadEmpFilterMode, setDownloadEmpFilterMode] = useState<'date' | 'range' | 'month'>('month');
-  const [downloadEmpDate, setDownloadEmpDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [downloadEmpFrom, setDownloadEmpFrom] = useState(() => {
-    const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0];
-  });
-  const [downloadEmpTo, setDownloadEmpTo] = useState(() => new Date().toISOString().split('T')[0]);
-  const [downloadEmpMonth, setDownloadEmpMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [downloadByEmpLoading, setDownloadByEmpLoading] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -275,30 +258,9 @@ export default function AttendanceModule() {
 
   useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
 
-  // Close download dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (downloadRef.current && !downloadRef.current.contains(e.target as Node)) {
-        setDownloadOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
   const fetchData = useCallback(async () => {
     try {
-      // Build API URL with date filters so the server returns only relevant records
-      let apiUrl = '/api/attendance?limit=50000'
-      if (filterMode === 'month') {
-        apiUrl += `&month=${monthFilter}`
-      } else if (filterMode === 'range') {
-        apiUrl += `&fromDate=${fromDate}`
-        if (toDate) apiUrl += `&toDate=${toDate}`
-      } else if (dateFilter) {
-        apiUrl += `&date=${dateFilter}`
-      }
-      const res = await fetch(apiUrl);
+      const res = await fetch('/api/attendance');
       if (!res.ok) throw new Error('Failed to fetch attendance');
       const json = await res.json();
       if (json.success) {
@@ -323,7 +285,7 @@ export default function AttendanceModule() {
             timeOut: punchOut ? punchOut.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : null,
             otHours: Math.round(otHours * 10) / 10, // Round to 1 decimal
             shift: record.shiftName || null,
-            status: record.status === 'present' ? 'Present' : record.status === 'absent' ? 'Absent' : record.status === 'late' ? 'Late' : record.status === 'half_day' ? 'Half Day' : record.status === 'on_leave' ? 'On Leave' : 'Present',
+            status: record.status === 'present' ? 'Present' : record.status === 'absent' ? 'Absent' : 'Present',
             employee: {
               id: record.employeeId?.toString() || '',
               empId: record.Employee?.employeeCode || '',
@@ -336,7 +298,7 @@ export default function AttendanceModule() {
       else throw new Error(json.error || 'Unknown error');
     } catch (err) { setError(err instanceof Error ? err.message : 'Something went wrong'); }
     finally { setLoading(false); }
-  }, [dateFilter, filterMode, fromDate, toDate, monthFilter]);
+  }, []);
 
   const fetchEmployees = useCallback(async () => {
     try {
@@ -401,10 +363,7 @@ export default function AttendanceModule() {
     let filtered = records;
     
     // Apply date filter based on mode
-    if (filterMode === 'month') {
-      // Month mode: filter by YYYY-MM prefix
-      filtered = filtered.filter(r => r.date.startsWith(monthFilter));
-    } else if (filterMode === 'range') {
+    if (dateRangeMode) {
       // Date range mode: filter between fromDate and toDate (inclusive)
       filtered = filtered.filter(r => r.date >= fromDate && r.date <= toDate);
     } else {
@@ -435,7 +394,7 @@ export default function AttendanceModule() {
     }
     
     // For future dates in single-date mode, show all employees with "—" status
-    if (filterMode === 'date' && dateFilter && isFutureDate(dateFilter)) {
+    if (!dateRangeMode && dateFilter && isFutureDate(dateFilter)) {
       // Create attendance records for all employees with pending status
       const employeeRecordsMap = new Map(filtered.map(r => [r.empId, r]));
       
@@ -464,7 +423,7 @@ export default function AttendanceModule() {
     }
     
     return filtered;
-  }, [records, dateFilter, filterMode, fromDate, toDate, monthFilter, search, siteFilter, statusFilter, employeeList]);
+  }, [records, dateFilter, dateRangeMode, fromDate, toDate, search, siteFilter, statusFilter, employeeList]);
 
   // Calculate statistics
   const stats = useMemo(() => {
@@ -657,88 +616,6 @@ export default function AttendanceModule() {
     finally { setSubmitting(false); }
   };
 
-  const buildExportRows = (data: any[], isEmployeeExport: boolean) => {
-    return data.map((r: any) => {
-      const emp = r.Employee || r.employee || {}
-      const punchIn = r.punchIn ? new Date(r.punchIn).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '—'
-      const punchOut = r.punchOut ? new Date(r.punchOut).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '—'
-      const date = new Date(r.logDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-      const status = r.status ? r.status.charAt(0).toUpperCase() + r.status.slice(1) : 'Present'
-      if (isEmployeeExport) {
-        return [date, punchIn, punchOut, r.lateMinutes ?? 0, r.fineAmount ?? 0, status]
-      }
-      const empCode = emp.employeeCode || r.employeeId?.toString() || ''
-      const empName = emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : 'Unknown'
-      const site = r.siteName || r.biometricDeviceId || 'N/A'
-      return [date, empCode, empName, site, punchIn, punchOut, r.lateMinutes ?? 0, r.fineAmount ?? 0, status]
-    })
-  }
-
-  const handleExport = async (mode: 'current' | 'date' | 'range' | 'month') => {
-    try {
-      let apiUrl = '/api/attendance?limit=50000'
-      if (mode === 'current') {
-        if (filterMode === 'month') apiUrl += `&month=${monthFilter}`
-        else if (filterMode === 'range') { apiUrl += `&fromDate=${fromDate}`; if (toDate) apiUrl += `&toDate=${toDate}` }
-        else apiUrl += `&date=${dateFilter}`
-      } else if (mode === 'month') {
-        apiUrl += `&month=${monthFilter}`
-      } else if (mode === 'range') {
-        apiUrl += `&fromDate=${fromDate}&toDate=${toDate}`
-      } else {
-        apiUrl += `&date=${dateFilter}`
-      }
-
-      const res = await fetch(apiUrl)
-      const json = await res.json()
-      if (!json.success || !json.data?.length) {
-        toast.error('No data to export')
-        return
-      }
-
-      const rows = buildExportRows(json.data, false)
-      const label = mode === 'current'
-        ? `${filterMode === 'month' ? monthFilter : filterMode === 'range' ? `${fromDate}_to_${toDate}` : dateFilter}`
-        : `${mode === 'month' ? monthFilter : mode === 'range' ? `${fromDate}_to_${toDate}` : dateFilter}`
-
-      downloadExcel(rows, ['Date', 'Emp Code', 'Employee', 'Site', 'Time In', 'Time Out', 'Late (min)', 'Fine (₹)', 'Status'], `Attendance_${label}.xlsx`)
-    } catch (e) {
-      console.error('Export failed:', e)
-      toast.error('Failed to export attendance')
-    }
-  }
-
-  const handleDownloadByEmployee = async () => {
-    if (!downloadEmpId) { toast.error('Please select an employee'); return }
-    setDownloadByEmpLoading(true)
-    try {
-      let apiUrl = `/api/attendance?limit=50000&employeeId=${downloadEmpId}`
-      if (downloadEmpFilterMode === 'month') apiUrl += `&month=${downloadEmpMonth}`
-      else if (downloadEmpFilterMode === 'range') { apiUrl += `&fromDate=${downloadEmpFrom}`; if (downloadEmpTo) apiUrl += `&toDate=${downloadEmpTo}` }
-      else apiUrl += `&date=${downloadEmpDate}`
-
-      const res = await fetch(apiUrl)
-      const json = await res.json()
-      if (!json.success || !json.data?.length) {
-        toast.error('No attendance data found for this employee')
-        return
-      }
-
-      const emp = employeeList.find(e => e.id === downloadEmpId)
-      const empLabel = emp ? `${emp.empId}_${emp.name.replace(/\s+/g, '_')}` : downloadEmpId
-      const rows = buildExportRows(json.data, true)
-      const label = downloadEmpFilterMode === 'month' ? downloadEmpMonth : downloadEmpFilterMode === 'range' ? `${downloadEmpFrom}_to_${downloadEmpTo}` : downloadEmpDate
-
-      downloadExcel(rows, ['Date', 'Time In', 'Time Out', 'Late (min)', 'Fine (₹)', 'Status'], `Attendance_${empLabel}_${label}.xlsx`)
-      setDownloadByEmpOpen(false)
-    } catch (e) {
-      console.error('Employee export failed:', e)
-      toast.error('Failed to export attendance')
-    } finally {
-      setDownloadByEmpLoading(false)
-    }
-  }
-
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
@@ -909,62 +786,29 @@ export default function AttendanceModule() {
             {/* Date filter mode toggle */}
             <div className="flex items-center gap-1 bg-[#141920] border border-[#2e3a48] rounded-md p-0.5">
               <button
-                onClick={() => setFilterMode('date')}
+                onClick={() => setDateRangeMode(false)}
                 className={`px-2.5 py-1 rounded text-[9px] font-semibold uppercase tracking-wide transition-all ${
-                  filterMode === 'date'
+                  !dateRangeMode
                     ? 'bg-[#f5a623] text-black'
                     : 'text-[#8899aa] hover:text-[#e2e8f0]'
                 }`}
               >
-                Daily
+                Single Date
               </button>
               <button
-                onClick={() => setFilterMode('range')}
+                onClick={() => setDateRangeMode(true)}
                 className={`px-2.5 py-1 rounded text-[9px] font-semibold uppercase tracking-wide transition-all ${
-                  filterMode === 'range'
+                  dateRangeMode
                     ? 'bg-[#f5a623] text-black'
                     : 'text-[#8899aa] hover:text-[#e2e8f0]'
                 }`}
               >
-                Range
-              </button>
-              <button
-                onClick={() => setFilterMode('month')}
-                className={`px-2.5 py-1 rounded text-[9px] font-semibold uppercase tracking-wide transition-all ${
-                  filterMode === 'month'
-                    ? 'bg-[#f5a623] text-black'
-                    : 'text-[#8899aa] hover:text-[#e2e8f0]'
-                }`}
-              >
-                Monthly
+                Date Range
               </button>
             </div>
             
             {/* Date inputs */}
-            {filterMode === 'month' ? (
-              <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-1">
-                <span className="text-[10px] text-[#5a6878]">Year:</span>
-                <select
-                  value={monthFilter.slice(0, 4)}
-                  onChange={e => setMonthFilter(`${e.target.value}-${monthFilter.slice(5)}`)}
-                  className="bg-transparent border border-[#2e3a48] text-[#e2e8f0] outline-none text-[11px] w-[80px] rounded px-1 py-0.5 appearance-none"
-                >
-                  {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-                <span className="text-[10px] text-[#5a6878]">Month:</span>
-                <select
-                  value={monthFilter.slice(5)}
-                  onChange={e => setMonthFilter(`${monthFilter.slice(0, 5)}${e.target.value}`)}
-                  className="bg-transparent border border-[#2e3a48] text-[#e2e8f0] outline-none text-[11px] w-[110px] rounded px-1 py-0.5 appearance-none"
-                >
-                  {MONTHS.map((m, i) => (
-                    <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            ) : filterMode === 'range' ? (
+            {dateRangeMode ? (
               <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-1">
                 <span className="text-[10px] text-[#5a6878]">From:</span>
                 <input
@@ -994,54 +838,6 @@ export default function AttendanceModule() {
             )}
             
             <span className="text-[10px] text-[#5a6878]">{filteredRecords.length} records</span>
-          </div>
-          <div className="relative" ref={downloadRef}>
-            <button
-              className="vc-btn-primary ml-2 flex items-center gap-1"
-              onClick={() => setDownloadOpen(!downloadOpen)}
-            >
-              <Download size={13} /> Export
-            </button>
-            {downloadOpen && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-[#0d1117] border border-[#2e3a48] rounded-lg shadow-xl min-w-[200px] py-1">
-                <button
-                  className="w-full text-left px-3 py-2 text-[11px] text-[#e2e8f0] hover:bg-[#141920] transition-colors flex items-center gap-2"
-                  onClick={() => { handleExport('current'); setDownloadOpen(false); }}
-                >
-                  <Download size={12} className="text-[#f5a623]" />
-                  Download (current filter)
-                </button>
-                <button
-                  className="w-full text-left px-3 py-2 text-[11px] text-[#e2e8f0] hover:bg-[#141920] transition-colors flex items-center gap-2"
-                  onClick={() => { handleExport('date'); setDownloadOpen(false); }}
-                >
-                  <Download size={12} className="text-[#00d4ff]" />
-                  Download by Date
-                </button>
-                <button
-                  className="w-full text-left px-3 py-2 text-[11px] text-[#e2e8f0] hover:bg-[#141920] transition-colors flex items-center gap-2"
-                  onClick={() => { handleExport('range'); setDownloadOpen(false); }}
-                >
-                  <Download size={12} className="text-[#a78bfa]" />
-                  Download by Date Range
-                </button>
-                <button
-                  className="w-full text-left px-3 py-2 text-[11px] text-[#e2e8f0] hover:bg-[#141920] transition-colors flex items-center gap-2"
-                  onClick={() => { handleExport('month'); setDownloadOpen(false); }}
-                >
-                  <Download size={12} className="text-[#00e676]" />
-                  Download by Month
-                </button>
-                <div className="border-t border-[#2e3a48] my-1" />
-                <button
-                  className="w-full text-left px-3 py-2 text-[11px] text-[#e2e8f0] hover:bg-[#141920] transition-colors flex items-center gap-2"
-                  onClick={() => { setDownloadEmpId(''); setDownloadOpen(false); setDownloadByEmpOpen(true); }}
-                >
-                  <Users size={12} className="text-[#ffab40]" />
-                  Download by Employee
-                </button>
-              </div>
-            )}
           </div>
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={openCreate}><Plus size={13} /> New Record</button>
         </div>
@@ -1101,7 +897,7 @@ export default function AttendanceModule() {
             </thead>
             <tbody>
               {filteredRecords.length === 0 ? (
-                <tr><td colSpan={10} className="py-8 text-center text-[#5a6878] text-[11px]">No attendance records for this {filterMode === 'month' ? 'month' : filterMode === 'range' ? 'date range' : 'date'}.</td></tr>
+                <tr><td colSpan={10} className="py-8 text-center text-[#5a6878] text-[11px]">No attendance records for this {dateRangeMode ? 'date range' : 'date'}.</td></tr>
               ) : filteredRecords.map(r => {
                 const statusLabel = getStatusLabel(r);
                 const statusColorClass = statusColor(r);
@@ -1198,133 +994,6 @@ export default function AttendanceModule() {
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button className="bg-[#ff3d3d] text-white hover:bg-[#cc2020] font-semibold" disabled={submitting} onClick={handleDelete}>{submitting ? 'Deleting...' : 'Delete'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Download by Employee Dialog */}
-      <Dialog open={downloadByEmpOpen} onOpenChange={setDownloadByEmpOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-lg" aria-describedby="download-emp-description">
-          <DialogHeader>
-            <DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2">
-              <Download size={16} className="text-[#ffab40]" /> Download Attendance by Employee
-            </DialogTitle>
-            <p id="download-emp-description" className="text-[11px] text-[#5a6878] mt-1">Select an employee and filter options to download attendance data.</p>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">Employee</label>
-              <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-lg px-3 py-[6px] mb-2">
-                <Search size={13} className="text-[#5a6878] shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Search by name or emp ID…"
-                  value={downloadEmpSearch}
-                  onChange={e => setDownloadEmpSearch(e.target.value)}
-                  className="bg-transparent border-none text-[#e2e8f0] outline-none text-[12px] w-full placeholder:text-[#5a6878]"
-                />
-                {downloadEmpSearch && <button onClick={() => setDownloadEmpSearch('')} className="text-[#5a6878] hover:text-[#e2e8f0]"><X size={12} /></button>}
-              </div>
-              <EmployeeSearchSelect
-                employees={employeeList}
-                value={downloadEmpId}
-                onChange={(id) => { setDownloadEmpId(id); setDownloadEmpSearch(''); }}
-              />
-              {downloadEmpSearch && (
-                <div className="mt-1 max-h-32 overflow-y-auto bg-[#0d1117] border border-[#2e3a48] rounded-lg">
-                  {employeeList.filter(e =>
-                    e.empId.toLowerCase().includes(downloadEmpSearch.toLowerCase()) ||
-                    e.name.toLowerCase().includes(downloadEmpSearch.toLowerCase())
-                  ).length === 0 ? (
-                    <div className="px-3 py-4 text-center text-[10px] text-[#5a6878]">No employees found</div>
-                  ) : (
-                    employeeList
-                      .filter(e =>
-                        e.empId.toLowerCase().includes(downloadEmpSearch.toLowerCase()) ||
-                        e.name.toLowerCase().includes(downloadEmpSearch.toLowerCase())
-                      )
-                      .slice(0, 20)
-                      .map(emp => (
-                        <button
-                          key={emp.id}
-                          type="button"
-                          onClick={() => { setDownloadEmpId(emp.id); setDownloadEmpSearch(''); }}
-                          className={`w-full text-left px-3 py-2 text-[11px] hover:bg-[#141920] transition-colors border-b border-[#1e252e] last:border-0 ${downloadEmpId === emp.id ? 'bg-[#f5a623]/10 text-[#f5a623]' : 'text-[#e2e8f0]'}`}
-                        >
-                          <span className="font-semibold font-mono">{emp.empId}</span>
-                          <span className="text-[#8899aa] mx-1">–</span>
-                          {emp.name}
-                        </button>
-                      ))
-                  )}
-                </div>
-              )}
-            </div>
-            <div>
-              <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">Filter By</label>
-              <div className="flex items-center gap-1 bg-[#141920] border border-[#2e3a48] rounded-md p-0.5">
-                {(['date', 'range', 'month'] as const).map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setDownloadEmpFilterMode(mode)}
-                    className={`flex-1 px-2.5 py-1 rounded text-[9px] font-semibold uppercase tracking-wide transition-all ${
-                      downloadEmpFilterMode === mode
-                        ? 'bg-[#f5a623] text-black'
-                        : 'text-[#8899aa] hover:text-[#e2e8f0]'
-                    }`}
-                  >
-                    {mode === 'date' ? 'Date' : mode === 'range' ? 'Range' : 'Month'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {downloadEmpFilterMode === 'month' ? (
-              <div>
-                <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">Month</label>
-                <div className="flex gap-2">
-                  <select
-                    value={downloadEmpMonth.slice(0, 4)}
-                    onChange={e => setDownloadEmpMonth(`${e.target.value}-${downloadEmpMonth.slice(5)}`)}
-                    className={inputCls + ' w-[90px] appearance-none'}
-                  >
-                    {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={downloadEmpMonth.slice(5)}
-                    onChange={e => setDownloadEmpMonth(`${downloadEmpMonth.slice(0, 5)}${e.target.value}`)}
-                    className={inputCls + ' w-[120px] appearance-none'}
-                  >
-                    {MONTHS.map((m, i) => (
-                      <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ) : downloadEmpFilterMode === 'range' ? (
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">From</label>
-                  <input type="date" className={inputCls} value={downloadEmpFrom} onChange={e => setDownloadEmpFrom(e.target.value)} />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">To</label>
-                  <input type="date" className={inputCls} value={downloadEmpTo} onChange={e => setDownloadEmpTo(e.target.value)} />
-                </div>
-              </div>
-            ) : (
-              <div>
-                <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">Date</label>
-                <input type="date" className={inputCls} value={downloadEmpDate} onChange={e => setDownloadEmpDate(e.target.value)} />
-              </div>
-            )}
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setDownloadByEmpOpen(false)}>Cancel</Button>
-            <Button disabled={downloadByEmpLoading} className="bg-[#00e676] text-black hover:bg-[#00c864] font-semibold flex items-center gap-1.5 disabled:opacity-50" onClick={handleDownloadByEmployee}>
-              {downloadByEmpLoading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} Download
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

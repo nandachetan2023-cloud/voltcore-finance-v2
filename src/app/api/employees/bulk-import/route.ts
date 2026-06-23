@@ -46,8 +46,6 @@ interface EmployeeRow {
   
   // New format (current template)
   'Employee ID*'?: string
-  'Token Number'?: string
-  'Workmen Sl. No.'?: string
   'First Name*'?: string
   'Middle Name'?: string
   'Last Name*'?: string
@@ -77,8 +75,6 @@ interface EmployeeRow {
   'Confirmation Date (YYYY-MM-DD)'?: string
   'Employment Type (permanent/contract/probation/intern/part_time)'?: string
   'Employment Status* (active/inactive)'?: string
-  'Nature of Designation'?: string
-  'Monthly Gross Salary'?: number
   'Probation Months'?: number
   'Notice Period Days'?: number
   'PAN Number'?: string
@@ -201,20 +197,18 @@ export async function POST(request: NextRequest) {
 // Helper to normalize row data from different template formats
 function normalizeRow(row: EmployeeRow) {
   // Detect which format is being used
-  const isNewFormat = 'Employee ID*' in row || 'First Name*' in row || 'Last Name' in row
+  const isNewFormat = 'Employee ID*' in row || 'First Name*' in row
   
   if (isNewFormat) {
     // New format - direct mapping
     return {
       employeeId: row['Employee ID*'],
-      tokenNumber: row['Token Number'],
-      workmenSlNo: row['Workmen Sl. No.'],
       firstName: row['First Name*'],
       middleName: row['Middle Name'],
-      lastName: row['Last Name'] || row['Last Name*'],
+      lastName: row['Last Name*'],
       email: row['Work Email'],
       personalEmail: row['Personal Email'],
-      phone: row['Phone'] || row['Phone*'],
+      phone: row['Phone*'],
       alternatePhone: row['Alternate Phone'],
       dateOfBirth: row['Date of Birth* (YYYY-MM-DD)'],
       gender: row['Gender* (male/female/other)'],
@@ -238,8 +232,6 @@ function normalizeRow(row: EmployeeRow) {
       confirmationDate: row['Confirmation Date (YYYY-MM-DD)'],
       employmentType: row['Employment Type (permanent/contract/probation/intern/part_time)'],
       employmentStatus: row['Employment Status* (active/inactive)'],
-      natureOfDesignation: row['Nature of Designation'],
-      monthlyGrossSalary: row['Monthly Gross Salary'],
       probationMonths: row['Probation Months'],
       noticePeriodDays: row['Notice Period Days'],
       panNumber: row['PAN Number'],
@@ -260,8 +252,6 @@ function normalizeRow(row: EmployeeRow) {
     
     return {
       employeeId: row['Employee ID'],
-      tokenNumber: null,
-      workmenSlNo: null,
       firstName: nameParts.firstName,
       middleName: nameParts.middleName,
       lastName: nameParts.lastName,
@@ -293,8 +283,6 @@ function normalizeRow(row: EmployeeRow) {
       employmentStatus: row['Date of Exit'] ? 'separated' : 'active',
       probationMonths: null,
       noticePeriodDays: null,
-      natureOfDesignation: null,
-      monthlyGrossSalary: null,
       panNumber: row['PAN'],
       aadharNumber: row['Aadhar No.'],
       uanNumber: row['UAN'],
@@ -409,6 +397,8 @@ async function validateAndImport(
       rowErrors.push('Employee ID must be UA + 4 digits (e.g. UA0001, UA0023) or just the number (auto-formatted)')
     }
     if (!data.firstName) rowErrors.push('First Name is required')
+    if (!data.lastName) rowErrors.push('Last Name is required')
+    if (!data.phone) rowErrors.push('Phone is required')
     if (!data.dateOfBirth) rowErrors.push('Date of Birth is required')
     if (!data.dateOfJoining) rowErrors.push('Date of Joining is required')
     if (!data.department) rowErrors.push('Department is required')
@@ -494,11 +484,9 @@ async function validateAndImport(
     // Prepare employee data for import
     const employeeData = {
       employeeCode: normalizedEmployeeId,  // Use normalized ID (UA + 8 digits)
-      tokenNumber: data.tokenNumber || null,
-      workmenSlNo: data.workmenSlNo || null,
       firstName: data.firstName!,
       middleName: data.middleName || null,
-      lastName: data.lastName || '',
+      lastName: data.lastName!,
       email: data.email || `${normalizedEmployeeId}@temp.local`, // Use normalized ID for temp email
       personalEmail: data.personalEmail || null,
       phone: data.phone ? String(data.phone) : '',
@@ -525,8 +513,6 @@ async function validateAndImport(
       confirmationDate: data.confirmationDate ? parseDate(data.confirmationDate) : null,
       employmentType: normalizeEmploymentType(data.employmentType),
       employmentStatus: normalizeEmploymentStatus(data.employmentStatus),
-      natureOfDesignation: data.natureOfDesignation || null,
-      monthlyGrossSalary: data.monthlyGrossSalary ? parseFloat(String(data.monthlyGrossSalary)) : null,
       probationMonths: data.probationMonths || 6,
       noticePeriodDays: data.noticePeriodDays || 30,
       separationDate: data.dateOfExit ? parseDate(data.dateOfExit) : null,

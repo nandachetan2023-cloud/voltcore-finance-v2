@@ -4,7 +4,7 @@ export type UserRole = 'superadmin' | 'admin' | 'demo';
 
 // All top-level modules and their sub-modules for access checking
 export const MODULE_TREE: Record<string, string[]> = {
-  organization: ['organization', 'departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-document-upload', 'employee-documents', 'roles-access'],
+  organization: ['organization', 'departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents', 'roles-access'],
   hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
   procurement: ['procurement', 'purchases', 'expenses'],
   finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
@@ -69,7 +69,7 @@ export type ModuleId =
   | 'project-list'
   // Organization sub-modules
   | 'departments' | 'designations' | 'holidays' | 'leave-policies' | 'attendance-rules'
-  | 'employee-document-upload' | 'employee-documents' | 'roles-access'
+  | 'employee-documents' | 'roles-access'
   // Biometric
   | 'biometric'
   // Admin
@@ -142,7 +142,6 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'leave-policies', icon: 'FileText', label: 'Leave Policies' },
     { id: 'attendance-rules', icon: 'Shield', label: 'Attendance Rules' },
     { id: 'checklist-templates', icon: 'ClipboardList', label: 'Checklist Templates' },
-    { id: 'employee-document-upload', icon: 'Upload', label: 'Document Upload' },
     { id: 'employee-documents', icon: 'FolderOpen', label: 'Employee Documents' },
     { id: 'roles-access', icon: 'UserCog', label: 'Roles & Access' },
   ],
@@ -257,7 +256,6 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   offboarding: { title: 'Offboarding', breadcrumb: 'HRMS › Employee Lifecycle › Offboarding' },
   'exit-management': { title: 'Exit Management', breadcrumb: 'HRMS › Employee Lifecycle › Exit' },
   'checklist-templates': { title: 'Checklist Templates', breadcrumb: 'Organization › Checklist Templates' },
-  'employee-document-upload': { title: 'Document Upload', breadcrumb: 'Organization › Document Upload' },
   'employee-documents': { title: 'Employee Documents', breadcrumb: 'Organization › Employee Documents' },
   'roles-access': { title: 'Roles & Access', breadcrumb: 'Organization › Roles & Access' },
   purchases: { title: 'Purchase Orders', breadcrumb: 'Finance › Procurement' },

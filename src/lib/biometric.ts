@@ -4,7 +4,6 @@ import { superadminDb } from './superadmin-db'
 import { PrismaClient } from '@prisma/client'
 import { classifyAttendance } from './services/attendance-rule-service'
 import { getActiveShiftAssignment } from './services/attendance-rule-service'
-import { decrypt } from './crypto'
 
 type DbClient = PrismaClient
 
@@ -70,7 +69,7 @@ export async function loadBiometricSitesFromDb(dbClient?: DbClient, tenantId?: s
             baseUrl: c.baseUrl,
             corporateId: c.corporateId,
             username: c.username,
-            password: decrypt(c.password),
+            password: c.password,
             siteId: c.siteId,
             siteName: c.siteName,
           },
@@ -512,27 +511,20 @@ export class BiometricService {
   // re-runs processing. Because matching re-evaluates the shift's effective date
   // for each punch's date (getActiveShiftAssignment), this lets you assign a shift
   // (or create the employee) AFTER fetching, then go back and match historical logs.
-  //
-  // When force=true, ALL processed logs (including already-matched ones) are reset.
-  // Use this after fixing shift assignments or when attendance records were deleted
-  // but the raw logs are still marked as matched=true.
-  async rematchUnmatched(force: boolean = false): Promise<{
+  async rematchUnmatched(): Promise<{
     reset: number;
     processedCount: number;
     processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }>;
     skippedRecords: Array<{ empCode: string; name: string; date: string; reason: string }>;
   }> {
-    const where: any = {
-      siteId: this.config.siteId,
-      processed: true,
-    }
-    if (!force) {
-      where.matched = false
-    }
-
+    // Reset unmatched logs for THIS site so processRawLogs picks them up again.
     const resetResult = await this.db.biometricRawLog.updateMany({
-      where,
-      data: { processed: false, matched: false, skipReason: null, processedAt: null },
+      where: {
+        siteId: this.config.siteId,
+        processed: true,
+        matched: false,
+      },
+      data: { processed: false, skipReason: null, processedAt: null },
     })
 
     const { processedCount, processedEmployees, skippedRecords } = await this.processRawLogs()

@@ -275,7 +275,6 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
     const XLSX = require('xlsx');
     const headers = [
       'Employee ID*',
-      'Token Number', 'Workmen Sl. No.',
       'First Name*', 'Middle Name', 'Last Name*',
       'Work Email', 'Personal Email', 'Phone*', 'Alternate Phone',
       'Date of Birth* (YYYY-MM-DD)', 'Gender* (male/female/other)',
@@ -288,7 +287,6 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
       'Date of Joining* (YYYY-MM-DD)', 'Confirmation Date (YYYY-MM-DD)',
       'Employment Type (permanent/contract/probation/intern/part_time)',
       'Employment Status* (active/inactive)',
-      'Nature of Designation', 'Monthly Gross Salary',
       'Probation Months', 'Notice Period Days',
       'PAN Number', 'Aadhar Number', 'UAN Number', 'ESIC Number',
       'Bank Name', 'Bank Account Number', 'Bank IFSC Code',
@@ -297,7 +295,6 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
 
     const sampleRow = [
       'UA0001',
-      'TKN001', 'WM001',
       'John', '', 'Doe',
       'john.doe@company.com', 'john.personal@email.com', '9876543210', '',
       '1990-01-15', 'male',
@@ -309,7 +306,6 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
       '',
       '2024-01-01', '',
       'permanent', 'active',
-      'Skilled', '15000',
       '6', '30',
       'ABCDE1234F', '123456789012', '100123456789', '1234567890',
       'Bank Name', '1234567890123', 'BANK0001234',
@@ -381,9 +377,8 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
       const XLSX = require('xlsx');
       const headers = [
         'Employee ID*',
-        'Token Number', 'Workmen Sl. No.',
-        'First Name*', 'Middle Name', 'Last Name',
-'Work Email', 'Personal Email', 'Phone', 'Alternate Phone',
+        'First Name*', 'Middle Name', 'Last Name*',
+        'Work Email', 'Personal Email', 'Phone*', 'Alternate Phone',
         'Date of Birth* (YYYY-MM-DD)', 'Gender* (male/female/other)',
         'Marital Status (single/married/divorced/widowed)', 'Blood Group (A+/A-/B+/B-/AB+/AB-/O+/O-)',
         "Father's Name",
@@ -394,7 +389,6 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
         'Date of Joining* (YYYY-MM-DD)', 'Confirmation Date (YYYY-MM-DD)',
         'Employment Type (permanent/contract/probation/intern/part_time)',
         'Employment Status* (active/inactive)',
-        'Nature of Designation', 'Monthly Gross Salary',
         'Probation Months', 'Notice Period Days',
         'PAN Number', 'Aadhar Number', 'UAN Number', 'ESIC Number',
         'Bank Name', 'Bank Account Number', 'Bank IFSC Code',
@@ -405,7 +399,6 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
 
       const rows = json.data.map((e: any) => [
         e.employeeCode || '',
-        e.tokenNumber || '', e.workmenSlNo || '',
         e.firstName || '', e.middleName || '', e.lastName || '',
         e.email || '', e.personalEmail || '', e.phone || '', e.alternatePhone || '',
         fmt(e.dateOfBirth), e.gender || '',
@@ -417,7 +410,6 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
         e.reportingManager?.employeeCode || '',
         fmt(e.dateOfJoining), fmt(e.confirmationDate),
         e.employmentType || '', e.employmentStatus || '',
-        e.natureOfDesignation || '', e.monthlyGrossSalary ?? '',
         e.probationMonths ?? '', e.noticePeriodDays ?? '',
         e.panNumber || '', e.aadharNumber || '', e.uanNumber || '', e.esicNumber || '',
         e.bankName || '', e.bankAccount || '', e.bankIfsc || '',

@@ -64,7 +64,6 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   'my-notices':    () => import('@/components/erp/my-notices'),
   'my-payslips':   () => import('@/components/erp/my-payslips'),
   'my-documents':  () => import('@/components/erp/my-documents'),
-  'employee-document-upload': () => import('@/components/erp/employee-document-upload'),
   'my-shifts':     () => import('@/components/erp/my-shifts'),
   'report-manpower':   () => import('@/components/erp/report-manpower'),
   'report-attendance': () => import('@/components/erp/report-attendance'),

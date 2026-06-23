@@ -13,19 +13,11 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '100')
     const offset = parseInt(searchParams.get('offset') || '0')
     const date = searchParams.get('date')
-    const fromDate = searchParams.get('fromDate')
-    const toDate = searchParams.get('toDate')
-    const month = searchParams.get('month')
     const employeeId = searchParams.get('employeeId')
 
     // Build where clause
     const where: any = {}
-    if (month) {
-      const [year, mon] = month.split('-').map(Number)
-      const gte = new Date(year, mon - 1, 1)
-      const lte = new Date(year, mon, 0, 23, 59, 59, 999)
-      where.logDate = { gte, lte }
-    } else if (date) {
+    if (date) {
       const targetDate = new Date(date)
       targetDate.setHours(0, 0, 0, 0)
       const nextDate = new Date(targetDate)
@@ -34,24 +26,10 @@ export async function GET(request: NextRequest) {
         gte: targetDate,
         lt: nextDate,
       }
-    } else if (fromDate) {
-      const gte = new Date(fromDate)
-      gte.setHours(0, 0, 0, 0)
-      if (toDate) {
-        const lte = new Date(toDate)
-        lte.setHours(23, 59, 59, 999)
-        where.logDate = { gte, lte }
-      } else {
-        where.logDate = { gte }
-      }
     }
     if (employeeId) {
       where.employeeId = parseInt(employeeId)
     }
-
-    // When date filters are provided, use a larger limit so older records aren't
-    // silently dropped from the response.
-    const effectiveLimit = (date || fromDate || month) ? 50000 : limit
 
     // Fetch attendance with optimized query
     const [attendance, total] = await Promise.all([
@@ -77,7 +55,7 @@ export async function GET(request: NextRequest) {
           },
         },
         orderBy: { logDate: 'desc' },
-        take: effectiveLimit,
+        take: limit,
         skip: offset,
       }),
       db.attendanceLog.count({ where }),

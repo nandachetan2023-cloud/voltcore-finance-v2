@@ -120,60 +120,58 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'No linked employee record' }, { status: 400 })
       }
 
-      // Fetch current employee record — admin-set fields take priority and cannot be overwritten
-      const currentEmployee = await db.employee.findUnique({
-        where: { id: user.employeeId },
-      })
-      const adminHas = (field: string) => {
-        const val = (currentEmployee as any)?.[field]
-        return val !== null && val !== undefined && val !== ''
-      }
-
-      // Copy form data → employee record, skipping fields already set by admin
+      // Copy form data → employee record
       const updateData: any = {
         updatedAt: new Date(),
       }
 
-      // Personal — only fill if admin didn't already set them
-      if (formData.firstName && !adminHas('firstName')) updateData.firstName = formData.firstName
-      if (formData.middleName !== undefined && !adminHas('middleName')) updateData.middleName = formData.middleName || null
-      if (formData.lastName && !adminHas('lastName')) updateData.lastName = formData.lastName
-      if (formData.dateOfBirth && !adminHas('dateOfBirth')) updateData.dateOfBirth = new Date(formData.dateOfBirth)
-      if (formData.gender && !adminHas('gender')) updateData.gender = formData.gender.toLowerCase()
-      if (formData.maritalStatus && !adminHas('maritalStatus')) updateData.maritalStatus = formData.maritalStatus.toLowerCase()
-      if (formData.bloodGroup && !adminHas('bloodGroup')) updateData.bloodGroup = formData.bloodGroup
-      if (formData.fatherName && !adminHas('fatherName')) updateData.fatherName = formData.fatherName
+      // Personal
+      if (formData.firstName) updateData.firstName = formData.firstName
+      if (formData.middleName !== undefined) updateData.middleName = formData.middleName || null
+      if (formData.lastName) updateData.lastName = formData.lastName
+      if (formData.dateOfBirth) updateData.dateOfBirth = new Date(formData.dateOfBirth)
+      if (formData.gender) updateData.gender = formData.gender.toLowerCase()
+      if (formData.maritalStatus) updateData.maritalStatus = formData.maritalStatus.toLowerCase()
+      if (formData.bloodGroup) updateData.bloodGroup = formData.bloodGroup
+      if (formData.fatherName) updateData.fatherName = formData.fatherName
 
-      // Address (Present) — only fill if admin didn't set currentAddress
-      if (!adminHas('currentAddress')) {
-        const presentParts = [formData.presentDoorNo, formData.presentBuilding, formData.presentStreet, formData.presentLocation].filter(Boolean)
-        if (presentParts.length) updateData.currentAddress = presentParts.join(', ')
+      // Address (Present)
+      const presentParts = [formData.presentDoorNo, formData.presentBuilding, formData.presentStreet, formData.presentLocation].filter(Boolean)
+      if (presentParts.length) updateData.currentAddress = presentParts.join(', ')
+      if (formData.presentCity) updateData.currentCity = formData.presentCity
+      if (formData.presentState) updateData.currentState = formData.presentState
+      if (formData.presentPincode) updateData.currentPincode = formData.presentPincode
+
+      // Address (Permanent)
+      const permParts = [formData.permanentDoorNo, formData.permanentBuilding, formData.permanentStreet, formData.permanentLocation].filter(Boolean)
+      if (permParts.length) updateData.permanentAddress = permParts.join(', ')
+      if (formData.permanentCity) updateData.permanentCity = formData.permanentCity
+      if (formData.permanentState) updateData.permanentState = formData.permanentState
+      if (formData.permanentPincode) updateData.permanentPincode = formData.permanentPincode
+
+      // Bank & statutory
+      if (formData.bankName) updateData.bankName = formData.bankName
+      if (formData.bankAccount) updateData.bankAccount = formData.bankAccount
+      if (formData.bankIfsc) updateData.bankIfsc = formData.bankIfsc
+      if (formData.panNumber) updateData.panNumber = formData.panNumber
+      if (formData.aadharNumber) updateData.aadharNumber = formData.aadharNumber
+      if (formData.uanNumber) updateData.uanNumber = formData.uanNumber
+      if (formData.esicNumber) updateData.esicNumber = formData.esicNumber
+
+      // Nominee (Form No. 25)
+      if (formData.nomineeName) updateData.nomineeName = formData.nomineeName
+      if (formData.nomineeRelation) updateData.nomineeRelation = formData.nomineeRelation
+      if (formData.nomineeAddress) updateData.nomineeAddress = formData.nomineeAddress
+
+      // Emergency contact (from onboarding form; falls back to nominee if not provided)
+      if (formData.emergencyContactName) {
+        updateData.emergencyContactName = formData.emergencyContactName
+        updateData.emergencyContactRelation = formData.emergencyContactRelation || null
+        updateData.emergencyContactPhone = formData.emergencyContactPhone || null
+      } else if (formData.nomineeName) {
+        updateData.emergencyContactName = formData.nomineeName
+        updateData.emergencyContactRelation = formData.nomineeRelation || null
       }
-      if (formData.presentCity && !adminHas('currentCity')) updateData.currentCity = formData.presentCity
-      if (formData.presentState && !adminHas('currentState')) updateData.currentState = formData.presentState
-      if (formData.presentPincode && !adminHas('currentPincode')) updateData.currentPincode = formData.presentPincode
-
-      // Address (Permanent) — only fill if admin didn't set permanentAddress
-      if (!adminHas('permanentAddress')) {
-        const permParts = [formData.permanentDoorNo, formData.permanentBuilding, formData.permanentStreet, formData.permanentLocation].filter(Boolean)
-        if (permParts.length) updateData.permanentAddress = permParts.join(', ')
-      }
-      if (formData.permanentCity && !adminHas('permanentCity')) updateData.permanentCity = formData.permanentCity
-      if (formData.permanentState && !adminHas('permanentState')) updateData.permanentState = formData.permanentState
-      if (formData.permanentPincode && !adminHas('permanentPincode')) updateData.permanentPincode = formData.permanentPincode
-
-      // Bank & statutory — only fill if admin didn't set them
-      if (formData.bankName && !adminHas('bankName')) updateData.bankName = formData.bankName
-      if (formData.bankAccount && !adminHas('bankAccount')) updateData.bankAccount = formData.bankAccount
-      if (formData.bankIfsc && !adminHas('bankIfsc')) updateData.bankIfsc = formData.bankIfsc
-      if (formData.panNumber && !adminHas('panNumber')) updateData.panNumber = formData.panNumber
-      if (formData.aadharNumber && !adminHas('aadharNumber')) updateData.aadharNumber = formData.aadharNumber
-      if (formData.uanNumber && !adminHas('uanNumber')) updateData.uanNumber = formData.uanNumber
-      if (formData.esicNumber && !adminHas('esicNumber')) updateData.esicNumber = formData.esicNumber
-
-      // Emergency contact (using nominee as a fallback) — only fill if admin didn't set them
-      if (formData.nomineeName && !adminHas('emergencyContactName')) updateData.emergencyContactName = formData.nomineeName
-      if (formData.nomineeRelation && !adminHas('emergencyContactRelation')) updateData.emergencyContactRelation = formData.nomineeRelation
 
       await db.employee.update({
         where: { id: user.employeeId },
@@ -188,12 +186,11 @@ export async function POST(request: NextRequest) {
           onboardingApprovedAt: new Date(),
           onboardingRejectionReason: null,
           phone: formData.phone || (user as any).phone || '',
-          employeeCode: currentEmployee?.employeeCode || null,
         } as any,
       })
 
-      // Update employee phone too if provided (only if admin didn't already set it)
-      if (formData.phone && !adminHas('phone')) {
+      // Update employee phone too if provided
+      if (formData.phone) {
         await db.employee.update({
           where: { id: user.employeeId },
           data: { phone: formData.phone, updatedAt: new Date() },

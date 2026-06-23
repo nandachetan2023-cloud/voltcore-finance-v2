@@ -47,38 +47,19 @@ export async function GET(request: NextRequest) {
     // Get attendance data for the month
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);
-
+    
     const attendanceData = await db.attendanceLog.groupBy({
       by: ['employeeId', 'status'],
       where: {
         employeeId: { in: employees.map(e => e.id) },
-        logDate: { gte: startDate, lte: endDate },
+        logDate: {
+          gte: startDate,
+          lte: endDate,
+        },
       },
-      _count: { id: true },
-    });
-
-    // Fetch approved tour requests (count as present)
-    const tourData = await db.tourRequest.findMany({
-      where: {
-        employeeId: { in: employees.map(e => e.id) },
-        status: 'approved',
-        fromDate: { lte: endDate },
-        toDate: { gte: startDate },
-        isDeleted: false,
+      _count: {
+        id: true,
       },
-      select: { employeeId: true, days: true },
-    });
-
-    // Fetch approved paid leave requests for leave days
-    const leaveData = await db.leaveRequest.findMany({
-      where: {
-        employeeId: { in: employees.map(e => e.id) },
-        status: 'approved',
-        fromDate: { lte: endDate },
-        toDate: { gte: startDate },
-        isDeleted: false,
-      },
-      select: { employeeId: true, days: true },
     });
 
     // Create attendance map
@@ -91,47 +72,8 @@ export async function GET(request: NextRequest) {
       if (a.status === 'present' || a.status === 'half-day') {
         data.present += a._count?.id || 0;
       }
+      // Leave days logic can be enhanced based on your attendance/leave tracking
     });
-    tourData.forEach(t => {
-      if (!attendanceMap.has(t.employeeId)) {
-        attendanceMap.set(t.employeeId, { present: 0, leaveDays: 0 });
-      }
-      attendanceMap.get(t.employeeId)!.present += Number(t.days);
-    });
-    leaveData.forEach(l => {
-      if (!attendanceMap.has(l.employeeId)) {
-        attendanceMap.set(l.employeeId, { present: 0, leaveDays: 0 });
-      }
-      attendanceMap.get(l.employeeId)!.leaveDays += Number(l.days);
-    });
-
-    // Fetch shift assignments for working days calculation
-    const shiftAssignments = await db.shiftAssignment.findMany({
-      where: {
-        employeeId: { in: employees.map(e => e.id) },
-        effectiveFrom: { lte: endDate },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: startDate } }],
-      },
-      include: { Shift: { select: { weekOffDays: true } } },
-      orderBy: { effectiveFrom: 'desc' },
-    });
-
-    const shiftWeekOffDaysMap = new Map<number, number[]>();
-    for (const sa of shiftAssignments) {
-      if (!shiftWeekOffDaysMap.has(sa.employeeId) && sa.Shift?.weekOffDays) {
-        shiftWeekOffDaysMap.set(sa.employeeId, sa.Shift.weekOffDays);
-      }
-    }
-
-    function computeMonthlyWorkingDays(month: number, year: number, weekOffDays: number[]): number {
-      const totalDays = new Date(year, month, 0).getDate();
-      let count = 0;
-      for (let d = 1; d <= totalDays; d++) {
-        const dow = new Date(year, month - 1, d).getDay();
-        if (!weekOffDays.includes(dow)) count++;
-      }
-      return count;
-    }
 
     // Fetch approved advances for the month
     // Use approvedAmount if set (approver may have reduced the amount), otherwise fall back to amount
@@ -245,10 +187,6 @@ export async function GET(request: NextRequest) {
       const fullName = `${employee.firstName} ${employee.middleName || ''} ${employee.lastName}`.trim().toUpperCase();
       const attendance = attendanceMap.get(employee.id) || { present: 0, leaveDays: 0 };
       const advance = advanceMap.get(employee.id) || 0;
-      const weekOffDays = shiftWeekOffDaysMap.get(employee.id) || null;
-      const computedWorkingDays = weekOffDays
-        ? computeMonthlyWorkingDays(month, year, weekOffDays)
-        : 26;
 
       const row = worksheet.addRow([
         index + 1,               // col 0: SL NO.
@@ -270,14 +208,14 @@ export async function GET(request: NextRequest) {
         employee.natureOfDesignation || '', // P: NATURE OF DESIGNATION / GRADE
         employee.monthlyGrossSalary ? parseFloat(employee.monthlyGrossSalary.toString()) : '', // Q: MONTHLY GROSS SALARY
         attendance.present, // R: ACTUAL ATTENDANCE
-        attendance.leaveDays, // S: LEAVE DAYS (auto-filled from approved leave requests)
+        attendance.leaveDays, // S: LEAVE DAYS
         '', // T: PH DAYS (USER INPUT)
         '', // U: ACTUAL EARN WAGES (CALCULATED)
         '', // V: ACTUAL OT HRS (USER INPUT)
         '', // W: ACTUAL OT AMOUNT (CALCULATED)
         '', // X: GROSS EARN WAGES (CALCULATED)
         '', // Y: BASIC WAGES/DAY (USER INPUT)
-        computedWorkingDays, // Z: MONTHLY WORKING DAYS (auto-filled from shift)
+        '', // Z: MONTHLY WORKING DAYS (USER INPUT)
         '', // AA: OT HRS (USER INPUT)
         '', // AB: ATTENDANCE (USER INPUT)
         '', // AC: PH (USER INPUT)

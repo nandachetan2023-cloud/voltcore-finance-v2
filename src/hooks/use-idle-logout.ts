@@ -33,11 +33,6 @@ export function useIdleLogout({ onLogout, enabled = true }: UseIdleLogoutOptions
     if (countdownRef.current) clearInterval(countdownRef.current);
   }, []);
 
-  const showWarningRef = useRef(showWarning);
-  useEffect(() => {
-    showWarningRef.current = showWarning;
-  }, [showWarning]);
-
   const startTimers = useCallback(() => {
     clearTimers();
     setShowWarning(false);
@@ -83,7 +78,7 @@ export function useIdleLogout({ onLogout, enabled = true }: UseIdleLogoutOptions
       // Only reset if the warning isn't showing — if it is, the user must
       // explicitly click "Stay logged in" (prevents accidental resets from
       // background events while the warning is visible).
-      if (!showWarningRef.current) startTimers();
+      if (!showWarning) startTimers();
     };
 
     ACTIVITY_EVENTS.forEach(e => window.addEventListener(e, handleActivity, { passive: true }));

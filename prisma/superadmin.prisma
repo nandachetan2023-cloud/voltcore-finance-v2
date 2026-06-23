@@ -36,7 +36,6 @@ model TenantUser {
 
   name           String
   email          String
-  employeeCode   String?                       // unique login ID from Employee.employeeCode
   password       String                        // bcrypt hash
   phone          String   @default("")
   allowedModules String   @default("all")      // "all" or comma-separated: "organization,hrms"
@@ -54,9 +53,7 @@ model TenantUser {
   updatedAt      DateTime @updatedAt
 
   @@unique([tenantId, email])
-  @@unique([tenantId, employeeCode])
   @@index([email])
-  @@index([employeeCode])
 }
 
 // ── BiometricSiteConfig: per-tenant punch machine credentials ───
