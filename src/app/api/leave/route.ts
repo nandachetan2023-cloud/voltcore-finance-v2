@@ -195,6 +195,7 @@ export async function POST(request: NextRequest) {
       toDate,
       days,
       reason,
+      supportingDocument,
     } = body
 
     if (!employeeId || !leaveType || !fromDate || !toDate) {
@@ -250,6 +251,14 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'This leave type is not applicable to your role or department' },
         { status: 400 }
       )
+    }
+
+    // ── Document requirement check ────────────────────────────────
+    if (policy.requiresDocument && !supportingDocument) {
+      return NextResponse.json({
+        success: false,
+        error: `${policy.name} requires a supporting document (e.g. medical certificate). Please attach one before submitting.`,
+      }, { status: 400 })
     }
 
     // ── Policy restriction checks ─────────────────────────────────
@@ -414,6 +423,7 @@ export async function POST(request: NextRequest) {
         toDate: new Date(toDate),
         days: leaveDays,
         reason: reason || '',
+        supportingDocument: supportingDocument || undefined,
         status: 'pending',
         currentStep: 1,
         appliedDate: new Date(),

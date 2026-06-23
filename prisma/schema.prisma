@@ -253,25 +253,26 @@ model ItemCategory {
 }
 
 model LeaveRequest {
-  id              Int       @id @default(autoincrement())
-  employeeId      Int
-  leaveType       String
-  fromDate        DateTime
-  toDate          DateTime
-  days            Decimal   @default(1.0) @db.Decimal(5, 1)
-  reason          String?
-  status          String    @default("pending")
-  currentStep     Int       @default(1)
-  appliedDate     DateTime  @default(now())
-  approvedBy      Int?
-  approvedDate    DateTime?
-  rejectedBy      Int?
-  rejectedDate    DateTime?
-  rejectionReason String?
-  isDeleted       Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime
-  Employee        Employee  @relation(fields: [employeeId], references: [id])
+  id                  Int       @id @default(autoincrement())
+  employeeId          Int
+  leaveType           String
+  fromDate            DateTime
+  toDate              DateTime
+  days                Decimal   @default(1.0) @db.Decimal(5, 1)
+  reason              String?
+  supportingDocument  Json?
+  status              String    @default("pending")
+  currentStep         Int       @default(1)
+  appliedDate         DateTime  @default(now())
+  approvedBy          Int?
+  approvedDate        DateTime?
+  rejectedBy          Int?
+  rejectedDate        DateTime?
+  rejectionReason     String?
+  isDeleted           Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime
+  Employee            Employee  @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId, status])
   @@index([fromDate, toDate])
