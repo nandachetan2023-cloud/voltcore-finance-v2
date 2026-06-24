@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   IndianRupee, TrendingUp, Users, Download, FileSpreadsheet,
-  Plus, Eye, Loader2, AlertTriangle, CheckCircle2, Clock, Filter
+  Plus, Eye, Loader2, AlertTriangle, CheckCircle2, Clock, Filter, Trash2
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -130,6 +130,9 @@ export default function PayrollModule() {
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [calculating, setCalculating] = useState(false);
   const templateFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [deleteConfirmRun, setDeleteConfirmRun] = useState<PayrollRun | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Restore previously uploaded template file after page refresh
   useEffect(() => {
@@ -638,6 +641,30 @@ export default function PayrollModule() {
     }
   };
 
+  const handleDeleteRun = async () => {
+    if (!deleteConfirmRun) return;
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/payroll', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deleteConfirmRun.id }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        toast.success(`Payroll run "${deleteConfirmRun.name}" deleted successfully.`);
+        setDeleteConfirmRun(null);
+        fetchData();
+      } else {
+        toast.error(json.error || 'Failed to delete payroll run');
+      }
+    } catch {
+      toast.error('Failed to delete payroll run');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -787,13 +814,21 @@ export default function PayrollModule() {
                         <Download size={14} />
                         Payslips
                       </button>
-                      <button 
+                      <button
                         className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-medium bg-[#00e676]/10 text-[#00e676] hover:bg-[#00e676]/20 border border-[#00e676]/30 transition-colors"
                         onClick={() => handleDownloadSalarySheet(run.id, run.month, run.year)}
                         title="Download Salary Sheet (Excel)"
                       >
                         <FileSpreadsheet size={14} />
                         Sheet
+                      </button>
+                      <button
+                        className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-medium bg-[#ff3d3d]/10 text-[#ff3d3d] hover:bg-[#ff3d3d]/20 border border-[#ff3d3d]/30 transition-colors"
+                        onClick={() => setDeleteConfirmRun(run)}
+                        title="Delete Payroll Run"
+                      >
+                        <Trash2 size={14} />
+                        Delete
                       </button>
                     </div>
                   </td>
@@ -1149,6 +1184,43 @@ export default function PayrollModule() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmRun} onOpenChange={open => { if (!open) setDeleteConfirmRun(null); }}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-[#ff3d3d] text-base flex items-center gap-2">
+              <Trash2 size={18} /> Delete Payroll Run
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="text-[12px] text-[#e2e8f0]">
+              Are you sure you want to delete <span className="font-semibold text-[#f5a623]">{deleteConfirmRun?.name}</span>?
+            </p>
+            <p className="text-[11px] text-[#8899aa]">
+              This will permanently remove the payroll run and all {deleteConfirmRun?.totalEmployees} employee salary records for{' '}
+              {deleteConfirmRun ? `${MONTHS[deleteConfirmRun.month - 1].label} ${deleteConfirmRun.year}` : ''}. This action cannot be undone.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]"
+              onClick={() => setDeleteConfirmRun(null)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#ff3d3d] text-white hover:bg-[#cc2222] font-semibold"
+              onClick={handleDeleteRun}
+              disabled={deleting}
+            >
+              {deleting ? <><Loader2 size={14} className="animate-spin mr-1" />Deleting...</> : <><Trash2 size={14} className="mr-1" />Delete</>}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
