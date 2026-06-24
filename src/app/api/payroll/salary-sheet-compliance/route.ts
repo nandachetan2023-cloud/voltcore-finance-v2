@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         },
         PayrollRun: true,
       },
-      orderBy: { employeeId: 'asc' },
+      orderBy: { Employee: { employeeCode: 'asc' } },
     });
 
     if (payrollItems.length === 0) {
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
       'E.P.F in Rs',
       'E.S.I in Rs',
       'House rent in Rs',
-      'Other deduction in Rs(PT)',
+      'Other deduction in Rs',
       'Total deduction in Rs',
       'Net amount paid in Rs',
       'Time&date of payment',
@@ -110,7 +110,6 @@ export async function POST(request: NextRequest) {
       const grossEarnings = Number(item.grossEarning);
       const pfDeduction = Number(item.pfDeduction) || 0;
       const esiDeduction = Number(item.esiDeduction) || 0;
-      const ptDeduction = Number(item.ptDeduction) || 0;
       const totalDeduction = Number(item.totalDeduction);
       const netPay = Number(item.netPay);
       
@@ -146,7 +145,7 @@ export async function POST(request: NextRequest) {
         pfDeduction, // EPF
         esiDeduction, // ESI
         hra, // House rent
-        ptDeduction, // PT
+        '', // Other deduction (PT) — removed (blank)
         totalDeduction, // Total deduction
         netPay, // Net amount paid
         '', // Time & date of payment

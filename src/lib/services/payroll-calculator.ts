@@ -163,9 +163,8 @@ export class PayrollCalculator {
       ? (grossSalary * this.config.esiEmployeeRate) / 100 
       : 0;
 
-    // Professional Tax (state-specific)
-    const ptConfig = this.config.professionalTax.find(pt => pt.state === state);
-    const ptDeduction = ptConfig ? ptConfig.amount : 0;
+    // Professional Tax — not deducted by the company
+    const ptDeduction = 0;
 
     return {
       pfDeduction: Math.round(pfDeduction * 100) / 100,

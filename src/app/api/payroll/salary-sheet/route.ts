@@ -50,7 +50,6 @@ export async function POST(request: NextRequest) {
         PayrollRun: true,
       },
       orderBy: [
-        { Employee: { Department: { name: 'asc' } } },
         { Employee: { employeeCode: 'asc' } },
       ],
     });
@@ -81,7 +80,7 @@ export async function POST(request: NextRequest) {
       'BANK NAME',
       'ACCOUNT NO.',
       'IFSC CODE NO.',
-      '', // Column 11 - Empty
+      'SITE', // Column 11 - SITE
       'UAN NO.',
       'ESIC IP NO',
       'DESIGNATION',
@@ -108,7 +107,7 @@ export async function POST(request: NextRequest) {
       'TOTAL NETT PAYBLE',
       'EPF',
       'ESIC',
-      'PT',
+      '', // PT — removed
       'TOTAL DEDUCTION',
       'NETT PAYBLE',
       'EMPLOYEE SIGNATURE/THUMB IMPRESSION ',
@@ -137,7 +136,7 @@ export async function POST(request: NextRequest) {
       'TOTAL SALARY',
       'EPF',
       'ESIC',
-      'TDS',
+      '', // TDS — removed
       'ADVANCE',
     ]);
 
@@ -160,8 +159,6 @@ export async function POST(request: NextRequest) {
       const grossEarnings = Number(item.grossEarning);
       const pfDeduction = Number(item.pfDeduction) || 0;
       const esiDeduction = Number(item.esiDeduction) || 0;
-      const ptDeduction = Number(item.ptDeduction) || 0;
-      const tdsDeduction = Number(item.tdsDeduction) || 0;
       const totalDeduction = Number(item.totalDeduction);
       const netPay = Number(item.netPay);
       const advance = Number(item.otherDeductions) || 0;
@@ -184,7 +181,7 @@ export async function POST(request: NextRequest) {
         employee.bankName || 'BANDHAN BANK',
         employee.bankAccount || '',
         employee.bankIfsc || 'BDBL0001747',
-        '', // Column 11 - Empty
+        employee.Branch?.name || '', // Column 11 - SITE
         employee.uanNumber || '',
         employee.esicNumber || '',
         employee.Designation?.name || '',
@@ -211,7 +208,7 @@ export async function POST(request: NextRequest) {
         totalNettPayable, // TOTAL NETT PAYBLE
         pfDeduction, // EPF
         esiDeduction, // ESIC
-        ptDeduction, // PT
+        '', // PT — removed (blank)
         totalDeduction, // TOTAL DEDUCTION
         nettPayableAfterDeduction, // NETT PAYBLE
         '', // SIGNATURE - Column 41
@@ -240,7 +237,7 @@ export async function POST(request: NextRequest) {
         grossEarnings, // TOTAL SALARY
         pfDeduction, // EPF
         esiDeduction, // ESIC
-        tdsDeduction, // TDS
+        '', // TDS — removed (blank)
         advance, // ADVANCE
       ]);
     });

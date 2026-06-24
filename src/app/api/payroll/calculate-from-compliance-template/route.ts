@@ -116,8 +116,8 @@ export async function POST(request: NextRequest) {
         // House rent = HRA proportional to days worked
         const houseRent = workingDays > 0 ? Math.round((hra / workingDays) * daysWorked * 100) / 100 : 0;
 
-        // PT (Professional Tax) = 125 if total wages > 13300, else 0
-        const pt = totalWagesESI > 13300 ? 125 : 0;
+        // PT (Professional Tax) — not deducted by the company
+        const pt = 0;
 
         // Total deduction
         const totalDeduction = epf + esi + pt;
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
         row.getCell(17).value = epf;
         row.getCell(18).value = esi;
         row.getCell(19).value = houseRent;
-        row.getCell(20).value = pt;
+        row.getCell(20).value = ''; // PT — removed (blank)
         row.getCell(21).value = totalDeduction;
         row.getCell(22).value = netAmount;
 

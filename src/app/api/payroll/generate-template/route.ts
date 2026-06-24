@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
         Grade: true,
       },
       orderBy: [
-        { Department: { name: 'asc' } },
         { employeeCode: 'asc' },
       ],
     });
@@ -111,20 +110,20 @@ export async function GET(request: NextRequest) {
     // Define column headers (69 columns - SL NO. first, then EMPLOYEE ID, then original 67 columns)
     const headers = [
       'SL NO.', 'EMPLOYEE ID', 'WORKMEN SL. NO.', 'TOKEN NO.', 'NAME OF EMPLOYEE', "FATHER'S NAME",
-      'DOJ', 'DOB', 'BANK NAME', 'ACCOUNT NO.', 'IFSC CODE NO.', '',
+      'DOJ', 'DOB', 'BANK NAME', 'ACCOUNT NO.', 'IFSC CODE NO.', 'SITE',
       'UAN NO.', 'ESIC IP NO', 'DESIGNATION', 'DEPARTMENT', 'NATURE OF DESIGNATION',
       'MONTHLY GROSS SALARY', 'ACTUAL ATTENDANCE', 'LEAVE DAYS', 'PH DAYS',
       'ACTUAL EARN WAGES', 'ACTUAL OT HRS', 'ACTUAL OT AMOUNT', 'GROSS EARN WAGES',
       'BASIC WAGES/DAY', 'MONTHLY WORKING DAYS', 'OT. HRS', 'ATTENDANCE', 'PH',
       'WAGES/MONTH', 'EARN WAGES', 'PH AMOUNT', 'TOTAL EARN WAGES', 'OT HRS PAYMENT',
-      'TOTAL NETT PAYBLE', 'EPF', 'ESIC', 'PT', 'TOTAL DEDUCTION', 'NETT PAYBLE',
+      'TOTAL NETT PAYBLE', 'EPF', 'ESIC', '', 'TOTAL DEDUCTION', 'NETT PAYBLE',
       'EMPLOYEE SIGNATURE/THUMB IMPRESSION', '', '', 'TOTAL NON COMPLIANCE AMOUNT',
       'ADVANCE', 'AREEARS', 'NETT PAYBLE NON COMPLIANCE', 'GRAND TOTAL NETT PAYBLE SALARY',
       '', 'LEAVE', 'BONUS', '', '', '',
       'MONTHLY BASIC SALARY', 'PH AMOUNT', 'OT AMOUNT', 'EARN SALARY',
       'MONTHLY House Rent Allow.', 'Monthly Site Allow.', 'Monthly Leave Travel Allow.',
       'Monthly Special Allow.', 'MonthlyAttendence Allow.', 'TOTAL SALARY',
-      'EPF', 'ESIC', 'TDS', 'ADVANCE'
+      'EPF', 'ESIC', '', 'ADVANCE'
     ];
 
     // Add header row
@@ -200,7 +199,7 @@ export async function GET(request: NextRequest) {
         employee.bankName || '', // H: BANK NAME
         employee.bankAccount || '', // I: ACCOUNT NO
         employee.bankIfsc || '', // J: IFSC CODE
-        '', // K: Empty
+        employee.Branch?.name || '', // L: SITE
         employee.uanNumber || '', // L: UAN
         employee.esicNumber || '', // M: ESIC
         employee.Designation?.name || '', // N: DESIGNATION
@@ -233,13 +232,11 @@ export async function GET(request: NextRequest) {
       // Yellow = user input required
       // White  = calculated after upload — leave blank
 
-      // cols 1-20: auto-filled (blue, editable)
+      // cols 1-20: auto-filled (blue, editable) — incl. col 12 (SITE)
       for (let col = 1; col <= 20; col++) {
-        if (col !== 12) { // Skip col 12 (empty column K shifted)
-          const cell = row.getCell(col);
-          cell.style = autoFilledStyle;
-          cell.note = 'Auto-filled by system. You can edit this value if needed.';
-        }
+        const cell = row.getCell(col);
+        cell.style = autoFilledStyle;
+        cell.note = 'Auto-filled by system. You can edit this value if needed.';
       }
 
       // col 46 (ADVANCE): Editable auto-filled (Light Green — fetched from advance requests)

@@ -29,7 +29,7 @@ export async function GET() {
       'E.P.F in Rs',
       'E.S.I in Rs',
       'House rent in Rs',
-      'Other deduction in Rs(PT)',
+      'Other deduction in Rs',
       'Total deduction in Rs',
       'Net amount paid in Rs',
       'Time&date of payment',
@@ -83,7 +83,7 @@ export async function GET() {
       ['- Columns 1-6: Employee identification (Sl. No., Name, Site, UAN, IP NO., Designation)'],
       ['- Columns 7-9: Attendance details (Days worked, OT hours, Work done)'],
       ['- Columns 10-15: Earnings (Daily rate, Basic, DA, OT, Other payments, Total wages)'],
-      ['- Columns 16-20: Deductions (EPF, ESI, House rent, PT, Total deductions)'],
+      ['- Columns 16-20: Deductions (EPF, ESI, House rent, Other, Total deductions)'],
       ['- Column 21: Net amount paid'],
       ['- Columns 22-24: Payment details (Time/date, Place, Signature)'],
     ];

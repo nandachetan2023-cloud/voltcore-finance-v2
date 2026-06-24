@@ -175,8 +175,8 @@ export class PayslipGenerator {
         [
           { content: 'Site Allowances' },
           { content: this.formatCurrency(data.earnings.siteAllowance), colSpan: 2 },
-          { content: 'PT' },
-          { content: this.formatCurrency(data.deductions.pt), colSpan: 2 }
+          { content: '' },
+          { content: '', colSpan: 2 }
         ],
         // Row 15
         [

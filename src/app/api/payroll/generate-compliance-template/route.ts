@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     const employees = await db.employee.findMany({
       where: employeeWhere,
       include: { Department: true, Designation: true, Branch: true },
-      orderBy: [{ Department: { name: 'asc' } }, { employeeCode: 'asc' }],
+      orderBy: [{ employeeCode: 'asc' }],
     });
 
     if (employees.length === 0) {
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
       'TOTAL NO OF DAYS WORKED', 'O.T Hours', 'no.of work done',
       'daily rate of wages', 'Basic wages in Rs', 'Dearness allowances in Rs',
       'Overtime in Rs', 'Other cash payment in Rs', 'TOTAL WAGES FOR ESI DEDUCTION(TNP)',
-      'E.P.F in Rs', 'E.S.I in Rs', 'House rent in Rs', 'Other deduction in Rs(PT)',
+      'E.P.F in Rs', 'E.S.I in Rs', 'House rent in Rs', 'Other deduction in Rs',
       'Total deduction in Rs', 'Net amount paid in Rs',
       'Time & date of payment', 'Place of payment', 'Signature or thumb Impression',
     ];

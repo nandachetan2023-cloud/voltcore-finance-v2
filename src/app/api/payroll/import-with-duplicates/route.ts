@@ -128,8 +128,8 @@ export async function POST(request: NextRequest) {
           grossEarning: salaryData.monthlyGrossSalary,
           pfDeduction: salaryData.epf,
           esiDeduction: salaryData.esic,
-          ptDeduction: salaryData.pt,
-          tdsDeduction: salaryData.tds,
+          ptDeduction: 0, // PT — not deducted by the company
+          tdsDeduction: 0, // TDS — not deducted by the company
           lopDeduction: 0,
           otherDeductions: salaryData.advance,
           totalDeduction: salaryData.totalDeduction,

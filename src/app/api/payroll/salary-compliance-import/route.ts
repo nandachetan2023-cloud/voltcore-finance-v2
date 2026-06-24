@@ -264,7 +264,7 @@ export async function POST(request: NextRequest) {
               grossEarning: salaryData.totalWagesForESI,
               pfDeduction: salaryData.epf,
               esiDeduction: salaryData.esi,
-              ptDeduction: salaryData.otherDeduction,
+              ptDeduction: 0, // PT / Other deduction — not deducted by the company
               tdsDeduction: 0,
               lopDeduction: 0,
               otherDeductions: 0,
@@ -302,7 +302,7 @@ export async function POST(request: NextRequest) {
               grossEarning: salaryData.totalWagesForESI,
               pfDeduction: salaryData.epf,
               esiDeduction: salaryData.esi,
-              ptDeduction: salaryData.otherDeduction,
+              ptDeduction: 0, // PT / Other deduction — not deducted by the company
               tdsDeduction: 0,
               lopDeduction: 0,
               otherDeductions: 0,

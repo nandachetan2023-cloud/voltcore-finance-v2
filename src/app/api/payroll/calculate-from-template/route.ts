@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
         // Deductions (AJ-AM)
         const AJ = Math.ceil(AG * 0.12); // EPF (12%)
         const AK = Math.ceil(AG * 0.0075); // ESIC (0.75%)
-        const AL = AI > 13300 ? 125 : 0; // PT (threshold ₹13,300)
+        const AL = 0; // PT — not deducted by the company
         const AM = AJ + AK + AL; // TOTAL DEDUCTION
 
         // Net Payable (AN)
@@ -142,7 +142,6 @@ export async function POST(request: NextRequest) {
         // Compliance Deductions (BM-BP)
         const BM = AJ; // EPF
         const BN = AK; // ESIC
-        const BO = AL; // TDS/PT
         const BP = AS; // ADVANCE
 
         // Write calculated values back into the row
@@ -157,7 +156,7 @@ export async function POST(request: NextRequest) {
         row.getCell(36).value = AI; // col 36: AI - TOTAL NETT PAYBLE
         row.getCell(37).value = AJ; // col 37: AJ - EPF
         row.getCell(38).value = AK; // col 38: AK - ESIC
-        row.getCell(39).value = AL; // col 39: AL - PT
+        row.getCell(39).value = ''; // col 39: PT — removed (blank)
         row.getCell(40).value = AM; // col 40: AM - TOTAL DEDUCTION
         row.getCell(41).value = AN; // col 41: AN - NETT PAYBLE
         row.getCell(45).value = AR; // col 45: AR - TOTAL NON COMPLIANCE AMOUNT
@@ -180,7 +179,7 @@ export async function POST(request: NextRequest) {
         row.getCell(65).value = BL; // col 65: BL - TOTAL SALARY
         row.getCell(66).value = BM; // col 66: BM - EPF
         row.getCell(67).value = BN; // col 67: BN - ESIC
-        row.getCell(68).value = BO; // col 68: BO - TDS/PT
+        row.getCell(68).value = ''; // col 68: TDS — removed (blank)
         row.getCell(69).value = BP; // col 69: BP - ADVANCE
 
         calculatedData.push({

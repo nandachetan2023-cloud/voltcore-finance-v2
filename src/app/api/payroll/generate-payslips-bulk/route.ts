@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
         },
         PayrollRun: true,
       },
+      orderBy: { Employee: { employeeCode: 'asc' } },
     });
 
     if (payrollItems.length === 0) {

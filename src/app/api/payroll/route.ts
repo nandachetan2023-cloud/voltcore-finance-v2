@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
               },
             },
           },
+          orderBy: { Employee: { employeeCode: 'asc' } },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -145,7 +146,11 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await db.payrollRun.delete({ where: { id } })
+    // PayrollItem has no onDelete: Cascade, so remove child items first
+    await db.$transaction([
+      db.payrollItem.deleteMany({ where: { payrollRunId: id } }),
+      db.payrollRun.delete({ where: { id } }),
+    ])
 
     return NextResponse.json({ success: true, data: { id } })
   } catch (error) {
