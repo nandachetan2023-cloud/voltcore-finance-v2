@@ -327,16 +327,8 @@ export default function AttendanceModule() {
     try {
       const res = await fetch('/api/biometric/sites-list');
       const json = await res.json();
-      console.log('🔍 Biometric sites API response:', json);
-      if (json.success) {
-        console.log('✅ Active biometric sites loaded:', json.data.length, json.data);
-        setBiometricSites(json.data);
-      } else {
-        console.error('❌ Failed to fetch biometric sites:', json.error);
-      }
-    } catch (error) {
-      console.error('❌ Error fetching biometric sites:', error);
-    }
+      if (json.success) setBiometricSites(json.data);
+    } catch { /* silent — biometric sites are optional */ }
   }, []);
 
   // When employee changes in the form, auto-populate their active shift assignment
