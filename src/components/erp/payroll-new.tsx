@@ -677,6 +677,9 @@ export default function PayrollModule() {
           <button className="vc-btn-secondary ml-2 flex items-center gap-1" onClick={() => setGenerateOpen(true)}>
             <Plus size={13} /> Generate Payroll Excel
           </button>
+          <button className="vc-btn-secondary ml-2 flex items-center gap-1" onClick={() => setUploadCalculateOpen(true)}>
+            <FileSpreadsheet size={13} /> Upload & Calculate
+          </button>
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={() => setSearchPayslipOpen(true)}>
             <Download size={13} /> Search & Download Payslips
           </button>

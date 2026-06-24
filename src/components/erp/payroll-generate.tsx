@@ -770,8 +770,7 @@ export default function PayrollGenerateModule() {
                 </button>
                 <button
                   onClick={() => setUploadCalculateOpen(true)}
-                  disabled={!filtersLocked}
-                  className="flex-1 bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold rounded-lg py-3 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold rounded-lg py-3 flex items-center justify-center gap-2 transition-colors"
                 >
                   <Upload size={16} />Upload & Calculate
                 </button>
@@ -787,8 +786,7 @@ export default function PayrollGenerateModule() {
                 </button>
                 <button
                   onClick={() => setComplianceUploadOpen(true)}
-                  disabled={!complianceFiltersLocked}
-                  className="flex-1 bg-[#00e676] text-black hover:bg-[#00c060] font-semibold rounded-lg py-3 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 bg-[#00e676] text-black hover:bg-[#00c060] font-semibold rounded-lg py-3 flex items-center justify-center gap-2 transition-colors"
                 >
                   <Upload size={16} />Upload & Calculate
                 </button>
