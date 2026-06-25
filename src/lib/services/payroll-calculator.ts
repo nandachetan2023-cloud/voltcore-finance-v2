@@ -288,8 +288,9 @@ export class PayrollCalculator {
     return {
       company: {
         name: company.name || 'Upasana Associate',
-        address: company.address || 'Flat No. G+1/3, Vinayakpuram, In front of MME Ground, Jharsuguda, Odisha-768201',
+        address: company.address || 'UPASANA VILLA, KHATA NO-747/5139, PLOT NO-666/11857,\nINFRONT OF MAMTA MARBLE, BRUNDABAN COLONY,\nJHARSUGUDA, Jharsuguda, Odisha, 768203',
         principalEmployer: company.principalEmployer || 'Hindalco Industries Ltd., Lapanga, Sambalpur-768212',
+        logo: company.logo || null,
       },
       employee: {
         code: employee.employeeCode,

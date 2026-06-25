@@ -11,6 +11,7 @@ export interface PayslipData {
     name: string;
     address: string;
     principalEmployer: string;
+    logo?: string | null; // base64 data URL of the tenant logo (optional)
   };
   employee: {
     code: string;
@@ -88,6 +89,24 @@ export class PayslipGenerator {
     const margin = 11;
     const contentWidth = pageWidth - (margin * 2);
     let yPos = 15;
+
+    // Company logo (top-left), if the tenant has one uploaded
+    if (data.company.logo) {
+      try {
+        const props = doc.getImageProperties(data.company.logo);
+        const maxW = 24;
+        const maxH = 16;
+        let w = maxW;
+        let h = (props.height / props.width) * w;
+        if (h > maxH) {
+          h = maxH;
+          w = (props.width / props.height) * h;
+        }
+        doc.addImage(data.company.logo, props.fileType || 'PNG', margin, 8, w, h);
+      } catch {
+        /* invalid/unsupported logo — skip silently */
+      }
+    }
 
     // Company Header Title (Row 1)
     doc.setFontSize(18);

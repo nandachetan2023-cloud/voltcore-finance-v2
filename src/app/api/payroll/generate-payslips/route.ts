@@ -2,6 +2,7 @@ import { getDbForRequest } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { PayslipGenerator } from '@/lib/services/payslip-generator';
 import { PayrollCalculator } from '@/lib/services/payroll-calculator';
+import { getTenantLogo } from '@/lib/tenant-branding';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,11 +29,13 @@ export async function POST(request: NextRequest) {
     const calculator = new PayrollCalculator();
     console.log('[Payslip API] Generator and calculator initialized');
 
-    // Company info (should come from settings)
+    // Company info (logo comes from the superadmin-managed tenant branding)
+    const logo = await getTenantLogo(request);
     const companyInfo = {
       name: 'Upasana Associate',
-      address: 'Flat No. G+1/3, Vinayakpuram, In front of MME Ground, Jharsuguda, Odisha-768201',
+      address: 'UPASANA VILLA, KHATA NO-747/5139, PLOT NO-666/11857,\nINFRONT OF MAMTA MARBLE, BRUNDABAN COLONY,\nJHARSUGUDA, Jharsuguda, Odisha, 768203',
       principalEmployer: 'Hindalco Industries Ltd., Lapanga, Sambalpur-768212',
+      logo,
     };
 
     // Generate single payslip
