@@ -26,7 +26,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, data: null })
     }
 
-    return NextResponse.json({ success: true, data: tenant })
+    return NextResponse.json(
+      { success: true, data: tenant },
+      { headers: { 'Cache-Control': 'private, max-age=600' } }
+    )
   } catch (error) {
     console.error('Error fetching tenant branding:', error)
     return NextResponse.json({ success: false, error: 'Failed to fetch branding' }, { status: 500 })

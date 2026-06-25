@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { superadminDb } from '@/lib/superadmin-db'
+import { compressLogoDataUrl } from '@/lib/logo-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,10 +26,11 @@ export async function POST(request: NextRequest) {
     if (!name || !slug || !dbUrl) {
       return NextResponse.json({ success: false, error: 'name, slug and dbUrl are required' }, { status: 400 })
     }
+    const compressedLogo = await compressLogoDataUrl(logoUrl)
     const tenant = await superadminDb.tenant.create({
       data: {
         name, slug: slug.toLowerCase().replace(/\s+/g, '-'), dbUrl,
-        notes: notes || '', status: 'active', logoUrl: logoUrl || null,
+        notes: notes || '', status: 'active', logoUrl: compressedLogo || null,
         maxAccounts: maxAccounts != null ? parseInt(String(maxAccounts)) || 0 : 0,
         enabledModules: enabledModules || 'all',
       } as any,
@@ -47,6 +49,7 @@ export async function PUT(request: NextRequest) {
     const { id, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 })
     if (data.maxAccounts !== undefined) data.maxAccounts = parseInt(String(data.maxAccounts)) || 0
+    if (data.logoUrl !== undefined) data.logoUrl = await compressLogoDataUrl(data.logoUrl)
     const tenant = await superadminDb.tenant.update({ where: { id }, data })
     return NextResponse.json({ success: true, data: tenant })
   } catch (e) {
