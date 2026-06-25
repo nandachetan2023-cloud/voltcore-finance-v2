@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       { success: true, data: tenant },
-      { headers: { 'Cache-Control': 'private, max-age=600' } }
+      { headers: { 'Cache-Control': 'private, max-age=60' } }
     )
   } catch (error) {
     console.error('Error fetching tenant branding:', error)
