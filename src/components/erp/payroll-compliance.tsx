@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
-import SalaryComplianceBulkImport from './salary-compliance-bulk-import';
 
 interface PayrollRun {
   id: number;
@@ -326,7 +325,6 @@ export default function PayrollCompliance() {
           <Shield size={15} className="text-[#00e676]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Compliance Payroll Runs</span>
           <span className="ml-auto text-[10px] text-[#5a6878]">{payrollRuns.length} runs</span>
-          <SalaryComplianceBulkImport onImportComplete={fetchData} />
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={() => setSearchPayslipOpen(true)}>
             <Download size={13} /> Search & Download Sheet
           </button>

@@ -1,4 +1,5 @@
-import { getDbForRequest } from '@/lib/db';
+import { getDbForRequest } from '@/lib/db'
+import { syncComplianceRunFromNonCompliance } from '@/lib/services/compliance-run';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 
@@ -372,6 +373,13 @@ export async function POST(request: NextRequest) {
         processedAt: new Date(),
       },
     });
+
+    // Auto-generate the matching compliance run so it appears in the Compliance view
+    try {
+      await syncComplianceRunFromNonCompliance(db, payrollRun.id, month, year);
+    } catch (e) {
+      console.error('Failed to auto-generate compliance run:', e);
+    }
 
     return NextResponse.json({
       success: true,

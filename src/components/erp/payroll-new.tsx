@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
-import SalaryComplianceBulkImport from './salary-compliance-bulk-import';
 
 interface PayrollRun {
   id: number;
@@ -700,7 +699,6 @@ export default function PayrollModule() {
           <IndianRupee size={15} className="text-[#f5a623]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Payroll Runs</span>
           <span className="ml-auto text-[10px] text-[#5a6878]">{filteredRuns.length}{filteredRuns.length !== payrollRuns.length ? ` / ${payrollRuns.length}` : ''} runs</span>
-          <SalaryComplianceBulkImport onImportComplete={fetchData} />
           <button className="vc-btn-secondary ml-2 flex items-center gap-1" onClick={() => setGenerateOpen(true)}>
             <Plus size={13} /> Generate Payroll Excel
           </button>

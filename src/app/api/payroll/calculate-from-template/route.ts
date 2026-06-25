@@ -1,6 +1,9 @@
 import { getDbForRequest } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
+import { buildComplianceSheetBuffer } from '@/lib/services/compliance-sheet';
+import type { ComplianceSheetItem } from '@/lib/services/compliance-sheet';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +20,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Period for the auto-generated compliance register (falls back to current month)
+    const month = parseInt((formData.get('month') as string) || '') || (new Date().getMonth() + 1);
+    const year = parseInt((formData.get('year') as string) || '') || new Date().getFullYear();
 
     // Read uploaded Excel
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -36,6 +43,10 @@ export async function POST(request: NextRequest) {
 
     const errors: string[] = [];
     const calculatedData: any[] = [];
+    // Compliance "Register of Wages" rows derived from the same computed values,
+    // sourced from the exact variables the bulk-import later stores to the DB —
+    // so the ZIP's compliance file matches the auto-created compliance run.
+    const complianceItems: ComplianceSheetItem[] = [];
 
     // Process each row (skip header row 1)
     worksheet.eachRow((row, rowNumber) => {
@@ -182,6 +193,33 @@ export async function POST(request: NextRequest) {
         row.getCell(68).value = ''; // col 68: TDS — removed (blank)
         row.getCell(69).value = BP; // col 69: BP - ADVANCE
 
+        complianceItems.push({
+          Employee: {
+            employeeCode,
+            firstName: getVal(5)?.toString() || '', // full NAME (helper joins name parts)
+            middleName: '',
+            lastName: '',
+            uanNumber: getVal(13)?.toString() || '',
+            esicNumber: getVal(14)?.toString() || '',
+            Designation: { name: getVal(15)?.toString() || '' },
+            Branch: { name: getVal(12)?.toString() || '' }, // col 12: SITE
+          },
+          basicSalary: BC,           // monthly basic salary
+          hra: BG,                   // house rent allowance
+          conveyanceAllowance: BH,   // site allowance
+          medicalAllowance: BI,      // leave travel allowance
+          specialAllowance: BJ,      // special allowance
+          otAmount: W,               // overtime amount
+          otHours: V,                // actual OT hours
+          presentDays: R,            // actual attendance / days worked
+          workingDays: Z,            // monthly working days
+          grossEarning: Q,           // monthly gross salary
+          pfDeduction: AJ,           // EPF
+          esiDeduction: AK,          // ESIC
+          totalDeduction: AM,        // total deduction
+          netPay: AN,                // net payable
+        });
+
         calculatedData.push({
           rowNumber,
           employeeCode,
@@ -211,15 +249,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate final Excel (includes successfully calculated rows; failed rows are left blank)
-    const finalBuffer = await workbook.xlsx.writeBuffer();
+    // Generate final non-compliance Excel (calculated rows; failed rows left blank)
+    const nonComplianceBuffer = Buffer.from(await workbook.xlsx.writeBuffer());
 
-    const timestamp = Date.now();
-    const filename = `Payroll_Calculated_${timestamp}.xlsx`;
+    // Build the matching compliance "Register of Wages" sheet from the same data
+    const complianceBuffer = buildComplianceSheetBuffer(complianceItems, month, year);
+
+    const monthAbbr = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][month - 1];
+    const stamp = `${monthAbbr}_${year}`;
+
+    // Bundle both sheets into a single ZIP download
+    const zip = new JSZip();
+    zip.file(`Payroll_NonCompliance_${stamp}.xlsx`, nonComplianceBuffer);
+    zip.file(`Payroll_Compliance_${stamp}.xlsx`, complianceBuffer);
+    const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="Payroll_Calculated_${stamp}.zip"`,
       'X-Calculated-Rows': calculatedData.length.toString(),
     };
     if (errors.length > 0) {
@@ -227,7 +274,7 @@ export async function POST(request: NextRequest) {
       headers['X-Calculation-Error-Details'] = JSON.stringify(errors.slice(0, 20));
     }
 
-    return new NextResponse(finalBuffer, { headers });
+    return new NextResponse(zipBuffer, { headers });
   } catch (error) {
     console.error('Error calculating payroll:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
