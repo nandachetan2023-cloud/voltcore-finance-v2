@@ -21,7 +21,14 @@ const nextConfig: NextConfig = {
   },
   // Experimental features for better performance
   experimental: {
-    optimizePackageImports: ['lucide-react', '@prisma/client'],
+    // Tree-shake heavy barrel packages so each lazy-loaded module only pulls the
+    // icons/components/helpers it actually uses (smaller per-route JS chunks).
+    optimizePackageImports: [
+      'lucide-react',
+      '@prisma/client',
+      'recharts',
+      'date-fns',
+    ],
   },
 };
 

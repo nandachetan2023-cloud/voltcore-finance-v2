@@ -69,20 +69,31 @@ export async function GET(request: NextRequest) {
     })
     const branchMap = new Map(empBranches.map(e => [e.id, e.Branch?.name ?? null]))
 
+    // Fetch every shift assignment for the page's employees in ONE query, then
+    // resolve the active one per row in memory (was an N+1: one query per row).
+    const allAssignments = await db.shiftAssignment.findMany({
+      where: { employeeId: { in: uniqueEmpIds } },
+      orderBy: { effectiveFrom: 'desc' },
+      include: { Shift: { select: { name: true, startTime: true, endTime: true, breakMinutes: true, crossesMidnight: true, otThresholdMin: true } } },
+    })
+    const assignmentsByEmp = new Map<number, typeof allAssignments>()
+    for (const asg of allAssignments) {
+      const list = assignmentsByEmp.get(asg.employeeId)
+      if (list) list.push(asg)
+      else assignmentsByEmp.set(asg.employeeId, [asg])
+    }
+
     // Enrich each record with the shift that was active ON the log date
     // (respects the shift assignment's effective date range), including its
     // start/end time, plus the employee's branch/site name.
-    const enriched = await Promise.all(attendance.map(async (a) => {
+    const enriched = attendance.map((a) => {
       const logDate = new Date(a.logDate)
-      const assignment = await db.shiftAssignment.findFirst({
-        where: {
-          employeeId: a.employeeId,
-          effectiveFrom: { lte: logDate },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: logDate } }],
-        },
-        orderBy: { effectiveFrom: 'desc' },
-        include: { Shift: { select: { name: true, startTime: true, endTime: true, breakMinutes: true, crossesMidnight: true, otThresholdMin: true } } },
-      })
+      // Lists are sorted by effectiveFrom desc, so the first match is the most
+      // recent assignment effective on logDate — same as the old findFirst.
+      const assignment = (assignmentsByEmp.get(a.employeeId) || []).find(asg =>
+        new Date(asg.effectiveFrom) <= logDate &&
+        (asg.effectiveTo == null || new Date(asg.effectiveTo) >= logDate)
+      ) || null
 
       const shiftName = assignment?.Shift
         ? `${assignment.Shift.name}${assignment.Shift.startTime && assignment.Shift.endTime ? ` (${assignment.Shift.startTime}–${assignment.Shift.endTime})` : ''}`
@@ -99,7 +110,7 @@ export async function GET(request: NextRequest) {
         shiftOtThresholdMin: assignment?.Shift?.otThresholdMin ?? null,
         siteName: branchMap.get(a.employeeId) || null,
       }
-    }))
+    })
 
     return NextResponse.json({ 
       success: true, 

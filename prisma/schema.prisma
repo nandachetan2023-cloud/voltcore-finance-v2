@@ -24,6 +24,7 @@ model AttendanceLog {
   Employee          Employee  @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId, logDate])
+  @@index([logDate])
 }
 
 model BiometricRawLog {
@@ -317,6 +318,7 @@ model PayrollItem {
   PayrollRun           PayrollRun @relation(fields: [payrollRunId], references: [id])
 
   @@index([employeeId, payrollRunId])
+  @@index([payrollRunId])
 }
 
 model PayrollRun {
@@ -502,6 +504,8 @@ model ShiftAssignment {
   updatedAt     DateTime
   Employee      Employee  @relation(fields: [employeeId], references: [id])
   Shift         Shift     @relation(fields: [shiftId], references: [id])
+
+  @@index([employeeId, effectiveFrom])
 }
 
 model StockEntry {

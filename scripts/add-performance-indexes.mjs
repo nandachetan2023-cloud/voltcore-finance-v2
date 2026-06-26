@@ -10,9 +10,12 @@ import pg from 'pg';
 
 const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "AttendanceLog_employeeId_logDate_idx" ON "AttendanceLog" ("employeeId", "logDate")`,
+  `CREATE INDEX IF NOT EXISTS "AttendanceLog_logDate_idx" ON "AttendanceLog" ("logDate")`,
   `CREATE INDEX IF NOT EXISTS "Employee_isDeleted_employmentStatus_idx" ON "Employee" ("isDeleted", "employmentStatus")`,
   `CREATE INDEX IF NOT EXISTS "Employee_departmentId_idx" ON "Employee" ("departmentId")`,
   `CREATE INDEX IF NOT EXISTS "Employee_branchId_idx" ON "Employee" ("branchId")`,
+  `CREATE INDEX IF NOT EXISTS "PayrollItem_payrollRunId_idx" ON "PayrollItem" ("payrollRunId")`,
+  `CREATE INDEX IF NOT EXISTS "ShiftAssignment_employeeId_effectiveFrom_idx" ON "ShiftAssignment" ("employeeId", "effectiveFrom")`,
 ];
 
 const stripQuery = (url) => url.split('?')[0]; // pg doesn't understand ?schema=public
