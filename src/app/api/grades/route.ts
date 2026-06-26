@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient, Prisma } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { Prisma } from '@prisma/client';
+import { getDbForRequest } from '@/lib/db';
 
 // GET - Fetch all grades
 export async function GET(request: NextRequest) {
+  const prisma = getDbForRequest(request);
   try {
     const grades = await prisma.grade.findMany({
       where: { isActive: true },
@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
 
 // POST - Create a new grade
 export async function POST(request: NextRequest) {
+  const prisma = getDbForRequest(request);
   try {
     const body = await request.json();
     const {
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
 
 // PUT - Update a grade
 export async function PUT(request: NextRequest) {
+  const prisma = getDbForRequest(request);
   try {
     const body = await request.json();
     const { id, ...updateData } = body;
@@ -127,6 +129,7 @@ export async function PUT(request: NextRequest) {
 
 // DELETE - Delete a grade
 export async function DELETE(request: NextRequest) {
+  const prisma = getDbForRequest(request);
   try {
     const body = await request.json();
     const { id } = body;

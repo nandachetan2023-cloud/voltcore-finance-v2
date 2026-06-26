@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { superadminDb } from '@/lib/superadmin-db'
-import { PrismaClient } from '@prisma/client'
+import { getClientForUrl } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,18 +15,14 @@ export async function GET(request: NextRequest) {
     const tenant = await superadminDb.tenant.findUnique({ where: { id: tenantId } })
     if (!tenant) return NextResponse.json({ success: false, error: 'Tenant not found' }, { status: 404 })
 
-    // Connect to tenant's DB
-    const tenantDb = new PrismaClient({ datasources: { db: { url: tenant.dbUrl } } })
+    // Connect to tenant's DB (shared pooled client)
+    const tenantDb = getClientForUrl(tenant.dbUrl)
 
-    try {
-      const [departments, designations] = await Promise.all([
-        tenantDb.department.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
-        tenantDb.designation.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
-      ])
-      return NextResponse.json({ success: true, data: { departments, designations } })
-    } finally {
-      await tenantDb.$disconnect()
-    }
+    const [departments, designations] = await Promise.all([
+      tenantDb.department.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+      tenantDb.designation.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    ])
+    return NextResponse.json({ success: true, data: { departments, designations } })
   } catch (e) {
     console.error('Tenant data fetch error:', e)
     return NextResponse.json({ success: false, error: 'Failed to fetch tenant data', data: { departments: [], designations: [] } })

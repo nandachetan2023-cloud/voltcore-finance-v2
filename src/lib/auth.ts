@@ -98,13 +98,12 @@ export async function authenticateUser(email: string, password: string): Promise
         let employeeCode: string | undefined
         if (tenantUser.employeeId && tenantUser.tenant.dbUrl) {
           try {
-            const { PrismaClient } = await import('@prisma/client')
-            const tenantDb = new PrismaClient({ datasources: { db: { url: tenantUser.tenant.dbUrl } } })
+            const { getClientForUrl } = await import('@/lib/db')
+            const tenantDb = getClientForUrl(tenantUser.tenant.dbUrl)
             const emp = await tenantDb.employee.findUnique({
               where: { id: tenantUser.employeeId },
               select: { employeeCode: true },
             }).catch(() => null)
-            await tenantDb.$disconnect()
             if (emp) employeeCode = emp.employeeCode
           } catch {}
         }

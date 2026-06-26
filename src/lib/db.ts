@@ -2,12 +2,25 @@ import { PrismaClient } from '@prisma/client'
 import { NextRequest } from 'next/server'
 
 // ── Singleton cache keyed by DB URL ─────────────────────────────
+// One PrismaClient (and one connection pool) per distinct DB URL, reused across
+// requests. Creating a PrismaClient per request opens a fresh pool every time
+// and exhausts Postgres connections under load — always go through this cache.
 const clientCache = new Map<string, PrismaClient>()
 
-function getClientForUrl(url: string): PrismaClient {
-  if (clientCache.has(url)) return clientCache.get(url)!
+// Bound each pool so many tenant clients can't exhaust Postgres connections.
+// Tunable via DB_CONNECTION_LIMIT (default 5).
+function withPoolParams(url: string): string {
+  if (/[?&]connection_limit=/.test(url)) return url
+  const limit = process.env.DB_CONNECTION_LIMIT || '5'
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}connection_limit=${limit}&pool_timeout=20`
+}
+
+export function getClientForUrl(url: string): PrismaClient {
+  const cached = clientCache.get(url)
+  if (cached) return cached
   const client = new PrismaClient({
-    datasources: { db: { url } },
+    datasources: { db: { url: withPoolParams(url) } },
     log: process.env.NODE_ENV !== 'production' ? ['error'] : [],
   })
   clientCache.set(url, client)

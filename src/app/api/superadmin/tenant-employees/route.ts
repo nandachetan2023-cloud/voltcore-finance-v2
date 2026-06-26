@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { superadminDb } from '@/lib/superadmin-db'
-import { PrismaClient } from '@prisma/client'
+import { getClientForUrl } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,9 +34,9 @@ export async function GET(request: NextRequest) {
       .map(u => u.employeeId)
       .filter((id): id is number => id !== null)
 
-    const tenantDb = new PrismaClient({ datasources: { db: { url: tenant.dbUrl } } })
+    const tenantDb = getClientForUrl(tenant.dbUrl)
 
-    try {
+    {
       const employees = await tenantDb.employee.findMany({
         where: {
           isDeleted: false,
@@ -68,8 +68,6 @@ export async function GET(request: NextRequest) {
       })
 
       return NextResponse.json({ success: true, data: employees })
-    } finally {
-      await tenantDb.$disconnect()
     }
   } catch (e) {
     console.error('Tenant employees fetch error:', e)

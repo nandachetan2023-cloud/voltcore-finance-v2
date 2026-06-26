@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { superadminDb } from '@/lib/superadmin-db'
-import { PrismaClient } from '@prisma/client'
+import { getClientForUrl } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,7 +83,7 @@ export async function PUT(request: NextRequest) {
     if (siteIdChanged) {
       const tenant = await superadminDb.tenant.findUnique({ where: { id: existing.tenantId } })
       if (tenant?.dbUrl) {
-        const tenantDb = new PrismaClient({ datasources: { db: { url: tenant.dbUrl } } })
+        const tenantDb = getClientForUrl(tenant.dbUrl)
         try {
           const raw = await tenantDb.biometricRawLog.updateMany({
             where: { siteId: existing.siteId },
@@ -96,8 +96,6 @@ export async function PUT(request: NextRequest) {
           cascade = { rawLogs: raw.count, syncLogs: sync.count }
         } catch (err) {
           console.error('[Biometric config] Failed to cascade siteId rename to tenant DB:', err)
-        } finally {
-          await tenantDb.$disconnect()
         }
       }
     }
