@@ -22,6 +22,8 @@ model AttendanceLog {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime
   Employee          Employee  @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, logDate])
 }
 
 model BiometricRawLog {
@@ -180,6 +182,10 @@ model Employee {
   EmployeeRequest           EmployeeRequest[]
   OnboardingChecklist       OnboardingChecklist[]
   Resignation               Resignation[]
+
+  @@index([isDeleted, employmentStatus])
+  @@index([departmentId])
+  @@index([branchId])
 }
 
 model Invoice {
