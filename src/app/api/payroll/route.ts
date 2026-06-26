@@ -22,19 +22,29 @@ export async function GET(request: NextRequest) {
     const payrollRuns = await db.payrollRun.findMany({
       where,
       include: {
+        // Lean projection — only the fields the payroll screens actually render.
+        // Critically excludes the large `details` JSON (stores per-employee import
+        // rawData) and unused decimal columns, which bloated every list load.
         PayrollItem: {
-          include: {
+          select: {
+            id: true,
+            employeeId: true,
+            workingDays: true,
+            presentDays: true,
+            basicSalary: true,
+            grossEarning: true,
+            totalDeduction: true,
+            netPay: true,
+            status: true,
+            payslipGenerated: true,
             Employee: {
               select: {
-                id: true,
                 employeeCode: true,
                 firstName: true,
                 middleName: true,
                 lastName: true,
-                email: true,
                 Department: { select: { name: true } },
                 Designation: { select: { name: true } },
-                Branch: { select: { name: true } },
               },
             },
           },
