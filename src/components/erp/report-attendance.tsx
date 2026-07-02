@@ -1,9 +1,11 @@
 'use client'
-import { useState, useCallback } from 'react'
-import { ClipboardList, RefreshCw } from 'lucide-react'
+import { useState, useCallback, useEffect } from 'react'
+import { ClipboardList, RefreshCw, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { ReportShell, StatBox, SummaryRow, downloadExcel, fmtCurrency, TOOLTIP_STYLE } from './report-utils'
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 export default function ReportAttendance() {
   const [data, setData] = useState<any[]>([])
@@ -13,6 +15,52 @@ export default function ReportAttendance() {
     const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0]
   })
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0])
+
+  // ── Month Performance Register (eTimeOffice biometric format) ──────
+  const now = new Date()
+  const [mpMonth, setMpMonth] = useState(now.getMonth() + 1)
+  const [mpYear, setMpYear] = useState(now.getFullYear())
+  const [mpEmp, setMpEmp] = useState('all') // 'all' or an employee id
+  const [employees, setEmployees] = useState<any[]>([])
+  const [mpLoading, setMpLoading] = useState(false)
+
+  useEffect(() => {
+    window.fetch('/api/employees?limit=10000')
+      .then(r => r.json())
+      .then(res => { if (res.success) setEmployees(res.data) })
+      .catch(() => {})
+  }, [])
+
+  const exportMonthPerformance = async () => {
+    setMpLoading(true)
+    try {
+      const params = new URLSearchParams({ month: String(mpMonth), year: String(mpYear) })
+      if (mpEmp !== 'all') params.set('employeeId', mpEmp)
+      const res = await window.fetch(`/api/reports/month-performance?${params}`)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        toast.error(err.error || 'Failed to generate report')
+        return
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get('Content-Disposition') || ''
+      const match = disposition.match(/filename="?([^"]+)"?/)
+      const filename = match?.[1] || `MonthPerformance_${MONTHS[mpMonth - 1]}${mpYear}.xlsx`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success('Month performance report downloaded')
+    } catch {
+      toast.error('Failed to generate report')
+    } finally {
+      setMpLoading(false)
+    }
+  }
 
   const fetch = useCallback(async () => {
     setLoading(true)
@@ -75,6 +123,45 @@ export default function ReportAttendance() {
           {loaded ? 'Refresh' : 'Generate Report'}
         </button>
         {loaded && <span className="text-[11px] text-[#5a6878]">{data.length} records</span>}
+      </div>
+
+      {/* Month Performance Register — eTimeOffice biometric block format */}
+      <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 space-y-3">
+        <div className="text-[10px] text-[#8899aa] uppercase tracking-wider font-semibold">
+          Month Performance Register (Biometric Format)
+        </div>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Month</label>
+            <select value={mpMonth} onChange={e => setMpMonth(Number(e.target.value))} className="vc-input py-1.5 px-2 text-[11px] w-[130px]">
+              {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Year</label>
+            <select value={mpYear} onChange={e => setMpYear(Number(e.target.value))} className="vc-input py-1.5 px-2 text-[11px] w-[90px]">
+              {Array.from({ length: 4 }, (_, i) => now.getFullYear() - i).map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Employee</label>
+            <select value={mpEmp} onChange={e => setMpEmp(e.target.value)} className="vc-input py-1.5 px-2 text-[11px] w-[240px]">
+              <option value="all">All Employees</option>
+              {employees.map(e => (
+                <option key={e.id} value={e.id}>
+                  {e.employeeCode} — {`${e.firstName || ''} ${e.lastName || ''}`.trim()}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button onClick={exportMonthPerformance} disabled={mpLoading} className="flex items-center gap-1.5 px-4 py-2 bg-[#00d4ff] text-black text-[12px] font-bold rounded-lg hover:bg-[#00b8e0] disabled:opacity-50">
+            {mpLoading ? <div className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : <Download size={13} />}
+            Export
+          </button>
+        </div>
+        <div className="text-[10px] text-[#5a6878]">
+          Exports the per-day IN/OUT/WORK/Break/OT/Status grid with monthly totals — one employee or all, in the biometric register layout.
+        </div>
       </div>
 
       {loaded && (
