@@ -558,11 +558,11 @@ export class BiometricService {
         ? lastSync.lastRecord
         : ''
 
-      // First-ever sync starts from May 1st of the current year, then every
-      // subsequent sync resumes from the stored cursor (continues where it left off).
-      // Override the anchor month/year via env if needed.
-      const anchorMonth = parseInt(process.env.BIOMETRIC_BACKFILL_START_MONTH || '5')  // May
-      const anchorYear = parseInt(process.env.BIOMETRIC_BACKFILL_START_YEAR || String(new Date().getFullYear()))
+      // First-ever sync (no stored cursor) starts from September of LAST year,
+      // then every subsequent sync resumes from the stored cursor (continues where
+      // it left off). Override the anchor month/year via env if needed.
+      const anchorMonth = parseInt(process.env.BIOMETRIC_BACKFILL_START_MONTH || '9')  // September
+      const anchorYear = parseInt(process.env.BIOMETRIC_BACKFILL_START_YEAR || String(new Date().getFullYear() - 1))  // last year
 
       const now = new Date()
       // Determine the first (month, year) to start walking from.
