@@ -1,12 +1,11 @@
 #!/usr/bin/env tsx
-/**
- * Biometric Sync Cron Job
- * 
- * This script should be run every 5 minutes via cron:
- * */5 * * * * cd /path/to/project && tsx scripts/biometric-sync-cron.ts
- * 
- * Or use Node-cron for internal scheduling
- */
+// Biometric Sync Cron Job
+//
+// Run this every 5 minutes via system cron. Example crontab line (the minutes
+// field is an asterisk followed by "/5"):
+//   */5 * * * * cd /path/to/project && tsx scripts/biometric-sync-cron.ts
+//
+// Or use node-cron for internal scheduling.
 
 import { createBiometricService } from '../src/lib/biometric'
 
