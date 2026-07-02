@@ -539,30 +539,39 @@ export class BiometricService {
   // punches. The data is stored in monthly tables and the cursor is "MMyyyy$ID".
   // So to fetch existing/historical data we must SEED the cursor with a month anchor
   // ("MMyyyy$0") and page forward, walking month-by-month up to the current month.
-  async syncIncremental(): Promise<{ 
-    fetched: number; 
+  async syncIncremental(opts?: { startMonth?: number; startYear?: number }): Promise<{
+    fetched: number;
     processed: number;
     processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }>;
   }> {
     try {
+      // A forced start (month+year) ignores the stored cursor and re-walks from that
+      // month up to now — used by the one-off backfill script. Because saveRawLogs
+      // de-duplicates, re-fetching already-synced months creates no duplicates.
+      // Normal scheduled syncs pass nothing and behave exactly as before.
+      const forceStart = opts?.startMonth && opts?.startYear
+        ? { m: opts.startMonth, y: opts.startYear }
+        : null
+
       // Get last successful sync for this site to retrieve the stored cursor (MaxRecord)
       const lastSync = await this.db.biometricSyncLog.findFirst({
-        where: { 
+        where: {
           status: 'success',
           siteId: this.config.siteId,
         },
         orderBy: { createdAt: 'desc' },
       })
 
-      const storedCursor = lastSync?.lastRecord && lastSync.lastRecord.includes('$')
+      const storedCursor = !forceStart && lastSync?.lastRecord && lastSync.lastRecord.includes('$')
         ? lastSync.lastRecord
         : ''
 
       // First-ever sync (no stored cursor) starts from September of LAST year,
       // then every subsequent sync resumes from the stored cursor (continues where
-      // it left off). Override the anchor month/year via env if needed.
-      const anchorMonth = parseInt(process.env.BIOMETRIC_BACKFILL_START_MONTH || '9')  // September
-      const anchorYear = parseInt(process.env.BIOMETRIC_BACKFILL_START_YEAR || String(new Date().getFullYear() - 1))  // last year
+      // it left off). A forced start (backfill) overrides both. Override the default
+      // anchor month/year via env if needed.
+      const anchorMonth = forceStart ? forceStart.m : parseInt(process.env.BIOMETRIC_BACKFILL_START_MONTH || '9')  // September
+      const anchorYear = forceStart ? forceStart.y : parseInt(process.env.BIOMETRIC_BACKFILL_START_YEAR || String(new Date().getFullYear() - 1))  // last year
 
       const now = new Date()
       // Determine the first (month, year) to start walking from.
