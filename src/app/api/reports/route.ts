@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
             Designation: { select: { name: true } },
             Branch: { select: { name: true } },
           },
+          orderBy: { employeeCode: 'asc' },
         })
         return NextResponse.json({ success: true, data: employees })
       }

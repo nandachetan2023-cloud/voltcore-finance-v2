@@ -117,7 +117,9 @@ export async function GET(request: NextRequest) {
     const employees = await db.employee.findMany({
       where,
       select: selectBase,
-      orderBy: { createdAt: 'desc' },
+      // Serial order by employee code (UA0001, UA0002, …) — this endpoint feeds
+      // the employee tables and dropdowns across every module.
+      orderBy: { employeeCode: 'asc' },
       take: limit,
       skip: offset,
     })
