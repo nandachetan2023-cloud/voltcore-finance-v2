@@ -44,6 +44,12 @@ export async function POST(request: NextRequest) {
       // No maxAge → session cookie → cleared on browser close
     }
 
+    // JS-readable session marker (NOT httpOnly). Like the others it's a session
+    // cookie, so a full browser close clears it. The client checks for it on load
+    // and, if it's gone while localStorage still holds the user, forces a logout —
+    // this is what actually sends a returning user back to the login screen.
+    response.cookies.set('erp_session', '1', { sameSite: 'lax', path: '/' })
+
     // Role cookie (superadmin | admin | demo)
     response.cookies.set('erp_user_role', user.role, cookieOpts)
 

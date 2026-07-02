@@ -18,23 +18,33 @@ export default function ERPPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const authUser = localStorage.getItem('erp_auth_user');
+    let authUser = localStorage.getItem('erp_auth_user');
+
+    // Session validity: the server sets a non-httpOnly `erp_session` marker that,
+    // like the httpOnly auth cookies, is cleared when the browser is fully closed.
+    // If localStorage still remembers the user but that cookie is gone, the session
+    // cookies are gone too — so drop the stale localStorage and fall through to the
+    // login screen instead of showing a logged-in shell whose API calls have no session.
+    const hasSessionCookie = document.cookie.split('; ').some(c => c.startsWith('erp_session='));
+    if (authUser && !hasSessionCookie) {
+      localStorage.removeItem('erp_auth_user');
+      localStorage.removeItem('erp_employee_id');
+      authUser = null;
+    }
+
     if (authUser) {
       try {
         const user = JSON.parse(authUser);
-        // Only redirect to superadmin if we're NOT already coming from there
-        // (i.e. don't redirect if the user explicitly navigated to /)
+        // Superadmin must log in separately via /superadmin — don't auto-authenticate
+        // the ERP shell here; just clear the stored user and show the ERP login.
         if (user.role === 'superadmin') {
-          // Don't auto-redirect — just show the ERP login
-          // Superadmin must log in separately via /superadmin
           localStorage.removeItem('erp_auth_user');
-          setIsLoading(false);
-          return;
+        } else {
+          setUserRole(user.role);
+          setAllowedModules(user.allowedModules || 'all');
+          setOnboardingStatus(user.onboardingStatus || 'none');
+          setIsAuthenticated(true);
         }
-        setUserRole(user.role);
-        setAllowedModules(user.allowedModules || 'all');
-        setOnboardingStatus(user.onboardingStatus || 'none');
-        setIsAuthenticated(true);
       } catch {}
     }
     setIsLoading(false);
