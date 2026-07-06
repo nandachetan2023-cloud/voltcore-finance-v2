@@ -146,6 +146,7 @@ export async function POST(request: NextRequest) {
       const fullName = `${employee.firstName} ${employee.middleName || ''} ${employee.lastName}`.trim().toUpperCase();
       
       const basicSalary = Number(item.basicSalary) || 0;
+      const basicWagesPerDay = Number(item.basicWagesPerDay) || 0;
       const hra = Number(item.hra) || 0;
       const conveyance = Number(item.conveyanceAllowance) || 0;
       const medical = Number(item.medicalAllowance) || 0;
@@ -163,8 +164,11 @@ export async function POST(request: NextRequest) {
       const netPay = Number(item.netPay);
       const advance = Number(item.otherDeductions) || 0;
 
-      const basicPerDay = basicSalary / workingDays;
-      const earnWages = (attendance / workingDays) * basicSalary;
+      // Use the per-day rate exactly as entered at import time — don't
+      // recompute it from basicSalary/workingDays, which silently overwrites
+      // the user's typed rate whenever it doesn't divide evenly.
+      const basicPerDay = basicWagesPerDay || (basicSalary / workingDays);
+      const earnWages = basicPerDay * attendance;
       const totalEarnWages = earnWages + phAmount;
       const totalNettPayable = totalEarnWages + otAmount;
       const nettPayableAfterDeduction = totalNettPayable - totalDeduction;

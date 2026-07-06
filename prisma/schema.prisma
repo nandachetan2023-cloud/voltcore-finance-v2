@@ -295,6 +295,7 @@ model PayrollItem {
   lopDays              Int        @default(0)
   otHours              Decimal    @default(0) @db.Decimal(5, 2)
   basicSalary          Decimal    @default(0) @db.Decimal(15, 2)
+  basicWagesPerDay     Decimal    @default(0) @db.Decimal(10, 2)
   hra                  Decimal    @default(0) @db.Decimal(15, 2)
   conveyanceAllowance  Decimal    @default(0) @db.Decimal(15, 2)
   medicalAllowance     Decimal    @default(0) @db.Decimal(15, 2)
