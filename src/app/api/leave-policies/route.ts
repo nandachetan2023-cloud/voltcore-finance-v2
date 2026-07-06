@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
       applicableTo = 'all',
       departmentId,
       designationId,
+      employeeId,
       requiresDocument = false,
       // Earned leave settings
       earnedLeaveAccrualMethod,
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
         applicableTo,
         departmentId: departmentId ? parseInt(departmentId) : null,
         designationId: designationId ? parseInt(designationId) : null,
+        employeeId: applicableTo === 'employee' && employeeId ? parseInt(employeeId) : null,
         requiresDocument,
         isActive: true,
         updatedAt: new Date(),
@@ -174,6 +176,13 @@ export async function PUT(request: NextRequest) {
     }
     if (updateData.designationId !== undefined) {
       updateData.designationId = updateData.designationId ? parseInt(updateData.designationId) : null;
+    }
+    if (updateData.employeeId !== undefined) {
+      updateData.employeeId = updateData.employeeId ? parseInt(updateData.employeeId) : null;
+    }
+    // Clear the employee scope if the policy is no longer employee-scoped.
+    if (updateData.applicableTo !== undefined && updateData.applicableTo !== 'employee') {
+      updateData.employeeId = null;
     }
 
     // Handle earned leave fields

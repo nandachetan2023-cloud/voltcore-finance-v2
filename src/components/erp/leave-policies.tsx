@@ -37,6 +37,7 @@ export default function LeavePoliciesModule() {
   const [policies, setPolicies] = useState<LeavePolicy[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [designations, setDesignations] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -45,8 +46,8 @@ export default function LeavePoliciesModule() {
   const [form, setForm] = useState({ 
     name: '', code: '', leaveType: 'paid', annualQuota: '0', carryForward: false, maxCarryForward: '0', 
     encashable: false, maxEncashment: '0', minDaysNotice: '0', maxConsecutiveDays: '0', 
-    applicableAfterMonths: '0', applicableGender: 'all', applicableTo: 'all', 
-    departmentId: '', designationId: '', requiresDocument: false,
+    applicableAfterMonths: '0', applicableGender: 'all', applicableTo: 'all',
+    departmentId: '', designationId: '', employeeId: '', requiresDocument: false,
     // Earned leave settings
     earnedLeaveAccrualMethod: 'monthly',
     earnedLeaveAccrualRate: '1.25',
@@ -60,7 +61,7 @@ export default function LeavePoliciesModule() {
       name: '', code: '', leaveType: 'paid', annualQuota: '0', carryForward: false, maxCarryForward: '0', 
       encashable: false, maxEncashment: '0', minDaysNotice: '0', maxConsecutiveDays: '0', 
       applicableAfterMonths: '0', applicableGender: 'all', applicableTo: 'all', 
-      departmentId: '', designationId: '', requiresDocument: false,
+      departmentId: '', designationId: '', employeeId: '', requiresDocument: false,
       earnedLeaveAccrualMethod: 'monthly',
       earnedLeaveAccrualRate: '1.25',
       earnedLeaveMaxAccumulation: '30',
@@ -74,6 +75,7 @@ export default function LeavePoliciesModule() {
     fetchPolicies();
     fetchDepartments();
     fetchDesignations();
+    fetchEmployees();
   }, []);
 
   const fetchPolicies = async () => {
@@ -112,6 +114,18 @@ export default function LeavePoliciesModule() {
       }
     } catch (error) {
       console.error('Error fetching designations:', error);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await fetch('/api/employees?limit=10000');
+      const data = await response.json();
+      if (data.success) {
+        setEmployees(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching employees:', error);
     }
   };
 
@@ -231,6 +245,7 @@ export default function LeavePoliciesModule() {
                             maxConsecutiveDays: policy.maxConsecutiveDays.toString(), applicableAfterMonths: policy.applicableAfterMonths.toString(), 
                             applicableGender: policy.applicableGender, applicableTo: (policy as any).applicableTo || 'all',
                             departmentId: (policy as any).departmentId?.toString() || '', designationId: (policy as any).designationId?.toString() || '',
+                            employeeId: (policy as any).employeeId?.toString() || '',
                             requiresDocument: policy.requiresDocument,
                             earnedLeaveAccrualMethod: policy.earnedLeaveAccrualMethod || 'monthly',
                             earnedLeaveAccrualRate: policy.earnedLeaveAccrualRate?.toString() || '1.25',
@@ -357,6 +372,7 @@ export default function LeavePoliciesModule() {
                 <option value="department">Specific Department</option>
                 <option value="designation">Specific Designation</option>
                 <option value="both">Department & Designation</option>
+                <option value="employee">Specific Employee</option>
               </select>
             </div>
             {(form.applicableTo === 'department' || form.applicableTo === 'both') && (
@@ -377,6 +393,17 @@ export default function LeavePoliciesModule() {
                   <option value="">Select Designation</option>
                   {designations.map(desig => (
                     <option key={desig.id} value={desig.id}>{desig.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {form.applicableTo === 'employee' && (
+              <div className="col-span-2">
+                <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Employee</label>
+                <select className={selectCls} value={form.employeeId} onChange={e => setForm(f => ({ ...f, employeeId: e.target.value }))}>
+                  <option value="">Select Employee</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.employeeCode} — {`${emp.firstName || ''} ${emp.lastName || ''}`.trim()}</option>
                   ))}
                 </select>
               </div>
@@ -510,6 +537,7 @@ export default function LeavePoliciesModule() {
                 <option value="department">Specific Department</option>
                 <option value="designation">Specific Designation</option>
                 <option value="both">Department & Designation</option>
+                <option value="employee">Specific Employee</option>
               </select>
             </div>
             {(form.applicableTo === 'department' || form.applicableTo === 'both') && (
@@ -530,6 +558,17 @@ export default function LeavePoliciesModule() {
                   <option value="">Select Designation</option>
                   {designations.map(desig => (
                     <option key={desig.id} value={desig.id}>{desig.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {form.applicableTo === 'employee' && (
+              <div className="col-span-2">
+                <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Employee</label>
+                <select className={selectCls} value={form.employeeId} onChange={e => setForm(f => ({ ...f, employeeId: e.target.value }))}>
+                  <option value="">Select Employee</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.employeeCode} — {`${emp.firstName || ''} ${emp.lastName || ''}`.trim()}</option>
                   ))}
                 </select>
               </div>

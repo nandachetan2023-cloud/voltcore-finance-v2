@@ -220,18 +220,22 @@ export async function POST(request: NextRequest) {
         isActive: true,
         OR: [
           { applicableTo: 'all' },
-          { 
+          {
             applicableTo: 'department',
-            departmentId: employee.departmentId 
+            departmentId: employee.departmentId
           },
-          { 
+          {
             applicableTo: 'designation',
-            designationId: employee.designationId 
+            designationId: employee.designationId
           },
-          { 
+          {
             applicableTo: 'both',
             departmentId: employee.departmentId,
-            designationId: employee.designationId 
+            designationId: employee.designationId
+          },
+          {
+            applicableTo: 'employee',
+            employeeId: employee.id
           }
         ]
       }

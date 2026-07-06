@@ -15,6 +15,7 @@ export default function ReportAttendance() {
     const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0]
   })
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [siteFilter, setSiteFilter] = useState('all')
 
   // ── Month Performance Register (eTimeOffice biometric format) ──────
   const now = new Date()
@@ -73,15 +74,19 @@ export default function ReportAttendance() {
     finally { setLoading(false) }
   }, [startDate, endDate])
 
-  const present = data.filter(a => a.status === 'present').length
-  const absent = data.filter(a => a.status === 'absent').length
-  const late = data.filter(a => a.status === 'late').length
-  const halfDay = data.filter(a => a.status === 'half_day').length
-  const totalFines = data.reduce((s, a) => s + Number(a.fineAmount || 0), 0)
-  const totalLateMins = data.reduce((s, a) => s + (a.lateMinutes || 0), 0)
+  // Site/branch filter — narrow the loaded data to a single site if selected.
+  const sites = Array.from(new Set(data.map(a => a.Employee?.Branch?.name).filter(Boolean))).sort() as string[]
+  const view = siteFilter === 'all' ? data : data.filter(a => (a.Employee?.Branch?.name || '') === siteFilter)
+
+  const present = view.filter(a => a.status === 'present').length
+  const absent = view.filter(a => a.status === 'absent').length
+  const late = view.filter(a => a.status === 'late').length
+  const halfDay = view.filter(a => a.status === 'half_day').length
+  const totalFines = view.reduce((s, a) => s + Number(a.fineAmount || 0), 0)
+  const totalLateMins = view.reduce((s, a) => s + (a.lateMinutes || 0), 0)
 
   const byDept = new Map<string, { present: number; absent: number; late: number }>()
-  data.forEach(a => {
+  view.forEach(a => {
     const d = a.Employee?.Department?.name || 'Unassigned'
     const cur = byDept.get(d) || { present: 0, absent: 0, late: 0 }
     if (a.status === 'present') cur.present++
@@ -91,20 +96,22 @@ export default function ReportAttendance() {
   })
 
   const handleDownload = () => {
-    if (!data.length) { toast.error('Generate the report first'); return }
-    const headers = ['Date', 'Employee ID', 'Employee Name', 'Department', 'Status', 'Punch In', 'Punch Out', 'Late Minutes', 'Fine Amount']
-    const rows = data.map(a => [
+    if (!view.length) { toast.error('Generate the report first'); return }
+    const headers = ['Date', 'Employee ID', 'Employee Name', 'Department', 'Site', 'Status', 'Punch In', 'Punch Out', 'Late Minutes', 'Fine Amount']
+    const rows = view.map(a => [
       a.logDate ? new Date(a.logDate).toLocaleDateString('en-IN') : '',
       a.Employee?.employeeCode || '',
       `${a.Employee?.firstName || ''} ${a.Employee?.lastName || ''}`.trim(),
       a.Employee?.Department?.name || '',
+      a.Employee?.Branch?.name || '',
       a.status || '',
       a.punchIn ? new Date(a.punchIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '',
       a.punchOut ? new Date(a.punchOut).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '',
       a.lateMinutes || 0,
       Number(a.fineAmount || 0).toFixed(2),
     ])
-    downloadExcel(rows, headers, `Attendance_Report_${startDate}_to_${endDate}.xlsx`, 'Attendance')
+    const siteTag = siteFilter === 'all' ? '' : `_${siteFilter.replace(/\s+/g, '')}`
+    downloadExcel(rows, headers, `Attendance_Report_${startDate}_to_${endDate}${siteTag}.xlsx`, 'Attendance')
   }
 
   return (
@@ -122,7 +129,16 @@ export default function ReportAttendance() {
           {loading ? <div className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : <RefreshCw size={13} />}
           {loaded ? 'Refresh' : 'Generate Report'}
         </button>
-        {loaded && <span className="text-[11px] text-[#5a6878]">{data.length} records</span>}
+        {loaded && sites.length > 0 && (
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Site</label>
+            <select value={siteFilter} onChange={e => setSiteFilter(e.target.value)} className="vc-input py-1.5 px-2 text-[11px] w-[160px]">
+              <option value="all">All Sites</option>
+              {sites.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        )}
+        {loaded && <span className="text-[11px] text-[#5a6878]">{view.length} records{siteFilter !== 'all' ? ` (of ${data.length})` : ''}</span>}
       </div>
 
       {/* Month Performance Register — eTimeOffice biometric block format */}

@@ -724,6 +724,7 @@ model LeavePolicy {
   applicableTo          String       @default("all")
   departmentId          Int?
   designationId         Int?
+  employeeId            Int?         // set when applicableTo == "employee" (scopes to one employee)
   requiresDocument      Boolean      @default(false)
   isActive              Boolean      @default(true)
   createdAt             DateTime     @default(now())
@@ -740,6 +741,7 @@ model LeavePolicy {
   @@index([leaveType])
   @@index([departmentId])
   @@index([designationId])
+  @@index([employeeId])
 }
 
 model AttendanceRule {
