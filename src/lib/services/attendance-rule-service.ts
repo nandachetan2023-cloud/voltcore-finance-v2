@@ -84,7 +84,8 @@ function pickClosestShift(shifts: any[], punchIn: Date, logDate: Date): any {
 export async function getApplicableRule(
   employeeId: number,
   ruleType: string = 'late',
-  dbClient?: DbClient
+  dbClient?: DbClient,
+  resolvedShiftId?: number | null
 ): Promise<any | null> {
   const db = dbClient ?? defaultDb
 
@@ -99,19 +100,26 @@ export async function getApplicableRule(
 
   if (!employee) return null;
 
-  // Get active shift assignment by date
-  const today = new Date()
-  const shiftAssignment = await db.shiftAssignment.findFirst({
-    where: {
-      employeeId,
-      effectiveFrom: { lte: today },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
-    },
-    select: { shiftId: true },
-    orderBy: { effectiveFrom: 'desc' },
-  })
+  // Use the already-resolved shift (picked as the closest match to the actual
+  // punch-in when an employee has multiple concurrent assignments) instead of
+  // re-querying by "most recently assigned" — that ignored punch-in entirely
+  // and could select a different shift than the one attendance was scored
+  // against, applying the wrong shift's fine/rule policy.
+  let shiftId = resolvedShiftId
+  if (shiftId === undefined) {
+    const today = new Date()
+    const shiftAssignment = await db.shiftAssignment.findFirst({
+      where: {
+        employeeId,
+        effectiveFrom: { lte: today },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+      },
+      select: { shiftId: true },
+      orderBy: { effectiveFrom: 'desc' },
+    })
+    shiftId = shiftAssignment?.shiftId ?? null
+  }
 
-  const shiftId = shiftAssignment?.shiftId;
   const departmentId = employee.departmentId;
   const branchId = employee.branchId;
 
@@ -157,8 +165,9 @@ export async function applyAttendanceRules(
   ruleType: string = 'late',
   dbClient?: DbClient,
   shiftGraceMinutes: number = 0,
+  resolvedShiftId?: number | null,
 ): Promise<AttendanceRuleResult> {
-  const rule = await getApplicableRule(employeeId, ruleType, dbClient);
+  const rule = await getApplicableRule(employeeId, ruleType, dbClient, resolvedShiftId);
 
   // No scoped AttendanceRule → fall back to the SHIFT as the primary source.
   // The shift's grace period decides late status; the shift never fines (fine = 0).
@@ -240,7 +249,7 @@ export async function calculateFinesForPeriod(
     const scheduledTime = new Date(log.logDate);
     scheduledTime.setHours(hours, minutes, 0, 0);
 
-    const result = await applyAttendanceRules(employeeId, scheduledTime, log.punchIn, 'late', db, shift.graceMinutes ?? 0);
+    const result = await applyAttendanceRules(employeeId, scheduledTime, log.punchIn, 'late', db, shift.graceMinutes ?? 0, shift.id);
     if (result.fineAmount > 0) {
       totalFine += result.fineAmount;
       details.push({
@@ -294,7 +303,9 @@ export async function classifyAttendance(
   scheduledPunchIn.setHours(shiftHour, shiftMin, 0, 0)
 
   // Apply the rule. Pass the shift's grace period so that when NO scoped
-  // AttendanceRule exists, the shift's own grace drives late status.
+  // AttendanceRule exists, the shift's own grace drives late status. Also pass
+  // this shift's own id so rule-matching scopes to the SAME shift that was
+  // picked as closest to the punch-in, not whichever assignment is newest.
   const result = await applyAttendanceRules(
     employeeId,
     scheduledPunchIn,
@@ -302,6 +313,7 @@ export async function classifyAttendance(
     'late',
     db,
     shift.graceMinutes ?? 0,
+    shift.id,
   )
 
   // If punchOut is provided, also check early departure / half-day by hours worked
