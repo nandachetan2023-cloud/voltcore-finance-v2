@@ -16,6 +16,7 @@ interface TourRequest {
   appliedDate: string;
   approvedDate?: string;
   rejectionReason?: string;
+  approvalStage?: { currentStep: number; totalSteps: number; approverRole: string };
 }
 
 const inp = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]/60 transition-colors placeholder:text-[#5a6878]';
@@ -190,6 +191,12 @@ export default function MyTours() {
                       tr.status === 'rejected' ? 'bg-[#ff3d3d]/10 text-[#ff3d3d]' :
                       'bg-[#ffab40]/10 text-[#ffab40]'
                     }`}>{tr.status}</span>
+                    {tr.status === 'pending' && tr.approvalStage && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#00d4ff]/10 text-[#00d4ff]">
+                        Awaiting {tr.approvalStage.approverRole}
+                        {tr.approvalStage.totalSteps > 1 ? ` · Step ${tr.approvalStage.currentStep} of ${tr.approvalStage.totalSteps}` : ''}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 text-[11px] text-[#8899aa]">
                     <span className="flex items-center gap-1">

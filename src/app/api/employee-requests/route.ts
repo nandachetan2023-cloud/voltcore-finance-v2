@@ -1,5 +1,6 @@
 import { getDbForRequest } from '@/lib/db'
 import { superadminDb } from '@/lib/superadmin-db'
+import { annotateRequesterStage } from '@/lib/services/approval-stage'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -200,6 +201,9 @@ export async function GET(request: NextRequest) {
       } else {
         enriched = []
       }
+    } else if (tenantId) {
+      // Requester's own view — annotate each pending request with its stage.
+      enriched = await annotateRequesterStage(tenantId, parseInt(employeeId), requests)
     }
 
     return NextResponse.json({ success: true, data: enriched })

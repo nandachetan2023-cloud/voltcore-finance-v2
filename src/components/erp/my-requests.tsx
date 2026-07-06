@@ -217,6 +217,12 @@ export default function MyRequests() {
                           {typeCfg?.label}
                         </span>
                         <span className={`vc-badge ${statusCfg.cls}`}>{statusCfg.label}</span>
+                        {r.status === 'pending' && r.approvalStage && (
+                          <span className="text-[9px] font-bold px-2 py-[2px] rounded-full bg-[#00d4ff]/10 text-[#00d4ff]">
+                            Awaiting {r.approvalStage.approverRole}
+                            {r.approvalStage.totalSteps > 1 ? ` · Step ${r.approvalStage.currentStep} of ${r.approvalStage.totalSteps}` : ''}
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-[#8899aa] mt-1 line-clamp-2">{r.description}</p>
                       {r.amount && (

@@ -402,7 +402,15 @@ export default function MyLeave() {
                   <td className="py-2.5 px-3 text-[#e2e8f0] font-semibold">{r.days}</td>
                   <td className="py-2.5 px-3 text-[#8899aa] max-w-[160px] truncate" title={r.reason}>{r.reason || '—'}</td>
                   <td className="py-2.5 px-3 text-[#8899aa]">{fmtDate(r.appliedDate || r.createdAt)}</td>
-                  <td className="py-2.5 px-3"><span className={`vc-badge ${statusBadge(r.status)}`}>{r.status}</span></td>
+                  <td className="py-2.5 px-3">
+                    <span className={`vc-badge ${statusBadge(r.status)}`}>{r.status}</span>
+                    {r.status === 'Pending' && r.approvalStage && (
+                      <div className="text-[9px] text-[#00d4ff] font-semibold mt-1">
+                        Awaiting {r.approvalStage.approverRole}
+                        {r.approvalStage.totalSteps > 1 ? ` · Step ${r.approvalStage.currentStep}/${r.approvalStage.totalSteps}` : ''}
+                      </div>
+                    )}
+                  </td>
                   <td className="py-2.5 px-3">
                     {r.status === 'Pending' && (
                       <button onClick={() => setDeleteTarget(r)} className="p-1 text-[#5a6878] hover:text-[#ff3d3d] transition-colors" title="Cancel">
