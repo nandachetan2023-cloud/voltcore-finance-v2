@@ -23,8 +23,10 @@ export async function GET(request: NextRequest) {
     if (employeeId) where.employeeId = parseInt(employeeId)
     if (status) where.status = status.toLowerCase()
 
-    // Resolve caller's role level for canApprove tagging
+    // Resolve caller identity for approver filtering / self-exclusion
+    let callerEmployeeId: number | null = null
     let callerRoleLevel: number | null = null
+    let callerOrgRoleId: string | null = null
     let callerIsAdmin = false
     const callerEmail = request.cookies.get('erp_user_email')?.value
     const callerRole = request.cookies.get('erp_user_role')?.value
@@ -35,7 +37,9 @@ export async function GET(request: NextRequest) {
         select: { employeeId: true, orgRoleId: true },
       }).catch(() => null)
 
+      if (callerUser?.employeeId) callerEmployeeId = callerUser.employeeId
       if (callerUser?.orgRoleId) {
+        callerOrgRoleId = callerUser.orgRoleId
         const role = await superadminDb.orgRole.findUnique({
           where: { id: callerUser.orgRoleId },
           select: { level: true },
@@ -45,6 +49,11 @@ export async function GET(request: NextRequest) {
       callerIsAdmin = callerRole === 'admin' && !callerUser?.orgRoleId
     } else if (!employeeId && callerRole === 'admin') {
       callerIsAdmin = true
+    }
+
+    // Exclude the caller's own requests from the approver view
+    if (callerEmployeeId && !employeeId) {
+      where.employeeId = { not: callerEmployeeId }
     }
 
     const [tourRequests, total] = await Promise.all([
@@ -68,11 +77,57 @@ export async function GET(request: NextRequest) {
       db.tourRequest.count({ where }),
     ])
 
-    // Enrich with canApprove
-    const enriched = tourRequests.map((tr: any) => ({
-      ...tr,
-      canApprove: tr.status === 'pending' && (callerIsAdmin || (callerRoleLevel !== null && callerRoleLevel > 1)),
-    }))
+    // Approver view: only surface a tour to the approver whose turn it is (parity
+    // with leave/employee-requests). The "my tours" view (?employeeId=) is raw.
+    let enriched: any[] = tourRequests
+    if (!employeeId) {
+      if (tenantId && callerRoleLevel !== null) {
+        // Chain approver — show only tours where they are the CURRENT-step approver
+        const requesterEmpIds = [...new Set(tourRequests.map(r => r.employeeId))]
+        const requesterUsers = await superadminDb.tenantUser.findMany({
+          where: { tenantId, employeeId: { in: requesterEmpIds }, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => [])
+
+        const roleIds = [...new Set(requesterUsers.map(u => u.orgRoleId).filter(Boolean))] as string[]
+        const roles = roleIds.length > 0
+          ? await superadminDb.orgRole.findMany({ where: { id: { in: roleIds } }, select: { id: true, level: true } }).catch(() => [])
+          : []
+        const roleLevelMap = new Map<string, number>(roles.map(r => [r.id, r.level] as [string, number]))
+        const empRoleLevelMap = new Map<number, number>(
+          requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ? (roleLevelMap.get(u.orgRoleId) ?? 0) : 0] as [number, number])
+        )
+        const empOrgRoleMap = new Map<number, string | null>(
+          requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ?? null] as [number, string | null])
+        )
+
+        const chainStepsMap = new Map<string, any[]>()
+        for (const roleId of roleIds) {
+          const chain = await getTourApprovalChain(tenantId, roleId)
+          chainStepsMap.set(roleId, chain?.steps || [])
+        }
+
+        enriched = tourRequests
+          .filter(r => {
+            const reqOrgRoleId = empOrgRoleMap.get(r.employeeId)
+            const reqLevel = empRoleLevelMap.get(r.employeeId) ?? 0
+            if (reqLevel <= 1) return false
+            if (!reqOrgRoleId) return false
+            const steps = chainStepsMap.get(reqOrgRoleId) || []
+            const currentStepNum = (r as any).currentStep || 1
+            const currentStepDef = steps.find((s: any) => s.stepNumber === currentStepNum)
+            return currentStepDef?.approverRoleId === callerOrgRoleId
+          })
+          .map(r => ({ ...r, canApprove: true }))
+      } else if (callerIsAdmin) {
+        // Full admin sees all tours and can finalize any of them (top authority)
+        enriched = tourRequests
+          .filter(r => r.employeeId !== callerEmployeeId)
+          .map(r => ({ ...r, canApprove: true }))
+      } else {
+        enriched = []
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -236,14 +291,57 @@ export async function PATCH(request: NextRequest) {
     if (!tourRequest) return NextResponse.json({ success: false, error: 'Tour request not found' }, { status: 404 })
     if (tourRequest.status !== 'pending') return NextResponse.json({ success: false, error: 'Tour request is not pending' }, { status: 400 })
 
+    // ── Caller identity + guards ──────────────────────────────────
     let approverEmployeeId: number | null = null
     const callerEmail = request.cookies.get('erp_user_email')?.value
-    if (callerEmail && tenantId) {
-      const callerUser = await superadminDb.tenantUser.findFirst({
-        where: { tenantId, email: callerEmail, isActive: true },
-        select: { employeeId: true },
+    const callerRole = request.cookies.get('erp_user_role')?.value
+    const callerUser = (callerEmail && tenantId)
+      ? await superadminDb.tenantUser.findFirst({
+          where: { tenantId, email: callerEmail, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => null)
+      : null
+    if (callerUser?.employeeId) approverEmployeeId = callerUser.employeeId
+    // Full admin (role 'admin' with no org-role) is the top authority: it may
+    // finalize any tour, overriding remaining chain steps.
+    const isFullAdmin = callerRole === 'admin' && !callerUser?.orgRoleId
+
+    // Block self-approval
+    if (callerUser?.employeeId && callerUser.employeeId === tourRequest.employeeId) {
+      return NextResponse.json(
+        { success: false, error: 'You cannot approve or reject your own tour request.' },
+        { status: 403 }
+      )
+    }
+
+    // Chain approvers may act ONLY on their current step. The full admin bypasses this.
+    if (!isFullAdmin && callerUser?.orgRoleId && tenantId) {
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId, employeeId: tourRequest.employeeId, isActive: true },
+        select: { orgRoleId: true },
       }).catch(() => null)
-      if (callerUser?.employeeId) approverEmployeeId = callerUser.employeeId
+
+      const requesterRole = requesterUser?.orgRoleId
+        ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+        : null
+
+      const isLevel1Requester = !requesterRole || requesterRole.level === 1
+
+      if (!isLevel1Requester) {
+        const chain = await getTourApprovalChain(tenantId, requesterUser?.orgRoleId)
+        const currentStepDef = chain?.steps.find(s => s.stepNumber === (tourRequest.currentStep || 1))
+        if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
+          return NextResponse.json(
+            { success: false, error: 'It is not your turn to approve this tour request. Please wait for the previous step to be completed.' },
+            { status: 403 }
+          )
+        }
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Level-1 tour requests require admin approval.' },
+          { status: 403 }
+        )
+      }
     }
 
     const empName = `${tourRequest.Employee.firstName} ${tourRequest.Employee.lastName}`
@@ -280,7 +378,8 @@ export async function PATCH(request: NextRequest) {
 
     const currentStep = tourRequest.currentStep || 1
     const totalSteps = chain?.steps.length || 1
-    const isLastStep = !chain || currentStep >= totalSteps
+    // Full admin finalizes immediately (top authority); otherwise final at last step.
+    const isLastStep = !chain || currentStep >= totalSteps || isFullAdmin
 
     if (isLastStep) {
       // Final approval

@@ -259,7 +259,7 @@ export default function AdminRequests() {
                     </div>
                   </div>
 
-                  {r.status === 'pending' && (
+                  {r.status === 'pending' && r.canApprove !== false && (
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button onClick={() => {
                           setActionTarget({ request: r, action: 'approve' });

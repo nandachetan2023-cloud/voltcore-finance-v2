@@ -147,23 +147,10 @@ export async function GET(request: NextRequest) {
           .map(r => ({ ...r, canApprove: true }))
 
       } else if (callerIsAdmin) {
-        // Admin sees ALL leaves (full visibility), can only approve level-1 ones
-        const requesterEmpIds2 = [...new Set(leaveRequests.map(r => r.employeeId))]
-        const requesterUsers2 = await superadminDb.tenantUser.findMany({
-          where: { tenantId, employeeId: { in: requesterEmpIds2 }, isActive: true },
-          select: { employeeId: true, orgRoleId: true },
-        }).catch(() => [])
-        const roleIds2 = [...new Set(requesterUsers2.map(u => u.orgRoleId).filter(Boolean))] as string[]
-        const roles2 = roleIds2.length > 0
-          ? await superadminDb.orgRole.findMany({ where: { id: { in: roleIds2 } }, select: { id: true, level: true } }).catch(() => [])
-          : []
-        const roleLevelMap2 = new Map<string, number>(roles2.map(r => [r.id, r.level] as [string, number]))
-        const empRoleLevelMap2 = new Map<number, number>(
-          requesterUsers2.map(u => [u.employeeId as number, u.orgRoleId ? (roleLevelMap2.get(u.orgRoleId) ?? 0) : 0] as [number, number])
-        )
+        // Full admin sees ALL leaves and can finalize any of them (top authority).
         enriched = leaveRequests
           .filter(r => r.employeeId !== callerEmployeeId)
-          .map(r => ({ ...r, canApprove: (empRoleLevelMap2.get(r.employeeId) ?? 0) <= 1 }))
+          .map(r => ({ ...r, canApprove: true }))
       } else {
         enriched = []
       }
@@ -553,49 +540,54 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // ── Self-approval guard + current-step check ──────────────────
+    // ── Caller identity + self-approval + current-step guard ──────
     const callerEmail = request.cookies.get('erp_user_email')?.value
-    if (callerEmail && tenantId) {
-      const callerUser = await superadminDb.tenantUser.findFirst({
-        where: { tenantId, email: callerEmail, isActive: true },
-        select: { employeeId: true, orgRoleId: true },
+    const callerRole = request.cookies.get('erp_user_role')?.value
+    const callerUser = (callerEmail && tenantId)
+      ? await superadminDb.tenantUser.findFirst({
+          where: { tenantId, email: callerEmail, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => null)
+      : null
+    // Full admin (role 'admin' with no org-role) is the top authority: it may
+    // finalize any leave, overriding remaining chain steps.
+    const isFullAdmin = callerRole === 'admin' && !callerUser?.orgRoleId
+
+    if (callerUser?.employeeId && callerUser.employeeId === existing.employeeId) {
+      return NextResponse.json(
+        { success: false, error: 'You cannot approve or reject your own leave request.' },
+        { status: 403 }
+      )
+    }
+
+    // Chain approvers may act ONLY on their current step. The full admin bypasses this.
+    if (!isFullAdmin && callerUser?.orgRoleId) {
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId: tenantId!, employeeId: existing.employeeId, isActive: true },
+        select: { orgRoleId: true },
       }).catch(() => null)
 
-      if (callerUser?.employeeId && callerUser.employeeId === existing.employeeId) {
-        return NextResponse.json(
-          { success: false, error: 'You cannot approve or reject your own leave request.' },
-          { status: 403 }
-        )
-      }
+      const requesterRole = requesterUser?.orgRoleId
+        ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+        : null
 
-      if (callerUser?.orgRoleId) {
-        const requesterUser = await superadminDb.tenantUser.findFirst({
-          where: { tenantId, employeeId: existing.employeeId, isActive: true },
-          select: { orgRoleId: true },
-        }).catch(() => null)
+      const isLevel1Requester = !requesterRole || requesterRole.level === 1
 
-        const requesterRole = requesterUser?.orgRoleId
-          ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
-          : null
-
-        const isLevel1Requester = !requesterRole || requesterRole.level === 1
-
-        if (!isLevel1Requester) {
-          const chain = await getLeaveApprovalChain(tenantId, requesterUser?.orgRoleId)
-          // Must be the approver for the CURRENT step specifically
-          const currentStepDef = chain?.steps.find(s => s.stepNumber === ((existing as any).currentStep || 1))
-          if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
-            return NextResponse.json(
-              { success: false, error: 'It is not your turn to approve this leave request. Please wait for the previous step to be completed.' },
-              { status: 403 }
-            )
-          }
-        } else {
+      if (!isLevel1Requester) {
+        const chain = await getLeaveApprovalChain(tenantId!, requesterUser?.orgRoleId)
+        // Must be the approver for the CURRENT step specifically
+        const currentStepDef = chain?.steps.find(s => s.stepNumber === ((existing as any).currentStep || 1))
+        if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
           return NextResponse.json(
-            { success: false, error: 'Level-1 leave requests require admin approval.' },
+            { success: false, error: 'It is not your turn to approve this leave request. Please wait for the previous step to be completed.' },
             { status: 403 }
           )
         }
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Level-1 leave requests require admin approval.' },
+          { status: 403 }
+        )
       }
     }
 
@@ -648,7 +640,8 @@ export async function PATCH(request: NextRequest) {
 
     const currentStep = (existing as any).currentStep || 1
     const totalSteps = chain?.steps.length || 1
-    const isLastStep = !chain || currentStep >= totalSteps
+    // Full admin finalizes immediately (top authority); otherwise final at last step.
+    const isLastStep = !chain || currentStep >= totalSteps || isFullAdmin
 
     if (isLastStep) {
       // Final approval

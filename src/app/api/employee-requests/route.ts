@@ -193,27 +193,10 @@ export async function GET(request: NextRequest) {
           .map(r => ({ ...r, canApprove: true }))
 
       } else if (callerIsAdmin) {
-        // Admin sees ALL requests (full visibility for audit/management)
-        // but can only action level-1 ones
-        const requesterEmployeeIds = [...new Set(requests.map(r => r.employeeId))]
-        const requesterUsers = await superadminDb.tenantUser.findMany({
-          where: { tenantId: tenantId || '', employeeId: { in: requesterEmployeeIds }, isActive: true },
-          select: { employeeId: true, orgRoleId: true },
-        }).catch(() => [])
-
-        const roleIds = [...new Set(requesterUsers.map(u => u.orgRoleId).filter(Boolean))] as string[]
-        const roles = roleIds.length > 0
-          ? await superadminDb.orgRole.findMany({ where: { id: { in: roleIds } }, select: { id: true, level: true } }).catch(() => [])
-          : []
-        const roleLevelMap = new Map<string, number>(roles.map(r => [r.id, r.level] as [string, number]))
-        const empRoleLevelMap = new Map<number, number>(
-          requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ? (roleLevelMap.get(u.orgRoleId) ?? 0) : 0] as [number, number])
-        )
-
-        // Return all requests — canApprove only for level-1
+        // Full admin sees ALL requests and can finalize any of them (top authority).
         enriched = requests
           .filter(r => r.employeeId !== callerEmployeeId)
-          .map(r => ({ ...r, canApprove: (empRoleLevelMap.get(r.employeeId) ?? 0) <= 1 }))
+          .map(r => ({ ...r, canApprove: true }))
       } else {
         enriched = []
       }
@@ -382,50 +365,55 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // ── Guard: caller must be the approver for the CURRENT step ──
+    // ── Caller identity ──────────────────────────────────────────
     const callerEmail = request.cookies.get('erp_user_email')?.value
-    if (callerEmail && tenantId) {
-      const callerUser = await superadminDb.tenantUser.findFirst({
-        where: { tenantId, email: callerEmail, isActive: true },
-        select: { employeeId: true, orgRoleId: true },
+    const callerRole = request.cookies.get('erp_user_role')?.value
+    const callerUser = (callerEmail && tenantId)
+      ? await superadminDb.tenantUser.findFirst({
+          where: { tenantId, email: callerEmail, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => null)
+      : null
+    // A full admin (role 'admin' with no org-role) is the top authority: it may
+    // finalize ANY request, overriding remaining chain steps.
+    const isFullAdmin = callerRole === 'admin' && !callerUser?.orgRoleId
+
+    // Block self-approval
+    if (callerUser?.employeeId && callerUser.employeeId === existing.employeeId) {
+      return NextResponse.json(
+        { success: false, error: 'You cannot approve or reject your own request.' },
+        { status: 403 }
+      )
+    }
+
+    // Chain approvers may act ONLY on their current step. The full admin bypasses this.
+    if (!isFullAdmin && callerUser?.orgRoleId) {
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId: tenantId!, employeeId: existing.employeeId, isActive: true },
+        select: { orgRoleId: true },
       }).catch(() => null)
 
-      // Block self-approval
-      if (callerUser?.employeeId && callerUser.employeeId === existing.employeeId) {
-        return NextResponse.json(
-          { success: false, error: 'You cannot approve or reject your own request.' },
-          { status: 403 }
-        )
-      }
+      const requesterRole = requesterUser?.orgRoleId
+        ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+        : null
 
-      if (callerUser?.orgRoleId) {
-        const requesterUser = await superadminDb.tenantUser.findFirst({
-          where: { tenantId, employeeId: existing.employeeId, isActive: true },
-          select: { orgRoleId: true },
-        }).catch(() => null)
+      const isLevel1Requester = !requesterRole || requesterRole.level === 1
 
-        const requesterRole = requesterUser?.orgRoleId
-          ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
-          : null
-
-        const isLevel1Requester = !requesterRole || requesterRole.level === 1
-
-        if (!isLevel1Requester) {
-          const chain = await getChainForRole(tenantId, requesterUser?.orgRoleId)
-          // Check caller is the approver for the CURRENT step specifically
-          const currentStepDef = chain?.steps.find(s => s.stepNumber === (existing.currentStep || 1))
-          if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
-            return NextResponse.json(
-              { success: false, error: 'It is not your turn to approve this request. Please wait for the previous step to be completed.' },
-              { status: 403 }
-            )
-          }
-        } else {
+      if (!isLevel1Requester) {
+        const chain = await getChainForRole(tenantId!, requesterUser?.orgRoleId)
+        // Check caller is the approver for the CURRENT step specifically
+        const currentStepDef = chain?.steps.find(s => s.stepNumber === (existing.currentStep || 1))
+        if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
           return NextResponse.json(
-            { success: false, error: 'Level-1 requests require admin approval.' },
+            { success: false, error: 'It is not your turn to approve this request. Please wait for the previous step to be completed.' },
             { status: 403 }
           )
         }
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Level-1 requests require admin approval.' },
+          { status: 403 }
+        )
       }
     }
 
@@ -482,42 +470,9 @@ export async function PATCH(request: NextRequest) {
     const currentStep = existing.currentStep || 1
     const totalSteps = chain?.steps.length || 1
 
-    // ── Determine if this approval is final ───────────────────────
-    // Rule: Admin approval is only REQUIRED for level-1 employees.
-    // For employees at level 2+, the approval of their direct manager
-    // (the role one level above them) is sufficient — admin is optional.
-    //
-    // Implementation: after approving step N, check if the NEXT step's
-    // role is the highest-level role (admin). If the requester's own
-    // role level is > 1, skip the admin step and mark as fully approved.
-
-    let skipAdminStep = false
-    if (chain && currentStep < totalSteps && tenantId) {
-      const nextStepDef = chain.steps.find(s => s.stepNumber === currentStep + 1)
-      if (nextStepDef) {
-        const requesterRoleLevel = requesterRoleId
-          ? (await superadminDb.orgRole.findUnique({ where: { id: requesterRoleId }, select: { level: true } }).catch(() => null))?.level ?? 1
-          : 1
-
-        const nextRole = await superadminDb.orgRole.findUnique({
-          where: { id: nextStepDef.approverRoleId },
-          select: { level: true },
-        }).catch(() => null)
-
-        const highestRole = await superadminDb.orgRole.findFirst({
-          where: { tenantId },
-          orderBy: { level: 'desc' },
-          select: { level: true },
-        }).catch(() => null)
-
-        const isNextStepAdmin = nextRole && highestRole && nextRole.level >= highestRole.level
-        if (isNextStepAdmin && requesterRoleLevel > 1) {
-          skipAdminStep = true
-        }
-      }
-    }
-
-    const isLastStep = !chain || currentStep >= totalSteps || skipAdminStep
+    // The full admin finalizes immediately (top authority — overrides the rest of
+    // the chain). Otherwise it's final only once the last chain step is approved.
+    const isLastStep = !chain || currentStep >= totalSteps || isFullAdmin
 
     if (isLastStep) {
       // Final approval — mark as approved, store approvedAmount if provided
