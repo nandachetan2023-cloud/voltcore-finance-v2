@@ -31,6 +31,56 @@ export function downloadExcel(rows: any[][], headers: string[], filename: string
   }
 }
 
+// CSV export — opens cleanly in Excel/Sheets and needs no extra dependency.
+export function downloadCSV(rows: any[][], headers: string[], filename: string) {
+  try {
+    const esc = (v: any) => {
+      const s = v == null ? '' : String(v)
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const csv = [headers, ...rows].map(r => r.map(esc).join(',')).join('\n')
+    // Prepend BOM so Excel reads UTF-8 (₹, accented names) correctly.
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename.endsWith('.csv') ? filename : filename.replace(/\.[^.]+$/, '') + '.csv'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    toast.success('Report downloaded')
+  } catch {
+    toast.error('Failed to download report')
+  }
+}
+
+// PDF export — landscape table via jsPDF + autotable, with an optional title.
+export async function downloadPDF(rows: any[][], headers: string[], filename: string, title?: string) {
+  try {
+    const { jsPDF } = await import('jspdf')
+    const autoTable = (await import('jspdf-autotable')).default
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+    if (title) {
+      doc.setFontSize(13)
+      doc.text(title, 40, 32)
+    }
+    autoTable(doc, {
+      head: [headers],
+      body: rows.map(r => r.map(c => (c == null ? '' : String(c)))),
+      startY: title ? 44 : 24,
+      styles: { fontSize: 7, cellPadding: 3 },
+      headStyles: { fillColor: [22, 28, 36], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      margin: { left: 20, right: 20 },
+    })
+    doc.save(filename.endsWith('.pdf') ? filename : filename.replace(/\.[^.]+$/, '') + '.pdf')
+    toast.success('Report downloaded')
+  } catch {
+    toast.error('Failed to download PDF')
+  }
+}
+
 export const TOOLTIP_STYLE = {
   background: '#1a2030', border: '1px solid #252e3a',
   borderRadius: '8px', fontSize: '11px', color: '#e2e8f0',

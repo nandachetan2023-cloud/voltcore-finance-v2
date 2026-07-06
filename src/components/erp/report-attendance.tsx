@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { ClipboardList, RefreshCw, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { ReportShell, StatBox, SummaryRow, downloadExcel, fmtCurrency, TOOLTIP_STYLE } from './report-utils'
+import { ReportShell, StatBox, SummaryRow, downloadExcel, downloadCSV, downloadPDF, fmtCurrency, TOOLTIP_STYLE } from './report-utils'
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
@@ -16,6 +16,10 @@ export default function ReportAttendance() {
   })
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0])
   const [siteFilter, setSiteFilter] = useState('all')
+  const [deptFilter, setDeptFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [empSearch, setEmpSearch] = useState('')
+  const [exportFormat, setExportFormat] = useState<'excel' | 'csv' | 'pdf'>('excel')
 
   // ── Month Performance Register (eTimeOffice biometric format) ──────
   const now = new Date()
@@ -74,9 +78,25 @@ export default function ReportAttendance() {
     finally { setLoading(false) }
   }, [startDate, endDate])
 
-  // Site/branch filter — narrow the loaded data to a single site if selected.
+  // Filter options derived from the loaded data.
   const sites = Array.from(new Set(data.map(a => a.Employee?.Branch?.name).filter(Boolean))).sort() as string[]
-  const view = siteFilter === 'all' ? data : data.filter(a => (a.Employee?.Branch?.name || '') === siteFilter)
+  const depts = Array.from(new Set(data.map(a => a.Employee?.Department?.name).filter(Boolean))).sort() as string[]
+  const statuses = Array.from(new Set(data.map(a => a.status).filter(Boolean))).sort() as string[]
+
+  // Apply all active filters (site + department + status + employee search).
+  const q = empSearch.trim().toLowerCase()
+  const view = data.filter(a => {
+    if (siteFilter !== 'all' && (a.Employee?.Branch?.name || '') !== siteFilter) return false
+    if (deptFilter !== 'all' && (a.Employee?.Department?.name || '') !== deptFilter) return false
+    if (statusFilter !== 'all' && a.status !== statusFilter) return false
+    if (q) {
+      const name = `${a.Employee?.firstName || ''} ${a.Employee?.lastName || ''}`.toLowerCase()
+      const code = (a.Employee?.employeeCode || '').toLowerCase()
+      if (!name.includes(q) && !code.includes(q)) return false
+    }
+    return true
+  })
+  const filtersActive = siteFilter !== 'all' || deptFilter !== 'all' || statusFilter !== 'all' || q !== ''
 
   // "Present" = worked days (present + late + half-day). Late & Half Day are
   // still broken out separately below. Counting only strict 'present' hid the
@@ -101,8 +121,7 @@ export default function ReportAttendance() {
     byDept.set(d, cur)
   })
 
-  const handleDownload = () => {
-    if (!view.length) { toast.error('Generate the report first'); return }
+  const buildRows = () => {
     const headers = ['Date', 'Employee ID', 'Employee Name', 'Department', 'Site', 'Status', 'Punch In', 'Punch Out', 'Late Minutes', 'Fine Amount']
     const rows = view.map(a => [
       a.logDate ? new Date(a.logDate).toLocaleDateString('en-IN') : '',
@@ -116,12 +135,25 @@ export default function ReportAttendance() {
       a.lateMinutes || 0,
       Number(a.fineAmount || 0).toFixed(2),
     ])
-    const siteTag = siteFilter === 'all' ? '' : `_${siteFilter.replace(/\s+/g, '')}`
-    downloadExcel(rows, headers, `Attendance_Report_${startDate}_to_${endDate}${siteTag}.xlsx`, 'Attendance')
+    return { headers, rows }
+  }
+
+  const handleDownload = (fmt: 'excel' | 'csv' | 'pdf' = exportFormat) => {
+    if (!view.length) { toast.error('Generate the report first (no rows to export)'); return }
+    const { headers, rows } = buildRows()
+    const tags = [
+      siteFilter !== 'all' ? siteFilter : '',
+      deptFilter !== 'all' ? deptFilter : '',
+      statusFilter !== 'all' ? statusFilter : '',
+    ].filter(Boolean).map(t => `_${t.replace(/\s+/g, '')}`).join('')
+    const base = `Attendance_Report_${startDate}_to_${endDate}${tags}`
+    if (fmt === 'csv') downloadCSV(rows, headers, `${base}.csv`)
+    else if (fmt === 'pdf') downloadPDF(rows, headers, `${base}.pdf`, `Attendance Report  ${startDate} to ${endDate}`)
+    else downloadExcel(rows, headers, `${base}.xlsx`, 'Attendance')
   }
 
   return (
-    <ReportShell title="Attendance Report" icon={ClipboardList} color="#00e676" onDownload={handleDownload} loading={loading}>
+    <ReportShell title="Attendance Report" icon={ClipboardList} color="#00e676" onDownload={() => handleDownload()} loading={loading}>
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <label className="text-[10px] text-[#5a6878] font-semibold uppercase">From</label>
@@ -135,17 +167,75 @@ export default function ReportAttendance() {
           {loading ? <div className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : <RefreshCw size={13} />}
           {loaded ? 'Refresh' : 'Generate Report'}
         </button>
-        {loaded && sites.length > 0 && (
-          <div className="flex items-center gap-2">
-            <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Site</label>
-            <select value={siteFilter} onChange={e => setSiteFilter(e.target.value)} className="vc-input py-1.5 px-2 text-[11px] w-[160px]">
-              <option value="all">All Sites</option>
-              {sites.map(s => <option key={s} value={s}>{s}</option>)}
+      </div>
+
+      {/* Filters + multi-format export — shown once a report is generated */}
+      {loaded && (
+        <div className="flex items-end gap-3 flex-wrap bg-[#161c24] border border-[#252e3a] rounded-xl p-3">
+          {sites.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Site</label>
+              <select value={siteFilter} onChange={e => setSiteFilter(e.target.value)} className="vc-input py-1.5 px-2 text-[11px] w-[150px]">
+                <option value="all">All Sites</option>
+                {sites.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          )}
+          {depts.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Department</label>
+              <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)} className="vc-input py-1.5 px-2 text-[11px] w-[150px]">
+                <option value="all">All Departments</option>
+                {depts.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+          )}
+          {statuses.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Status</label>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="vc-input py-1.5 px-2 text-[11px] w-[130px]">
+                <option value="all">All Statuses</option>
+                {statuses.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Employee</label>
+            <input value={empSearch} onChange={e => setEmpSearch(e.target.value)} placeholder="Name or code…" className="vc-input py-1.5 px-2 text-[11px] w-[160px]" />
+          </div>
+          {filtersActive && (
+            <button
+              onClick={() => { setSiteFilter('all'); setDeptFilter('all'); setStatusFilter('all'); setEmpSearch('') }}
+              className="px-3 py-2 text-[11px] text-[#8899aa] hover:text-[#e2e8f0] border border-[#252e3a] rounded-lg"
+            >
+              Clear
+            </button>
+          )}
+
+          <div className="flex-1" />
+
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Format</label>
+            <select value={exportFormat} onChange={e => setExportFormat(e.target.value as 'excel' | 'csv' | 'pdf')} className="vc-input py-1.5 px-2 text-[11px] w-[110px]">
+              <option value="excel">Excel</option>
+              <option value="csv">CSV</option>
+              <option value="pdf">PDF</option>
             </select>
           </div>
-        )}
-        {loaded && <span className="text-[11px] text-[#5a6878]">{view.length} records{siteFilter !== 'all' ? ` (of ${data.length})` : ''}</span>}
-      </div>
+          <button
+            onClick={() => handleDownload()}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#00d4ff] text-black text-[12px] font-bold rounded-lg hover:bg-[#00b8e0]"
+          >
+            <Download size={13} /> Export {view.length}
+          </button>
+        </div>
+      )}
+
+      {loaded && (
+        <div className="text-[11px] text-[#5a6878] px-1">
+          Showing <strong className="text-[#e2e8f0]">{view.length}</strong>{filtersActive ? ` of ${data.length}` : ''} records
+        </div>
+      )}
 
       {/* Month Performance Register — eTimeOffice biometric block format */}
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 space-y-3">
