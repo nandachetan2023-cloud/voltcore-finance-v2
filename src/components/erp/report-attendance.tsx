@@ -78,7 +78,12 @@ export default function ReportAttendance() {
   const sites = Array.from(new Set(data.map(a => a.Employee?.Branch?.name).filter(Boolean))).sort() as string[]
   const view = siteFilter === 'all' ? data : data.filter(a => (a.Employee?.Branch?.name || '') === siteFilter)
 
-  const present = view.filter(a => a.status === 'present').length
+  // "Present" = worked days (present + late + half-day). Late & Half Day are
+  // still broken out separately below. Counting only strict 'present' hid the
+  // late/half-day attendees. "Absent" counts explicit absent records (the report
+  // only holds actual attendance rows, so it reflects marked absences only).
+  const worked = view.filter(a => a.status === 'present' || a.status === 'late' || a.status === 'half_day').length
+  const present = worked
   const absent = view.filter(a => a.status === 'absent').length
   const late = view.filter(a => a.status === 'late').length
   const halfDay = view.filter(a => a.status === 'half_day').length
@@ -89,9 +94,10 @@ export default function ReportAttendance() {
   view.forEach(a => {
     const d = a.Employee?.Department?.name || 'Unassigned'
     const cur = byDept.get(d) || { present: 0, absent: 0, late: 0 }
-    if (a.status === 'present') cur.present++
+    // Present column = worked (present/late/half-day); Late shown separately.
+    if (a.status === 'present' || a.status === 'late' || a.status === 'half_day') cur.present++
     else if (a.status === 'absent') cur.absent++
-    else if (a.status === 'late') cur.late++
+    if (a.status === 'late') cur.late++
     byDept.set(d, cur)
   })
 

@@ -274,8 +274,13 @@ export class BiometricService {
     const skippedRecords: Array<{ empCode: string; name: string; date: string; reason: string }> = []
     const employeeRecordCount = new Map<string, { name: string; count: number }>()
 
-    // Group by employee and date
-    const groupedLogs = this.groupLogsByEmployeeAndDate(unprocessedLogs)
+    // Group by employee and date, then stitch cross-midnight (night-shift)
+    // punches: a lone early-morning punch is moved onto the previous day's
+    // open evening punch as its punch-OUT, so night shifts don't end up with a
+    // punch-in and no punch-out (and a stray "in" the next morning).
+    const groupedLogs = this.mergeCrossMidnightPunches(
+      this.groupLogsByEmployeeAndDate(unprocessedLogs)
+    )
 
     for (const [key, logs] of Object.entries(groupedLogs)) {
       try {
@@ -653,10 +658,14 @@ export class BiometricService {
 
   // Helper: Parse punch date from API format
   private parsePunchDate(dateStr: string): string {
-    // Format: "02/01/2020 15:58:00" -> ISO format
+    // Format: "02/01/2020 15:58:00" (device local time = IST) -> ISO with the
+    // IST offset so `new Date()` yields the correct absolute instant no matter
+    // what timezone the server runs in. Without the +05:30 suffix the string is
+    // parsed in the server's local zone, shifting every punch time (and, near
+    // midnight, the day it lands on — which broke night-shift punch pairing).
     const [datePart, timePart] = dateStr.split(' ')
     const [day, month, year] = datePart.split('/')
-    return `${year}-${month}-${day}T${timePart}`
+    return `${year}-${month}-${day}T${timePart || '00:00:00'}+05:30`
   }
 
   // Helper: Group logs by employee and date
@@ -664,11 +673,9 @@ export class BiometricService {
     const grouped: Record<string, any[]> = {}
 
     for (const log of logs) {
-      const date = new Date(log.punchDate)
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      const dateKey = `${year}-${month}-${day}`
+      // Bucket by the IST calendar day (matching how times are stored/displayed),
+      // independent of the server's own timezone. en-CA gives YYYY-MM-DD.
+      const dateKey = new Date(log.punchDate).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
       // Group strictly by enrolledId (EmpcardNo) — the unique identifier we match on.
       // Logs without an enrolledId are grouped by empCode so they can be reported
       // as skipped (they cannot be reliably matched to an employee).
@@ -679,6 +686,62 @@ export class BiometricService {
         grouped[key] = []
       }
       grouped[key].push(log)
+    }
+
+    return grouped
+  }
+
+  // Hour-of-day (0–23) of a punch in IST, regardless of server timezone.
+  private istHour(punchDate: any): number {
+    const h = new Date(punchDate).toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })
+    return parseInt(h, 10)
+  }
+
+  // Stitch night-shift punches that straddle midnight. The device emits an
+  // out-punch after 00:00 as a separate record that buckets into the NEXT
+  // calendar day, leaving day-1 with an in-punch and no out, and day-2 with a
+  // lone "in". When a day bucket holds a single early-morning punch (≤ EARLY_HR)
+  // and the same employee's immediately-previous day ended with a single
+  // late-evening punch (≥ EVENING_HR) and no closing punch, move the morning
+  // punch onto the previous day so it becomes that shift's punch-OUT.
+  private mergeCrossMidnightPunches(grouped: Record<string, any[]>): Record<string, any[]> {
+    const EARLY_HR = 11   // a lone punch at/before 11:00 IST looks like a night-shift exit
+    const EVENING_HR = 14 // a lone punch at/after 14:00 IST looks like a night-shift entry
+
+    // Index buckets by employee identifier so we can look at consecutive days.
+    const byEmp = new Map<string, string[]>()
+    for (const key of Object.keys(grouped)) {
+      const [identifier] = key.split('|')
+      if (!byEmp.has(identifier)) byEmp.set(identifier, [])
+      byEmp.get(identifier)!.push(key)
+    }
+
+    for (const [identifier, keys] of byEmp) {
+      // Sort the employee's day-keys chronologically by their date part.
+      keys.sort((a, b) => a.split('|')[1].localeCompare(b.split('|')[1]))
+
+      for (let i = 1; i < keys.length; i++) {
+        const todayKey = keys[i]
+        const today = grouped[todayKey]
+        if (!today || today.length !== 1) continue
+        if (this.istHour(today[0].punchDate) > EARLY_HR) continue
+
+        const prevKey = keys[i - 1]
+        const prev = grouped[prevKey]
+        if (!prev || prev.length !== 1) continue
+        if (this.istHour(prev[0].punchDate) < EVENING_HR) continue
+
+        // Confirm the two days are actually consecutive (prev day + 1 = today).
+        const prevDate = prevKey.split('|')[1]
+        const todayDate = todayKey.split('|')[1]
+        const nextOfPrev = new Date(`${prevDate}T00:00:00Z`)
+        nextOfPrev.setUTCDate(nextOfPrev.getUTCDate() + 1)
+        if (nextOfPrev.toISOString().slice(0, 10) !== todayDate) continue
+
+        // Move the morning exit-punch onto the previous (shift-start) day.
+        prev.push(today[0])
+        delete grouped[todayKey]
+      }
     }
 
     return grouped

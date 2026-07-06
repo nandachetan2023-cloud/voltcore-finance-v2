@@ -64,6 +64,23 @@ const STATUS_LABELS: Record<string, string> = {
 // Statuses that mean the employee physically worked/attended that day.
 const WORKED_STATUSES = new Set(['Present', 'Late', 'Half Day']);
 
+// Gross paid minutes of a shift ("HH:MM" start/end), net of the unpaid break.
+// Handles shifts that cross midnight (end <= start). Returns null if unknown.
+function shiftGrossMinutes(
+  startTime?: string | null,
+  endTime?: string | null,
+  crossesMidnight?: boolean | null,
+  breakMinutes?: number | null,
+): number | null {
+  if (!startTime || !endTime) return null;
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  if ([sh, sm, eh, em].some(n => Number.isNaN(n))) return null;
+  let mins = (eh * 60 + em) - (sh * 60 + sm);
+  if (mins <= 0 || crossesMidnight) mins += 24 * 60; // wrap past midnight
+  return Math.max(0, mins - (Number(breakMinutes) || 0));
+}
+
 const emptyForm: AttendanceFormData = {
   empId: '', site: '', date: '', timeIn: '', timeOut: '', otHours: 0, shift: '', status: 'Present',
 };
@@ -292,12 +309,27 @@ export default function AttendanceModule() {
         const mappedRecords = json.data.map((record: any) => {
           const punchIn = record.punchIn ? new Date(record.punchIn) : null;
           const punchOut = record.punchOut ? new Date(record.punchOut) : null;
-          
-          // Calculate OT hours (hours worked beyond 8 hours)
+
+          // Overtime = worked time beyond the assigned shift's paid duration,
+          // NOT a flat "hours − 8" (that invented OT for any shift ≠ 8h and
+          // ignored breaks). Worked minutes come from the punch timestamps
+          // (absolute instants, so cross-midnight is handled correctly); the
+          // shift's gross paid minutes and OT threshold come from the record.
           let otHours = 0;
           if (punchIn && punchOut) {
-            const hoursWorked = (punchOut.getTime() - punchIn.getTime()) / (1000 * 60 * 60);
-            otHours = Math.max(0, hoursWorked - 8);
+            // Elapsed clock time between punches. Employees don't punch out for
+            // their break, so this span INCLUDES the break — compare it against
+            // the shift's full in→out span (break included), not the paid net.
+            const workedMin = (punchOut.getTime() - punchIn.getTime()) / 60000;
+            const shiftSpanMin = shiftGrossMinutes(
+              record.shiftStartTime, record.shiftEndTime,
+              record.shiftCrossesMidnight, 0
+            );
+            // No shift info → fall back to an 8h (480 min) baseline.
+            const baseline = shiftSpanMin ?? 480;
+            const thresholdMin = Number(record.shiftOtThresholdMin) || 0;
+            const overMin = workedMin - baseline;
+            otHours = overMin > thresholdMin ? Math.max(0, overMin) / 60 : 0;
           }
           
           return {
