@@ -123,10 +123,13 @@ export async function POST(request: NextRequest) {
     let failed = 0;
     let skipped = 0;
 
-    // Get current month and year for payroll run
+    // Month/year of the data being imported. Use the period the user selected in
+    // the import dialog; fall back to the current month only if none was sent.
+    const monthRaw = formData.get('month');
+    const yearRaw = formData.get('year');
     const now = new Date();
-    const month = now.getMonth() + 1;
-    const year = now.getFullYear();
+    const month = monthRaw ? parseInt(String(monthRaw)) : now.getMonth() + 1;
+    const year = yearRaw ? parseInt(String(yearRaw)) : now.getFullYear();
 
     // Find or create payroll run for non-compliance
     let payrollRun = await db.payrollRun.findFirst({

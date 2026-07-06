@@ -113,6 +113,12 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
   const [duplicateMonth, setDuplicateMonth] = useState<number>(0);
   const [duplicateYear, setDuplicateYear] = useState<number>(0);
 
+  // Period this sheet is for. Defaults to the current month but the user MUST be
+  // able to pick an older month (e.g. importing May's sheet in July) — otherwise
+  // the data gets filed under the wrong month.
+  const [importMonth, setImportMonth] = useState<number>(new Date().getMonth() + 1);
+  const [importYear, setImportYear] = useState<number>(new Date().getFullYear());
+
   const downloadTemplate = () => {
     try {
       const XLSX = require('xlsx');
@@ -415,6 +421,8 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('sheetName', selectedSheet);
+      formData.append('month', String(importMonth));
+      formData.append('year', String(importYear));
 
       const res = await fetch('/api/payroll/check-duplicates', {
         method: 'POST',
@@ -463,7 +471,9 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('sheetName', selectedSheet);
-      
+      formData.append('month', String(importMonth));
+      formData.append('year', String(importYear));
+
       // Add manual mappings if any
       if (manualMappings.size > 0) {
         const mappingsArray = Array.from(manualMappings.values());
@@ -717,6 +727,36 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
                   )}
                 </div>
               </label>
+            </div>
+
+            {/* Period selector — which month/year this sheet is for */}
+            <div className="border border-[#2e3a48] rounded-lg p-4 bg-[#141920]">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="text-[12px] font-semibold text-[#e2e8f0]">Salary Period</div>
+              </div>
+              <div className="text-[10px] text-[#5a6878] mb-3">
+                Select the month this sheet belongs to. Importing an older month? Change it here — the data is filed under this period, not today's month.
+              </div>
+              <div className="flex items-center gap-3">
+                <select
+                  value={importMonth}
+                  onChange={e => setImportMonth(parseInt(e.target.value))}
+                  className="flex-1 bg-[#0d1117] border border-[#2e3a48] rounded px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                    <option key={m} value={m}>{getMonthName(m)}</option>
+                  ))}
+                </select>
+                <select
+                  value={importYear}
+                  onChange={e => setImportYear(parseInt(e.target.value))}
+                  className="w-28 bg-[#0d1117] border border-[#2e3a48] rounded px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]"
+                >
+                  {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Sheet Selector */}
