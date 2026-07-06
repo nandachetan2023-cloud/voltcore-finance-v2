@@ -13,6 +13,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '100')
     const offset = parseInt(searchParams.get('offset') || '0')
     const date = searchParams.get('date')
+    const from = searchParams.get('from')
+    const to = searchParams.get('to')
     const employeeId = searchParams.get('employeeId')
 
     // Build where clause
@@ -26,6 +28,22 @@ export async function GET(request: NextRequest) {
         gte: targetDate,
         lt: nextDate,
       }
+    } else if (from || to) {
+      // Inclusive [from, to] date range — lets the client fetch an arbitrary
+      // month/period instead of just the 100 most-recent rows.
+      const range: any = {}
+      if (from) {
+        const start = new Date(from)
+        start.setHours(0, 0, 0, 0)
+        range.gte = start
+      }
+      if (to) {
+        const end = new Date(to)
+        end.setHours(0, 0, 0, 0)
+        end.setDate(end.getDate() + 1) // make the upper bound inclusive of `to`
+        range.lt = end
+      }
+      where.logDate = range
     }
     if (employeeId) {
       where.employeeId = parseInt(employeeId)

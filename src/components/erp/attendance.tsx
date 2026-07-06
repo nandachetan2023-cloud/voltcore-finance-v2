@@ -260,7 +260,17 @@ export default function AttendanceModule() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/attendance');
+      // Push the active date filter to the server so it returns the whole window
+      // being viewed. Without this the API caps at the 100 most-recent rows, so
+      // older months (e.g. May) never reach the client on data-heavy servers.
+      const params = new URLSearchParams({ limit: '100000' });
+      if (dateRangeMode) {
+        if (fromDate) params.set('from', fromDate);
+        if (toDate) params.set('to', toDate);
+      } else if (dateFilter) {
+        params.set('date', dateFilter);
+      }
+      const res = await fetch(`/api/attendance?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch attendance');
       const json = await res.json();
       if (json.success) {
@@ -298,7 +308,7 @@ export default function AttendanceModule() {
       else throw new Error(json.error || 'Unknown error');
     } catch (err) { setError(err instanceof Error ? err.message : 'Something went wrong'); }
     finally { setLoading(false); }
-  }, []);
+  }, [dateRangeMode, dateFilter, fromDate, toDate]);
 
   const fetchEmployees = useCallback(async () => {
     try {
