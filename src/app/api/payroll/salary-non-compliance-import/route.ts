@@ -44,6 +44,7 @@ interface SalaryNonComplianceRow {
   pt: number;
   totalDeduction: number;
   nettPayable: number;
+  totalNonComplianceAmount: number;
   advance: number;
   arrears: number;
   monthlyBasicSalary: number;
@@ -240,7 +241,8 @@ export async function POST(request: NextRequest) {
           pt: Number(row[38]) || 0,                      // col 38: PT
           totalDeduction: Number(row[39]) || 0,          // col 39: TOTAL DEDUCTION
           nettPayable: Number(row[40]) || 0,             // col 40: NETT PAYBLE
-          // cols 41-43 = signature/empty
+          // col 41 = signature/empty
+          totalNonComplianceAmount: Number(row[44]) || 0, // col 44: TOTAL NON COMPLIANCE AMOUNT
           advance: Number(row[45]) || 0,                 // col 45: ADVANCE
           arrears: Number(row[46]) || 0,                 // col 46: ARREARS
           // col 49 empty, col 50 LEAVE, col 51 BONUS, cols 52-54 empty
@@ -282,6 +284,8 @@ export async function POST(request: NextRequest) {
               phAmount: salaryData.phAmount,
               otAmount: salaryData.actualOtAmount,
               grossEarning: salaryData.monthlyGrossSalary,
+              grossEarnWages: salaryData.grossEarnWages,
+              totalNonComplianceAmount: salaryData.totalNonComplianceAmount,
               pfDeduction: salaryData.epf,
               esiDeduction: salaryData.esic,
               ptDeduction: 0, // PT — not deducted by the company
@@ -320,6 +324,8 @@ export async function POST(request: NextRequest) {
               phAmount: salaryData.phAmount,
               otAmount: salaryData.actualOtAmount,
               grossEarning: salaryData.monthlyGrossSalary,
+              grossEarnWages: salaryData.grossEarnWages,
+              totalNonComplianceAmount: salaryData.totalNonComplianceAmount,
               pfDeduction: salaryData.epf,
               esiDeduction: salaryData.esic,
               ptDeduction: 0, // PT — not deducted by the company

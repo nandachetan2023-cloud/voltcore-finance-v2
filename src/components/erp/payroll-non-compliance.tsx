@@ -37,6 +37,8 @@ interface PayrollItem {
   basicSalary: number;
   hra: number;
   grossEarning: number;
+  grossEarnWages: number;
+  totalNonComplianceAmount: number;
   totalDeduction: number;
   netPay: number;
   status: string;
@@ -184,11 +186,17 @@ export default function PayrollNonCompliance() {
   const stats = useMemo(() => {
     if (!payrollRuns.length) return { totalRuns: 0, totalEmployees: 0, totalGross: 0, totalNet: 0 };
     const completed = payrollRuns.filter(r => r.status === 'completed');
+    // "Total Gross" = sum of GROSS EARN WAGES (col Y in the generated sheet).
+    // "Total Net" = sum of TOTAL NON COMPLIANCE AMOUNT (the non-compliance total).
+    // Summed per-employee across all completed runs, not the run-level
+    // totalGross/totalNet (which track monthlyGrossSalary/nettPayable instead).
+    const sumItems = (r: PayrollRun, key: 'grossEarnWages' | 'totalNonComplianceAmount') =>
+      (r.PayrollItem || []).reduce((s, item) => s + Number(item[key] ?? 0), 0);
     return {
       totalRuns: payrollRuns.length,
       totalEmployees: completed.reduce((s, r) => s + r.totalEmployees, 0),
-      totalGross: completed.reduce((s, r) => s + Number(r.totalGross), 0),
-      totalNet: completed.reduce((s, r) => s + Number(r.totalNet), 0),
+      totalGross: completed.reduce((s, r) => s + sumItems(r, 'grossEarnWages'), 0),
+      totalNet: completed.reduce((s, r) => s + sumItems(r, 'totalNonComplianceAmount'), 0),
     };
   }, [payrollRuns]);
 

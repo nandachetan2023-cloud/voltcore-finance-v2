@@ -304,6 +304,8 @@ model PayrollItem {
   phAmount             Decimal    @default(0) @db.Decimal(15, 2)
   otAmount             Decimal    @default(0) @db.Decimal(15, 2)
   grossEarning         Decimal    @db.Decimal(15, 2)
+  grossEarnWages       Decimal    @default(0) @db.Decimal(15, 2)
+  totalNonComplianceAmount Decimal @default(0) @db.Decimal(15,2)
   pfDeduction          Decimal    @default(0) @db.Decimal(15, 2)
   esiDeduction         Decimal    @default(0) @db.Decimal(15, 2)
   ptDeduction          Decimal    @default(0) @db.Decimal(15, 2)

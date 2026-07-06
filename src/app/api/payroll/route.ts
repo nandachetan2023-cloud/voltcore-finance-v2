@@ -33,6 +33,8 @@ export async function GET(request: NextRequest) {
             presentDays: true,
             basicSalary: true,
             grossEarning: true,
+            grossEarnWages: true,
+            totalNonComplianceAmount: true,
             totalDeduction: true,
             netPay: true,
             status: true,
