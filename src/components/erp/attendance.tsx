@@ -50,6 +50,20 @@ interface AttendanceFormData {
 
 const STATUSES = ['Present', 'Absent', 'Late', 'On Leave', 'Half Day'];
 
+// Maps the backend's canonical status strings to the UI labels. Anything not
+// listed falls back to 'Present' (a punched-in record with an unknown status).
+const STATUS_LABELS: Record<string, string> = {
+  present: 'Present',
+  absent: 'Absent',
+  late: 'Late',
+  half_day: 'Half Day',
+  on_leave: 'On Leave',
+  leave: 'On Leave',
+};
+
+// Statuses that mean the employee physically worked/attended that day.
+const WORKED_STATUSES = new Set(['Present', 'Late', 'Half Day']);
+
 const emptyForm: AttendanceFormData = {
   empId: '', site: '', date: '', timeIn: '', timeOut: '', otHours: 0, shift: '', status: 'Present',
 };
@@ -99,7 +113,7 @@ const shiftColor = (s: string) => {
 };
 
 function StatCard({ icon: Icon, label, value, color }: {
-  icon: React.ElementType; label: string; value: number; color: string;
+  icon: React.ElementType; label: string; value: number | string; color: string;
 }) {
   return (
     <div className="vc-stat-card">
@@ -295,7 +309,10 @@ export default function AttendanceModule() {
             timeOut: punchOut ? punchOut.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : null,
             otHours: Math.round(otHours * 10) / 10, // Round to 1 decimal
             shift: record.shiftName || null,
-            status: record.status === 'present' ? 'Present' : record.status === 'absent' ? 'Absent' : 'Present',
+            // Preserve the real classification instead of collapsing everything
+            // that isn't 'present'/'absent' into 'Present' (which hid Late,
+            // Half Day and On Leave and broke the stat counts).
+            status: STATUS_LABELS[String(record.status)] || 'Present',
             employee: {
               id: record.employeeId?.toString() || '',
               empId: record.Employee?.employeeCode || '',
@@ -429,24 +446,34 @@ export default function AttendanceModule() {
 
   // Calculate statistics
   const stats = useMemo(() => {
-    const presentToday = filteredRecords.filter(r => r.status === 'Present').length;
+    // Present = anyone who actually worked that day (present, late or half-day),
+    // not just the strict 'Present' status. Late/half-day people attended.
+    const presentToday = filteredRecords.filter(r => WORKED_STATUSES.has(r.status)).length;
     const onLeave = filteredRecords.filter(r => r.status === 'On Leave').length;
-    
-    // Calculate OT workers (worked more than 8 hours)
-    const otWorkers = filteredRecords.filter(r => {
-      if (!r.timeIn || !r.timeOut) return false;
-      const inTime = new Date(`2000-01-01 ${r.timeIn}`);
-      const outTime = new Date(`2000-01-01 ${r.timeOut}`);
-      const hoursWorked = (outTime.getTime() - inTime.getTime()) / (1000 * 60 * 60);
-      return hoursWorked > 8;
-    }).length;
-    
-    // Calculate absent: Total active employees - (Present + On Leave)
-    const totalActiveEmployees = employeeList.length;
-    const absent = Math.max(0, totalActiveEmployees - presentToday - onLeave);
-    
+
+    // OT workers: records carrying overtime hours (computed server-side against
+    // the shift). Falls back to the record's otHours field.
+    const otWorkers = filteredRecords.filter(r => Number(r.otHours) > 0).length;
+
+    // Absent is only meaningful for a single selected day: active employees who
+    // have NO attendance record that day. For a multi-day range it's ambiguous
+    // (one person can be present some days, absent others) so we report -1 →
+    // the tile renders "—". The site filter narrows the active headcount too.
+    let absent = -1;
+    if (!dateRangeMode && dateFilter && !isFutureDate(dateFilter)) {
+      const workedEmpIds = new Set(
+        filteredRecords.filter(r => WORKED_STATUSES.has(r.status)).map(r => r.employee.id)
+      );
+      // Respect the site filter: only count employees whose records appear for
+      // the selected site scope. When no site filter, use the full active list.
+      const activeCount = siteFilter === 'all'
+        ? employeeList.length
+        : new Set(records.filter(r => r.site === siteFilter).map(r => r.employee.id)).size;
+      absent = Math.max(0, activeCount - workedEmpIds.size - onLeave);
+    }
+
     return { presentToday, absent, onLeave, otWorkers };
-  }, [filteredRecords, employeeList]);
+  }, [filteredRecords, employeeList, records, dateFilter, dateRangeMode, siteFilter]);
 
   // Dynamic filter options derived from loaded records
   const siteOptions = useMemo(() =>
@@ -775,7 +802,7 @@ export default function AttendanceModule() {
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Users} label="Present" value={presentToday} color="#00e676" />
-        <StatCard icon={UserX} label="Absent" value={absent} color="#ff3d3d" />
+        <StatCard icon={UserX} label="Absent" value={absent < 0 ? '—' : absent} color="#ff3d3d" />
         <StatCard icon={CalendarOff} label="On Leave" value={onLeave} color="#ffab40" />
         <StatCard icon={Clock} label="OT Workers" value={otWorkers} color="#00d4ff" />
       </div>
