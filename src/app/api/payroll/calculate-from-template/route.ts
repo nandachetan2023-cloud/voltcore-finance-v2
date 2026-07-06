@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
 
         // User input columns (all shifted +1 vs old 68-col template)
         const T = getNum(21); // col 21: PH DAYS
+        const U_input = getNum(22); // col 22: ACTUAL EARN WAGES — user-entered, not recalculated
         const V = getNum(23); // col 23: ACTUAL OT HRS
         const Y = getNum(26); // col 26: BASIC WAGES/DAY
         const Z = getNum(27); // col 27: MONTHLY WORKING DAYS
@@ -105,7 +106,9 @@ export async function POST(request: NextRequest) {
         // ===== CALCULATIONS =====
 
         // Detailed Earnings (U, W, X)
-        const U = Math.round(Q / 24 * (R + T)); // ACTUAL EARN WAGES
+        // ACTUAL EARN WAGES (U) is the user's typed value — not recalculated.
+        // Fall back to the formula only if the cell was left blank.
+        const U = U_input || Math.round(Q / 24 * (R + T)); // ACTUAL EARN WAGES
         const W = Math.round((Q / Z / 8) * (V + (S * 8))); // ACTUAL OT AMOUNT
         const X = U + W; // GROSS EARN WAGES
 
@@ -156,7 +159,9 @@ export async function POST(request: NextRequest) {
         const BP = AS; // ADVANCE
 
         // Write calculated values back into the row
-        row.getCell(22).value = U;  // col 22: U - ACTUAL EARN WAGES
+        // col 22 (ACTUAL EARN WAGES) is user input — not overwritten. Only fill
+        // it in when the user left it blank, so the fallback formula is visible.
+        if (!U_input) row.getCell(22).value = U;
         row.getCell(24).value = W;  // col 24: W - ACTUAL OT AMOUNT
         row.getCell(25).value = X;  // col 25: X - GROSS EARN WAGES
         row.getCell(31).value = AD; // col 31: AD - WAGES/MONTH
