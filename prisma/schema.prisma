@@ -299,6 +299,8 @@ model PayrollItem {
   conveyanceAllowance  Decimal    @default(0) @db.Decimal(15, 2)
   medicalAllowance     Decimal    @default(0) @db.Decimal(15, 2)
   specialAllowance     Decimal    @default(0) @db.Decimal(15, 2)
+  attendanceAllowance  Decimal    @default(0) @db.Decimal(15, 2)
+  phAmount             Decimal    @default(0) @db.Decimal(15, 2)
   otAmount             Decimal    @default(0) @db.Decimal(15, 2)
   grossEarning         Decimal    @db.Decimal(15, 2)
   pfDeduction          Decimal    @default(0) @db.Decimal(15, 2)

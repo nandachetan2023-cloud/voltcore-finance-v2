@@ -72,6 +72,8 @@ export async function POST(request: NextRequest) {
         conveyanceAllowance: Number(payrollItem.conveyanceAllowance) || 0,
         medicalAllowance: Number(payrollItem.medicalAllowance) || 0,
         specialAllowance: Number(payrollItem.specialAllowance) || 0,
+        attendanceAllowance: Number(payrollItem.attendanceAllowance) || 0,
+        phAmount: Number(payrollItem.phAmount) || 0,
         otAmount: Number(payrollItem.otAmount) || 0,
         grossEarnings: Number(payrollItem.grossEarning),
         pfDeduction: Number(payrollItem.pfDeduction) || 0,

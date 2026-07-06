@@ -61,6 +61,8 @@ export interface PayrollItem {
   conveyanceAllowance: number;
   medicalAllowance: number;
   specialAllowance: number;
+  attendanceAllowance: number;
+  phAmount: number;
   otAmount: number;
   grossEarnings: number;
   pfDeduction: number;
@@ -261,6 +263,8 @@ export class PayrollCalculator {
       conveyanceAllowance: Math.round(conveyanceAllowance * 100) / 100,
       medicalAllowance: Math.round(medicalAllowance * 100) / 100,
       specialAllowance: Math.round(specialAllowance * 100) / 100,
+      attendanceAllowance: 0,
+      phAmount: 0,
       otAmount: Math.round(otAmount * 100) / 100,
       grossEarnings: Math.round(grossEarnings * 100) / 100,
       pfDeduction: deductions.pfDeduction,
@@ -284,7 +288,32 @@ export class PayrollCalculator {
    */
   generatePayslipData(payrollItem: PayrollItem, employee: any, company: any): any {
     const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    
+
+    // Earning lines (mirrors the reference payslip's 8 rows). conveyanceAllowance
+    // holds the Site allowance and medicalAllowance holds the Travel allowance.
+    const earn = {
+      basicSalary: Number(payrollItem.basicSalary) || 0,
+      hra: Number(payrollItem.hra) || 0,
+      siteAllowance: Number(payrollItem.conveyanceAllowance) || 0,
+      travelAllowance: Number(payrollItem.medicalAllowance) || 0,
+      specialAllowance: Number(payrollItem.specialAllowance) || 0,
+      attendanceAllowance: Number(payrollItem.attendanceAllowance) || 0,
+      overtime: Number(payrollItem.otAmount) || 0,
+      phAmount: Number(payrollItem.phAmount) || 0,
+    };
+    const grossTotal =
+      earn.basicSalary + earn.hra + earn.siteAllowance + earn.travelAllowance +
+      earn.specialAllowance + earn.attendanceAllowance + earn.overtime + earn.phAmount;
+
+    const ded = {
+      pf: Number(payrollItem.pfDeduction) || 0,
+      esi: Number(payrollItem.esiDeduction) || 0,
+      pt: Number(payrollItem.ptDeduction) || 0,
+      advance: Number(payrollItem.otherDeductions) || 0,
+      other: 0,
+    };
+    const deductionTotal = ded.pf + ded.esi + ded.pt + ded.advance + ded.other;
+
     return {
       company: {
         name: company.name || 'Upasana Associate',
@@ -313,29 +342,34 @@ export class PayrollCalculator {
         dateOfPayment: '', // Can be set from company settings if needed
       },
       earnings: {
-        basicSalary: payrollItem.basicSalary,
-        hra: payrollItem.hra,
-        siteAllowance: payrollItem.conveyanceAllowance,
-        travelAllowance: payrollItem.medicalAllowance,
-        specialAllowance: payrollItem.specialAllowance,
-        attendanceAllowance: 0,
-        overtime: payrollItem.otAmount,
-        phAmount: 0,
-        total: payrollItem.grossEarnings,
+        basicSalary: earn.basicSalary,
+        hra: earn.hra,
+        siteAllowance: earn.siteAllowance,
+        travelAllowance: earn.travelAllowance,
+        specialAllowance: earn.specialAllowance,
+        attendanceAllowance: earn.attendanceAllowance,
+        overtime: earn.overtime,
+        phAmount: earn.phAmount,
+        // Gross = sum of the earning lines so the slip reconciles and matches the
+        // reference payslip (which totals its earning rows to the gross-earn wage).
+        total: grossTotal,
       },
       deductions: {
-        pf: payrollItem.pfDeduction,
-        esi: payrollItem.esiDeduction,
-        pt: payrollItem.ptDeduction,
-        advance: payrollItem.otherDeductions,
-        other: 0,
-        total: payrollItem.totalDeductions,
+        pf: ded.pf,
+        esi: ded.esi,
+        pt: ded.pt,
+        advance: ded.advance,
+        other: ded.other,
+        total: deductionTotal,
       },
       attendance: {
         workingDays: payrollItem.workingDays,
         presentDays: payrollItem.presentDays,
       },
-      netSalary: payrollItem.netSalary,
+      // Net take-home = Gross earnings − total deductions (matches the reference
+      // payslip: Net Payable = B20 − E20). This is the actual amount received,
+      // not the compliance-only nett figure stored on the payroll item.
+      netSalary: grossTotal - deductionTotal,
     };
   }
 }
