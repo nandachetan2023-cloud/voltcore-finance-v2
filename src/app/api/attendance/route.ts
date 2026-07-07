@@ -101,17 +101,49 @@ export async function GET(request: NextRequest) {
       else assignmentsByEmp.set(asg.employeeId, [asg])
     }
 
+    // Minutes-of-day (IST) for a punch timestamp — used to pick the shift whose
+    // start time is closest to when the employee actually punched in.
+    const istMinutesOfDay = (d: Date): number => {
+      const hm = new Intl.DateTimeFormat('en-GB', {
+        hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata',
+      }).format(d)
+      const [h, m] = hm.split(':').map(Number)
+      return h * 60 + m
+    }
+    const shiftStartMinutes = (startTime?: string | null): number | null => {
+      if (!startTime) return null
+      const [h, m] = startTime.split(':').map(Number)
+      return Number.isNaN(h) || Number.isNaN(m) ? null : h * 60 + m
+    }
+
     // Enrich each record with the shift that was active ON the log date
     // (respects the shift assignment's effective date range), including its
     // start/end time, plus the employee's branch/site name.
     const enriched = attendance.map((a) => {
       const logDate = new Date(a.logDate)
-      // Lists are sorted by effectiveFrom desc, so the first match is the most
-      // recent assignment effective on logDate — same as the old findFirst.
-      const assignment = (assignmentsByEmp.get(a.employeeId) || []).find(asg =>
+      // All assignments active on the log date.
+      const active = (assignmentsByEmp.get(a.employeeId) || []).filter(asg =>
         new Date(asg.effectiveFrom) <= logDate &&
         (asg.effectiveTo == null || new Date(asg.effectiveTo) >= logDate)
-      ) || null
+      )
+
+      // When several shifts are active at once, show the one whose start time is
+      // closest to the actual punch-in (matching how attendance is classified) —
+      // NOT just the most-recently-assigned one. Falls back to the most recent
+      // (list is sorted effectiveFrom desc) when there's no punch-in.
+      let assignment = active[0] || null
+      if (active.length > 1 && a.punchIn) {
+        const punchMin = istMinutesOfDay(new Date(a.punchIn))
+        let bestDiff = Infinity
+        for (const asg of active) {
+          const startMin = shiftStartMinutes(asg.Shift?.startTime)
+          if (startMin == null) continue
+          // Compare on a 24h circle so 23:30 vs 00:15 is 45 min, not 23h.
+          const raw = Math.abs(punchMin - startMin)
+          const diff = Math.min(raw, 1440 - raw)
+          if (diff < bestDiff) { bestDiff = diff; assignment = asg }
+        }
+      }
 
       const shiftName = assignment?.Shift
         ? `${assignment.Shift.name}${assignment.Shift.startTime && assignment.Shift.endTime ? ` (${assignment.Shift.startTime}–${assignment.Shift.endTime})` : ''}`

@@ -167,29 +167,28 @@ export default function ReportAttendance() {
           {loading ? <div className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : <RefreshCw size={13} />}
           {loaded ? 'Refresh' : 'Generate Report'}
         </button>
+        {!loaded && !loading && (
+          <span className="text-[11px] text-[#5a6878]">Pick a date range and generate — site/department/status filters and Excel/CSV/PDF export appear here.</span>
+        )}
       </div>
 
-      {/* Filters + multi-format export — shown once a report is generated */}
+      {/* Filters + multi-format export — populated from the generated data */}
       {loaded && (
         <div className="flex items-end gap-3 flex-wrap bg-[#161c24] border border-[#252e3a] rounded-xl p-3">
-          {sites.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Site</label>
-              <select value={siteFilter} onChange={e => setSiteFilter(e.target.value)} className="vc-input py-1.5 px-2 text-[11px] w-[150px]">
-                <option value="all">All Sites</option>
-                {sites.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-          )}
-          {depts.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Department</label>
-              <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)} className="vc-input py-1.5 px-2 text-[11px] w-[150px]">
-                <option value="all">All Departments</option>
-                {depts.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-          )}
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Site</label>
+            <select value={siteFilter} onChange={e => setSiteFilter(e.target.value)} className="vc-input py-1.5 px-2 text-[11px] w-[150px]">
+              <option value="all">All Sites</option>
+              {sites.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Department</label>
+            <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)} className="vc-input py-1.5 px-2 text-[11px] w-[150px]">
+              <option value="all">All Departments</option>
+              {depts.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
           {statuses.length > 0 && (
             <div className="flex flex-col gap-1">
               <label className="text-[10px] text-[#5a6878] font-semibold uppercase">Status</label>
