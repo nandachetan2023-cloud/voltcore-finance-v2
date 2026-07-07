@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
         // Detailed Earnings (U, W, X)
         // ACTUAL EARN WAGES (U) is the user's typed value — not recalculated.
         // Fall back to the formula only if the cell was left blank.
-        const U = U_input || Math.round(Q / 24 * (R + T)); // ACTUAL EARN WAGES
+        const U = U_input || Math.round(Q / 26 * (R + T)); // ACTUAL EARN WAGES
         const W = Math.round((Q / Z / 8) * (V + (S * 8))); // ACTUAL OT AMOUNT
         const X = U + W; // GROSS EARN WAGES
 
