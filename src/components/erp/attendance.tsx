@@ -472,9 +472,15 @@ export default function AttendanceModule() {
     }
 
     // Status filter — runs AFTER synthetic absent rows are added, so selecting
-    // "Absent" returns the no-record employees (not the present ones).
+    // "Absent" returns the no-record employees (not the present ones). A record
+    // that has a punch-in but was rule-stamped 'Absent' (arrived past the
+    // absent-after cutoff) is treated as 'Present' here, so the filter stays
+    // consistent with the row badge and the Present/Absent stat counts.
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(r => r.status.toLowerCase() === statusFilter.toLowerCase());
+      filtered = filtered.filter(r => {
+        const effective = (r.status === 'Absent' && r.timeIn) ? 'Present' : r.status;
+        return effective.toLowerCase() === statusFilter.toLowerCase();
+      });
     }
 
     return filtered;
@@ -482,22 +488,31 @@ export default function AttendanceModule() {
 
   // Calculate statistics
   const stats = useMemo(() => {
-    // Present = anyone who actually worked that day (present, late or half-day),
-    // not just the strict 'Present' status. Late/half-day people attended.
-    const presentToday = filteredRecords.filter(r => WORKED_STATUSES.has(r.status)).length;
+    // A physical punch-in means the person showed up. The attendance-rule engine
+    // can stamp a punched-in record 'absent' (arrived past the absent-after
+    // cutoff), but for the headcount they still attended, so anyone with a
+    // timeIn counts as present — matching the row badge, which also never shows
+    // Absent for a punched-in record. On Leave / Half Day are their own buckets.
+    const hasPunchIn = (r: AttendanceRecord) => Boolean(r.timeIn);
+
+    // Present = anyone who physically attended: has a punch-in, OR carries a
+    // worked status (present/late/half-day) even without a parsed timeIn.
+    const presentToday = filteredRecords.filter(
+      r => (hasPunchIn(r) || WORKED_STATUSES.has(r.status)) && r.status !== 'On Leave'
+    ).length;
     const onLeave = filteredRecords.filter(r => r.status === 'On Leave').length;
 
     // OT workers: records carrying overtime hours (computed server-side against
     // the shift). Falls back to the record's otHours field.
     const otWorkers = filteredRecords.filter(r => Number(r.otHours) > 0).length;
 
-    // Absent is only meaningful for a single (non-future) day. We now synthesize
-    // an 'Absent' row per no-record active employee, so just count those — they
-    // already respect the site/search filters. For a multi-day range absence is
-    // ambiguous (present some days, absent others), so report -1 → tile shows "—".
+    // Absent is only meaningful for a single (non-future) day. Count 'Absent'
+    // rows — the synthetic no-record employees plus any rule-engine 'absent' —
+    // but exclude anyone who actually punched in (they're counted as present
+    // above, so counting them here too would double-count and mislead).
     let absent = -1;
     if (!dateRangeMode && dateFilter && !isFutureDate(dateFilter)) {
-      absent = filteredRecords.filter(r => r.status === 'Absent').length;
+      absent = filteredRecords.filter(r => r.status === 'Absent' && !hasPunchIn(r)).length;
     }
 
     return { presentToday, absent, onLeave, otWorkers };
