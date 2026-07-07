@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
 import { calculateAttendanceStatus, getDisplayStatus, isFutureDate, isToday } from '@/lib/attendance-utils';
 
-interface EmployeeInfo { id: string; empId: string; name: string; shiftId?: number; }
+interface EmployeeInfo { id: string; empId: string; name: string; shiftId?: number; site?: string; isActive?: boolean; }
 
 interface ShiftInfo {
   id: number;
@@ -368,6 +368,8 @@ export default function AttendanceModule() {
           id: e.id.toString(),
           empId: e.employeeCode,
           name: `${e.firstName} ${e.lastName}`,
+          site: e.Branch?.name || undefined,
+          isActive: e.isActive !== false,
         }));
         setEmployeeList(mappedEmployees);
       }
@@ -411,19 +413,49 @@ export default function AttendanceModule() {
   useEffect(() => { fetchData(); fetchEmployees(); fetchShifts(); fetchBiometricSites(); }, [fetchData, fetchEmployees, fetchShifts, fetchBiometricSites]);
 
   const filteredRecords = useMemo(() => {
-    let filtered = records;
-    
-    // Apply date filter based on mode
+    // 1) Narrow the real attendance records to the selected date window.
+    let dated = records;
     if (dateRangeMode) {
-      // Date range mode: filter between fromDate and toDate (inclusive)
-      filtered = filtered.filter(r => r.date >= fromDate && r.date <= toDate);
-    } else {
-      // Single date mode: filter by exact date
-      if (dateFilter) {
-        filtered = filtered.filter(r => r.date === dateFilter);
-      }
+      dated = dated.filter(r => r.date >= fromDate && r.date <= toDate);
+    } else if (dateFilter) {
+      dated = dated.filter(r => r.date === dateFilter);
     }
-    
+
+    // 2) In SINGLE-date mode, append a synthesized row for every active
+    //    employee who has NO record that day — 'Absent' for a past/today date
+    //    (they didn't punch in) or 'pending' for a future date (not due yet).
+    //    Absent members are listed AFTER the ones who have records, so they can
+    //    be seen, filtered and exported. Absent has no biometric row of its own,
+    //    so this is the only place they can surface.
+    let combined = dated;
+    if (!dateRangeMode && dateFilter) {
+      const haveRecord = new Set(dated.map(r => r.employee.id));
+      const future = isFutureDate(dateFilter);
+      // Future date → 'pending' (not due yet). Today or a past date with no
+      // record → 'Absent' so they list after the present rows and the "Absent"
+      // status filter/stat can surface them. (For today the row badge still
+      // shows "—" via getDisplayStatus, since the day isn't over — the 'Absent'
+      // value drives filtering/counting, not the visible badge.)
+      const syntheticStatus = future ? 'pending' : 'Absent';
+      const synthetic = employeeList
+        .filter(emp => emp.isActive !== false && !haveRecord.has(emp.id))
+        .map(emp => ({
+          id: `${future ? 'pending' : 'absent'}-${emp.id}-${dateFilter}`,
+          empId: emp.empId,
+          site: emp.site || '—',
+          date: dateFilter,
+          timeIn: null,
+          timeOut: null,
+          otHours: 0,
+          shift: null,
+          status: syntheticStatus,
+          employee: emp,
+        }) as AttendanceRecord);
+      combined = [...dated, ...synthetic]; // present first, absent/pending after
+    }
+
+    let filtered = combined;
+
     // Search by name or employee code
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -439,40 +471,12 @@ export default function AttendanceModule() {
       filtered = filtered.filter(r => r.site === siteFilter);
     }
 
-    // Status filter
+    // Status filter — runs AFTER synthetic absent rows are added, so selecting
+    // "Absent" returns the no-record employees (not the present ones).
     if (statusFilter !== 'all') {
       filtered = filtered.filter(r => r.status.toLowerCase() === statusFilter.toLowerCase());
     }
-    
-    // For future dates in single-date mode, show all employees with "—" status
-    if (!dateRangeMode && dateFilter && isFutureDate(dateFilter)) {
-      // Create attendance records for all employees with pending status
-      const employeeRecordsMap = new Map(filtered.map(r => [r.empId, r]));
-      
-      const allEmployeeRecords = employeeList.map(emp => {
-        const existingRecord = employeeRecordsMap.get(emp.id);
-        if (existingRecord) {
-          return existingRecord;
-        }
-        
-        // Create a placeholder record for employees without attendance
-        return {
-          id: `future-${emp.id}-${dateFilter}`,
-          empId: emp.id,
-          site: '—',
-          date: dateFilter,
-          timeIn: null,
-          timeOut: null,
-          otHours: 0,
-          shift: null,
-          status: 'pending',
-          employee: emp,
-        } as AttendanceRecord;
-      });
-      
-      return allEmployeeRecords;
-    }
-    
+
     return filtered;
   }, [records, dateFilter, dateRangeMode, fromDate, toDate, search, siteFilter, statusFilter, employeeList]);
 
@@ -487,25 +491,17 @@ export default function AttendanceModule() {
     // the shift). Falls back to the record's otHours field.
     const otWorkers = filteredRecords.filter(r => Number(r.otHours) > 0).length;
 
-    // Absent is only meaningful for a single selected day: active employees who
-    // have NO attendance record that day. For a multi-day range it's ambiguous
-    // (one person can be present some days, absent others) so we report -1 →
-    // the tile renders "—". The site filter narrows the active headcount too.
+    // Absent is only meaningful for a single (non-future) day. We now synthesize
+    // an 'Absent' row per no-record active employee, so just count those — they
+    // already respect the site/search filters. For a multi-day range absence is
+    // ambiguous (present some days, absent others), so report -1 → tile shows "—".
     let absent = -1;
     if (!dateRangeMode && dateFilter && !isFutureDate(dateFilter)) {
-      const workedEmpIds = new Set(
-        filteredRecords.filter(r => WORKED_STATUSES.has(r.status)).map(r => r.employee.id)
-      );
-      // Respect the site filter: only count employees whose records appear for
-      // the selected site scope. When no site filter, use the full active list.
-      const activeCount = siteFilter === 'all'
-        ? employeeList.length
-        : new Set(records.filter(r => r.site === siteFilter).map(r => r.employee.id)).size;
-      absent = Math.max(0, activeCount - workedEmpIds.size - onLeave);
+      absent = filteredRecords.filter(r => r.status === 'Absent').length;
     }
 
     return { presentToday, absent, onLeave, otWorkers };
-  }, [filteredRecords, employeeList, records, dateFilter, dateRangeMode, siteFilter]);
+  }, [filteredRecords, dateFilter, dateRangeMode]);
 
   // Dynamic filter options derived from loaded records
   const siteOptions = useMemo(() =>
