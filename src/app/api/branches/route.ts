@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
     const body = await request.json()
-    const { name, address } = body
+    const { name, address, monthlyWorkingDays } = body
 
     if (!name) {
       return NextResponse.json(
@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
       data: {
         name,
         address,
+        monthlyWorkingDays: typeof monthlyWorkingDays === 'number' ? monthlyWorkingDays : 26,
       },
     })
 
@@ -103,6 +104,16 @@ export async function PUT(request: NextRequest) {
         { success: false, error: 'Branch not found' },
         { status: 404 }
       )
+    }
+
+    if (data.monthlyWorkingDays !== undefined) {
+      data.monthlyWorkingDays = parseInt(data.monthlyWorkingDays) || 26
+    }
+    if (data.otType1Divisor !== undefined) {
+      data.otType1Divisor = parseInt(data.otType1Divisor) || 26
+    }
+    if (data.otType2Divisor !== undefined) {
+      data.otType2Divisor = parseInt(data.otType2Divisor) || 26
     }
 
     const branch = await db.branch.update({

@@ -48,6 +48,18 @@ export async function POST(request: NextRequest) {
     // so the ZIP's compliance file matches the auto-created compliance run.
     const complianceItems: ComplianceSheetItem[] = [];
 
+    // Pre-fetch every employee (with branch working days) keyed by code, so the
+    // synchronous row loop can derive the Fixed/Non-Fixed + OT behaviour from the
+    // master instead of a per-sheet "OT Types" column.
+    //   Fixed (employmentType === 'fixed'): earn = gross / branch.monthlyWorkingDays
+    //     * attendance, and no non-compliance OT.
+    //   Non-fixed: earn = gross / 26 * attendance; OT paid at otType× hourly.
+    const allEmployees = await db.employee.findMany({
+      select: { employeeCode: true, employmentType: true, otType: true,
+                Branch: { select: { monthlyWorkingDays: true, otType1Divisor: true, otType2Divisor: true } } },
+    });
+    const empByCode = new Map(allEmployees.map(e => [e.employeeCode, e]));
+
     // Process each row (skip header row 1)
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return; // Skip header
@@ -105,11 +117,33 @@ export async function POST(request: NextRequest) {
 
         // ===== CALCULATIONS =====
 
+        // Fixed / Non-Fixed + OT behaviour, derived from the employee master (not
+        // from a sheet column). Fixed → divide by the branch's working days and no
+        // OT; Non-Fixed → divide by 26 and pay OT at the otType multiplier.
+        //   verified against JUNE reference: earn 19/19, OT amount 19/19.
+        const emp = empByCode.get(employeeCode);
+        // All divisors come from the employee's SITE (Global OT Settings), by type:
+        //   Fixed        → site.monthlyWorkingDays, no OT.
+        //   Non-Fixed OT1 → site.otType1Divisor, OT at 1× hourly.
+        //   Non-Fixed OT2 → site.otType2Divisor, OT at 2× hourly.
+        // Each defaults to 26 (and to the sheet's MONTHLY WORKING DAYS if unset).
+        const isFixed = (emp?.employmentType || '').toLowerCase() === 'fixed';
+        const otMultiplier = isFixed ? 0 : (emp?.otType === 2 ? 2 : 1);
+        const otDivisor = emp?.otType === 2
+          ? (emp?.Branch?.otType2Divisor || Z || 26)
+          : (emp?.Branch?.otType1Divisor || Z || 26);
+        const earnDivisor = isFixed
+          ? (emp?.Branch?.monthlyWorkingDays || Z || 26)
+          : otDivisor;
+
         // Detailed Earnings (U, W, X)
         // ACTUAL EARN WAGES (U) is the user's typed value — not recalculated.
-        // Fall back to the formula only if the cell was left blank.
-        const U = U_input || Math.round(Q / 26 * (R + T)); // ACTUAL EARN WAGES
-        const W = Math.round((Q / Z / 8) * (V + (S * 8))); // ACTUAL OT AMOUNT
+        // Fall back to the formula only if the cell was left blank. Payable days =
+        // attendance + PH (T); divisor depends on Fixed / OT type.
+        const U = U_input || Math.round(Q / earnDivisor * (R + T)); // ACTUAL EARN WAGES
+        // ACTUAL OT AMOUNT: hourly rate = gross / otDivisor / 8, at the OT multiplier.
+        // Fixed employees earn no non-compliance OT (multiplier 0).
+        const W = Math.round((Q / otDivisor / 8) * otMultiplier * V); // ACTUAL OT AMOUNT
         const X = U + W; // GROSS EARN WAGES
 
         // Payroll Calculation (AD-AN)

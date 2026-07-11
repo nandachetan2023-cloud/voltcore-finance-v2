@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   TimerReset, ChevronLeft, ChevronRight, Clock, UserCheck,
-  AlertCircle, Download
+  AlertCircle, Download, FileSpreadsheet
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -140,16 +140,40 @@ function getStatusStyle(status: string) {
 }
 
 function getStatusLabel(status: string): string {
-  const normalized = status.toLowerCase();
-  switch (normalized) {
-    case 'present': return 'P';
+  // Map every known status to a HIL-style code. Anything unrecognised (or an
+  // empty status) returns '' rather than leaking a raw substring like "LA" /
+  // "ON" / "WE" into the export.
+  switch ((status || '').toLowerCase().replace(/[\s-]+/g, '_')) {
+    case 'present':
+    case 'late': return 'P';        // late is still present in the HIL layout
     case 'absent': return 'A';
-    case 'leave': return 'L';
-    case 'half_day': return 'HD';
-    case 'holiday': return 'H';
-    default: return status.substring(0, 2).toUpperCase();
+    case 'leave':
+    case 'on_leave': return 'L';
+    case 'half_day':
+    case 'halfday': return 'HD';
+    case 'holiday': return 'HL';
+    case 'week_off':
+    case 'weekoff':
+    case 'weekly_off': return 'WO';
+    default: return '';
   }
 }
+
+// Fill colours (ARGB) for each export status code, so the sheet reads at a glance.
+const STATUS_FILL: Record<string, string> = {
+  P: 'FFE2EFDA',    // green tint  – present
+  'P/WO': 'FFC6E0B4',// deeper green – present on a week-off
+  SP: 'FFC6E0B4',   // present on a holiday
+  A: 'FFFCE4E4',    // red tint    – absent
+  HD: 'FFFFF2CC',   // amber tint  – half day
+  L: 'FFDDEBF7',    // blue tint   – leave
+  WO: 'FFEDEDED',   // grey        – week off
+  HL: 'FFEDEDED',   // grey        – holiday
+};
+const STATUS_FONT: Record<string, string> = {
+  P: 'FF375623', 'P/WO': 'FF375623', SP: 'FF375623',
+  A: 'FFC00000', HD: 'FF7F6000', L: 'FF1F4E79', WO: 'FF7F7F7F', HL: 'FF7F7F7F',
+};
 
 /* ── Skeleton ── */
 function LoadingSkeleton() {
@@ -180,6 +204,7 @@ export default function TimesheetModule() {
   const [siteFilter, setSiteFilter] = useState('');
   const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [exporting, setExporting] = useState(false);
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   
@@ -365,61 +390,173 @@ export default function TimesheetModule() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleExport = () => {
+  // Consistent day-cell code for the export — never mixes times and letters.
+  // Holiday/week-off aware: SP = worked on a holiday, P/WO = worked on a week-off.
+  const dayCodeFor = (date: Date, record: AttendanceRecord | undefined): string => {
+    const dateStr = formatDate(date);
+    const isHoliday = !!holidays[dateStr];
+    const worked = !!(record && record.punchIn);
+    if (isHoliday) return worked ? 'SP' : 'HL';
+    if (record) {
+      const code = getStatusLabel(record.status);
+      if (code === 'WO') return worked ? 'P/WO' : 'WO';
+      return code || (worked ? 'P' : 'A');
+    }
+    return date.getDay() === 0 ? 'WO' : 'A'; // no record: Sunday → WO, else Absent
+  };
+
+  const handleExport = async () => {
+    const ExcelJS = (await import('exceljs')).default;
     const dates = dateRange.dates;
-    const headers = [
-      'Employee',
-      'Emp ID',
-      'Site',
-      ...dates.map(d => formatDisplayDate(d)),
-      'Total Hrs',
-      'OT Hrs',
-      'Days Present'
-    ];
-    
-    const csvRows = filteredEmployees.map(emp => {
-      const cells = [
-        `"${emp.firstName} ${emp.lastName}"`,
-        emp.employeeCode,
-        emp.branch?.name || ''
-      ];
-      
-      let totalHrs = 0;
-      let totalOt = 0;
-      let daysPresent = 0;
-      
-      dates.forEach(date => {
+    const dayHeaders = dates.map(d => formatDisplayDate(d));
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Timesheet');
+
+    const C = {
+      titleBg: 'FF1F4E79', titleFg: 'FFFFFFFF',
+      headBg: 'FF2E75B6', headFg: 'FFFFFFFF',
+      border: 'FFBFBFBF', zebra: 'FFF7FAFD', totalBg: 'FFFFF2CC',
+    };
+    const thin = { style: 'thin' as const, color: { argb: C.border } };
+    const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
+
+    const fixedCols = ['Employee', 'Emp ID', 'Site'];
+    const tailCols = ['Total Hrs', 'OT Hrs', 'Days Present'];
+    const headerLabels = [...fixedCols, ...dayHeaders, ...tailCols];
+    const colCount = headerLabels.length;
+    const firstDayCol = fixedCols.length + 1;           // 1-based col of day 1
+    const lastDayCol = fixedCols.length + dates.length; // 1-based col of last day
+
+    // Column widths
+    ws.getColumn(1).width = 24; // Employee
+    ws.getColumn(2).width = 12; // Emp ID
+    ws.getColumn(3).width = 16; // Site
+    for (let c = firstDayCol; c <= lastDayCol; c++) ws.getColumn(c).width = 9;
+    ws.getColumn(lastDayCol + 1).width = 11;
+    ws.getColumn(lastDayCol + 2).width = 10;
+    ws.getColumn(lastDayCol + 3).width = 13;
+
+    // Row 1 — title band
+    const rangeLabel = dates.length === 1
+      ? formatDisplayDate(dates[0])
+      : `${formatDisplayDate(dates[0])} – ${formatDisplayDate(dates[dates.length - 1])}`;
+    ws.mergeCells(1, 1, 1, colCount);
+    const titleCell = ws.getCell(1, 1);
+    titleCell.value = `TIMESHEET  •  ${rangeLabel}`;
+    titleCell.font = { bold: true, size: 13, color: { argb: C.titleFg } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.titleBg } };
+    ws.getRow(1).height = 22;
+
+    // Row 2 — headers
+    const headerRow = ws.getRow(2);
+    headerLabels.forEach((v, i) => { headerRow.getCell(i + 1).value = v; });
+    headerRow.height = 30;
+    for (let c = 1; c <= colCount; c++) {
+      const cell = headerRow.getCell(c);
+      cell.font = { bold: true, size: 9, color: { argb: C.headFg } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.headBg } };
+      cell.border = allBorders;
+    }
+
+    // Data rows
+    let rowIdx = 3;
+    filteredEmployees.forEach((emp, i) => {
+      const row = ws.getRow(rowIdx);
+      row.getCell(1).value = `${emp.firstName} ${emp.lastName}`.trim();
+      row.getCell(2).value = emp.employeeCode;
+      row.getCell(3).value = emp.branch?.name || '';
+
+      let totalHrs = 0, totalOt = 0, daysPresent = 0;
+
+      dates.forEach((date, di) => {
         const dateStr = formatDate(date);
         const record = attMap[`${emp.employeeCode}_${dateStr}`];
-        
-        if (record && record.status.toLowerCase() === 'present' && record.punchIn && record.punchOut) {
+        const code = dayCodeFor(date, record);
+        if (record && record.punchIn && record.punchOut &&
+            (code === 'P' || code === 'P/WO' || code === 'SP' || code === 'HD')) {
           const hrs = calcHours(record.punchIn, record.punchOut);
-          const ot = calcOtHours(hrs, record);
           totalHrs += hrs;
-          totalOt += ot;
-          daysPresent++;
-          const timeIn = formatTime(record.punchIn);
-          const timeOut = formatTime(record.punchOut);
-          cells.push(`${timeIn}-${timeOut} (${hrs.toFixed(2)}h)`);
-        } else if (record) {
-          cells.push(getStatusLabel(record.status));
-        } else {
-          cells.push('—');
+          totalOt += calcOtHours(hrs, record);
         }
+        if (code === 'P' || code === 'P/WO' || code === 'SP') daysPresent++;
+
+        const cell = row.getCell(firstDayCol + di);
+        cell.value = code;
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.font = { size: 9, bold: code === 'A', color: { argb: STATUS_FONT[code] || 'FF000000' } };
+        if (STATUS_FILL[code]) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: STATUS_FILL[code] } };
       });
-      
-      cells.push(`${totalHrs.toFixed(2)}h`, `${totalOt.toFixed(2)}h`, `${daysPresent}/${dates.length}`);
-      return cells.join(',');
+
+      row.getCell(lastDayCol + 1).value = Math.round(totalHrs * 100) / 100;
+      row.getCell(lastDayCol + 2).value = Math.round(totalOt * 100) / 100;
+      row.getCell(lastDayCol + 3).value = `${daysPresent}/${dates.length}`;
+
+      const zebra = i % 2 === 1;
+      for (let c = 1; c <= colCount; c++) {
+        const cell = row.getCell(c);
+        cell.border = allBorders;
+        if (!cell.font) cell.font = { size: 9 };
+        if (!cell.alignment) cell.alignment = { vertical: 'middle', horizontal: c >= lastDayCol + 1 ? 'center' : 'left' };
+        if (c === lastDayCol + 1 || c === lastDayCol + 2) cell.numFmt = '0.00';
+        // Zebra only on the fixed/total columns; day cells keep their status colour.
+        if (zebra && (c < firstDayCol || c > lastDayCol) && !cell.fill) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.zebra } };
+        }
+      }
+      row.height = 15;
+      rowIdx++;
     });
-    
-    const csv = [headers.join(','), ...csvRows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+
+    // Legend row (below the data) so the codes are self-documenting.
+    const legendRow = ws.getRow(rowIdx + 1);
+    legendRow.getCell(1).value =
+      'Legend:  P = Present   A = Absent   HD = Half Day   L = Leave   WO = Week Off   HL = Holiday   P/WO = Present on Week Off   SP = Present on Holiday';
+    ws.mergeCells(rowIdx + 1, 1, rowIdx + 1, colCount);
+    legendRow.getCell(1).font = { italic: true, size: 8, color: { argb: 'FF5A6878' } };
+    legendRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+    ws.views = [{ state: 'frozen', xSplit: 3, ySplit: 2 }];
+    ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: colCount } };
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `timesheet-${viewMode}-${weekLabel.replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+    a.download = `timesheet-${viewMode}-${weekLabel.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Downloads the HIL "Summary Report" (.xlsx) for the selected month — one row
+  // per workman, one status cell per day, plus OT/HD/Leave/Mandays/HL totals.
+  const handleSummaryReport = async () => {
+    const ref = new Date(selectedDate);
+    const month = ref.getMonth() + 1;
+    const year = ref.getFullYear();
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/reports/mandays-summary?month=${month}&year=${year}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || 'Failed to generate summary report');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      a.download = `SummaryReport_${MON[month - 1]}${year}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to generate summary report');
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading) return <LoadingSkeleton />;
@@ -473,6 +610,15 @@ export default function TimesheetModule() {
           >
             <Download size={13} />
             <span className="hidden sm:inline">Export</span>
+          </button>
+          <button
+            className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50"
+            onClick={handleSummaryReport}
+            disabled={exporting}
+            title="Download the monthly Summary Report (HIL format)"
+          >
+            <FileSpreadsheet size={13} />
+            <span className="hidden sm:inline">{exporting ? 'Generating…' : 'Summary Report'}</span>
           </button>
         </div>
       </div>

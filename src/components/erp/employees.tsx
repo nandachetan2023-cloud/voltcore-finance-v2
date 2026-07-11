@@ -25,6 +25,7 @@ interface Employee {
   dateOfBirth: string;
   gender: string;
   employmentType: string;
+  otType: number;
   employmentStatus: string;
   dateOfJoining: string;
   Department?: {
@@ -82,6 +83,7 @@ interface EmployeeFormData {
   dateOfJoining: string;
   confirmationDate: string;
   employmentType: string;
+  otType: number;
   employmentStatus: string;
   probationMonths: string;
   noticePeriodDays: string;
@@ -119,7 +121,7 @@ const emptyForm: EmployeeFormData = {
   permanentAddress: '', permanentCity: '', permanentState: '', permanentPincode: '',
   departmentId: '', designationId: '', natureOfDesignation: '', branchId: '', gradeId: '', reportingManagerId: '',
   dateOfJoining: '', confirmationDate: '',
-  employmentType: '', employmentStatus: 'active',
+  employmentType: 'non_fixed', otType: 1, employmentStatus: 'active',
   probationMonths: '6', noticePeriodDays: '30',
   monthlyGrossSalary: '',
   panNumber: '', aadharNumber: '', uanNumber: '', esicNumber: '',
@@ -404,7 +406,8 @@ export default function EmployeesModule() {
       reportingManagerId: emp.reportingManagerId?.toString() || '',
       dateOfJoining: emp.dateOfJoining ? emp.dateOfJoining.split('T')[0] : '',
       confirmationDate: emp.confirmationDate ? emp.confirmationDate.split('T')[0] : '',
-      employmentType: emp.employmentType || 'permanent',
+      employmentType: emp.employmentType || 'non_fixed',
+      otType: emp.otType ?? 1,
       employmentStatus: emp.employmentStatus || 'active',
       probationMonths: emp.probationMonths?.toString() || '6',
       noticePeriodDays: emp.noticePeriodDays?.toString() || '30',
@@ -488,6 +491,7 @@ export default function EmployeesModule() {
           branchId: parseInt(form.branchId),
           dateOfJoining: new Date(form.dateOfJoining).toISOString(),
           employmentType: form.employmentType,
+          otType: form.otType,
           natureOfDesignation: form.natureOfDesignation.trim() || null,
           gradeLabel: form.gradeId.trim() || null,
           monthlyGrossSalary: form.monthlyGrossSalary || null,
@@ -614,6 +618,7 @@ export default function EmployeesModule() {
         dateOfJoining: new Date(form.dateOfJoining).toISOString(),
         confirmationDate: form.confirmationDate ? new Date(form.confirmationDate).toISOString() : null,
         employmentType: form.employmentType,
+        otType: form.otType,
         employmentStatus: form.employmentStatus,
         probationMonths: parseInt(form.probationMonths) || 6,
         noticePeriodDays: parseInt(form.noticePeriodDays) || 30,
@@ -862,13 +867,18 @@ export default function EmployeesModule() {
           <F label="Employment Type">
             <select className={sel} value={form.employmentType} onChange={e => setForm(f => ({ ...f, employmentType: e.target.value }))}>
               <option value="">Not specified</option>
-              <option value="permanent">Permanent</option>
-              <option value="contract">Contract</option>
-              <option value="probation">Probation</option>
-              <option value="intern">Intern</option>
-              <option value="part_time">Part Time</option>
+              <option value="fixed">Fixed</option>
+              <option value="non_fixed">Non-Fixed</option>
             </select>
           </F>
+          {form.employmentType === 'non_fixed' && (
+            <F label="OT Type">
+              <select className={sel} value={String(form.otType ?? 1)} onChange={e => setForm(f => ({ ...f, otType: Number(e.target.value) }))}>
+                <option value="1">1× OT (single rate)</option>
+                <option value="2">2× OT (double rate)</option>
+              </select>
+            </F>
+          )}
           <F label="Employment Status" req>
             <select className={sel} value={form.employmentStatus} onChange={e => setForm(f => ({ ...f, employmentStatus: e.target.value }))}>
               <option value="active">Active</option>
@@ -1019,7 +1029,7 @@ export default function EmployeesModule() {
                     </div>
                     <div className="hidden md:block min-w-0"><div className="text-[10px] text-[#e2e8f0] truncate">{emp.Designation?.name || '—'}</div><div className="text-[9px] text-[#5a6878] truncate">{emp.Department?.name || '—'}</div></div>
                     <span className="hidden lg:block text-[10px] text-[#8899aa] truncate">{emp.Branch?.name || '—'}</span>
-                    <span className={`vc-badge ${emp.employmentType === 'permanent' ? 'bg-[#00e676]/10 text-[#00e676]' : 'bg-[#ffab40]/10 text-[#ffab40]'}`}>{emp.employmentType || '—'}</span>
+                    <span className={`vc-badge truncate max-w-full ${emp.employmentType === 'fixed' ? 'bg-[#00e676]/10 text-[#00e676]' : 'bg-[#ffab40]/10 text-[#ffab40]'}`} title={emp.employmentType === 'non_fixed' ? `Non-Fixed · ${emp.otType ?? 1}× OT` : emp.employmentType === 'fixed' ? 'Fixed' : ''}>{emp.employmentType === 'fixed' ? 'Fixed' : emp.employmentType === 'non_fixed' ? `Non-Fixed ${emp.otType ?? 1}×` : '—'}</span>
                     <span className="hidden sm:block text-[9px] text-[#8899aa]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{formatDate(emp.dateOfJoining)}</span>
                     <div className="hidden xl:flex items-center gap-1 flex-wrap">
                       <span className="text-[9px] text-[#5a6878]">—</span>

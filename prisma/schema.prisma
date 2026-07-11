@@ -67,6 +67,13 @@ model Branch {
   id             Int              @id @default(autoincrement())
   name           String           @unique
   address        String?
+  // Payroll divisors for this site (per attended day):
+  //   monthlyWorkingDays — Fixed employees' earn-wages divisor.
+  //   otType1Divisor / otType2Divisor — Non-fixed employees' earn-wages AND OT
+  //     hourly-rate divisor, by their OT type. All default to 26.
+  monthlyWorkingDays Int          @default(26)
+  otType1Divisor     Int          @default(26)
+  otType2Divisor     Int          @default(26)
   Employee       Employee[]
   Warehouse      Warehouse[]
   Holiday        Holiday[]
@@ -141,7 +148,13 @@ model Employee {
   reportingManagerId        Int?
   dateOfJoining             DateTime
   confirmationDate          DateTime?
+  // employmentType now classifies payroll behaviour: "fixed" | "non_fixed".
+  // Fixed employees earn over the branch's monthly working days and get no OT;
+  // non-fixed employees earn over 26 and get OT at the otType multiplier.
   employmentType            String?
+  // OT multiplier class for NON-FIXED employees: 1 = 1x hourly OT, 2 = 2x hourly OT.
+  // Ignored (no OT) when the employee is fixed. Mirrors the sheet's "OT Types".
+  otType                    Int                         @default(1)
   employmentStatus          String
   probationMonths           Int                         @default(6)
   noticePeriodDays          Int                         @default(30)
@@ -490,6 +503,12 @@ model Shift {
   breakMinutes    Int               @default(60)
   graceMinutes    Int               @default(15)
   otThresholdMin  Int               @default(30)
+  // Hours-worked thresholds that decide attendance status for this shift:
+  //   worked ≥ minPresentHours            → Present
+  //   minHalfDayHours ≤ worked < minPresent → Half Day
+  //   worked < minHalfDayHours            → Absent
+  minPresentHours Float             @default(8)
+  minHalfDayHours Float             @default(4)
   weekOffDays     Int[]
   isActive        Boolean           @default(true)
   isDeleted       Boolean           @default(false)

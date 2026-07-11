@@ -1,4 +1,5 @@
 import { getDbForRequest } from '@/lib/db';
+import { Prisma } from '@prisma/client';
 import { syncComplianceRunFromNonCompliance } from '@/lib/services/compliance-run';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
@@ -68,6 +69,11 @@ export async function POST(request: NextRequest) {
     // Process each row
     for (const item of decodedData) {
       const { rowNumber, employeeId, rowData } = item;
+      // Prisma's Json array rejects `undefined` AND sparse-array holes (empty
+      // Excel cells). Array.from visits holes (unlike .map) so every slot becomes
+      // an explicit value; then normalise undefined/null → null.
+      const sanitizedRow = Array.from({ length: (rowData as any[]).length },
+        (_, i) => { const v = (rowData as any[])[i]; return v === undefined || v === null ? null : v; });
 
       try {
         // Check if this employee has a duplicate action
@@ -146,12 +152,16 @@ export async function POST(request: NextRequest) {
           totalDeduction: salaryData.totalDeduction,
           netPay: salaryData.nettPayable,
           status: 'pending',
-          details: { 
-            imported: true, 
-            importedAt: new Date().toISOString(), 
+          details: {
+            imported: true,
+            importedAt: new Date().toISOString(),
+            rawData: salaryData,
+            // Full uploaded row, verbatim — lets the salary-sheet download
+            // re-emit an identical sheet (see salary-non-compliance-import).
+            rawRow: sanitizedRow,
             format: 'non-compliance',
             duplicateAction: action || 'new',
-          },
+          } as unknown as Prisma.InputJsonValue,
         };
 
         if (existing) {
@@ -203,8 +213,11 @@ export async function POST(request: NextRequest) {
       where: { payrollRunId: payrollRun.id },
     });
 
-    const totalGross = items.reduce((sum, item) => sum + Number(item.grossEarning), 0);
-    const totalNet = items.reduce((sum, item) => sum + Number(item.netPay), 0);
+    // Run totals reflect the non-compliance sheet's own columns:
+    //   Total Gross = Σ GROSS EARN WAGES (sheet col 24)
+    //   Total Net   = Σ TOTAL NON COMPLIANCE AMOUNT (sheet col AQ / 44)
+    const totalGross = items.reduce((sum, item) => sum + Number(item.grossEarnWages), 0);
+    const totalNet = items.reduce((sum, item) => sum + Number(item.totalNonComplianceAmount), 0);
 
     await db.payrollRun.update({
       where: { id: payrollRun.id },

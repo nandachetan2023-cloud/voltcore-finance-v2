@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
       dateOfJoining: true,
       confirmationDate: true,
       employmentType: true,
+      otType: true,
       employmentStatus: true,
       probationMonths: true,
       noticePeriodDays: true,
@@ -69,9 +70,6 @@ export async function GET(request: NextRequest) {
       nomineeAddress: true,
       isActive: true,
       isDeleted: true,
-      employmentType: true,
-      employmentStatus: true,
-      dateOfJoining: true,
       Department: {
         select: {
           id: true,
@@ -157,6 +155,7 @@ export async function POST(request: NextRequest) {
       branchId,
       dateOfJoining,
       employmentType,
+      otType,
       employmentStatus,
     } = body
 
@@ -231,6 +230,7 @@ export async function POST(request: NextRequest) {
         dateOfJoining: new Date(dateOfJoining),
         confirmationDate: body.confirmationDate ? new Date(body.confirmationDate) : null,
         employmentType: employmentType || null,
+        otType: typeof otType === 'number' ? otType : 1,
         employmentStatus: employmentStatus || 'active',
         probationMonths: body.probationMonths ? parseInt(body.probationMonths) : 6,
         noticePeriodDays: body.noticePeriodDays ? parseInt(body.noticePeriodDays) : 30,
@@ -392,6 +392,7 @@ export async function PUT(request: NextRequest) {
     if (updateData.gradeId !== undefined) updateData.gradeId = updateData.gradeId ? parseInt(updateData.gradeId) : null
     if (updateData.reportingManagerId !== undefined) updateData.reportingManagerId = updateData.reportingManagerId ? parseInt(updateData.reportingManagerId) : null
     if (updateData.probationMonths !== undefined) updateData.probationMonths = parseInt(updateData.probationMonths) || 6
+    if (updateData.otType !== undefined) updateData.otType = parseInt(updateData.otType) || 1
     if (updateData.noticePeriodDays !== undefined) updateData.noticePeriodDays = parseInt(updateData.noticePeriodDays) || 30
     if (updateData.monthlyGrossSalary !== undefined) updateData.monthlyGrossSalary = updateData.monthlyGrossSalary ? parseFloat(updateData.monthlyGrossSalary) : null
     updateData.updatedAt = new Date()

@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
               select: {
                 employeeCode: true, firstName: true, lastName: true,
                 Department: { select: { name: true } },
+                Designation: { select: { name: true } },
                 Branch: { select: { name: true } },
               },
             },

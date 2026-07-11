@@ -4,7 +4,7 @@ export type UserRole = 'superadmin' | 'admin' | 'demo';
 
 // All top-level modules and their sub-modules for access checking
 export const MODULE_TREE: Record<string, string[]> = {
-  organization: ['organization', 'departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents', 'roles-access'],
+  organization: ['organization', 'departments', 'designations', 'payroll-sites', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents', 'roles-access'],
   hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
   procurement: ['procurement', 'purchases', 'expenses'],
   finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
@@ -50,6 +50,7 @@ export type ModuleId =
   | 'projects' | 'assets'
   | 'system'
   // Sub-modules
+  | 'payroll-sites'
   | 'employees' | 'attendance' | 'leave' | 'tour-requests' | 'shift' | 'training' | 'recruitment'
   | 'onboarding' | 'offboarding' | 'exit-management' | 'checklist-templates'
   | 'purchases' | 'expenses' | 'invoices'
@@ -138,6 +139,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
   organization: [
     { id: 'departments', icon: 'Building2', label: 'Departments' },
     { id: 'designations', icon: 'Award', label: 'Designations' },
+    { id: 'payroll-sites', icon: 'Timer', label: 'Global OT Settings' },
     { id: 'holidays', icon: 'CalendarDays', label: 'Holidays' },
     { id: 'leave-policies', icon: 'FileText', label: 'Leave Policies' },
     { id: 'attendance-rules', icon: 'Shield', label: 'Attendance Rules' },

@@ -316,19 +316,27 @@ export async function classifyAttendance(
     shift.id,
   )
 
-  // If punchOut is provided, also check early departure / half-day by hours worked
+  // If punchOut is provided, decide Present / Half Day / Absent by hours worked,
+  // using this shift's configurable thresholds (defaults: 8h present, 4h half-day):
+  //   worked ≥ minPresentHours              → Present (keep the rule result)
+  //   minHalfDayHours ≤ worked < minPresent → Half Day
+  //   worked < minHalfDayHours              → Absent
   if (punchOut && !result.isAbsent) {
-    const [endHour, endMin] = shift.endTime.split(':').map(Number)
-    const scheduledPunchOut = new Date(logDate)
-    scheduledPunchOut.setHours(endHour, endMin, 0, 0)
-    if (shift.crossesMidnight) scheduledPunchOut.setDate(scheduledPunchOut.getDate() + 1)
+    const workedHours = (punchOut.getTime() - punchIn.getTime()) / 3.6e6
+    const minPresent = shift.minPresentHours ?? 8
+    const minHalfDay = shift.minHalfDayHours ?? 4
 
-    const totalShiftMinutes = (scheduledPunchOut.getTime() - scheduledPunchIn.getTime()) / 60000
-    const workedMinutes = (punchOut.getTime() - punchIn.getTime()) / 60000
-    const halfDayThreshold = totalShiftMinutes / 2
-
-    // If worked less than half the shift and not already marked half_day/absent
-    if (workedMinutes < halfDayThreshold && result.status === 'present') {
+    if (workedHours < minHalfDay) {
+      return {
+        status: 'absent',
+        lateMinutes: result.lateMinutes,
+        fineAmount: result.fineAmount,
+        appliedRule: result.appliedRule,
+      }
+    }
+    // Below the present threshold but at/above the half-day floor → half day.
+    // Only downgrade a 'present' result; never upgrade a late/half_day rule result.
+    if (workedHours < minPresent && result.status === 'present') {
       return {
         status: 'half_day',
         lateMinutes: result.lateMinutes,

@@ -8,6 +8,7 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   employees: () => import('@/components/erp/employees'),
   departments: () => import('@/components/erp/departments'),
   designations: () => import('@/components/erp/designations'),
+  'payroll-sites': () => import('@/components/erp/payroll-sites'),
   holidays: () => import('@/components/erp/holidays'),
   'leave-policies': () => import('@/components/erp/leave-policies'),
   'attendance-rules': () => import('@/components/erp/attendance-rules'),

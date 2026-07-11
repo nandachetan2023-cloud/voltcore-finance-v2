@@ -22,6 +22,8 @@ interface Shift {
   breakMinutes: number;
   graceMinutes: number;
   otThresholdMin: number;
+  minPresentHours: number;
+  minHalfDayHours: number;
   weekOffDays: number[];
   isActive: boolean;
 }
@@ -56,6 +58,8 @@ interface ShiftFormData {
   breakMinutes: number;
   graceMinutes: number;
   otThresholdMin: number;
+  minPresentHours: number;
+  minHalfDayHours: number;
   weekOffDays: number[];
 }
 
@@ -75,6 +79,8 @@ const EMPTY_SHIFT_FORM: ShiftFormData = {
   breakMinutes: 60,
   graceMinutes: 10,
   otThresholdMin: 30,
+  minPresentHours: 8,
+  minHalfDayHours: 4,
   weekOffDays: [0], // Sunday
 };
 
@@ -368,6 +374,8 @@ export default function ShiftRosterModule() {
       breakMinutes: shift.breakMinutes,
       graceMinutes: shift.graceMinutes,
       otThresholdMin: shift.otThresholdMin,
+      minPresentHours: shift.minPresentHours ?? 8,
+      minHalfDayHours: shift.minHalfDayHours ?? 4,
       weekOffDays: shift.weekOffDays,
     });
     setSelectedShiftId(shift.id);
@@ -583,6 +591,36 @@ export default function ShiftRosterModule() {
           onChange={e => setShiftForm(f => ({ ...f, otThresholdMin: parseInt(e.target.value) || 0 }))}
         />
         <p className="text-[9px] text-[#5a6878] mt-1">Extra minutes beyond shift hours before OT starts counting (0 = count all extra time)</p>
+      </div>
+
+      <div>
+        <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">
+          Min Hours for Present
+        </label>
+        <input
+          type="number"
+          step="0.5"
+          min="0"
+          className={inputCls}
+          value={shiftForm.minPresentHours}
+          onChange={e => setShiftForm(f => ({ ...f, minPresentHours: parseFloat(e.target.value) || 0 }))}
+        />
+        <p className="text-[9px] text-[#5a6878] mt-1">Hours worked at or above this ⇒ full-day Present (default 8 = full shift)</p>
+      </div>
+
+      <div>
+        <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">
+          Min Hours for Half Day
+        </label>
+        <input
+          type="number"
+          step="0.5"
+          min="0"
+          className={inputCls}
+          value={shiftForm.minHalfDayHours}
+          onChange={e => setShiftForm(f => ({ ...f, minHalfDayHours: parseFloat(e.target.value) || 0 }))}
+        />
+        <p className="text-[9px] text-[#5a6878] mt-1">At or above this (but under full-day) ⇒ Half Day; below ⇒ Absent (default 4)</p>
       </div>
 
       <div className="md:col-span-2">

@@ -289,30 +289,45 @@ export class PayrollCalculator {
   generatePayslipData(payrollItem: PayrollItem, employee: any, company: any): any {
     const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
+    // The payslip must be OBEDIENT to the uploaded sheet — display the values the
+    // user filled in, not recomputed ones. The import stores the parsed sheet in
+    // details.rawData, so read from there; fall back to the DB fields only for
+    // records imported before rawData capture.
+    const raw = (payrollItem.details && typeof payrollItem.details === 'object'
+      ? (payrollItem.details as Record<string, unknown>).rawData
+      : null) as Record<string, number> | null;
+    const rv = (key: string, fallback: number): number => {
+      const n = raw ? Number(raw[key]) : NaN;
+      return Number.isFinite(n) ? n : fallback;
+    };
+
     // Earning lines (mirrors the reference payslip's 8 rows). conveyanceAllowance
     // holds the Site allowance and medicalAllowance holds the Travel allowance.
     const earn = {
-      basicSalary: Number(payrollItem.basicSalary) || 0,
-      hra: Number(payrollItem.hra) || 0,
-      siteAllowance: Number(payrollItem.conveyanceAllowance) || 0,
-      travelAllowance: Number(payrollItem.medicalAllowance) || 0,
-      specialAllowance: Number(payrollItem.specialAllowance) || 0,
-      attendanceAllowance: Number(payrollItem.attendanceAllowance) || 0,
-      overtime: Number(payrollItem.otAmount) || 0,
-      phAmount: Number(payrollItem.phAmount) || 0,
+      basicSalary: rv('monthlyBasicSalary', Number(payrollItem.basicSalary) || 0),
+      hra: rv('monthlyHRA', Number(payrollItem.hra) || 0),
+      siteAllowance: rv('monthlySiteAllow', Number(payrollItem.conveyanceAllowance) || 0),
+      travelAllowance: rv('monthlyLTA', Number(payrollItem.medicalAllowance) || 0),
+      specialAllowance: rv('monthlySpecialAllow', Number(payrollItem.specialAllowance) || 0),
+      attendanceAllowance: rv('monthlyAttendanceAllow', Number(payrollItem.attendanceAllowance) || 0),
+      overtime: rv('actualOtAmount', Number(payrollItem.otAmount) || 0),
+      phAmount: rv('phAmount', Number(payrollItem.phAmount) || 0),
     };
-    const grossTotal =
-      earn.basicSalary + earn.hra + earn.siteAllowance + earn.travelAllowance +
-      earn.specialAllowance + earn.attendanceAllowance + earn.overtime + earn.phAmount;
+    // Gross = the uploaded GROSS EARN WAGES / TOTAL SALARY (what the user filled),
+    // not a re-sum of the split allowances (which round independently).
+    const grossTotal = rv('grossEarnWages',
+      rv('totalSalary',
+        earn.basicSalary + earn.hra + earn.siteAllowance + earn.travelAllowance +
+        earn.specialAllowance + earn.attendanceAllowance + earn.overtime + earn.phAmount));
 
     const ded = {
-      pf: Number(payrollItem.pfDeduction) || 0,
-      esi: Number(payrollItem.esiDeduction) || 0,
-      pt: Number(payrollItem.ptDeduction) || 0,
-      advance: Number(payrollItem.otherDeductions) || 0,
+      pf: rv('epf', Number(payrollItem.pfDeduction) || 0),
+      esi: rv('esic', Number(payrollItem.esiDeduction) || 0),
+      pt: 0, // PT is not deducted by the company — kept at 0, not shown on the slip
+      advance: rv('advance', Number(payrollItem.otherDeductions) || 0),
       other: 0,
     };
-    const deductionTotal = ded.pf + ded.esi + ded.pt + ded.advance + ded.other;
+    const deductionTotal = ded.pf + ded.esi + ded.advance + ded.other;
 
     return {
       company: {
@@ -350,8 +365,7 @@ export class PayrollCalculator {
         attendanceAllowance: earn.attendanceAllowance,
         overtime: earn.overtime,
         phAmount: earn.phAmount,
-        // Gross = sum of the earning lines so the slip reconciles and matches the
-        // reference payslip (which totals its earning rows to the gross-earn wage).
+        // Gross = the uploaded GROSS EARN WAGES (user-entered), not a re-sum.
         total: grossTotal,
       },
       deductions: {
@@ -366,9 +380,8 @@ export class PayrollCalculator {
         workingDays: payrollItem.workingDays,
         presentDays: payrollItem.presentDays,
       },
-      // Net take-home = Gross earnings − total deductions (matches the reference
-      // payslip: Net Payable = B20 − E20). This is the actual amount received,
-      // not the compliance-only nett figure stored on the payroll item.
+      // Net Payable = Gross Earnings − Total Deductions, matching the reference
+      // payslip layout (Net = B20 − E20). Arrears are NOT part of this slip.
       netSalary: grossTotal - deductionTotal,
     };
   }
