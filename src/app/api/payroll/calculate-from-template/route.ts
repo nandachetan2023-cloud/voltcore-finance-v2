@@ -292,7 +292,7 @@ export async function POST(request: NextRequest) {
     const nonComplianceBuffer = Buffer.from(await workbook.xlsx.writeBuffer());
 
     // Build the matching compliance "Register of Wages" sheet from the same data
-    const complianceBuffer = buildComplianceSheetBuffer(complianceItems, month, year);
+    const complianceBuffer = await buildComplianceSheetBuffer(complianceItems, month, year);
 
     const monthAbbr = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][month - 1];
     const stamp = `${monthAbbr}_${year}`;

@@ -431,6 +431,108 @@ export async function PUT(request: NextRequest) {
   }
 }
 
+// PATCH: Bulk-edit the Organisation & Employment fields of many employees at once.
+// Body: { ids: number[], changes: { <field>: value, ... } }
+// Only the whitelisted Org/Employment fields are ever written, and only the keys
+// present in `changes` are applied — so unspecified fields are never touched.
+export async function PATCH(request: NextRequest) {
+  const db = getDbForRequest(request)
+  try {
+    const body = await request.json()
+    const { ids, changes } = body as { ids?: unknown; changes?: Record<string, unknown> }
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'ids must be a non-empty array' },
+        { status: 400 }
+      )
+    }
+    if (!changes || typeof changes !== 'object' || Object.keys(changes).length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'changes must be a non-empty object' },
+        { status: 400 }
+      )
+    }
+
+    const employeeIds = ids
+      .map((v) => parseInt(String(v)))
+      .filter((n) => Number.isInteger(n) && !Number.isNaN(n))
+    if (employeeIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No valid employee ids provided' },
+        { status: 400 }
+      )
+    }
+
+    // Only these Organisation & Employment fields may be bulk-edited. Anything
+    // else in `changes` (employeeCode, email, names, statutory, bank, …) is
+    // ignored — bulk edit is for setting shared org/employment values only.
+    const ALLOWED = new Set([
+      // Organisation
+      'departmentId', 'designationId', 'branchId', 'gradeId', 'reportingManagerId',
+      // Employment
+      'employmentType', 'otType', 'employmentStatus', 'natureOfDesignation',
+      'probationMonths', 'noticePeriodDays',
+    ])
+
+    // Build the update payload from ONLY the allowed keys the caller sent,
+    // reusing the same normalisation as the single-employee PUT.
+    const updateData: Record<string, unknown> = {}
+    for (const [key, rawVal] of Object.entries(changes)) {
+      if (!ALLOWED.has(key)) continue
+      switch (key) {
+        case 'departmentId':
+        case 'designationId':
+        case 'branchId':
+          if (rawVal) updateData[key] = parseInt(String(rawVal))
+          break
+        case 'gradeId':
+        case 'reportingManagerId':
+          updateData[key] = rawVal ? parseInt(String(rawVal)) : null
+          break
+        case 'otType':
+          updateData[key] = parseInt(String(rawVal)) || 1
+          break
+        case 'probationMonths':
+          updateData[key] = parseInt(String(rawVal)) || 6
+          break
+        case 'noticePeriodDays':
+          updateData[key] = parseInt(String(rawVal)) || 30
+          break
+        case 'employmentType':
+        case 'employmentStatus':
+        case 'natureOfDesignation':
+          updateData[key] = rawVal === '' ? null : String(rawVal)
+          break
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No editable Organisation/Employment fields in changes' },
+        { status: 400 }
+      )
+    }
+    updateData.updatedAt = new Date()
+
+    const result = await db.employee.updateMany({
+      where: { id: { in: employeeIds }, isDeleted: false },
+      data: updateData,
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: { updated: result.count, fields: Object.keys(updateData).filter((k) => k !== 'updatedAt') },
+    })
+  } catch (error) {
+    console.error('Error bulk-updating employees:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to bulk-update employees' },
+      { status: 500 }
+    )
+  }
+}
+
 // DELETE: Soft delete employee — always preserves data, frees up email/code for reuse
 export async function DELETE(request: NextRequest) {
   const db = getDbForRequest(request)

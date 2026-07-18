@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Award, Plus, Pencil, Trash2, Users } from 'lucide-react';
+import { SearchInput, matchesSearch } from './search-input';
 import { toast } from 'sonner';
 import { FieldError, fieldBorderError } from '@/components/ui/field-error';
 import { validateFields, isValid, type FieldErrors } from '@/lib/form-validation';
@@ -14,6 +15,7 @@ interface Designation {
 
 export default function DesignationsModule() {
   const [designations, setDesignations] = useState<Designation[]>([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -67,6 +69,11 @@ export default function DesignationsModule() {
     } catch { toast.error('Failed to delete designation'); }
   };
 
+  const filteredDesignations = useMemo(
+    () => designations.filter(d => matchesSearch(search, [d.name])),
+    [designations, search]
+  );
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-8 h-8 border-2 border-[#f5a623]/30 border-t-[#f5a623] rounded-full animate-spin" />
@@ -85,8 +92,12 @@ export default function DesignationsModule() {
         </button>
       </div>
 
+      {designations.length > 0 && (
+        <SearchInput value={search} onChange={setSearch} placeholder="Search designations by name..." />
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {designations.map(d => {
+        {filteredDesignations.map(d => {
           // 0 employees = likely auto-created via bulk import
           const isAuto = d._count?.Employee === 0;
           return (
@@ -120,6 +131,12 @@ export default function DesignationsModule() {
         <div className="text-center py-12 text-[#5a6878]">
           <Award size={48} className="mx-auto mb-4 opacity-50" />
           <p>No designations found. Create your first designation.</p>
+        </div>
+      )}
+      {designations.length > 0 && filteredDesignations.length === 0 && (
+        <div className="text-center py-12 text-[#5a6878]">
+          <Award size={48} className="mx-auto mb-4 opacity-50" />
+          <p>No designations match &quot;{search}&quot;.</p>
         </div>
       )}
 

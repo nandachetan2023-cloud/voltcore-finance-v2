@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   HardHat, Search, Plus, Eye, Pencil, Trash2, Users, MapPin,
-  UserPlus, UserMinus, ChevronDown, X, AlertTriangle
+  UserPlus, UserMinus, ChevronDown, X, AlertTriangle, Layers
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -279,6 +279,14 @@ export default function EmployeesModule() {
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formTab, setFormTab] = useState<'identity' | 'personal' | 'address' | 'org' | 'employment' | 'statutory' | 'bank' | 'emergency'>('identity');
+
+  // Bulk edit — set of selected employee ids + dialog state.
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  // For each bulk-editable field: whether it's enabled ("apply this") + its value.
+  const [bulkFields, setBulkFields] = useState<Record<string, { on: boolean; value: string }>>({});
+
   const { triggerCreate } = useERPStore();
 
   // Fetch designations for dropdown
@@ -354,6 +362,85 @@ export default function EmployeesModule() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const paged = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+
+  // ── Bulk selection helpers ──────────────────────────────────────────────
+  // "Select all" operates on the FILTERED set (across pages), so a user can
+  // filter to a site and bulk-edit everyone there in one action.
+  const filteredIds = useMemo(() => filtered.map(e => e.id), [filtered]);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
+  const someFilteredSelected = filteredIds.some(id => selectedIds.has(id));
+
+  const toggleOne = (id: number) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleAllFiltered = () => setSelectedIds(prev => {
+    if (allFilteredSelected) return new Set([...prev].filter(id => !filteredIds.includes(id)));
+    return new Set([...prev, ...filteredIds]);
+  });
+  const clearSelection = () => setSelectedIds(new Set());
+
+  // Fields the bulk editor exposes, grouped like the employee form's Org/Employment tabs.
+  const BULK_FIELDS = useMemo(() => ([
+    { group: 'Organisation', key: 'departmentId', label: 'Department', type: 'select',
+      options: departments.map(d => ({ value: String(d.id), label: d.name })) },
+    { group: 'Organisation', key: 'designationId', label: 'Designation', type: 'select',
+      options: designations.map(d => ({ value: String(d.id), label: d.name })) },
+    { group: 'Organisation', key: 'branchId', label: 'Branch / Site', type: 'select',
+      options: branches.map(b => ({ value: String(b.id), label: b.name })) },
+    { group: 'Organisation', key: 'gradeId', label: 'Grade / Level', type: 'text' },
+    { group: 'Organisation', key: 'reportingManagerId', label: 'Reporting Manager', type: 'select',
+      options: [{ value: '', label: 'None' }, ...employees.map(e => ({ value: String(e.id), label: `${e.employeeCode} — ${getFullName(e)}` }))] },
+    { group: 'Employment', key: 'employmentType', label: 'Employment Type', type: 'select',
+      options: [{ value: 'fixed', label: 'Fixed' }, { value: 'non_fixed', label: 'Non-Fixed' }] },
+    { group: 'Employment', key: 'otType', label: 'OT Type', type: 'select',
+      options: [{ value: '1', label: '1× OT (single rate)' }, { value: '2', label: '2× OT (double rate)' }] },
+    { group: 'Employment', key: 'employmentStatus', label: 'Employment Status', type: 'select',
+      options: [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'notice_period', label: 'Notice Period' }, { value: 'separated', label: 'Separated' }] },
+    { group: 'Employment', key: 'natureOfDesignation', label: 'Nature of Designation', type: 'select',
+      options: [{ value: 'Skilled', label: 'Skilled' }, { value: 'Semi-skilled', label: 'Semi-skilled' }, { value: 'Unskilled', label: 'Unskilled' }, { value: 'Highly Skilled', label: 'Highly Skilled' }] },
+    { group: 'Employment', key: 'probationMonths', label: 'Probation Months', type: 'number' },
+    { group: 'Employment', key: 'noticePeriodDays', label: 'Notice Period Days', type: 'number' },
+  ] as const), [departments, designations, branches, employees]);
+
+  const openBulk = () => {
+    // Reset the dialog: nothing enabled, values blank.
+    const init: Record<string, { on: boolean; value: string }> = {};
+    BULK_FIELDS.forEach(f => { init[f.key] = { on: false, value: '' }; });
+    setBulkFields(init);
+    setBulkOpen(true);
+  };
+
+  const submitBulk = async () => {
+    const changes: Record<string, string> = {};
+    BULK_FIELDS.forEach(f => {
+      const st = bulkFields[f.key];
+      if (st?.on) changes[f.key] = st.value; // include even blank → clears optional fields
+    });
+    if (Object.keys(changes).length === 0) {
+      setError('Enable at least one field to apply.');
+      return;
+    }
+    setBulkSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/employees', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds], changes }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Bulk update failed');
+      setBulkOpen(false);
+      clearSelection();
+      await fetchData();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Bulk update failed');
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
 
   const totalEmployees = employees.length;
   const activeCount = employees.filter(e => e.employmentStatus === 'active').length;
@@ -1006,11 +1093,31 @@ export default function EmployeesModule() {
             ))}
           </div>
 
+          {/* Bulk action bar — shown when at least one employee is selected */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-[#f5a623]/40 bg-[#f5a623]/10 px-3.5 py-2.5">
+              <div className="flex items-center gap-2 text-[12px] text-[#e2e8f0]">
+                <Layers size={14} className="text-[#f5a623]" />
+                <span className="font-semibold">{selectedIds.size}</span> selected
+                <button onClick={clearSelection} className="ml-2 text-[10px] text-[#8899aa] hover:text-[#e2e8f0] underline">Clear</button>
+              </div>
+              <button onClick={openBulk} className="vc-btn-primary text-[11px] px-3 py-1.5 flex items-center gap-1.5">
+                <Pencil size={12} /> Bulk Edit
+              </button>
+            </div>
+          )}
+
           {/* Table */}
           <div className="rounded-lg border border-[#252e3a] overflow-hidden">
             <div className="overflow-x-auto">
               <div className="max-h-[480px] overflow-y-auto min-w-[900px]">
-                <div className="grid grid-cols-[70px_1fr_110px_90px_90px_80px_130px_75px_60px] gap-2 px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-[#5a6878] bg-[#141920] border-b border-[#252e3a] sticky top-0 z-10">
+                <div className="grid grid-cols-[34px_70px_1fr_110px_90px_90px_80px_130px_75px_60px] gap-2 px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-[#5a6878] bg-[#141920] border-b border-[#252e3a] sticky top-0 z-10">
+                  <span className="flex items-center">
+                    <input type="checkbox" className="w-3.5 h-3.5 accent-[#f5a623] cursor-pointer"
+                      checked={allFilteredSelected}
+                      ref={el => { if (el) el.indeterminate = !allFilteredSelected && someFilteredSelected; }}
+                      onChange={toggleAllFiltered} title="Select all (filtered)" />
+                  </span>
                   <span>ID</span><span>Name</span><span className="hidden md:block">Trade/Role</span><span className="hidden lg:block">Site</span><span>Type</span><span className="hidden sm:block">Joined</span><span className="hidden xl:block">Certifications</span><span>Status</span><span className="text-right">Actions</span>
                 </div>
               {paged.length === 0 ? (
@@ -1021,7 +1128,11 @@ export default function EmployeesModule() {
                 const st = getStatusStyle(emp.employmentStatus || 'active');
                 const initials = getInitials(emp);
                 return (
-                  <div key={emp.id} className="grid grid-cols-[70px_1fr_110px_90px_90px_80px_130px_75px_60px] gap-2 px-3 py-2.5 items-center border-b border-[#1e252e] last:border-0 hover:bg-[#1a2028] transition-colors group">
+                  <div key={emp.id} className={`grid grid-cols-[34px_70px_1fr_110px_90px_90px_80px_130px_75px_60px] gap-2 px-3 py-2.5 items-center border-b border-[#1e252e] last:border-0 hover:bg-[#1a2028] transition-colors group ${selectedIds.has(emp.id) ? 'bg-[#f5a623]/5' : ''}`}>
+                    <span className="flex items-center">
+                      <input type="checkbox" className="w-3.5 h-3.5 accent-[#f5a623] cursor-pointer"
+                        checked={selectedIds.has(emp.id)} onChange={() => toggleOne(emp.id)} />
+                    </span>
                     <span className="text-[10px] text-[#8899aa] font-medium truncate" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{emp.employeeCode}</span>
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[9px] font-bold ${avatar.bg} ${avatar.text}`}>{initials}</div>
@@ -1116,6 +1227,58 @@ export default function EmployeesModule() {
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button className="bg-[#ff3d3d] text-white hover:bg-[#cc2020] font-semibold" disabled={submitting} onClick={handleDelete}>{submitting ? 'Deleting...' : 'Delete Employee'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Edit Dialog */}
+      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-lg max-h-[90vh] flex flex-col overflow-hidden" aria-describedby="bulk-edit-description">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2">
+              <Layers size={16} className="text-[#f5a623]" /> Bulk Edit — {selectedIds.size} employee{selectedIds.size === 1 ? '' : 's'}
+            </DialogTitle>
+          </DialogHeader>
+          <div id="bulk-edit-description" className="flex-1 overflow-y-auto pr-1 space-y-4">
+            <p className="text-[11px] text-[#8899aa] leading-relaxed">
+              Toggle a field to apply its value to <span className="text-[#e2e8f0] font-semibold">all {selectedIds.size} selected</span> employees.
+              Fields you leave off are left unchanged for each employee.
+            </p>
+            {(['Organisation', 'Employment'] as const).map(group => (
+              <div key={group}>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#5a6878] mb-2">{group}</div>
+                <div className="space-y-2">
+                  {BULK_FIELDS.filter(f => f.group === group).map(f => {
+                    const st = bulkFields[f.key] || { on: false, value: '' };
+                    const setOn = (on: boolean) => setBulkFields(bf => ({ ...bf, [f.key]: { ...st, on } }));
+                    const setVal = (value: string) => setBulkFields(bf => ({ ...bf, [f.key]: { on: true, value } }));
+                    return (
+                      <div key={f.key} className={`flex items-center gap-2.5 rounded-md border px-2.5 py-2 transition-colors ${st.on ? 'border-[#f5a623]/40 bg-[#f5a623]/5' : 'border-[#252e3a] bg-[#141920]'}`}>
+                        <input type="checkbox" className="w-3.5 h-3.5 accent-[#f5a623] cursor-pointer shrink-0" checked={st.on} onChange={e => setOn(e.target.checked)} />
+                        <label className="text-[11px] text-[#c8d2dc] w-[130px] shrink-0 cursor-pointer" onClick={() => setOn(!st.on)}>{f.label}</label>
+                        {f.type === 'select' ? (
+                          <select disabled={!st.on} value={st.value} onChange={e => setVal(e.target.value)}
+                            className="flex-1 min-w-0 bg-[#0f141a] border border-[#2e3a48] rounded px-2 py-1 text-[11px] text-[#e2e8f0] disabled:opacity-40 disabled:cursor-not-allowed focus:border-[#f5a623] outline-none">
+                            <option value="">Select...</option>
+                            {'options' in f && f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        ) : (
+                          <input type={f.type === 'number' ? 'number' : 'text'} disabled={!st.on} value={st.value} onChange={e => setVal(e.target.value)}
+                            placeholder={f.type === 'number' ? '0' : '—'}
+                            className="flex-1 min-w-0 bg-[#0f141a] border border-[#2e3a48] rounded px-2 py-1 text-[11px] text-[#e2e8f0] disabled:opacity-40 disabled:cursor-not-allowed focus:border-[#f5a623] outline-none" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="gap-2 pt-2 border-t border-[#252e3a]">
+            <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setBulkOpen(false)}>Cancel</Button>
+            <Button className="bg-[#f5a623] text-[#0f141a] hover:bg-[#e0961a] font-semibold" disabled={bulkSubmitting} onClick={submitBulk}>
+              {bulkSubmitting ? 'Applying...' : `Apply to ${selectedIds.size}`}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

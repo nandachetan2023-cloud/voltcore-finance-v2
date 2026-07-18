@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
+import { SearchInput, matchesSearch } from './search-input';
 
 interface PayrollRun {
   id: number;
@@ -115,6 +116,9 @@ export default function PayrollCompliance() {
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
   const [searchPayslipOpen, setSearchPayslipOpen] = useState(false);
+  const [runSearch, setRunSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'draft'>('all');
+  const [itemSearch, setItemSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirmRun, setDeleteConfirmRun] = useState<PayrollRun | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -226,6 +230,20 @@ export default function PayrollCompliance() {
     }
   };
 
+  // Live search over the runs table + the run-detail employee list.
+  const MONTH_LABEL = (m: number) => (MONTHS[m - 1]?.label || '');
+  const filteredRuns = useMemo(() => payrollRuns.filter(run => {
+    if (statusFilter !== 'all' && run.status !== statusFilter) return false;
+    return matchesSearch(runSearch, [run.name, MONTH_LABEL(run.month), run.year, run.status]);
+  }), [payrollRuns, runSearch, statusFilter]);
+
+  const filteredItems = useMemo(() => {
+    if (!selectedRun) return [];
+    return selectedRun.PayrollItem.filter(item => matchesSearch(itemSearch, [
+      item.Employee.employeeCode, item.Employee.firstName, item.Employee.lastName, item.Employee.Department?.name,
+    ]));
+  }, [selectedRun, itemSearch]);
+
   // Get available months and years from payroll runs
   const availableMonthsYears = useMemo(() => {
     const years = new Set<number>();
@@ -324,12 +342,24 @@ export default function PayrollCompliance() {
         <div className="vc-panel-header">
           <Shield size={15} className="text-[#00e676]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Compliance Payroll Runs</span>
-          <span className="ml-auto text-[10px] text-[#5a6878]">{payrollRuns.length} runs</span>
+          <span className="ml-auto text-[10px] text-[#5a6878]">{filteredRuns.length} of {payrollRuns.length} runs</span>
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={() => setSearchPayslipOpen(true)}>
             <Download size={13} /> Search & Download Sheet
           </button>
         </div>
-        
+
+        <div className="flex flex-wrap gap-2 items-center px-3 py-2 border-b border-[#252e3a]">
+          <SearchInput value={runSearch} onChange={setRunSearch} placeholder="Search by run name, month, year..." />
+          <div className="flex items-center gap-1">
+            {(['all', 'completed', 'draft'] as const).map(s => (
+              <button key={s} onClick={() => setStatusFilter(s)}
+                className={`px-2.5 py-[5px] rounded-md text-[10px] font-medium capitalize transition-colors border ${statusFilter === s ? 'bg-[#00e676]/15 text-[#00e676] border-[#00e676]/40' : 'bg-[#141920] text-[#8899aa] border-[#2e3a48] hover:text-[#e2e8f0]'}`}>
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 bg-[#161c24] z-10">
@@ -342,7 +372,9 @@ export default function PayrollCompliance() {
             <tbody>
               {payrollRuns.length === 0 ? (
                 <tr><td colSpan={7} className="py-8 text-center text-[#5a6878] text-[11px]">No payroll runs found.</td></tr>
-              ) : payrollRuns.map(run => (
+              ) : filteredRuns.length === 0 ? (
+                <tr><td colSpan={7} className="py-8 text-center text-[#5a6878] text-[11px]">No runs match your search.</td></tr>
+              ) : filteredRuns.map(run => (
                 <tr key={run.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors group">
                   <td className="py-[10px] px-3 font-semibold text-[#e2e8f0]">{run.name}</td>
                   <td className="py-[10px] px-3 text-[#8899aa]">{MONTHS[run.month - 1].label} {run.year}</td>
@@ -354,7 +386,7 @@ export default function PayrollCompliance() {
                     <div className="flex items-center gap-2">
                       <button 
                         className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-medium bg-[#00d4ff]/10 text-[#00d4ff] hover:bg-[#00d4ff]/20 border border-[#00d4ff]/30 transition-colors"
-                        onClick={() => { setSelectedRun(run); setViewOpen(true); }}
+                        onClick={() => { setSelectedRun(run); setItemSearch(''); setViewOpen(true); }}
                         title="View Details"
                       >
                         <Eye size={14} />
@@ -502,6 +534,11 @@ export default function PayrollCompliance() {
                 </div>
               </div>
 
+              <div className="flex items-center gap-2 mb-2">
+                <SearchInput value={itemSearch} onChange={setItemSearch} placeholder="Search employee by name, code, department..." />
+                <span className="text-[10px] text-[#5a6878]">{filteredItems.length} of {selectedRun.PayrollItem.length}</span>
+              </div>
+
               <div className="w-full max-h-[calc(100vh-280px)] overflow-y-auto">
                 <table className="w-full text-[11px] min-w-full">
                   <thead className="sticky top-0 bg-[#161c24] z-10">
@@ -517,7 +554,9 @@ export default function PayrollCompliance() {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedRun.PayrollItem.map(item => (
+                    {filteredItems.length === 0 ? (
+                      <tr><td colSpan={8} className="py-6 text-center text-[#5a6878] text-[11px]">No employees match your search.</td></tr>
+                    ) : filteredItems.map(item => (
                       <tr key={item.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors">
                         <td className="py-3 px-3">
                           <div className="text-[#8899aa] font-mono">{item.Employee.employeeCode}</div>

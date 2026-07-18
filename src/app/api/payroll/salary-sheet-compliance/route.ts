@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const excelBuffer = buildComplianceSheetBuffer(payrollItems, month, year);
+    const excelBuffer = await buildComplianceSheetBuffer(payrollItems, month, year);
 
     const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
     const filename = `Salary_Compliance_Sheet_${monthNames[month - 1]}_${year}.xlsx`;

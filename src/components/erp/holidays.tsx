@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Calendar, Plus, Edit2, Trash2, Building2, Globe } from 'lucide-react';
+import { SearchInput, matchesSearch } from './search-input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -86,6 +87,7 @@ function getMonthName(dateStr: string): string {
 
 export default function HolidaysModule() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [search, setSearch] = useState('');
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
@@ -127,16 +129,22 @@ export default function HolidaysModule() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Group holidays by month
+  // Live search over holidays (name, type, description, branch, date).
+  const filteredHolidays = useMemo(
+    () => holidays.filter(h => matchesSearch(search, [h.name, h.type, h.description, h.Branch?.name, h.date])),
+    [holidays, search]
+  );
+
+  // Group the (filtered) holidays by month
   const holidaysByMonth = useMemo(() => {
     const grouped: Record<string, Holiday[]> = {};
-    holidays.forEach(holiday => {
+    filteredHolidays.forEach(holiday => {
       const month = getMonthName(holiday.date);
       if (!grouped[month]) grouped[month] = [];
       grouped[month].push(holiday);
     });
     return grouped;
-  }, [holidays]);
+  }, [filteredHolidays]);
 
   const updateForm = (field: keyof HolidayFormData, value: string | boolean) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -341,8 +349,16 @@ export default function HolidaysModule() {
         </div>
       </div>
 
+      {/* Search */}
+      {holidays.length > 0 && (
+        <SearchInput value={search} onChange={setSearch} placeholder="Search holidays by name, type, branch..." />
+      )}
+
       {/* Holidays by Month */}
       <div className="space-y-6">
+        {holidays.length > 0 && filteredHolidays.length === 0 && (
+          <div className="text-center py-10 text-[#5a6878] text-[12px]">No holidays match &quot;{search}&quot;.</div>
+        )}
         {Object.entries(holidaysByMonth).map(([month, monthHolidays]) => (
           <div key={month}>
             <h3 className="text-[14px] font-semibold text-[#e2e8f0] mb-3">{month}</h3>
