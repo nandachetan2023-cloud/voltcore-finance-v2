@@ -378,12 +378,20 @@ export class BiometricService {
         console.log(`  - First punch: ${firstPunch.punchDate}`)
         console.log(`  - Calculated logDate: ${logDate.toISOString()} (${logDate.toLocaleDateString()})`)
 
-        // Check if attendance already exists
+        // Check if attendance already exists for this employee on this day.
+        // Match on a day WINDOW around logDate, not exact equality: a pre-existing
+        // row (e.g. an Absent placeholder, or a row seeded on a UTC server) can
+        // carry a logDate offset by the IST↔UTC gap (±5.5h). An exact-equality
+        // lookup would miss it and create a DUPLICATE (there is no unique
+        // constraint on employeeId+logDate). A ±6h window catches the offset row
+        // without bleeding into the adjacent calendar day.
+        const SIX_H = 6 * 60 * 60 * 1000
         const existingAttendance = await this.db.attendanceLog.findFirst({
           where: {
             employeeId: employee.id,
-            logDate: logDate,
+            logDate: { gte: new Date(logDate.getTime() - SIX_H), lte: new Date(logDate.getTime() + SIX_H) },
           },
+          orderBy: { logDate: 'asc' },
         })
 
         const punchIn = new Date(firstPunch.punchDate)
@@ -413,22 +421,19 @@ export class BiometricService {
         }
         
         const shiftAssignment = await getActiveShiftAssignment(employee.id, logDate, this.db)
-        
+
+        // NOTE: a missing shift assignment is NOT a reason to drop the punch.
+        // classifyAttendance() already handles "no shift" by marking the record
+        // present (it just can't compute late/half-day without shift timing).
+        // Previously we hard-skipped here, which is why matched employees without
+        // a shift assignment showed up as Absent with no time-in even though the
+        // biometric raw log had their punch. We now record the attendance and only
+        // lose the late/half-day refinement.
         if (!shiftAssignment) {
-          const reason = allShiftAssignments.length === 0 
-            ? `No shift assignments found for ${employee.employeeCode} (${employeeName})`
-            : `No ACTIVE shift assignment for ${employee.employeeCode} (${employeeName}) on ${dateStr}. ${allShiftAssignments.length} assignment(s) exist but none are active for this date. Check effectiveFrom/To dates.`
-          console.log(`[Biometric] ❌ Skipping: ${reason}`)
-          skippedRecords.push({ empCode: employee.employeeCode, name: employeeName, date: dateStr, reason })
-          // Mark logs as processed so they don't keep retrying
-          await this.db.biometricRawLog.updateMany({
-            where: { id: { in: logs.map(l => l.id) } },
-            data: { processed: true, matched: false, skipReason: reason, processedAt: new Date() },
-          })
-          continue
+          console.log(`[Biometric] ⚠️ No active shift for ${employee.employeeCode} (${employeeName}) on ${dateStr} — recording punch as present without shift-based late/half-day rules.`)
+        } else {
+          console.log(`[Biometric] ✅ Found active shift: ${shiftAssignment.Shift.name} (${shiftAssignment.Shift.startTime}-${shiftAssignment.Shift.endTime})`)
         }
-        
-        console.log(`[Biometric] ✅ Found active shift: ${shiftAssignment.Shift.name} (${shiftAssignment.Shift.startTime}-${shiftAssignment.Shift.endTime})`)
 
         // Apply attendance rules to classify the record
         const classification = await classifyAttendance(
