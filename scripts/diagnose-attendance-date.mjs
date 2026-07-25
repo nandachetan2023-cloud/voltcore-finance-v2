@@ -64,3 +64,31 @@ for (const url of urls) {
   }
 }
 console.log('\nDone.');
+
+// --- Raw biometric log dump (run with RAW=1) ---
+if (process.env.RAW === '1') {
+  const sa2 = new pg.Client({ connectionString: stripQuery(saUrl) });
+  await sa2.connect();
+  const { rows: turls } = await sa2.query('SELECT DISTINCT "dbUrl" FROM "Tenant"');
+  await sa2.end();
+  const us = new Set(turls.map(r => r.dbUrl).filter(Boolean));
+  if (process.env.DATABASE_URL) us.add(process.env.DATABASE_URL);
+  const last4 = EMP.replace(/\D/g, '').slice(-4);
+  for (const url of us) {
+    const c = new pg.Client({ connectionString: stripQuery(url) });
+    try {
+      await c.connect();
+      const raw = await c.query(`
+        SELECT id, "empCode", "enrolledId", name, "punchDate"::text AS punchdate,
+               ("rawJson"->>'PunchDate') AS raw_punchdate, processed, matched, "skipReason"
+        FROM "BiometricRawLog"
+        WHERE "enrolledId" LIKE $1 OR "empCode" LIKE $1
+        ORDER BY "punchDate" DESC LIMIT 10`, [`%${last4}`]);
+      if (raw.rowCount) {
+        console.log(`\n[RAW ${mask(url)}] logs for *${last4}:`);
+        raw.rows.forEach(r => console.log(`  #${r.id} enrolled=${r.enrolledId} rawPunchDate="${r.raw_punchdate}" stored(UTC)=${r.punchdate} proc=${r.processed} matched=${r.matched} skip=${r.skipReason||'-'}`));
+      }
+      await c.end();
+    } catch (e) { console.log('  raw err', e.message); try{await c.end()}catch{} }
+  }
+}
