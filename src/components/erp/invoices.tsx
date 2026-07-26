@@ -63,7 +63,7 @@ function parseAmount(a: string): number {
 function formatCurrency(val: number): string {
   if (val >= 10000000) return `₹${(val / 10000000).toFixed(1)}Cr`;
   if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`;
-  return `₹${val.toLocaleString('en-IN')}`;
+  return `₹${(val ?? 0).toLocaleString('en-IN')}`;
 }
 
 /* ── Loading Skeleton ─────────────────────────────── */
@@ -252,7 +252,7 @@ export default function Invoices() {
   if (loading) return <LoadingSkeleton />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={FileText} label="Total Invoices" value={invoices.length} color="#f5a623" />
@@ -325,7 +325,7 @@ export default function Invoices() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
               <Plus size={16} /> New Invoice
@@ -374,7 +374,7 @@ export default function Invoices() {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#00d4ff] flex items-center gap-2">
               <Pencil size={16} /> Edit Invoice — {editTarget?.invNo}

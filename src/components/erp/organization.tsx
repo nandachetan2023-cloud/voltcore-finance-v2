@@ -245,7 +245,7 @@ export default function OrganizationModule() {
   if (loading) return <LoadingSkeleton />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* ── Stats Row ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={Building2} label="Departments" value={stats.departments} color="#f5a623" sub={`${stats.totalEmployees} employees`} />

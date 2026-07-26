@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
-    const records = await pdb.budgetItem.findMany({ orderBy: { category: 'asc' } })
+    const records = await pdb.budgetItem.findMany({ orderBy: { category: 'asc' }, include: { site: true } })
     return NextResponse.json({ success: true, data: records })
   } catch (error) {
     console.error('Error fetching budget:', error)

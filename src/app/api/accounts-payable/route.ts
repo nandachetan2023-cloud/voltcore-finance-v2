@@ -6,15 +6,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
-    const records = await pdb.accountsPayable.findMany({ orderBy: { dueDate: 'asc' } })
-    const { searchParams } = new URL(request.url)
-    if (searchParams.get('format') === 'csv') {
-      const header = 'Vendor,BillNo,Amount,DueDate,Status,Description'
-      const rows = records.map(r => `"${r.vendor}","${r.billNo}",${r.totalAmount},${r.dueDate.toISOString().split('T')[0]},${r.status},"${r.description || ''}"`)
-      return new Response([header, ...rows].join('\n'), {
-        headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename=accounts-payable.csv' },
-      })
-    }
+    const records = await pdb.accountsPayable.findMany({ orderBy: { dueDate: 'asc' }, include: { site: true } })
     return NextResponse.json({ success: true, data: records })
   } catch (error) {
     console.error('Error fetching AP:', error)

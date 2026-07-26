@@ -436,7 +436,7 @@ export default function PayrollGenerateModule() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <div className="vc-panel">
         <div className="vc-panel-header">
           <FileSpreadsheet size={16} className="text-[#00e676]" />
@@ -758,7 +758,7 @@ export default function PayrollGenerateModule() {
 
       {/* Non-Compliance Upload & Calculate Dialog */}
       <Dialog open={uploadCalculateOpen} onOpenChange={setUploadCalculateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">Upload & Calculate - Step 2</DialogTitle>
           </DialogHeader>
@@ -839,7 +839,7 @@ export default function PayrollGenerateModule() {
 
       {/* Compliance Upload & Calculate Dialog */}
       <Dialog open={complianceUploadOpen} onOpenChange={setComplianceUploadOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">Compliance Upload & Calculate - Step 2</DialogTitle>
           </DialogHeader>

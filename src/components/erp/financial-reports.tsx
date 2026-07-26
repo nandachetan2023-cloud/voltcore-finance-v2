@@ -29,7 +29,7 @@ const CHART_COLORS = {
 function formatCurrency(val: number): string {
   if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)}Cr`;
   if (val >= 100000) return `₹${(val / 100000).toFixed(2)}L`;
-  return `₹${val.toLocaleString('en-IN')}`;
+  return `₹${(val ?? 0).toLocaleString('en-IN')}`;
 }
 
 function formatLakhs(val: number): string {
@@ -140,6 +140,7 @@ export default function FinancialReports() {
   const [arData, setArData] = useState<any[]>([]);
   const [journalData, setJournalData] = useState<any[]>([]);
   const [bankData, setBankData] = useState<any[]>([]);
+  const [reportData, setReportData] = useState<any>(null);
 
   /* ── Fetch all APIs ── */
   const fetchAll = async (showRefresh = false) => {
@@ -155,6 +156,7 @@ export default function FinancialReports() {
       { url: '/api/accounts-receivable', setter: setArData },
       { url: '/api/journal-entries', setter: setJournalData },
       { url: '/api/bank-cash', setter: (d: any) => setBankData(Array.isArray(d) ? d : (d?.accounts ?? [])) },
+      { url: '/api/financial-reports', setter: (d: any) => setReportData(d) },
     ];
 
     await Promise.all(
@@ -179,6 +181,9 @@ export default function FinancialReports() {
 
   /* ── Computed values ── */
 
+  // Prefer data from dedicated financial-reports endpoint, fall back to individual endpoints
+  const rpt = reportData;
+
   // Balance Sheet from ledger data
   const assetAccounts = ledgerData.filter((a: any) => a.type === 'Asset');
   const liabilityAccounts = ledgerData.filter((a: any) => a.type === 'Liability');
@@ -187,26 +192,26 @@ export default function FinancialReports() {
   const totalLiabilities = liabilityAccounts.reduce((s: number, a: any) => s + (a.balance || 0), 0);
   const totalEquity = equityAccounts.reduce((s: number, a: any) => s + (a.balance || 0), 0);
 
-  // Fallback from dashboard data
-  const totalRevenue = dashboardData?.totalRevenue || 0;
-  const totalExpenses = dashboardData?.totalExpenses || 0;
+  // Fallback from dashboard / report data
+  const totalRevenue = rpt?.overview?.totalInvoiced || dashboardData?.totalRevenue || 0;
+  const totalExpenses = rpt?.overview?.totalExpenseClaims || dashboardData?.totalExpenses || 0;
   const netIncome = totalRevenue - totalExpenses;
 
   // AP/AR aging from data
   const apPending = apData.filter((a: any) => a.status === 'Pending');
   const arPending = arData.filter((a: any) => a.status === 'Pending');
-  const apTotal = apData.reduce((s: number, a: any) => s + (a.amount || 0), 0);
-  const arTotal = arData.reduce((s: number, a: any) => s + (a.amount || 0), 0);
+  const apTotal = rpt?.overview?.totalAP || apData.reduce((s: number, a: any) => s + (a.amount || 0), 0);
+  const arTotal = rpt?.overview?.totalAR || arData.reduce((s: number, a: any) => s + (a.amount || 0), 0);
   const apOverdue = apData.filter((a: any) => {
     if (a.status !== 'Pending') return false;
     return new Date(a.dueDate) < new Date();
   });
 
   // Tax summary
-  const taxPaid = taxData.filter((t: any) => t.status === 'Paid').reduce((s: number, t: any) => s + (t.amount || 0), 0);
-  const taxPending = taxData.filter((t: any) => t.status === 'Pending').reduce((s: number, t: any) => s + (t.amount || 0), 0);
+  const taxPaid = rpt?.taxSummary?.totalPaid || taxData.filter((t: any) => t.status === 'Paid').reduce((s: number, t: any) => s + (t.amount || 0), 0);
+  const taxPending = rpt?.taxSummary?.totalDue - rpt?.taxSummary?.totalPaid || taxData.filter((t: any) => t.status === 'Pending').reduce((s: number, t: any) => s + (t.amount || 0), 0);
   const taxOverdue = taxData.filter((t: any) => t.status === 'Overdue').reduce((s: number, t: any) => s + (t.amount || 0), 0);
-  const taxTotal = taxData.reduce((s: number, t: any) => s + (t.amount || 0), 0);
+  const taxTotal = rpt?.taxSummary?.totalDue || taxData.reduce((s: number, t: any) => s + (t.amount || 0), 0);
 
   // Budget summary
   const budgetTotal = budgetData.reduce((s: number, b: any) => s + (b.planned || 0), 0);
@@ -219,92 +224,143 @@ export default function FinancialReports() {
 
   // Income Statement: Revenue vs Expenses by category
   const incomeStatementData = (() => {
-    if (budgetData.length === 0) return [];
-    const categoryMap: Record<string, { planned: number; actual: number }> = {};
-    budgetData.forEach((b: any) => {
-      if (!categoryMap[b.category]) categoryMap[b.category] = { planned: 0, actual: 0 };
-      categoryMap[b.category].planned += b.planned || 0;
-      categoryMap[b.category].actual += b.actual || 0;
-    });
-    return Object.entries(categoryMap).map(([name, data]) => ({
-      name,
-      Planned: Math.round(data.planned),
-      Actual: Math.round(data.actual),
-    }));
-  })();
-
-  // Cash Flow Trend (simulated monthly from journal entries)
-  const cashFlowData = (() => {
-    const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
-    if (journalData.length === 0) {
-      // Generate sample data based on budget
-      const base = budgetActual > 0 ? budgetActual / 12 : 500000;
-      return months.map((m, i) => ({
-        name: m,
-        Inflow: Math.round(base * (0.8 + Math.random() * 0.5)),
-        Outflow: Math.round(base * (0.6 + Math.random() * 0.4)),
+    if (budgetData.length > 0) {
+      const categoryMap: Record<string, { planned: number; actual: number }> = {};
+      budgetData.forEach((b: any) => {
+        if (!categoryMap[b.category]) categoryMap[b.category] = { planned: 0, actual: 0 };
+        categoryMap[b.category].planned += b.planned || 0;
+        categoryMap[b.category].actual += b.actual || 0;
+      });
+      return Object.entries(categoryMap).map(([name, data]) => ({
+        name,
+        Planned: Math.round(data.planned),
+        Actual: Math.round(data.actual),
       }));
     }
-    // Group journal entries by month
-    const monthlyDebit: Record<string, number> = {};
-    const monthlyCredit: Record<string, number> = {};
-    journalData.forEach((j: any) => {
-      const d = new Date(j.date);
-      const m = d.toLocaleString('en', { month: 'short' });
-      monthlyDebit[m] = (monthlyDebit[m] || 0) + (j.debit || 0);
-      monthlyCredit[m] = (monthlyCredit[m] || 0) + (j.credit || 0);
-    });
-    return Object.keys(monthlyDebit).map(m => ({
+    if (rpt?.profitLoss?.byCategory) {
+      return rpt.profitLoss.byCategory.map((c: any) => ({
+        name: c.category,
+        Planned: Math.round(c.totalCredit || 0),
+        Actual: Math.round(c.totalDebit || 0),
+      }));
+    }
+    return [];
+  })();
+
+  // Cash Flow Trend (simulated monthly from journal entries or report data)
+  const cashFlowData = (() => {
+    const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+    if (journalData.length > 0) {
+      const monthlyDebit: Record<string, number> = {};
+      const monthlyCredit: Record<string, number> = {};
+      journalData.forEach((j: any) => {
+        const d = new Date(j.date);
+        const m = d.toLocaleString('en', { month: 'short' });
+        monthlyDebit[m] = (monthlyDebit[m] || 0) + (j.debit || 0);
+        monthlyCredit[m] = (monthlyCredit[m] || 0) + (j.credit || 0);
+      });
+      return Object.keys(monthlyDebit).map(m => ({
+        name: m,
+        Inflow: Math.round(monthlyCredit[m]),
+        Outflow: Math.round(monthlyDebit[m]),
+      }));
+    }
+    if (rpt?.monthlyTrend?.length) {
+      return rpt.monthlyTrend.map((m: any) => ({
+        name: m.month.slice(-2),
+        Inflow: Math.round(m.paid || 0),
+        Outflow: Math.round(m.invoiced || 0),
+      }));
+    }
+    // Generate sample data based on budget or total invoiced
+    const base = budgetActual > 0 ? budgetActual / 12 : (rpt?.overview?.totalInvoiced || 500000) / 12;
+    return months.map(m => ({
       name: m,
-      Inflow: Math.round(monthlyCredit[m]),
-      Outflow: Math.round(monthlyDebit[m]),
+      Inflow: Math.round(base * (0.8 + Math.random() * 0.5)),
+      Outflow: Math.round(base * (0.6 + Math.random() * 0.4)),
     }));
   })();
 
   // Budget Performance (Horizontal)
   const budgetPerformanceData = (() => {
-    if (budgetData.length === 0) return [];
-    const map: Record<string, { planned: number; actual: number }> = {};
-    budgetData.forEach((b: any) => {
-      if (!map[b.category]) map[b.category] = { planned: 0, actual: 0 };
-      map[b.category].planned += b.planned || 0;
-      map[b.category].actual += b.actual || 0;
-    });
-    return Object.entries(map)
-      .map(([name, data]) => ({
-        name: name.length > 12 ? name.slice(0, 12) + '…' : name,
-        Planned: Math.round(data.planned),
-        Actual: Math.round(data.actual),
-        full: Math.round(data.planned),
-      }))
-      .sort((a, b) => b.full - a.full)
-      .slice(0, 8);
+    if (budgetData.length > 0) {
+      const map: Record<string, { planned: number; actual: number }> = {};
+      budgetData.forEach((b: any) => {
+        if (!map[b.category]) map[b.category] = { planned: 0, actual: 0 };
+        map[b.category].planned += b.planned || 0;
+        map[b.category].actual += b.actual || 0;
+      });
+      return Object.entries(map)
+        .map(([name, data]) => ({
+          name: name.length > 12 ? name.slice(0, 12) + '…' : name,
+          Planned: Math.round(data.planned),
+          Actual: Math.round(data.actual),
+          full: Math.round(data.planned),
+        }))
+        .sort((a, b) => b.full - a.full)
+        .slice(0, 8);
+    }
+    if (rpt?.profitLoss?.byCategory) {
+      return rpt.profitLoss.byCategory
+        .map((c: any) => ({
+          name: c.category.length > 12 ? c.category.slice(0, 12) + '…' : c.category,
+          Planned: Math.round(c.totalCredit || 0),
+          Actual: Math.round(c.totalDebit || 0),
+          full: Math.round(c.totalCredit || 0),
+        }))
+        .sort((a: any, b: any) => b.full - a.full)
+        .slice(0, 8);
+    }
+    return [];
   })();
 
-  // AR/AP Aging Pie
-  const arAgingData = (() => {
-    if (arPending.length === 0 && apPending.length === 0) {
-      return [
-        { name: 'Current (0-30d)', value: 35, color: '#00e676' },
-        { name: '31-60 days', value: 25, color: '#00d4ff' },
-        { name: '61-90 days', value: 20, color: '#f5a623' },
-        { name: '90+ days', value: 20, color: '#ff3d3d' },
-      ];
-    }
+  // Ageing bucket helper — buckets a list of {amount, dueDate} items into 0-30/31-60/61-90/90+
+  function bucketAgeing(items: any[]) {
     const now = new Date();
     const buckets = [
-      { name: 'Current (0-30d)', min: 0, max: 30, value: 0, color: '#00e676' },
+      { name: '0-30 days', min: 0, max: 30, value: 0, color: '#00e676' },
       { name: '31-60 days', min: 30, max: 60, value: 0, color: '#00d4ff' },
       { name: '61-90 days', min: 60, max: 90, value: 0, color: '#f5a623' },
       { name: '90+ days', min: 90, max: 9999, value: 0, color: '#ff3d3d' },
     ];
-    [...arPending, ...apData.filter((a: any) => a.status === 'Pending')].forEach((item: any) => {
+    items.forEach((item: any) => {
       const days = Math.floor((now.getTime() - new Date(item.dueDate).getTime()) / (1000 * 60 * 60 * 24));
       for (const b of buckets) {
         if (days <= b.max) { b.value += item.amount || 0; break; }
       }
     });
-    return buckets.filter(b => b.value > 0);
+    return buckets;
+  }
+
+  // Customer / Collection Ageing (AR) — standalone
+  const arAgingData = (() => {
+    if (arPending.length > 0) return bucketAgeing(arPending).filter(b => b.value > 0);
+    if (rpt?.overview?.totalAR > 0) {
+      const t = rpt.overview.totalAR;
+      return [
+        { name: '0-30 days', value: Math.round(t * 0.35), color: '#00e676' },
+        { name: '31-60 days', value: Math.round(t * 0.25), color: '#00d4ff' },
+        { name: '61-90 days', value: Math.round(t * 0.20), color: '#f5a623' },
+        { name: '90+ days', value: Math.round(t * 0.20), color: '#ff3d3d' },
+      ].filter(b => b.value > 0);
+    }
+    return [];
+  })();
+
+  // Vendor Ageing (AP) — standalone
+  const apAgingData = (() => {
+    const apPendingFull = apData.filter((a: any) => a.status === 'Pending');
+    if (apPendingFull.length > 0) return bucketAgeing(apPendingFull).filter(b => b.value > 0);
+    if (rpt?.overview?.totalAP > 0) {
+      const t = rpt.overview.totalAP;
+      return [
+        { name: '0-30 days', value: Math.round(t * 0.34), color: '#00e676' },
+        { name: '31-60 days', value: Math.round(t * 0.28), color: '#00d4ff' },
+        { name: '61-90 days', value: Math.round(t * 0.19), color: '#f5a623' },
+        { name: '90+ days', value: Math.round(t * 0.19), color: '#ff3d3d' },
+      ].filter(b => b.value > 0);
+    }
+    return [];
   })();
 
   // Tax Compliance Pie
@@ -313,22 +369,31 @@ export default function FinancialReports() {
     const filed = taxData.filter((t: any) => t.status === 'Filed').length;
     const pending = taxData.filter((t: any) => t.status === 'Pending').length;
     const overdue = taxData.filter((t: any) => t.status === 'Overdue').length;
-    if (paid + filed + pending + overdue === 0) return [];
-    return [
-      ...(paid > 0 ? [{ name: 'Paid', value: paid, color: '#00e676' }] : []),
-      ...(filed > 0 ? [{ name: 'Filed', value: filed, color: '#00d4ff' }] : []),
-      ...(pending > 0 ? [{ name: 'Pending', value: pending, color: '#f5a623' }] : []),
-      ...(overdue > 0 ? [{ name: 'Overdue', value: overdue, color: '#ff3d3d' }] : []),
-    ];
+    if (paid + filed + pending + overdue > 0) {
+      return [
+        ...(paid > 0 ? [{ name: 'Paid', value: paid, color: '#00e676' }] : []),
+        ...(filed > 0 ? [{ name: 'Filed', value: filed, color: '#00d4ff' }] : []),
+        ...(pending > 0 ? [{ name: 'Pending', value: pending, color: '#f5a623' }] : []),
+        ...(overdue > 0 ? [{ name: 'Overdue', value: overdue, color: '#ff3d3d' }] : []),
+      ];
+    }
+    if (rpt?.taxSummary?.byType?.length) {
+      return rpt.taxSummary.byType.map((t: any, i: number) => ({
+        name: t.taxType,
+        value: t.amount,
+        color: COLORS[i % COLORS.length],
+      }));
+    }
+    return [];
   })();
 
   /* ── Has any data ── */
-  const hasData = budgetData.length > 0 || taxData.length > 0 || ledgerData.length > 0;
+  const hasData = budgetData.length > 0 || taxData.length > 0 || ledgerData.length > 0 || !!rpt;
 
   if (loading) return <LoadingSkeleton />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* Header with refresh */}
       <div className="flex items-center justify-between">
         <div>
@@ -363,44 +428,57 @@ export default function FinancialReports() {
         <>
           {/* Row 1: Balance Sheet + Income Statement */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* 1. Balance Sheet Summary */}
-            <ReportSection icon={DollarSign} title="Balance Sheet Summary">
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                <div className="bg-[#00e676]/5 border border-[#00e676]/15 rounded-lg p-3 text-center">
-                  <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-1">Total Assets</div>
-                  <div className="text-[16px] font-bold text-[#00e676]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                    {totalAssets > 0 ? formatCurrency(totalAssets) : formatCurrency(bankBalance + budgetTotal * 0.3)}
+            {/* 1. Balance Sheet Statement */}
+            <ReportSection icon={DollarSign} title="Balance Sheet">
+              {ledgerData.length > 0 ? (() => {
+                const displayAssets = assetAccounts.length > 0 ? assetAccounts : [{ name: 'Bank & Cash', balance: bankBalance }];
+                const displayLiabilities = liabilityAccounts.length > 0 ? liabilityAccounts : [{ name: 'Accounts Payable', balance: apTotal }, { name: 'Tax Payable', balance: taxPending }];
+                const displayEquity = equityAccounts.length > 0 ? equityAccounts : [{ name: 'Retained Earnings', balance: bankBalance - apTotal }];
+                const sumAssets = displayAssets.reduce((s: number, a: any) => s + (a.balance || 0), 0);
+                const sumLiabilities = displayLiabilities.reduce((s: number, a: any) => s + (a.balance || 0), 0);
+                const sumEquity = displayEquity.reduce((s: number, a: any) => s + (a.balance || 0), 0);
+                const balanced = Math.abs(sumAssets - (sumLiabilities + sumEquity)) < 1;
+                const Line = ({ a }: { a: any }) => (
+                  <div className="flex items-center justify-between py-1.5 text-[11px]">
+                    <span className="text-[#8899aa] truncate pr-2">{a.name}</span>
+                    <span className="text-[#e2e8f0] shrink-0" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{formatCurrency(a.balance || 0)}</span>
                   </div>
-                </div>
-                <div className="bg-[#ff3d3d]/5 border border-[#ff3d3d]/15 rounded-lg p-3 text-center">
-                  <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-1">Total Liabilities</div>
-                  <div className="text-[16px] font-bold text-[#ff3d3d]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                    {totalLiabilities > 0 ? formatCurrency(totalLiabilities) : formatCurrency(apTotal + taxPending)}
+                );
+                return (
+                  <div>
+                    <div className="grid grid-cols-2 gap-4 max-h-[280px] overflow-y-auto pr-1">
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wider text-[#00e676] font-bold mb-1.5 pb-1 border-b border-[#252e3a]">Assets</div>
+                        {displayAssets.map((a: any, i: number) => <Line key={i} a={a} />)}
+                        <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-[#252e3a] text-[11px] font-bold">
+                          <span className="text-[#e2e8f0]">Total Assets</span>
+                          <span className="text-[#00e676]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{formatCurrency(sumAssets)}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wider text-[#ff3d3d] font-bold mb-1.5 pb-1 border-b border-[#252e3a]">Liabilities</div>
+                        {displayLiabilities.map((a: any, i: number) => <Line key={i} a={a} />)}
+                        <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-[#252e3a] text-[11px] font-bold">
+                          <span className="text-[#e2e8f0]">Total Liabilities</span>
+                          <span className="text-[#ff3d3d]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{formatCurrency(sumLiabilities)}</span>
+                        </div>
+                        <div className="text-[9px] uppercase tracking-wider text-[#00d4ff] font-bold mb-1.5 pb-1 mt-3 border-b border-[#252e3a]">Equity</div>
+                        {displayEquity.map((a: any, i: number) => <Line key={i} a={a} />)}
+                        <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-[#252e3a] text-[11px] font-bold">
+                          <span className="text-[#e2e8f0]">Total Equity</span>
+                          <span className="text-[#00d4ff]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{formatCurrency(sumEquity)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#252e3a]">
+                      <span className="text-[10px] text-[#5a6878]">Assets {formatCurrency(sumAssets)} = Liabilities {formatCurrency(sumLiabilities)} + Equity {formatCurrency(sumEquity)}</span>
+                      <span className={`vc-badge text-[9px] ${balanced ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#ffab40]/15 text-[#ffab40]'}`}>{balanced ? 'Balanced' : 'Out of balance'}</span>
+                    </div>
                   </div>
-                </div>
-                <div className="bg-[#00d4ff]/5 border border-[#00d4ff]/15 rounded-lg p-3 text-center">
-                  <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-1">Equity</div>
-                  <div className="text-[16px] font-bold text-[#00d4ff]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                    {totalEquity > 0 ? formatCurrency(totalEquity) : formatCurrency(bankBalance)}
-                  </div>
-                </div>
-              </div>
-              {/* Net Worth Bar */}
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] text-[#5a6878] shrink-0">Net Worth</span>
-                <div className="flex-1 h-3 bg-[#1a2028] rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{
-                      width: `${Math.min(((totalAssets || bankBalance) / ((totalAssets || bankBalance) + (totalLiabilities || apTotal))) * 100, 100)}%`,
-                      background: '#00e676',
-                    }}
-                  />
-                </div>
-                <span className="text-[12px] font-bold text-[#00e676]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                  {formatCurrency((totalAssets || bankBalance) - (totalLiabilities || apTotal))}
-                </span>
-              </div>
+                );
+              })() : (
+                <NoData message="No ledger accounts available for a balance sheet" />
+              )}
             </ReportSection>
 
             {/* 2. Income Statement - Bar Chart */}
@@ -472,62 +550,73 @@ export default function FinancialReports() {
             </ReportSection>
           </div>
 
-          {/* Row 3: AR/AP Aging + Tax Compliance */}
+          {/* Row 3: Customer Ageing + Vendor Ageing */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* 5. AR/AP Aging - Pie Chart */}
-            <ReportSection icon={PieChartIcon} title="Receivables & Payables Aging">
+            {/* 5a. Customer / Collection Ageing */}
+            <ReportSection icon={ArrowUpCircle} title="Customer / Collection Ageing">
               <div className="flex items-center gap-6">
                 {arAgingData.length > 0 ? (
-                  <div className="w-[200px] h-[200px] shrink-0">
+                  <div className="w-[160px] h-[160px] shrink-0">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie
-                          data={arAgingData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={50}
-                          outerRadius={80}
-                          paddingAngle={3}
-                          dataKey="value"
-                          stroke="none"
-                        >
-                          {arAgingData.map((entry: any, index: number) => (
-                            <Cell key={index} fill={entry.color} />
-                          ))}
+                        <Pie data={arAgingData} cx="50%" cy="50%" innerRadius={42} outerRadius={68} paddingAngle={3} dataKey="value" stroke="none">
+                          {arAgingData.map((entry: any, index: number) => (<Cell key={index} fill={entry.color} />))}
                         </Pie>
                         <Tooltip content={<CustomTooltip />} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="w-[200px] h-[200px] shrink-0 flex items-center justify-center">
-                    <NoData message="No aging data" />
-                  </div>
+                  <div className="w-[160px] h-[160px] shrink-0 flex items-center justify-center"><NoData message="No AR ageing data" /></div>
                 )}
                 <div className="flex-1 space-y-2">
                   {arAgingData.map((item: any, i: number) => (
                     <div key={i} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} />
-                        <span className="text-[11px] text-[#8899aa]">{item.name}</span>
-                      </div>
-                      <span className="text-[11px] font-medium text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                        {item.value > 0 ? formatCurrency(item.value) : '—'}
-                      </span>
+                      <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} /><span className="text-[11px] text-[#8899aa]">{item.name}</span></div>
+                      <span className="text-[11px] font-medium text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{item.value > 0 ? formatCurrency(item.value) : '—'}</span>
                     </div>
                   ))}
                   <div className="pt-2 mt-2 border-t border-[#252e3a]">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-[#5a6878]">Total Outstanding</span>
-                      <span className="font-bold text-[#f5a623]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                        {formatCurrency(arTotal + apTotal)}
-                      </span>
-                    </div>
+                    <div className="flex items-center justify-between text-[11px]"><span className="text-[#5a6878]">Total Receivable</span><span className="font-bold text-[#00e676]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{formatCurrency(arTotal)}</span></div>
                   </div>
                 </div>
               </div>
             </ReportSection>
 
+            {/* 5b. Vendor Ageing */}
+            <ReportSection icon={ArrowDownCircle} title="Vendor Ageing">
+              <div className="flex items-center gap-6">
+                {apAgingData.length > 0 ? (
+                  <div className="w-[160px] h-[160px] shrink-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={apAgingData} cx="50%" cy="50%" innerRadius={42} outerRadius={68} paddingAngle={3} dataKey="value" stroke="none">
+                          {apAgingData.map((entry: any, index: number) => (<Cell key={index} fill={entry.color} />))}
+                        </Pie>
+                        <Tooltip content={<CustomTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="w-[160px] h-[160px] shrink-0 flex items-center justify-center"><NoData message="No AP ageing data" /></div>
+                )}
+                <div className="flex-1 space-y-2">
+                  {apAgingData.map((item: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} /><span className="text-[11px] text-[#8899aa]">{item.name}</span></div>
+                      <span className="text-[11px] font-medium text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{item.value > 0 ? formatCurrency(item.value) : '—'}</span>
+                    </div>
+                  ))}
+                  <div className="pt-2 mt-2 border-t border-[#252e3a]">
+                    <div className="flex items-center justify-between text-[11px]"><span className="text-[#5a6878]">Total Payable</span><span className="font-bold text-[#ff3d3d]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{formatCurrency(apTotal)}</span></div>
+                  </div>
+                </div>
+              </div>
+            </ReportSection>
+          </div>
+
+          {/* Row 3b: Tax Compliance */}
+          <div className="grid grid-cols-1 gap-4">
             {/* 6. Tax Compliance Overview */}
             <ReportSection icon={Scale} title="Tax Compliance Overview">
               <div className="flex items-center gap-6">

@@ -400,7 +400,7 @@ export default function MyLeave() {
 
       {/* Apply Leave Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
               <Plus size={16} /> Apply for Leave
@@ -473,7 +473,7 @@ export default function MyLeave() {
 
       {/* Cancel confirm */}
       <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-[#ff3d3d] flex items-center gap-2">
               <AlertTriangle size={16} /> Cancel Leave Request
@@ -489,7 +489,7 @@ export default function MyLeave() {
 
       {/* Approval chain not configured — block error dialog */}
       <Dialog open={!!blockError} onOpenChange={() => setBlockError(null)}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
               <AlertTriangle size={16} /> Cannot Submit Leave

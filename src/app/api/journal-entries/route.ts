@@ -6,15 +6,16 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
-    const records = await pdb.journalEntry.findMany({ orderBy: { date: 'desc' } })
     const { searchParams } = new URL(request.url)
-    if (searchParams.get('format') === 'csv') {
-      const header = 'EntryNo,Date,Account,Debit,Credit,Description,Reference,Status,VoucherType'
-      const rows = records.map(r => `${r.entryNo},${r.date.toISOString().split('T')[0]},"${r.account}",${r.debit},${r.credit},"${r.description || ''}","${r.reference || ''}",${r.status},${r.voucherType || ''}`)
-      return new Response([header, ...rows].join('\n'), {
-        headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename=journal-entries.csv' },
-      })
+    const entryNo = searchParams.get('entryNo')
+
+    let records
+    if (entryNo) {
+      records = await pdb.journalEntry.findMany({ where: { entryNo }, orderBy: { id: 'asc' } })
+    } else {
+      records = await pdb.journalEntry.findMany({ orderBy: { date: 'desc' } })
     }
+
     return NextResponse.json({ success: true, data: records })
   } catch (error) {
     console.error('Error fetching journal entries:', error)
@@ -26,6 +27,38 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const pdb = getDbForRequest(request)
+
+    // Support batch: { entryNo, date, siteId, voucherType, status, lines: [...] }
+    if (body.lines && Array.isArray(body.lines)) {
+      const { lines, ...base } = body
+      const records = await pdb.$transaction(
+        lines.map((line: any) =>
+          pdb.journalEntry.create({
+            data: {
+              entryNo: base.entryNo,
+              date: base.date,
+              siteId: base.siteId || null,
+              partyId: base.partyId || null,
+              jobCode: base.jobCode || null,
+              costCenter: base.costCenter || null,
+              department: base.department || null,
+              projectManager: base.projectManager || null,
+              voucherType: base.voucherType,
+              status: base.status,
+              account: line.account,
+              accountName: line.accountName || null,
+              debit: line.debit || 0,
+              credit: line.credit || 0,
+              description: line.description || base.description || null,
+              reference: line.reference || base.reference || null,
+            },
+          })
+        )
+      )
+      return NextResponse.json({ success: true, data: records }, { status: 201 })
+    }
+
+    // Single-line (backward compatible)
     const record = await pdb.journalEntry.create({ data: body })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {

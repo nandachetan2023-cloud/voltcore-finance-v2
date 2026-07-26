@@ -1,18 +1,55 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Target, Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Target, Loader2, Plus, Pencil, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
+import { ExportButton, type ExportColumn } from './_import-export';
+import ImportWizard, { type ImportField } from './_import-wizard';
 
-interface BudgetItem { id: number; category: string; description: string; planned: number; actual: number; variance: number; period: string; month: string | null; status: string; }
-interface FormData { category: string; description: string; planned: number; actual: number; period: string; status: string; }
+interface SiteRef { id: number; name: string; siteCode: string; }
+interface BudgetItem { id: number; category: string; description: string; planned: number; actual: number; variance: number; period: string; month: string | null; siteId: number | null; status: string; site?: SiteRef | null; }
+interface FormData { category: string; description: string; planned: number; actual: number; period: string; siteId: string; status: string; }
 
-const EMPTY_FORM: FormData = { category: '', description: '', planned: 0, actual: 0, period: 'FY 2024-25', status: 'On Track' };
+const BUDGET_COLUMNS: ExportColumn<BudgetItem>[] = [
+  { header: 'Category', accessor: 'category' },
+  { header: 'Description', accessor: 'description' },
+  { header: 'Planned', accessor: 'planned' },
+  { header: 'Actual', accessor: 'actual' },
+  { header: 'Variance', accessor: 'variance' },
+  { header: 'Utilization %', accessor: (r) => r.planned > 0 ? ((r.actual / r.planned) * 100).toFixed(1) : '0' },
+  { header: 'Period', accessor: 'period' },
+  { header: 'Month', accessor: 'month' },
+  { header: 'Status', accessor: 'status' },
+];
+
+const EMPTY_FORM: FormData = { category: '', description: '', planned: 0, actual: 0, period: 'FY 2024-25', siteId: '', status: 'On Track' };
+
+const BUDGET_IMPORT_FIELDS: ImportField[] = [
+  { key: 'category', label: 'Category', required: true },
+  { key: 'description', label: 'Description', required: true },
+  { key: 'planned', label: 'Planned', type: 'number' },
+  { key: 'actual', label: 'Actual', type: 'number' },
+  { key: 'period', label: 'Period' },
+  { key: 'month', label: 'Month' },
+  { key: 'status', label: 'Status' },
+];
+const BUDGET_SAMPLE_ROW = { category: 'Manpower', description: 'Skilled labour charges', planned: 4500000, actual: 3800000, period: 'FY 2024-25', month: 'April', status: 'On Track' };
+
+function generateMockBudget(): BudgetItem[] {
+  return [
+    { id: 1, category: 'Manpower', description: 'Skilled & unskilled labour charges', planned: 4500000, actual: 3800000, variance: 700000, period: 'FY 2024-25', month: null, siteId: null, status: 'On Track' },
+    { id: 2, category: 'Material', description: 'Electrical panels, cables, transformers', planned: 8200000, actual: 9100000, variance: -900000, period: 'FY 2024-25', month: null, siteId: null, status: 'Over Budget' },
+    { id: 3, category: 'Equipment', description: 'DG sets, cranes, compressors', planned: 3500000, actual: 2800000, variance: 700000, period: 'FY 2024-25', month: null, siteId: null, status: 'Under Budget' },
+    { id: 4, category: 'Travel', description: 'Staff travel & site visits', planned: 1200000, actual: 950000, variance: 250000, period: 'FY 2024-25', month: null, siteId: null, status: 'On Track' },
+    { id: 5, category: 'Subcontract', description: 'Specialized testing & commissioning', planned: 6000000, actual: 5200000, variance: 800000, period: 'FY 2024-25', month: null, siteId: null, status: 'On Track' },
+    { id: 6, category: 'Overhead', description: 'Office rent, utilities, admin', planned: 1800000, actual: 1950000, variance: -150000, period: 'FY 2024-25', month: null, siteId: null, status: 'Over Budget' },
+  ];
+}
 
 export default function Budget() {
   const [records, setRecords] = useState<BudgetItem[]>([]);
@@ -23,10 +60,19 @@ export default function Budget() {
   const [deleteTarget, setDeleteTarget] = useState<BudgetItem | null>(null);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [sites, setSites] = useState<SiteRef[]>([]);
+
+  useEffect(() => { fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success) setSites(j.data); }).catch(() => {}); }, []);
 
   const fetchData = useCallback(async () => {
-    try { setLoading(true); const res = await fetch('/api/budget'); const json = await res.json(); if (json.success) setRecords(json.data); }
-    catch { toast.error('Failed to fetch budget data'); }
+    try {
+      setLoading(true);
+      const res = await fetch('/api/budget');
+      const json = await res.json();
+      if (json.success && json.data?.length) { setRecords(json.data); }
+      else { setRecords(generateMockBudget()); toast.info('Sample data — no server records found'); }
+    } catch { setRecords(generateMockBudget()); toast.info('Sample data — API unavailable'); }
     finally { setLoading(false); }
   }, []);
 
@@ -34,7 +80,7 @@ export default function Budget() {
 
   const openEdit = (r: BudgetItem) => {
     setEditTarget(r);
-    setForm({ category: r.category, description: r.description, planned: r.planned, actual: r.actual, period: r.period, status: r.status });
+    setForm({ category: r.category, description: r.description, planned: r.planned, actual: r.actual, period: r.period, siteId: r.siteId ? String(r.siteId) : '', status: r.status });
     setFormOpen(true);
   };
 
@@ -43,8 +89,10 @@ export default function Budget() {
     setSubmitting(true);
     try {
       const variance = form.planned - form.actual;
+      const { siteId, ...rest } = form;
+      const payload = { ...rest, siteId: siteId ? Number(siteId) : null, variance };
       const method = editTarget ? 'PUT' : 'POST';
-      const body = editTarget ? { id: editTarget.id, ...form, variance } : { ...form, variance };
+      const body = editTarget ? { id: editTarget.id, ...payload } : payload;
       const res = await fetch('/api/budget', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
       if (json.success) { toast.success(editTarget ? 'Budget updated' : 'Budget item created'); setFormOpen(false); await fetchData(); }
@@ -69,8 +117,23 @@ export default function Budget() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
 
+  if (importOpen) {
+    return (
+      <ImportWizard
+        title="Budget Items"
+        fields={BUDGET_IMPORT_FIELDS}
+        keyField="category"
+        existingKeys={new Set(records.map(r => r.category))}
+        commitEndpoint="/api/budget/import"
+        sampleRow={BUDGET_SAMPLE_ROW}
+        onClose={() => setImportOpen(false)}
+        onImported={fetchData}
+      />
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <div className="grid grid-cols-3 gap-3">
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00d4ff]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Planned</div><div className="text-[20px] font-bold text-[#00d4ff]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>₹{(totalPlanned / 10000000).toFixed(2)} Cr</div></div>
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#f5a623]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Actual</div><div className="text-[20px] font-bold text-[#f5a623]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>₹{(totalActual / 10000000).toFixed(2)} Cr</div></div>
@@ -82,12 +145,14 @@ export default function Budget() {
           <Target size={15} className="text-[#f5a623]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Budget Items</span>
           <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{records.length} Items</span>
+          <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button>
+          <ExportButton records={records} columns={BUDGET_COLUMNS} filename="budget" />
           <button onClick={() => { setEditTarget(null); setForm(EMPTY_FORM); setFormOpen(true); }} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Item</button>
         </div>
         <div className="overflow-x-auto"><div className="max-h-[480px] overflow-y-auto">
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
-              {['Category', 'Description', 'Planned', 'Actual', 'Variance', 'Utilization', 'Status', 'Actions'].map(h => (
+              {['Category', 'Description', 'Site', 'Planned', 'Actual', 'Variance', 'Utilization', 'Status', 'Actions'].map(h => (
                 <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>
               ))}
             </tr></thead>
@@ -98,6 +163,7 @@ export default function Budget() {
                   <tr key={r.id} className="hover:bg-[#141920] transition-colors">
                     <td className="py-2.5 px-3 text-[#f5a623] font-medium">{r.category}</td>
                     <td className="py-2.5 px-3 text-[#8899aa] max-w-[200px] truncate">{r.description}</td>
+                    <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.site?.siteCode || '—'}</td>
                     <td className="py-2.5 px-3 text-[#00d4ff] font-mono">₹{(r.planned / 100000).toFixed(1)}L</td>
                     <td className="py-2.5 px-3 text-[#f5a623] font-mono">₹{(r.actual / 100000).toFixed(1)}L</td>
                     <td className="py-2.5 px-3 font-mono"><span className={r.variance >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}>{r.variance >= 0 ? '+' : ''}₹{(r.variance / 100000).toFixed(1)}L</span></td>
@@ -123,7 +189,7 @@ export default function Budget() {
       </div>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader><DialogTitle className="text-[#f5a623]">{editTarget ? 'Edit Budget Item' : 'New Budget Item'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Category *</label><input value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="vc-input" placeholder="e.g. Manpower" /></div>
@@ -134,8 +200,9 @@ export default function Budget() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Period</label><input value={form.period} onChange={e => setForm(p => ({ ...p, period: e.target.value }))} className="vc-input" /></div>
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label><select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className="vc-input appearance-none"><option value="On Track">On Track</option><option value="Over Budget">Over Budget</option><option value="Under Budget">Under Budget</option></select></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site</label><select value={form.siteId} onChange={e => setForm(p => ({ ...p, siteId: e.target.value }))} className="vc-input appearance-none"><option value="">— Company-wide —</option>{sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
             </div>
+            <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label><select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className="vc-input appearance-none"><option value="On Track">On Track</option><option value="Over Budget">Over Budget</option><option value="Under Budget">Under Budget</option></select></div>
           </div>
           <DialogFooter>
             <button onClick={() => setFormOpen(false)} className="vc-btn-ghost">Cancel</button>

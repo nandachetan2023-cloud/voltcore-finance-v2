@@ -53,7 +53,6 @@ export const FULL_MODULE_TREE: {
     key: 'procurement', label: 'Procurement',
     subModules: [
       { key: 'purchases', label: 'Purchase Orders' },
-      { key: 'expenses',  label: 'Expenses' },
     ],
   },
   {

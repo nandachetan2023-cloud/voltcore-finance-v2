@@ -105,7 +105,7 @@ export default function ReportPayroll() {
                 <BarChart data={[{ name: 'Gross', value: totalGross }, { name: 'Net Pay', value: totalNet }, { name: 'PF', value: totalPF }, { name: 'ESI', value: totalESI }, { name: 'TDS', value: totalTDS }]} barSize={28}>
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} width={45} tickFormatter={v => v >= 100000 ? `${(v / 100000).toFixed(1)}L` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [`₹${v.toLocaleString('en-IN')}`, '']} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [`₹${(v ?? 0).toLocaleString('en-IN')}`, '']} />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                     {['#00d4ff', '#00e676', '#ff3d3d', '#ffab40', '#a78bfa'].map((c, i) => <Cell key={i} fill={c} />)}
                   </Bar>

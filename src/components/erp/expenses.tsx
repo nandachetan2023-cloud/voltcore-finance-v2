@@ -135,12 +135,12 @@ export default function Expenses() {
 
   useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
 
-  /* ── Fetch ── */
+/* ── Fetch ── */
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [expRes, empRes] = await Promise.all([
-        fetch('/api/expenses'),
+        fetch('/api/fin/expense-claims'),
         fetch('/api/employees'),
       ]);
       const expJson = await expRes.json();
@@ -174,7 +174,7 @@ export default function Expenses() {
     }
     try {
       setSubmitting(true);
-      const res = await fetch('/api/expenses', {
+      const res = await fetch('/api/fin/expense-claims', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
@@ -199,8 +199,8 @@ export default function Expenses() {
   const handleStatus = async (id: string, status: 'Approved' | 'Rejected') => {
     try {
       setActionLoading(id);
-      const res = await fetch('/api/expenses', {
-        method: 'PATCH',
+      const res = await fetch('/api/fin/expense-claims', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status }),
       });
@@ -222,7 +222,7 @@ export default function Expenses() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const res = await fetch('/api/expenses', {
+      const res = await fetch('/api/fin/expense-claims', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: deleteTarget.id }),
@@ -244,7 +244,7 @@ export default function Expenses() {
   if (loading) return <LoadingSkeleton />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Receipt} label="Pending Claims" value={pendingCount} color="#ffab40" />
@@ -295,7 +295,7 @@ export default function Expenses() {
                           {categoryIcon(exp.category)} {exp.category}
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 text-[#e2e8f0] font-medium">₹{exp.amount.toLocaleString('en-IN')}</td>
+                      <td className="py-2.5 px-3 text-[#e2e8f0] font-medium">₹{(exp.amount ?? 0).toLocaleString('en-IN')}</td>
                       <td className="py-2.5 px-3 text-[#8899aa]">{exp.project}</td>
                       <td className="py-2.5 px-3 text-[#5a6878]">{exp.date}</td>
                       <td className="py-2.5 px-3">
@@ -333,7 +333,7 @@ export default function Expenses() {
 
       {/* Create Expense Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
               <Plus size={16} /> New Expense Claim

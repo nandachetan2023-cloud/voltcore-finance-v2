@@ -297,7 +297,7 @@ export default function PermitsModule() {
   if (loading) return <LoadingSkeleton />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* Alert banner: permits expiring within 48h */}
       {expiringPermits.length > 0 && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-[#ff3d3d]/10 border border-[#ff3d3d]/30 animate-pulse">
@@ -426,7 +426,7 @@ export default function PermitsModule() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
               <Plus size={16} /> New Work Permit
@@ -482,7 +482,7 @@ export default function PermitsModule() {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#00d4ff] flex items-center gap-2">
               <Pencil size={16} /> Edit Permit — {editTarget?.permitNo}

@@ -6,15 +6,33 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
-    const records = await pdb.ledgerAccount.findMany({ orderBy: { accountCode: 'asc' } })
-    const { searchParams } = new URL(request.url)
-    if (searchParams.get('format') === 'csv') {
-      const header = 'AccountCode,AccountName,Group,Type,Balance,Status'
-      const rows = records.map(r => `${r.accountCode},"${r.name}",${r.group || ''},${r.type || ''},${r.balance},${r.status}`)
-      return new Response([header, ...rows].join('\n'), {
-        headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename=ledger.csv' },
-      })
-    }
+    const ledgerRecords = await pdb.ledgerAccount.findMany({ orderBy: { accountCode: 'asc' } })
+    const finRecords = await pdb.finAccount.findMany({ orderBy: { accountCode: 'asc' } })
+
+    const ledgerMapped = ledgerRecords.map(r => ({
+      id: r.id,
+      accountCode: r.accountCode,
+      name: r.name,
+      group: r.group || '',
+      type: r.type || '',
+      parentAccount: r.parentAccount || null,
+      balance: r.balance,
+      status: r.status,
+    }))
+
+    const finMapped = finRecords.map(r => ({
+      id: r.id,
+      accountCode: r.accountCode,
+      name: r.name,
+      group: r.group || '',
+      type: r.type || '',
+      parentAccount: null,
+      balance: 0,
+      status: r.isActive ? 'Active' : 'Inactive',
+    }))
+
+    const records = [...ledgerMapped, ...finMapped].sort((a, b) => a.accountCode.localeCompare(b.accountCode))
+
     return NextResponse.json({ success: true, data: records })
   } catch (error) {
     console.error('Error fetching ledger:', error)

@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { BookOpen, Plus, Pencil, Trash2, Loader2, Search, Filter, Download, Wallet, TrendingUp, TrendingDown, Scale } from 'lucide-react';
+import { BookOpen, Plus, Pencil, Trash2, Loader2, Search, Filter, Wallet, TrendingUp, TrendingDown, Scale, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
+import { ExportButton, type ExportColumn } from './_import-export';
+import ImportWizard, { type ImportField } from './_import-wizard';
 
 interface LedgerAccount {
   id: number;
@@ -35,6 +37,27 @@ const GROUPS = ['Assets', 'Liabilities', 'Income', 'Expense'];
 const TYPES = ['Debit', 'Credit'];
 const STATUSES = ['Active', 'Inactive'];
 
+const LEDGER_COLUMNS: ExportColumn<LedgerAccount>[] = [
+  { header: 'Account Code', accessor: 'accountCode' },
+  { header: 'Name', accessor: 'name' },
+  { header: 'Parent Account', accessor: 'parentAccount' },
+  { header: 'Group', accessor: 'group' },
+  { header: 'Type', accessor: 'type' },
+  { header: 'Balance', accessor: 'balance' },
+  { header: 'Status', accessor: 'status' },
+];
+
+const LEDGER_IMPORT_FIELDS: ImportField[] = [
+  { key: 'accountCode', label: 'Account Code', required: true },
+  { key: 'name', label: 'Name', required: true },
+  { key: 'group', label: 'Group' },
+  { key: 'type', label: 'Type' },
+  { key: 'parentAccount', label: 'Parent Account' },
+  { key: 'balance', label: 'Balance', type: 'number' },
+  { key: 'status', label: 'Status' },
+];
+const LEDGER_SAMPLE_ROW = { accountCode: '4001', name: 'Project Revenue', group: 'Income', type: 'Income', parentAccount: '', balance: 5000000, status: 'Active' };
+
 const GROUP_META: Record<string, { color: string; icon: typeof Wallet }> = {
   Assets: { color: '#00d4ff', icon: Wallet },
   Liabilities: { color: '#ff3d3d', icon: Scale },
@@ -42,7 +65,20 @@ const GROUP_META: Record<string, { color: string; icon: typeof Wallet }> = {
   Expense: { color: '#f5a623', icon: TrendingDown },
 };
 
-const inr = (n: number) => `\u20B9${n.toLocaleString('en-IN')}`;
+function generateMockLedger(): LedgerAccount[] {
+  return [
+    { id: 1, accountCode: '1001', name: 'Cash in Hand', group: 'Assets', type: 'Debit', parentAccount: null, balance: 2500000, status: 'Active' },
+    { id: 2, accountCode: '1002', name: 'Bank Account — SBI', group: 'Assets', type: 'Debit', parentAccount: null, balance: 18500000, status: 'Active' },
+    { id: 3, accountCode: '2001', name: 'Accounts Payable', group: 'Liabilities', type: 'Credit', parentAccount: null, balance: 6844000, status: 'Active' },
+    { id: 4, accountCode: '2002', name: 'GST Payable', group: 'Liabilities', type: 'Credit', parentAccount: null, balance: 3200000, status: 'Active' },
+    { id: 5, accountCode: '3001', name: 'Revenue — NTPC', group: 'Income', type: 'Credit', parentAccount: null, balance: 12500000, status: 'Active' },
+    { id: 6, accountCode: '3002', name: 'Revenue — BALCO', group: 'Income', type: 'Credit', parentAccount: null, balance: 8200000, status: 'Active' },
+    { id: 7, accountCode: '4001', name: 'Material Expense', group: 'Expense', type: 'Debit', parentAccount: null, balance: 9100000, status: 'Active' },
+    { id: 8, accountCode: '4002', name: 'Salary Expense', group: 'Expense', type: 'Debit', parentAccount: null, balance: 7500000, status: 'Active' },
+  ];
+}
+
+const inr = (n: number) => `\u20B9${(n ?? 0).toLocaleString('en-IN')}`;
 const inrL = (n: number) => `\u20B9${(n / 100000).toFixed(2)} L`;
 
 export default function Ledger() {
@@ -54,6 +90,7 @@ export default function Ledger() {
   const [deleteTarget, setDeleteTarget] = useState<LedgerAccount | null>(null);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
 
@@ -62,8 +99,9 @@ export default function Ledger() {
       setLoading(true);
       const res = await fetch('/api/ledger');
       const json = await res.json();
-      if (json.success) setRecords(json.data);
-    } catch { toast.error('Failed to fetch ledger accounts'); }
+      if (json.success && json.data?.length) { setRecords(json.data); }
+      else { setRecords(generateMockLedger()); toast.info('Sample data — no server records found'); }
+    } catch { setRecords(generateMockLedger()); toast.info('Sample data — API unavailable'); }
     finally { setLoading(false); }
   }, []);
 
@@ -107,8 +145,6 @@ export default function Ledger() {
     } catch { toast.error('Network error'); }
   };
 
-  const handleExport = () => { window.open('/api/ledger?format=csv', '_blank'); };
-
   const groupColor = (g: string | null) => GROUP_META[g || '']?.color || '#8899aa';
 
   /* ── Derived data: totals per group + filtered list ── */
@@ -141,8 +177,23 @@ export default function Ledger() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
 
+  if (importOpen) {
+    return (
+      <ImportWizard
+        title="Ledger Accounts"
+        fields={LEDGER_IMPORT_FIELDS}
+        keyField="accountCode"
+        existingKeys={new Set(records.map(r => r.accountCode))}
+        commitEndpoint="/api/ledger/import"
+        sampleRow={LEDGER_SAMPLE_ROW}
+        onClose={() => setImportOpen(false)}
+        onImported={fetchData}
+      />
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* KPI Cards — balance by accounting group */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {GROUPS.map(g => {
@@ -169,7 +220,7 @@ export default function Ledger() {
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Chart of Accounts</span>
           <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-2">{records.length} Accounts</span>
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={handleExport} className="vc-btn-ghost flex items-center gap-1.5" title="Export CSV"><Download size={13} /> Export</button>
+            <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={LEDGER_COLUMNS} filename="ledger" />
             <button onClick={openCreate} className="vc-btn-primary flex items-center gap-1.5">
               <Plus size={13} /> New Account
             </button>
@@ -248,7 +299,7 @@ export default function Ledger() {
 
       {/* Form Dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623]">{editTarget ? 'Edit Account' : 'New Ledger Account'}</DialogTitle>
           </DialogHeader>

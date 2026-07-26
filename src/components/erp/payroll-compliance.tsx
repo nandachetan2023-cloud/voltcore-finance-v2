@@ -66,7 +66,7 @@ const MONTHS = [
   { value: 12, label: 'December' },
 ];
 
-const formatCurrency = (val: number) => '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const formatCurrency = (val: number) => '₹' + (val ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const formatLakhs = (val: number) => {
   if (val >= 10000000) return '₹' + (val / 10000000).toFixed(2) + 'Cr';
   if (val >= 100000) return '₹' + (val / 100000).toFixed(1) + 'L';
@@ -271,7 +271,7 @@ export default function PayrollCompliance() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* Info Banner */}
       <div className="bg-[#00e676]/10 border border-[#00e676]/30 rounded-lg p-4">
         <div className="flex items-start gap-3">
@@ -379,7 +379,7 @@ export default function PayrollCompliance() {
 
       {/* Search & Download Sheet Dialog */}
       <Dialog open={searchPayslipOpen} onOpenChange={setSearchPayslipOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">Search & Download Compliance Sheet</DialogTitle>
           </DialogHeader>
@@ -442,7 +442,7 @@ export default function PayrollCompliance() {
 
       {/* View Details Dialog */}
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] w-[98vw] max-w-[98vw] sm:max-w-[98vw]">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] w-[98vw] max-w-[98vw] sm:max-w-[98vw]">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2">
               <Shield size={16} className="text-[#00e676]" />

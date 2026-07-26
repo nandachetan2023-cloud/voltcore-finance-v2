@@ -76,6 +76,73 @@ interface SyncState {
 type ModuleKey = 'employees' | 'projects' | 'finance' | 'equipment';
 
 /* ------------------------------------------------------------------ */
+/*  SSE Hook — real-time sync progress                                  */
+/* ------------------------------------------------------------------ */
+
+interface SyncStreamEvent {
+  module?: string
+  progress?: number
+  recordsSynced?: number
+  status?: string
+  batchId?: string
+  summary?: { totalRecordsSynced: number; totalErrors: number }
+}
+
+function useSyncStream(onComplete?: (summary: SyncStreamEvent['summary']) => void) {
+  const moduleProgressRef = useRef<Map<string, { progress: number; recordsSynced: number }>>(new Map())
+  const esRef = useRef<EventSource | null>(null)
+
+  useEffect(() => {
+    // Read the live batchId from the window variable set by triggerSync
+    const getBatchId = () => (window as unknown as Record<string, unknown>).__currentSyncBatchId as string | null | undefined
+
+    const connect = () => {
+      const batchId = getBatchId()
+      if (!batchId) return // not yet triggered
+
+      esRef.current = new EventSource(`/api/sync/stream?batchId=${encodeURIComponent(batchId)}`)
+
+      esRef.current.addEventListener('connected', () => {})
+
+      esRef.current.addEventListener('progress', (e: MessageEvent) => {
+        const data: SyncStreamEvent = JSON.parse(e.data)
+        if (data.module) {
+          moduleProgressRef.current.set(data.module, {
+            progress: data.progress ?? 0,
+            recordsSynced: data.recordsSynced ?? 0,
+          })
+        }
+      })
+
+      esRef.current.addEventListener('module_complete', (e: MessageEvent) => {
+        const data: SyncStreamEvent = JSON.parse(e.data)
+        if (data.module) {
+          moduleProgressRef.current.set(data.module, {
+            progress: 100,
+            recordsSynced: data.recordsSynced ?? 0,
+          })
+        }
+      })
+
+      esRef.current.addEventListener('sync_complete', (e: MessageEvent) => {
+        const data: SyncStreamEvent = JSON.parse(e.data)
+        esRef.current?.close()
+        onComplete?.(data.summary)
+      })
+
+      esRef.current.onerror = () => {
+        esRef.current?.close()
+      }
+    }
+
+    connect()
+    return () => { esRef.current?.close() }
+  }, [onComplete])
+
+  return moduleProgressRef
+}
+
+/* ------------------------------------------------------------------ */
 /*  Module definitions                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -386,33 +453,64 @@ export default function SyncDashboard() {
   }, [loading]);
 
   /* ---------------------------------------------------------------- */
-  /*  Polling for active syncs                                         */
+  /*  Initial fetch                                                    */
   /* ---------------------------------------------------------------- */
 
   useEffect(() => {
     fetchSyncData();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    // Set loading to false after first fetch
-    setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (syncStatus === 'syncing') {
-      pollRef.current = setInterval(fetchSyncData, 2000);
-    } else {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+  /* ---------------------------------------------------------------- */
+  /*  Real-time sync progress via SSE                                  */
+  /* ---------------------------------------------------------------- */
+
+  const safetyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleSyncComplete = useCallback((summary?: { totalRecordsSynced: number; totalErrors: number }) => {
+    if (safetyTimeoutRef.current) clearTimeout(safetyTimeoutRef.current)
+    setSyncStatus('complete')
+    setSyncingModules(new Set())
+    if (summary) {
+      setStats(prev => ({
+        ...prev,
+        totalRecordsSynced: summary.totalRecordsSynced,
+        overallStatus: summary.totalErrors > 0 ? 'error' : 'idle',
+      }))
     }
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-      }
-    };
-  }, [syncStatus, fetchSyncData]);
+    fetchSyncData()
+    setTimeout(() => setSyncStatus('idle'), 3000)
+  }, [fetchSyncData])
+
+  const moduleProgressRef = useSyncStream(handleSyncComplete)
+
+  /* ---------------------------------------------------------------- */
+  /*  Sync progress from SSE into moduleStatuses                        */
+  /* ---------------------------------------------------------------- */
+
+  useEffect(() => {
+    if (syncStatus !== 'syncing') return
+
+    const interval = setInterval(() => {
+      const progress = moduleProgressRef.current
+      if (progress.size === 0) return
+
+      setModuleStatuses(prev => {
+        const next = new Map(prev)
+        let changed = false
+        progress.forEach((val, mod) => {
+          const cur = next.get(mod)
+          if (!cur || cur.progress !== val.progress) {
+            next.set(mod, { status: val.progress >= 100 ? 'success' : 'syncing', progress: val.progress })
+            changed = true
+          }
+        })
+        return changed ? next : prev
+      })
+    }, 500)
+
+    return () => clearInterval(interval)
+  }, [syncStatus, moduleProgressRef])
 
   /* ---------------------------------------------------------------- */
   /*  Trigger full sync                                                */
@@ -423,11 +521,7 @@ export default function SyncDashboard() {
       setSyncStatus('syncing');
       setModuleStatuses(prev => {
         const next = new Map(prev);
-        if (modules) {
-          modules.forEach(m => next.set(m, { status: 'syncing', progress: 0 }));
-        } else {
-          MODULE_KEYS.forEach(m => next.set(m, { status: 'syncing', progress: 0 }));
-        }
+        (modules || MODULE_KEYS).forEach(m => next.set(m, { status: 'syncing', progress: 0 }));
         return next;
       });
 
@@ -442,60 +536,21 @@ export default function SyncDashboard() {
       });
 
       if (!res.ok) throw new Error('Sync failed');
+      const json = await res.json();
 
-      // Simulate progress animation for visual feedback
-      const targetModules = modules || MODULE_KEYS;
-      setSyncingModules(new Set(targetModules));
+      const newBatchId: string = json.data?.batchId ?? null
+      // Store batchId in a module-level variable accessible by the SSE hook
+      ;(window as unknown as Record<string, unknown>).__currentSyncBatchId = newBatchId
+      setSyncingModules(new Set(modules || MODULE_KEYS))
 
-      let progress = 0;
-      const progressInterval = setInterval(() => {
-        progress += Math.random() * 15 + 5;
-        if (progress > 95) progress = 95;
-
-        setModuleStatuses(prev => {
-          const next = new Map(prev);
-          targetModules.forEach(m => {
-            const current = next.get(m);
-            if (current && (current.status === 'syncing' || current.status === 'in_progress')) {
-              next.set(m, { status: 'syncing', progress: Math.min(progress + Math.random() * 10, 95) });
-            }
-          });
-          return next;
-        });
-      }, 600);
-
-      // Poll for completion
-      const checkComplete = setInterval(async () => {
-        try {
-          const statusRes = await fetch('/api/sync');
-          if (statusRes.ok) {
-            const statusJson = await statusRes.json();
-            const configs = statusJson.data?.configs || [];
-            const allDone = configs.every(
-              (cfg: SyncConfig) =>
-                !targetModules.includes(cfg.module as ModuleKey) ||
-                (cfg.lastStatus !== 'syncing' && cfg.lastStatus !== 'in_progress')
-            );
-            if (allDone) {
-              clearInterval(progressInterval);
-              clearInterval(checkComplete);
-              await fetchSyncData();
-              setSyncStatus('complete');
-              setSyncingModules(new Set());
-              setTimeout(() => setSyncStatus('idle'), 3000);
-            }
-          }
-        } catch {
-          // ignore poll errors
-        }
-      }, 2000);
-
-      // Safety timeout
-      setTimeout(() => {
-        clearInterval(progressInterval);
-        clearInterval(checkComplete);
+      // Safety timeout — if SSE doesn't fire sync_complete within 2 min, treat as done
+      if (safetyTimeoutRef.current) clearTimeout(safetyTimeoutRef.current)
+      safetyTimeoutRef.current = setTimeout(() => {
+        setSyncStatus('complete');
+        setSyncingModules(new Set());
         fetchSyncData();
-      }, 60000);
+        setTimeout(() => setSyncStatus('idle'), 3000);
+      }, 120_000)
     } catch (err) {
       setSyncStatus('error');
       setSyncingModules(new Set());
@@ -505,7 +560,7 @@ export default function SyncDashboard() {
         setError(null);
       }, 3000);
     }
-  }, [fetchSyncData]);
+  }, []);
 
   /* ---------------------------------------------------------------- */
   /*  Trigger single module sync                                       */
@@ -646,7 +701,7 @@ export default function SyncDashboard() {
   /* ---------------------------------------------------------------- */
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* ============================================================ */}
       {/*  TOP SECTION — Sync Status Bar                                */}
       {/* ============================================================ */}
@@ -704,7 +759,7 @@ export default function SyncDashboard() {
                     className="text-[16px] font-bold leading-none"
                     style={{ fontFamily: "'Share Tech Mono', monospace", color: '#e2e8f0' }}
                   >
-                    {stats.totalRecordsSynced.toLocaleString()}
+                    {(stats.totalRecordsSynced ?? 0).toLocaleString()}
                   </div>
                   <div className="text-[9px] text-[#5a6878] font-medium uppercase tracking-wider">
                     Records Synced

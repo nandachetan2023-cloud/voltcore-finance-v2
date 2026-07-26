@@ -14,9 +14,16 @@ export async function GET(request: NextRequest) {
   }
 }
 
+function isValidPartyName(name: string): boolean {
+  return name.trim().length >= 2 && !/^\d+\.?\d*$/.test(name.trim())
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    if (!body.name || !isValidPartyName(body.name)) {
+      return NextResponse.json({ success: false, error: 'Party name must be at least 2 characters and cannot be purely numeric' }, { status: 400 })
+    }
     const pdb = getDbForRequest(request)
     const record = await pdb.finParty.create({ data: body })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
@@ -31,6 +38,9 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { id, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    if (data.name && !isValidPartyName(data.name)) {
+      return NextResponse.json({ success: false, error: 'Party name must be at least 2 characters and cannot be purely numeric' }, { status: 400 })
+    }
     const pdb = getDbForRequest(request)
     const record = await pdb.finParty.update({ where: { id }, data })
     return NextResponse.json({ success: true, data: record })

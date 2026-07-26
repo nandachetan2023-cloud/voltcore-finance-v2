@@ -40,9 +40,108 @@ function pick(row: Record<string, unknown>, ...keys: string[]): unknown {
   return ''
 }
 
+// Build a line object from a flat record (used for both wizard JSON and xlsx rows)
+function buildLine(src: Record<string, unknown>) {
+  const get = (...keys: string[]) => {
+    // wizard sends mapped keys; xlsx rows use raw headers — try both
+    const direct = keys.find(k => k in src && src[k] !== '' && src[k] != null)
+    if (direct) return src[direct]
+    return pick(src, ...keys)
+  }
+  const billNo = str(get('billNo', 'INVOICE NO', 'INVOICE IDS', 'Bill No', 'BILL NO')) || null
+  const invDateRaw = get('invDate', 'INVOICE DT', 'INVOICE DATE', 'Bill Date', 'BILL DATE')
+  const invDate = str(invDateRaw) || null
+  const month = str(get('month', 'Month', 'MONTH')) || null
+  const invAmount = num(get('invAmount', 'Invoice Amount', 'INVOICE AMOUNT', 'Total Rent', 'TOTAL RENT'))
+  const tdsAmount = num(get('tdsAmount', 'TDS Amount', 'TDS AMOUNT', 'TDS'))
+  const amount = num(get('amount', 'Total Invoice Amount', 'TOTAL INVOICE AMOUNT', 'AMOUNT', 'Amount', 'Total'))
+  const paidAmount = num(get('paidAmount', 'Paid Amount', 'PAID AMOUNT', 'Paid'))
+  const balanceAmount = num(get('balanceAmount', 'Balance Amount', 'BALANCE AMOUNT', 'Balance'))
+  const remarks = str(get('remarks', 'Remarks', 'REMARKS', 'Description', 'DESCRIPTION')) || null
+  const voucherNo = str(get('voucherNo', 'Voucher no', 'VOUCHER NO', 'Voucher')) || null
+  return {
+    billNo,
+    invDate: invDateRaw instanceof Date ? invDateRaw.toISOString().split('T')[0] : invDate,
+    month,
+    invAmount,
+    gst: 0,
+    tdsAmount,
+    amount,
+    paidAmount,
+    balanceAmount,
+    remarks,
+    voucherNo,
+  }
+}
+
+function buildAdviceData(first: Record<string, unknown>) {
+  const get = (...keys: string[]) => {
+    const direct = keys.find(k => k in first && first[k] !== '' && first[k] != null)
+    if (direct) return first[direct]
+    return pick(first, ...keys)
+  }
+  return {
+    paymentDate: excelDateToJS(get('paymentDate', 'PAYMENT DATE', 'DATE', 'Advice Date', 'Date')) || new Date(),
+    paymentMode: str(get('paymentMode', 'PAYMENT MODE', 'Mode', 'MODE')) || 'Bank Transfer',
+    referenceNo: str(get('referenceNo', 'REFERENCE NO', 'Reference', 'REFERENCE')) || null,
+    notes: str(get('notes', 'NOTES', 'Notes')) || null,
+    supplierName: str(get('supplierName', 'Supplier Name', 'SUPPLIER NAME', 'Supplier', 'Party Name', 'PARTY NAME')) || null,
+    vendorCode: str(get('vendorCode', 'Vendor Code', 'VENDOR CODE')) || null,
+    panNo: str(get('panNo', 'PAN No', 'PAN NO', 'PAN')) || null,
+    bankName: str(get('bankName', 'Bank Name', 'BANK NAME')) || null,
+    accountNo: str(get('accountNo', 'Bank Account Number', 'BANK ACCOUNT NUMBER', 'Account No', 'ACCOUNT NO')) || null,
+    ifscCode: str(get('ifscCode', 'IFSC Code', 'IFSC CODE', 'IFSC')) || null,
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
+
+    // ── Path A: wizard JSON ({ records: [...] }) ────────────────
+    const ct = request.headers.get('content-type') || ''
+    if (ct.includes('application/json')) {
+      const body = await request.json()
+      const records: Record<string, unknown>[] = Array.isArray(body?.records) ? body.records : []
+      if (records.length === 0) return NextResponse.json({ success: false, error: 'No records provided' }, { status: 400 })
+
+      let createdAdvices = 0, createdLines = 0, errors = 0, skipped = 0
+      const errorRows: { adviceNo: string; message: string }[] = []
+      const adviceMap = new Map<string, Record<string, unknown>[]>()
+      for (const r of records) {
+        const adviceNo = str(r.adviceNo ?? '')
+        if (!adviceNo) { skipped++; continue }
+        if (!adviceMap.has(adviceNo)) adviceMap.set(adviceNo, [])
+        adviceMap.get(adviceNo)!.push(r)
+      }
+      for (const [adviceNo, adviceRows] of adviceMap) {
+        try {
+          const first = adviceRows[0]
+          const lines = adviceRows.map(buildLine)
+          const totalAmount = lines.reduce((s, l) => s + l.amount, 0) || num(first.amount)
+          const data = { adviceNo, totalAmount, updatedAt: new Date(), ...buildAdviceData(first) }
+          const existing = await pdb.finPaymentAdvice.findFirst({ where: { adviceNo } })
+          if (existing) {
+            await pdb.finPaymentAdviceLine.deleteMany({ where: { adviceId: existing.id } })
+            await pdb.finPaymentAdvice.update({ where: { id: existing.id }, data: { ...data, lines: { create: lines } } })
+          } else {
+            await pdb.finPaymentAdvice.create({ data: { ...data, lines: { create: lines } } })
+          }
+          createdAdvices++
+          createdLines += lines.length
+        } catch (e) {
+          errors++
+          errorRows.push({ adviceNo, message: (e as Error).message || 'Unknown error' })
+        }
+      }
+      return NextResponse.json({
+        success: true,
+        summary: { totalRows: records.length, createdAdvices, createdLines, rowErrors: errors, skipped },
+        errorRows: errorRows.slice(0, 20),
+      })
+    }
+
+    // ── Path B: uploaded Excel/CSV file (formData) ───────────────
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     if (!file) return NextResponse.json({ success: false, error: 'No file provided' }, { status: 400 })
@@ -53,8 +152,8 @@ export async function POST(request: NextRequest) {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
 
     let createdAdvices = 0, createdLines = 0, errors = 0, skipped = 0
+    const errorRows: { adviceNo: string; message: string }[] = []
 
-    // Group rows by advice number (multiple invoices per advice)
     const adviceMap = new Map<string, Record<string, unknown>[]>()
     for (const r of rows) {
       const adviceNo = str(pick(r, 'ADVICE NO', 'Advice No', 'PAYMENT ADVICE NO'))
@@ -66,23 +165,11 @@ export async function POST(request: NextRequest) {
     for (const [adviceNo, adviceRows] of adviceMap) {
       try {
         const first = adviceRows[0]
-        const lines = adviceRows.map(r => ({
-          billNo: str(pick(r, 'INVOICE IDS', 'INVOICE NO', 'Bill No', 'BILL NO')) || null,
-          amount: num(pick(r, 'AMOUNT', 'Amount')),
-          remarks: str(pick(r, 'REMARKS', 'Remarks')) || null,
-        }))
-        const totalAmount = lines.reduce((s, l) => s + l.amount, 0)
+        const lines = adviceRows.map(buildLine)
+        const totalAmount = lines.reduce((s, l) => s + l.amount, 0) || num(pick(first, 'Amount', 'AMOUNT'))
 
         const existing = await pdb.finPaymentAdvice.findFirst({ where: { adviceNo } })
-        const data = {
-          adviceNo,
-          totalAmount,
-          paymentDate: excelDateToJS(pick(first, 'PAYMENT DATE', 'DATE', 'Advice Date')) || new Date(),
-          paymentMode: str(pick(first, 'PAYMENT MODE', 'Mode')) || 'Bank Transfer',
-          referenceNo: str(pick(first, 'REFERENCE NO', 'Reference')) || null,
-          notes: str(pick(first, 'NOTES', 'Notes')) || null,
-          updatedAt: new Date(),
-        }
+        const data = { adviceNo, totalAmount, updatedAt: new Date(), ...buildAdviceData(first) }
 
         if (existing) {
           await pdb.finPaymentAdviceLine.deleteMany({ where: { adviceId: existing.id } })
@@ -92,10 +179,17 @@ export async function POST(request: NextRequest) {
         }
         createdAdvices++
         createdLines += lines.length
-      } catch { errors++ }
+      } catch (e) {
+        errors++
+        errorRows.push({ adviceNo, message: (e as Error).message || 'Unknown error' })
+      }
     }
 
-    return NextResponse.json({ success: true, summary: { createdAdvices, createdLines, rowErrors: errors, skipped } })
+    return NextResponse.json({
+      success: true,
+      summary: { createdAdvices, createdLines, rowErrors: errors, skipped },
+      errorRows: errorRows.slice(0, 20),
+    })
   } catch (error) {
     console.error('Payment advice import error:', error)
     return NextResponse.json({ success: false, error: (error as Error).message || 'Import failed' }, { status: 500 })

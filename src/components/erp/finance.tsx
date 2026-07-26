@@ -42,6 +42,7 @@ export default function Finance() {
   const [availableSheets, setAvailableSheets] = useState<Array<{name: string; rowCount: number}>>([]);
   const [showSheetSelector, setShowSheetSelector] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [previewJson, setPreviewJson] = useState<string>('');
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
@@ -95,8 +96,24 @@ export default function Finance() {
       formData.append('importedBy', 'Finance Import Center');
 
       let importEndpoint = '/api/fin/invoices/import';
-      if (activeTab === 'work-order') importEndpoint = '/api/fin/purchase-orders/import';
-      if (activeTab === 'payment-advice') importEndpoint = '/api/fin/payment-advices/import';
+      let importType = 'invoices';
+
+      if (activeTab === 'work-order') {
+        importEndpoint = '/api/fin/purchase-orders/import';
+        importType = 'purchase-orders';
+      } else if (activeTab === 'payment-advice') {
+        importEndpoint = '/api/fin/payment-advices/import';
+        importType = 'payment-advices';
+      } else if (activeTab === 'expenses') {
+        importEndpoint = activeTab === 'preview' || activeTab === 'expenses-preview'
+          ? '/api/finance/import/expenses/preview'
+          : '/api/finance/import/expenses/commit';
+        importType = 'expenses';
+      }
+
+      if (importType === 'expenses') {
+        formData.append('preview', previewJson);
+      }
 
       const res = await fetch(importEndpoint, { method: 'POST', body: formData });
       const json = await res.json();
@@ -108,6 +125,7 @@ export default function Finance() {
           setPreviewData(null);
           setSelectedFile(null);
           setResult(null);
+          setPreviewJson('');
         }, 2000);
       } else {
         setResult(json);
@@ -150,18 +168,21 @@ export default function Finance() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">Finance Import Center</DialogTitle>
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 bg-[#141920] border border-[#2e3a48]">
+            <TabsList className="grid w-full grid-cols-4 bg-[#141920] border border-[#2e3a48]">
               <TabsTrigger value="os-details" className="data-[state=active]:bg-[#f5a623] data-[state=active]:text-black">
                 OS Details (Invoices)
               </TabsTrigger>
               <TabsTrigger value="work-order" className="data-[state=active]:bg-[#f5a623] data-[state=active]:text-black">
                 Work Orders
+              </TabsTrigger>
+              <TabsTrigger value="expenses" className="data-[state=active]:bg-[#f5a623] data-[state=active]:text-black">
+                Expenses
               </TabsTrigger>
               <TabsTrigger value="payment-advice" className="data-[state=active]:bg-[#f5a623] data-[state=active]:text-black">
                 Payment Advice
@@ -176,6 +197,11 @@ export default function Finance() {
             <TabsContent value="work-order" className="mt-4">
               <div className="text-[11px] text-[#8899aa] mb-4">
                 Import work order master data. Links to party and site masters.
+              </div>
+            </TabsContent>
+            <TabsContent value="expenses" className="mt-4">
+              <div className="text-[11px] text-[#8899aa] mb-4">
+                Import HO personal expenses data. Select expenses tab, upload Excel file with proper columns (Date, SiteType, Category, ItemName, Description, TotalAmount, ReceivedAmount, GSTAmount, TDSAmount, BillNo, ApprovalStatus).
               </div>
             </TabsContent>
             <TabsContent value="payment-advice" className="mt-4">
@@ -222,6 +248,47 @@ export default function Finance() {
               </div>
             )}
 
+            {activeTab === 'expenses-preview' && previewData && previewData.success && (
+              <div className="border border-[#2e3a48] rounded-lg p-4 bg-[#141920]">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileSpreadsheet size={16} className="text-[#00d4ff]" />
+                  <div className="text-[12px] font-semibold text-[#e2e8f0]">Preview Results</div>
+                </div>
+                <div className="text-[11px] text-[#8899aa] mb-2">
+                  Sheet: <span className="text-[#f5a623]">{previewData.sheetName}</span>
+                  <br />
+                  Rows: <span className="text-[#f5a623]">{previewData.rowCount}</span>
+                  <br />
+                  Columns: <span className="text-[#f5a623]">{previewData.header.join(', ')}</span>
+                </div>
+                {previewData.sample && previewData.sample.length > 0 && (
+                  <div className="mt-4">
+                    <div className="text-[11px] font-semibold text-[#e2e8f0] mb-2">Sample Data:</div>
+                    <div className="border border-[#2e3a48] rounded bg-[#0d1117] max-h-60 overflow-y-auto">
+                      <table className="w-full text-[10px]">
+                        <thead className="bg-[#141920] sticky top-0">
+                          <tr>
+                            {Object.keys(previewData.sample[0]).map(key => (
+                              <th key={key} className="px-2 py-1 text-left whitespace-nowrap text-[#8899aa]">{key}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previewData.sample.slice(0, 5).map((row, idx) => (
+                            <tr key={idx} className="border-t border-[#2e3a48] hover:bg-[#0d1117]">
+                              {Object.values(row).map((val, cellIdx) => (
+                                <td key={cellIdx} className="px-2 py-1 whitespace-nowrap text-[#e2e8f0]">{String(val)}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {uploading && (
               <div className="bg-[#141920] border border-[#2e3a48] rounded-lg p-4">
                 <div className="flex items-center gap-3">
@@ -236,7 +303,18 @@ export default function Finance() {
                 <div className="flex items-start gap-3">
                   {result.success ? <CheckCircle2 size={20} className="text-[#00e676] shrink-0" /> : <AlertCircle size={20} className="text-[#ff3d3d] shrink-0" />}
                   <div className="text-[12px] font-semibold text-[#e2e8f0]">
-                    {result.success ? 'Import Successful' : result.error || 'Import Failed'}
+                    {result.success ? (
+                      <div>
+                        <div>Import Successful!</div>
+                        {result.summary && (
+                          <div className="mt-2 text-[10px] text-[#8899aa]">
+                            {result.summary.createdClaims ? `Created ${result.summary.createdClaims} claims` : ''}
+                            {result.summary.createdItems && ` & ${result.summary.createdItems} items`}
+                            {result.summary.errors > 0 && ` • ${result.summary.errors} errors`}
+                          </div>
+                        )}
+                      </div>
+                    ) : result.error || 'Import Failed'}
                   </div>
                 </div>
               </div>
@@ -247,7 +325,7 @@ export default function Finance() {
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={resetState}>
               Close
             </Button>
-            {selectedFile && selectedSheet && !result && (
+            {activeTab !== 'expenses-preview' && selectedFile && selectedSheet && !result && (
               <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" onClick={handleImport} disabled={uploading}>
                 {uploading ? 'Importing...' : 'Import Data'}
               </Button>

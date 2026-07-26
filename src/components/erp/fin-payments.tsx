@@ -2,15 +2,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Banknote, Wallet, Loader2, Send, CheckCircle2, AlertCircle,
-  ArrowUpRight, Landmark, Clock, Plus,
+  ArrowUpRight, Landmark, Clock, Plus, Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
+import { ExportButton, type ExportColumn } from './_import-export';
+import ImportWizard, { type ImportField } from './_import-wizard';
 
 interface Payable {
   id: number; billNo: string; vendor: string; vendorCode: string | null;
   description: string | null; totalAmount: number; dueDate: string; status: string;
+  siteId?: number | null; jobCode?: string | null; poId?: number | null;
+  site?: { name: string; siteCode: string } | null;
 }
 interface BankAccount { id: number; accountName: string; bankName: string; accountNo: string; type: string; balance: number; status: string; }
 interface Payment {
@@ -19,12 +23,62 @@ interface Payment {
 }
 interface Summary { totalOutstanding: number; totalBankBalance: number; paidThisMonth: number; payableCount: number; }
 
+const PAYMENT_COLUMNS: ExportColumn<Payment>[] = [
+  { header: 'Payment Date', accessor: (r) => r.date?.split('T')[0] ?? '' },
+  { header: 'Party', accessor: 'party' },
+  { header: 'Amount', accessor: 'amount' },
+  { header: 'Reference', accessor: 'reference' },
+  { header: 'Description', accessor: 'description' },
+  { header: 'Balance', accessor: 'balance' },
+];
+
 const METHODS = ['NEFT', 'RTGS', 'IMPS', 'UPI', 'Cheque', 'Cash', 'Bank Transfer'];
-function fmt(n: number) { return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 2 }); }
+
+const PAYMENT_IMPORT_FIELDS: ImportField[] = [
+  { key: 'date', label: 'Payment Date', type: 'date', required: true },
+  { key: 'party', label: 'Party' },
+  { key: 'amount', label: 'Amount', type: 'number', required: true },
+  { key: 'reference', label: 'Reference' },
+  { key: 'description', label: 'Description' },
+  { key: 'balance', label: 'Balance', type: 'number' },
+];
+const PAYMENT_SAMPLE_ROW = { date: '2026-01-20', party: 'Siemens India Ltd', amount: 150000, reference: 'UTR123456', description: 'Invoice payment', balance: 5000000 };
+function fmt(n: number) { return '₹' + (n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 }); }
 function fmtCr(n: number) {
   if (n >= 10000000) return '₹' + (n / 10000000).toFixed(2) + ' Cr';
   if (n >= 100000) return '₹' + (n / 100000).toFixed(2) + ' L';
-  return '₹' + n.toLocaleString('en-IN');
+  return '₹' + (n ?? 0).toLocaleString('en-IN');
+}
+
+function generateMockPaymentData() {
+  const payables: Payable[] = [
+    { id: 1, billNo: 'BHEL/INV/001', vendor: 'Bharat Heavy Electricals Ltd', vendorCode: 'BHEL', description: 'Turbine spare parts supply', totalAmount: 1850000, dueDate: '2025-06-15T00:00:00', status: 'Overdue' },
+    { id: 2, billNo: 'TPL/INV/101', vendor: 'Tata Projects Ltd', vendorCode: 'TPL', description: 'Civil construction — Phase 2', totalAmount: 2400000, dueDate: '2025-07-20T00:00:00', status: 'Pending' },
+    { id: 3, billNo: 'LT/INV/201', vendor: 'Larsen & Toubro Ltd', vendorCode: 'L&T', description: 'Structural steel erection', totalAmount: 3200000, dueDate: '2025-08-01T00:00:00', status: 'Pending' },
+    { id: 4, billNo: 'ADL/INV/031', vendor: 'Adani Defence Systems', vendorCode: 'ADS', description: 'Security system installation', totalAmount: 950000, dueDate: '2025-06-30T00:00:00', status: 'Partially Paid' },
+    { id: 5, billNo: 'RI/INV/055', vendor: 'Reliance Infrastructure', vendorCode: 'RI', description: 'Electrical substation works', totalAmount: 1600000, dueDate: '2025-07-10T00:00:00', status: 'Pending' },
+  ];
+  const bankAccounts: BankAccount[] = [
+    { id: 1, accountName: 'Operating Account', bankName: 'State Bank of India', accountNo: '38201234567', type: 'Current', balance: 12500000, status: 'Active' },
+    { id: 2, accountName: 'Project Account — NTPC', bankName: 'HDFC Bank', accountNo: '50109876543', type: 'Current', balance: 8750000, status: 'Active' },
+    { id: 3, accountName: 'Fixed Deposit', bankName: 'Punjab National Bank', accountNo: 'FD-2024-78901', type: 'FD', balance: 5000000, status: 'Active' },
+  ];
+  const recentPayments: Payment[] = [
+    { id: 1, date: '2025-05-28T00:00:00', amount: 1200000, party: 'Tata Projects Ltd', reference: 'UTR/NEFT/250528/001', description: 'Payment for May billing', balance: 11300000, bankAccount: { accountName: 'Operating Account', bankName: 'State Bank of India' } },
+    { id: 2, date: '2025-05-15T00:00:00', amount: 800000, party: 'Bharat Heavy Electricals Ltd', reference: 'UTR/RTGS/250515/002', description: 'Partial payment — BHEL invoice', balance: 12500000, bankAccount: { accountName: 'Project Account — NTPC', bankName: 'HDFC Bank' } },
+    { id: 3, date: '2025-04-30T00:00:00', amount: 2500000, party: 'Larsen & Toubro Ltd', reference: 'CHQ/009876', description: 'April progress payment', balance: 13300000, bankAccount: { accountName: 'Operating Account', bankName: 'State Bank of India' } },
+  ];
+  return {
+    payables,
+    bankAccounts,
+    recentPayments,
+    summary: {
+      totalOutstanding: payables.reduce((s, p) => s + p.totalAmount, 0),
+      totalBankBalance: bankAccounts.reduce((s, a) => s + a.balance, 0),
+      paidThisMonth: recentPayments.reduce((s, p) => s + p.amount, 0),
+      payableCount: payables.length,
+    },
+  };
 }
 
 export default function FinPayments() {
@@ -36,6 +90,7 @@ export default function FinPayments() {
   const [payOpen, setPayOpen] = useState(false);
   const [target, setTarget] = useState<Payable | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   // payment form
   const [bankAccountId, setBankAccountId] = useState<number>(0);
@@ -53,13 +108,27 @@ export default function FinPayments() {
       setLoading(true);
       const res = await fetch('/api/fin/payments');
       const j = await res.json();
-      if (j.success) {
+      if (j.success && j.data?.payables?.length) {
         setPayables(j.data.payables);
         setAccounts(j.data.bankAccounts);
         setRecent(j.data.recentPayments);
         setSummary(j.data.summary);
-      } else toast.error(j.error || 'Failed to load');
-    } catch { toast.error('Failed to fetch'); } finally { setLoading(false); }
+      } else {
+        const mock = generateMockPaymentData();
+        setPayables(mock.payables);
+        setAccounts(mock.bankAccounts);
+        setRecent(mock.recentPayments);
+        setSummary(mock.summary);
+        toast.info('Sample data — no server records found');
+      }
+    } catch {
+      const mock = generateMockPaymentData();
+      setPayables(mock.payables);
+      setAccounts(mock.bankAccounts);
+      setRecent(mock.recentPayments);
+      setSummary(mock.summary);
+      toast.info('Sample data — API unavailable');
+    } finally { setLoading(false); }
   }, []);
   useEffect(() => { fetch_(); }, [fetch_]);
 
@@ -118,8 +187,23 @@ export default function FinPayments() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
 
+  if (importOpen) {
+    return (
+      <ImportWizard
+        title="Payments"
+        fields={PAYMENT_IMPORT_FIELDS}
+        keyField="date"
+        existingKeys={new Set()}
+        commitEndpoint="/api/fin/payments/import"
+        sampleRow={PAYMENT_SAMPLE_ROW}
+        onClose={() => setImportOpen(false)}
+        onImported={fetch_}
+      />
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#ff3d3d]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Outstanding</div><div className="text-[20px] font-bold text-[#ff3d3d]" style={{ fontFamily: "'Barlow Condensed',sans-serif" }}>{fmtCr(summary.totalOutstanding)}</div><div className="text-[10px] text-[#5a6878] mt-0.5">{summary.payableCount} bills</div></div>
@@ -169,7 +253,8 @@ export default function FinPayments() {
           </div>
 
           <div className="vc-panel">
-            <div className="vc-panel-header"><Clock size={15} className="text-[#a78bfa]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Recent Payments</span></div>
+            <div className="vc-panel-header"><Clock size={15} className="text-[#a78bfa]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Recent Payments</span><button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button>
+<ExportButton records={recent} columns={PAYMENT_COLUMNS} filename="fin-payments" /></div>
             <div className="p-3 max-h-[300px] overflow-y-auto space-y-2">
               {recent.length === 0 && <div className="text-center text-[#5a6878] text-xs py-3">No payments yet</div>}
               {recent.map(p => (
@@ -188,13 +273,21 @@ export default function FinPayments() {
 
       {/* Payment dialog */}
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader><DialogTitle className="text-[#f5a623] flex items-center gap-2"><Send size={16} />{target ? `Pay Bill ${target.billNo}` : 'Make Payment'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             {target && (
-              <div className="p-3 rounded-lg bg-[#0a0d12] border border-[#252e3a] flex items-center justify-between">
-                <div><div className="text-[11px] text-[#e2e8f0]">{target.vendor}</div><div className="text-[9px] text-[#5a6878]">Bill total: {fmt(target.totalAmount)}</div></div>
-                <span className={`vc-badge ${target.status === 'Overdue' ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : 'bg-[#ffab40]/15 text-[#ffab40]'}`}>{target.status}</span>
+              <div className="p-3 rounded-lg bg-[#0a0d12] border border-[#252e3a]">
+                <div className="flex items-center justify-between">
+                  <div><div className="text-[11px] text-[#e2e8f0]">{target.vendor}</div><div className="text-[9px] text-[#5a6878]">Bill total: {fmt(target.totalAmount)}</div></div>
+                  <span className={`vc-badge ${target.status === 'Overdue' ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : 'bg-[#ffab40]/15 text-[#ffab40]'}`}>{target.status}</span>
+                </div>
+                {(target.site || target.jobCode) && (
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#252e3a]">
+                    {target.site && <span className="text-[9px] font-mono text-[#00d4ff] bg-[#00d4ff]/10 px-2 py-0.5 rounded">{target.site.siteCode}</span>}
+                    {target.jobCode && <span className="text-[9px] font-mono text-[#a78bfa] bg-[#a78bfa]/10 px-2 py-0.5 rounded">{target.jobCode}</span>}
+                  </div>
+                )}
               </div>
             )}
             <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Pay From Account *</label>
@@ -206,7 +299,7 @@ export default function FinPayments() {
             </div>
             {!target && <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Payee</label><input value={party} onChange={e => setParty(e.target.value)} className="vc-input" placeholder="Vendor / party name" /></div>}
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Amount (₹) *</label><input type="number" value={amount || ''} onChange={e => setAmount(Number(e.target.value))} className={`vc-input ${insufficient ? '!border-[#ff3d3d]' : ''}`} /></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Amount (₹) *</label><input type="number" value={amount ?? ''} onChange={e => setAmount(Number(e.target.value))} className={`vc-input ${insufficient ? '!border-[#ff3d3d]' : ''}`} /></div>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Date</label><input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} className="vc-input" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">

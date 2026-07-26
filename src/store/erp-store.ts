@@ -6,9 +6,9 @@ export type UserRole = 'superadmin' | 'admin' | 'demo';
 export const MODULE_TREE: Record<string, string[]> = {
   organization: ['organization', 'departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents'],
   hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
-  procurement: ['procurement', 'purchases', 'expenses'],
-  finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'create-journal-entry', 'bank-cash', 'taxation', 'budget', 'financial-reports', 'fin-sites', 'fin-parties', 'fin-invoices', 'fin-purchase-orders', 'fin-work-orders', 'fin-payments', 'fin-payment-advices', 'fin-petty-cash', 'fin-assets', 'fin-profit-loss'],
-  sales: ['sales', 'sales-tax-invoices'],
+  finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-receivable', 'journal-entries', 'create-journal-entry', 'bank-cash', 'taxation', 'budget', 'financial-reports', 'fin-sites', 'fin-parties', 'fin-invoices', 'fin-payments', 'fin-payment-advices', 'fin-petty-cash', 'fin-assets', 'fin-profit-loss', 'fin-bank-reconciliation', 'fin-expense-claims', 'fin-site-expenses', 'fin-work-orders', 'fin-tally-sync', 'fin-sync-config', 'fin-client-follow-up'],
+  procurement: ['procurement', 'purchases', 'fin-purchase-orders', 'accounts-payable', 'procurement-pr', 'procurement-rfq', 'procurement-po-register', 'procurement-vendors', 'procurement-material-tracking', 'procurement-subcontracts'],
+  sales: ['sales', 'sales-tax-invoices', 'sales-orders', 'sales-quotations', 'fin-credit-notes', 'sales-opportunity-pipeline', 'sales-tender-register', 'sales-revenue-forecast', 'sales-client-accounts'],
   projects: ['projects', 'project-list', 'sites'],
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
   // A dedicated "self-service" group for employees
@@ -66,9 +66,13 @@ export type ModuleId =
   // Finance sub-modules
   | 'finance-dashboard' | 'ledger' | 'accounts-payable' | 'accounts-receivable'
   | 'journal-entries' | 'bank-cash' | 'taxation' | 'budget' | 'financial-reports'
-  | 'finance' | 'create-journal-entry' | 'fin-sites' | 'fin-parties'
-  | 'fin-invoices' | 'fin-purchase-orders' | 'fin-work-orders' | 'fin-payments' | 'fin-payment-advices' | 'fin-petty-cash' | 'fin-assets' | 'fin-profit-loss'
-  | 'sales' | 'sales-tax-invoices'
+   | 'finance' | 'create-journal-entry' | 'fin-sites' | 'fin-parties'
+   | 'fin-invoices' | 'fin-payments' | 'fin-payment-advices' | 'fin-petty-cash' | 'fin-assets' | 'fin-profit-loss' | 'fin-bank-reconciliation'
+    | 'fin-purchase-orders' | 'fin-credit-notes' | 'fin-expense-claims' | 'fin-site-expenses' | 'fin-work-orders' | 'fin-tally-sync' | 'fin-sync-config' | 'fin-client-follow-up'
+   // Procurement sub-modules
+   | 'procurement-pr' | 'procurement-rfq' | 'procurement-po-register' | 'procurement-vendors' | 'procurement-material-tracking' | 'procurement-subcontracts'
+   | 'sales' | 'sales-tax-invoices' | 'sales-orders' | 'sales-quotations'
+   | 'sales-opportunity-pipeline' | 'sales-tender-register' | 'sales-revenue-forecast' | 'sales-client-accounts'
   // Projects sub-modules
   | 'project-list'
   // Organization sub-modules
@@ -129,8 +133,8 @@ export const DEMO_ALLOWED_MODULES: Set<string> = new Set([
 export const MAIN_MODULES: NavItem[] = [
   { id: 'organization', icon: 'Building2', label: 'Organization' },
   { id: 'hrms', icon: 'Users', label: 'HRMS' },
-  { id: 'procurement', icon: 'ShoppingCart', label: 'Procurement' },
-  { id: 'sales', icon: 'FileText', label: 'Sales' },
+  { id: 'procurement', icon: 'ShoppingCart', label: 'Procurement Management' },
+  { id: 'sales', icon: 'TrendingUp', label: 'Sales & Business Development' },
   { id: 'finance', icon: 'CreditCard', label: 'Finance' },
   { id: 'projects', icon: 'FolderKanban', label: 'Projects' },
   { id: 'assets', icon: 'Wrench', label: 'Assets' },
@@ -165,8 +169,15 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'exit-management', icon: 'ArrowLeft', label: 'Exit Management', section: 'Lifecycle' },
   ],
   procurement: [
-    { id: 'purchases', icon: 'ShoppingBag', label: 'Purchase Orders', section: 'Procurement' },
-    { id: 'expenses', icon: 'Receipt', label: 'Expenses', badge: 3, section: 'Procurement' },
+    { id: 'procurement-pr', icon: 'FileEdit', label: 'Purchase Requisition', section: 'Procurement' },
+    { id: 'procurement-rfq', icon: 'ClipboardList', label: 'RFQ Management', section: 'Procurement' },
+    { id: 'procurement-po-register', icon: 'ShoppingCart', label: 'PO Register', section: 'Procurement' },
+    { id: 'procurement-vendors', icon: 'Users', label: 'Vendor Management', section: 'Procurement' },
+    { id: 'procurement-material-tracking', icon: 'Package', label: 'Material Tracking', section: 'Procurement' },
+    { id: 'procurement-subcontracts', icon: 'FileText', label: 'Subcontract Register', section: 'Procurement' },
+    { id: 'purchases', icon: 'ShoppingBag', label: 'Legacy PO (Procurement)', section: 'Procurement' },
+    { id: 'fin-purchase-orders', icon: 'ShoppingCart', label: 'Purchase Orders (Finance)', section: 'Procurement' },
+    { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Accounts Payable', section: 'Procurement' },
   ],
   finance: [
     { id: 'finance-dashboard', icon: 'BarChart3', label: 'Dashboard', section: 'Finance' },
@@ -176,22 +187,33 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'journal-entries', icon: 'FileEdit', label: 'Journal Entries', section: 'Finance' },
     { id: 'create-journal-entry', icon: 'FilePlus', label: 'Create Journal Entry', section: 'Finance' },
     { id: 'fin-invoices', icon: 'FileText', label: 'Site Invoices', section: 'Billing' },
-    { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Accounts Payable', section: 'Finance' },
+    { id: 'fin-work-orders', icon: 'ClipboardList', label: 'Work Orders', section: 'Billing' },
     { id: 'accounts-receivable', icon: 'ArrowUpCircle', label: 'Accounts Receivable', section: 'Finance' },
-    { id: 'fin-purchase-orders', icon: 'ShoppingCart', label: 'Purchase Orders', section: 'Procurement' },
-    { id: 'fin-work-orders', icon: 'ClipboardList', label: 'Work Orders', section: 'Procurement' },
     { id: 'fin-payments', icon: 'Send', label: 'Payment Center', section: 'Cash' },
     { id: 'fin-petty-cash', icon: 'Wallet', label: 'Petty Cash', section: 'Cash' },
     { id: 'fin-payment-advices', icon: 'FileText', label: 'Payment Advices', section: 'Cash' },
+    { id: 'fin-expense-claims', icon: 'Wallet', label: 'Expense Claims', section: 'Cash' },
+    { id: 'fin-site-expenses', icon: 'FileSpreadsheet', label: 'Site Expenses', section: 'Cash' },
     { id: 'bank-cash', icon: 'Landmark', label: 'Bank & Cash', section: 'Finance' },
+    { id: 'fin-bank-reconciliation', icon: 'Scale', label: 'Bank Reconciliation', section: 'Cash' },
     { id: 'taxation', icon: 'Scale', label: 'Taxation & Compliance', section: 'Finance' },
     { id: 'budget', icon: 'Target', label: 'Budget & Forecasting', section: 'Finance' },
     { id: 'fin-assets', icon: 'Package', label: 'Fixed Assets', section: 'Assets' },
     { id: 'fin-profit-loss', icon: 'TrendingUp', label: 'Profit & Loss', section: 'Reports' },
     { id: 'financial-reports', icon: 'PieChart', label: 'Financial Reports', section: 'Finance' },
+    { id: 'fin-tally-sync', icon: 'Database', label: 'Tally Sync', section: 'Finance' },
+    { id: 'fin-sync-config', icon: 'Settings', label: 'Sync Config', section: 'Finance' },
+    { id: 'fin-client-follow-up', icon: 'PhoneCall', label: 'Client Follow Up', section: 'Finance' },
   ],
   sales: [
-    { id: 'sales-tax-invoices', icon: 'FileText', label: 'Tax Invoices', section: 'Sales' },
+    { id: 'sales-opportunity-pipeline', icon: 'TrendingUp', label: 'Opportunity Pipeline', section: 'Sales & BD' },
+    { id: 'sales-tender-register', icon: 'ClipboardList', label: 'Tender Register', section: 'Sales & BD' },
+    { id: 'sales-revenue-forecast', icon: 'BarChart3', label: 'Revenue Forecast', section: 'Sales & BD' },
+    { id: 'sales-client-accounts', icon: 'Users', label: 'Client Accounts', section: 'Sales & BD' },
+    { id: 'sales-tax-invoices', icon: 'FileText', label: 'Tax Invoices', section: 'Sales & BD' },
+    { id: 'sales-orders', icon: 'ShoppingBag', label: 'Sales Orders', section: 'Sales & BD' },
+    { id: 'sales-quotations', icon: 'FileText', label: 'Quotations', section: 'Sales & BD' },
+    { id: 'fin-credit-notes', icon: 'Files', label: 'Credit Notes', section: 'Sales & BD' },
   ],
   projects: [
     { id: 'project-list', icon: 'FolderKanban', label: 'All Projects', section: 'Projects' },
@@ -246,7 +268,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   dashboard: { title: 'Dashboard', breadcrumb: 'VoltCore ERP › Overview' },
   organization: { title: 'Organization', breadcrumb: 'VoltCore ERP › Organization' },
   hrms: { title: 'HRMS', breadcrumb: 'VoltCore ERP › Human Resources' },
-  procurement: { title: 'Procurement', breadcrumb: 'VoltCore ERP › Procurement' },
+  procurement: { title: 'Procurement Management', breadcrumb: 'VoltCore ERP › Procurement' },
   finance: { title: 'Finance', breadcrumb: 'VoltCore ERP › Finance' },
   projects: { title: 'Projects', breadcrumb: 'VoltCore ERP › Projects' },
   assets: { title: 'Assets', breadcrumb: 'VoltCore ERP › Assets & Operations' },
@@ -272,8 +294,15 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'exit-management': { title: 'Exit Management', breadcrumb: 'HRMS › Employee Lifecycle › Exit' },
   'checklist-templates': { title: 'Checklist Templates', breadcrumb: 'Organization › Checklist Templates' },
   'employee-documents': { title: 'Employee Documents', breadcrumb: 'Organization › Employee Documents' },
-  purchases: { title: 'Purchase Orders', breadcrumb: 'Finance › Procurement' },
-  expenses: { title: 'Expense Claims', breadcrumb: 'Finance › Expense Management' },
+  purchases: { title: 'Purchase Orders', breadcrumb: 'Procurement › PO' },
+  'fin-expense-claims': { title: 'Expense Claims', breadcrumb: 'Finance › Expense Claims' },
+  'fin-site-expenses': { title: 'Site Expenses', breadcrumb: 'Finance › Site Expenses' },
+  'procurement-pr': { title: 'Purchase Requisition', breadcrumb: 'Procurement › PR' },
+  'procurement-rfq': { title: 'RFQ Management', breadcrumb: 'Procurement › RFQ' },
+  'procurement-po-register': { title: 'PO Register', breadcrumb: 'Procurement › PO Register' },
+  'procurement-vendors': { title: 'Vendor Management', breadcrumb: 'Procurement › Vendors' },
+  'procurement-material-tracking': { title: 'Material Tracking', breadcrumb: 'Procurement › Materials' },
+  'procurement-subcontracts': { title: 'Subcontract Register', breadcrumb: 'Procurement › Subcontracts' },
   payroll: { title: 'Payroll', breadcrumb: 'HRMS › Payroll Processing' },
   // Finance sub-modules
   'finance-dashboard': { title: 'Finance Dashboard', breadcrumb: 'Finance › Overview' },
@@ -282,17 +311,28 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'fin-sites': { title: 'Finance Sites', breadcrumb: 'Finance › Sites' },
   'fin-parties': { title: 'Party Master', breadcrumb: 'Finance › Parties' },
   'fin-invoices': { title: 'Site Invoices', breadcrumb: 'Finance › Invoices' },
-  'fin-purchase-orders': { title: 'Purchase Orders', breadcrumb: 'Finance › Purchase Orders' },
-  'fin-work-orders': { title: 'Work Orders', breadcrumb: 'Finance › Work Orders' },
+  'fin-purchase-orders': { title: 'Purchase Orders (Finance)', breadcrumb: 'Procurement › Purchase Orders' },
   'fin-petty-cash': { title: 'Petty Cash', breadcrumb: 'Finance › Petty Cash' },
   'fin-payments': { title: 'Payment Center', breadcrumb: 'Finance › Payment Center' },
   'fin-payment-advices': { title: 'Payment Advices', breadcrumb: 'Finance › Payment Advices' },
+  'fin-credit-notes': { title: 'Credit Notes', breadcrumb: 'Sales › Credit Notes' },
+  'fin-work-orders': { title: 'Work Orders (Orders in Hand)', breadcrumb: 'Finance › Work Orders' },
+  'fin-bank-reconciliation': { title: 'Bank Reconciliation', breadcrumb: 'Finance › Bank Reconciliation' },
   'fin-assets': { title: 'Fixed Assets', breadcrumb: 'Finance › Fixed Assets' },
   'fin-profit-loss': { title: 'Profit & Loss', breadcrumb: 'Finance › Profit & Loss Account' },
-  sales: { title: 'Sales', breadcrumb: 'VoltCore ERP › Sales' },
-  'sales-tax-invoices': { title: 'Sales Tax Invoices', breadcrumb: 'Sales › Tax Invoices' },
+  'fin-tally-sync': { title: 'Tally Sync', breadcrumb: 'Finance › Tally Sync' },
+  'fin-sync-config': { title: 'Sync Configuration', breadcrumb: 'Finance › Sync Configuration' },
+  'fin-client-follow-up': { title: 'Client Follow Up', breadcrumb: 'Finance › Client Follow Up' },
+  sales: { title: 'Sales & Business Development', breadcrumb: 'VoltCore ERP › Sales & BD' },
+  'sales-opportunity-pipeline': { title: 'Opportunity Pipeline', breadcrumb: 'Sales & BD › Pipeline' },
+  'sales-tender-register': { title: 'Tender Register', breadcrumb: 'Sales & BD › Tenders' },
+  'sales-revenue-forecast': { title: 'Revenue Forecast', breadcrumb: 'Sales & BD › Forecast' },
+  'sales-client-accounts': { title: 'Client Accounts', breadcrumb: 'Sales & BD › Clients' },
+  'sales-tax-invoices': { title: 'Sales Tax Invoices', breadcrumb: 'Sales & BD › Tax Invoices' },
+  'sales-orders': { title: 'Sales Orders', breadcrumb: 'Sales & BD › Orders' },
+  'sales-quotations': { title: 'Quotations', breadcrumb: 'Sales & BD › Quotations' },
   ledger: { title: 'Ledger Management', breadcrumb: 'Finance › General Ledger' },
-  'accounts-payable': { title: 'Accounts Payable', breadcrumb: 'Finance › AP Management' },
+  'accounts-payable': { title: 'Accounts Payable', breadcrumb: 'Procurement › AP' },
   'accounts-receivable': { title: 'Accounts Receivable', breadcrumb: 'Finance › AR Management' },
   'journal-entries': { title: 'Journal Entries', breadcrumb: 'Finance › Journal' },
   'bank-cash': { title: 'Bank & Cash Management', breadcrumb: 'Finance › Banking' },
@@ -349,7 +389,7 @@ const PARENT_MAP: Record<string, string> = {};
 });
 
 // Expandable modules that show their own sub-module grid (instead of auto-redirecting to first child)
-export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'projects', 'reports'];
+export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'sales', 'procurement', 'projects', 'reports'];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};

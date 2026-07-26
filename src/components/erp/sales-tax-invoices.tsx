@@ -28,6 +28,29 @@ interface FormData {
 const EMPTY_FORM: FormData = { invoiceNo: '', invoiceDate: new Date().toISOString().split('T')[0], dueDate: '', customerId: 0, placeOfSupply: '', poNo: '', gstMode: 'intra' };
 const EMPTY_ITEM: Item = { description: '', hsnSac: '998717', uom: 'LOT', quantity: 1, rate: 0, taxableValue: 0, cgstPercent: 9, sgstPercent: 9, igstPercent: 0, cgstAmount: 0, sgstAmount: 0, igstAmount: 0, total: 0 };
 
+const mockCustomers: Customer[] = [
+  { id: 1, name: 'Aarav Infotech Solutions', gstin: '24AAJCS1234A1Z5', stateCode: '24', address: 'SG Highway, Ahmedabad, Gujarat' },
+  { id: 2, name: 'Meera Enterprises', gstin: '27AACPM5678B1Z6', stateCode: '27', address: 'FC Road, Pune, Maharashtra' },
+  { id: 3, name: 'Vikram Traders', gstin: '29AAKPV9012C1Z7', stateCode: '29', address: 'MG Road, Bangalore, Karnataka' },
+  { id: 4, name: 'Ananya Constructions', gstin: '08AAHCA3456D1Z8', stateCode: '08', address: 'MI Road, Jaipur, Rajasthan' },
+];
+
+function generateMockInvoices(): Invoice[] {
+  const today = new Date();
+  const d = (offset: number) => { const dt = new Date(today); dt.setDate(dt.getDate() + offset); return dt.toISOString().split('T')[0]; };
+
+  return [
+    { id: 1, invoiceNo: 'GSTIN/2024-25/001', invoiceDate: d(-30), dueDate: d(-15), customerId: 1, customerName: 'Aarav Infotech Solutions', customerGstin: '24AAJCS1234A1Z5', customerStateCode: '24', placeOfSupply: 'Ahmedabad', poNo: 'PO-2024-001', poDate: d(-35), taxableAmount: 100000, cgstAmount: 9000, sgstAmount: 9000, igstAmount: 0, totalAmount: 118000, amountInWords: 'One Lakh Eighteen Thousand Only', status: 'Paid', items: [{ id: 1, description: 'Software Development Services', hsnSac: '998312', uom: 'LOT', quantity: 1, rate: 100000, taxableValue: 100000, cgstPercent: 9, sgstPercent: 9, igstPercent: 0, cgstAmount: 9000, sgstAmount: 9000, igstAmount: 0, total: 118000 }] },
+    { id: 2, invoiceNo: 'GSTIN/2024-25/002', invoiceDate: d(-20), dueDate: d(-5), customerId: 2, customerName: 'Meera Enterprises', customerGstin: '27AACPM5678B1Z6', customerStateCode: '27', placeOfSupply: 'Pune', poNo: 'PO-2024-002', poDate: d(-25), taxableAmount: 250000, cgstAmount: 22500, sgstAmount: 22500, igstAmount: 0, totalAmount: 295000, amountInWords: 'Two Lakh Ninety-Five Thousand Only', status: 'Unpaid', items: [{ id: 2, description: 'Consulting & Advisory Services', hsnSac: '998314', uom: 'HRS', quantity: 50, rate: 5000, taxableValue: 250000, cgstPercent: 9, sgstPercent: 9, igstPercent: 0, cgstAmount: 22500, sgstAmount: 22500, igstAmount: 0, total: 295000 }] },
+    { id: 3, invoiceNo: 'GSTIN/2024-25/003', invoiceDate: d(-45), dueDate: d(-30), customerId: 3, customerName: 'Vikram Traders', customerGstin: '29AAKPV9012C1Z7', customerStateCode: '29', placeOfSupply: 'Bangalore', poNo: 'PO-2024-003', poDate: d(-50), taxableAmount: 180000, cgstAmount: 0, sgstAmount: 0, igstAmount: 32400, totalAmount: 212400, amountInWords: 'Two Lakh Twelve Thousand Four Hundred Only', status: 'Overdue', items: [{ id: 3, description: 'IT Infrastructure Support', hsnSac: '998316', uom: 'MON', quantity: 3, rate: 60000, taxableValue: 180000, cgstPercent: 0, sgstPercent: 0, igstPercent: 18, cgstAmount: 0, sgstAmount: 0, igstAmount: 32400, total: 212400 }] },
+    { id: 4, invoiceNo: 'GSTIN/2024-25/004', invoiceDate: d(-10), dueDate: d(5), customerId: 4, customerName: 'Ananya Constructions', customerGstin: '08AAHCA3456D1Z8', customerStateCode: '08', placeOfSupply: 'Jaipur', poNo: 'PO-2024-004', poDate: d(-15), taxableAmount: 75000, cgstAmount: 6750, sgstAmount: 6750, igstAmount: 0, totalAmount: 88500, amountInWords: 'Eighty-Eight Thousand Five Hundred Only', status: 'Paid', items: [{ id: 4, description: 'Structural Design & Drawing', hsnSac: '998323', uom: 'LOT', quantity: 1, rate: 75000, taxableValue: 75000, cgstPercent: 9, sgstPercent: 9, igstPercent: 0, cgstAmount: 6750, sgstAmount: 6750, igstAmount: 0, total: 88500 }] },
+    { id: 5, invoiceNo: 'GSTIN/2024-25/005', invoiceDate: d(-60), dueDate: d(-45), customerId: 1, customerName: 'Aarav Infotech Solutions', customerGstin: '24AAJCS1234A1Z5', customerStateCode: '24', placeOfSupply: 'Ahmedabad', poNo: 'PO-2024-005', poDate: d(-65), taxableAmount: 450000, cgstAmount: 0, sgstAmount: 0, igstAmount: 81000, totalAmount: 531000, amountInWords: 'Five Lakh Thirty-One Thousand Only', status: 'Paid', items: [{ id: 5, description: 'Annual Maintenance Contract', hsnSac: '998315', uom: 'LOT', quantity: 1, rate: 450000, taxableValue: 450000, cgstPercent: 0, sgstPercent: 0, igstPercent: 18, cgstAmount: 0, sgstAmount: 0, igstAmount: 81000, total: 531000 }] },
+    { id: 6, invoiceNo: 'GSTIN/2024-25/006', invoiceDate: d(-5), dueDate: d(10), customerId: 2, customerName: 'Meera Enterprises', customerGstin: '27AACPM5678B1Z6', customerStateCode: '27', placeOfSupply: 'Pune', poNo: 'PO-2024-006', poDate: d(-10), taxableAmount: 120000, cgstAmount: 10800, sgstAmount: 10800, igstAmount: 0, totalAmount: 141600, amountInWords: 'One Lakh Forty-One Thousand Six Hundred Only', status: 'Unpaid', items: [{ id: 6, description: 'Cloud Migration Services', hsnSac: '998318', uom: 'LOT', quantity: 1, rate: 120000, taxableValue: 120000, cgstPercent: 9, sgstPercent: 9, igstPercent: 0, cgstAmount: 10800, sgstAmount: 10800, igstAmount: 0, total: 141600 }] },
+    { id: 7, invoiceNo: 'GSTIN/2024-25/007', invoiceDate: d(-90), dueDate: d(-75), customerId: 3, customerName: 'Vikram Traders', customerGstin: '29AAKPV9012C1Z7', customerStateCode: '29', placeOfSupply: 'Bangalore', poNo: 'PO-2024-007', poDate: d(-95), taxableAmount: 60000, cgstAmount: 5400, sgstAmount: 5400, igstAmount: 0, totalAmount: 70800, amountInWords: 'Seventy Thousand Eight Hundred Only', status: 'Cancelled', items: [{ id: 7, description: 'Website Development', hsnSac: '998312', uom: 'LOT', quantity: 1, rate: 60000, taxableValue: 60000, cgstPercent: 9, sgstPercent: 9, igstPercent: 0, cgstAmount: 5400, sgstAmount: 5400, igstAmount: 0, total: 70800 }] },
+    { id: 8, invoiceNo: 'GSTIN/2024-25/008', invoiceDate: d(-15), dueDate: d(0), customerId: 4, customerName: 'Ananya Constructions', customerGstin: '08AAHCA3456D1Z8', customerStateCode: '08', placeOfSupply: 'Jaipur', poNo: 'PO-2024-008', poDate: d(-20), taxableAmount: 320000, cgstAmount: 0, sgstAmount: 0, igstAmount: 57600, totalAmount: 377600, amountInWords: 'Three Lakh Seventy-Seven Thousand Six Hundred Only', status: 'Overdue', items: [{ id: 8, description: 'Interior Design & Execution', hsnSac: '998324', uom: 'LOT', quantity: 1, rate: 320000, taxableValue: 320000, cgstPercent: 0, sgstPercent: 0, igstPercent: 18, cgstAmount: 0, sgstAmount: 0, igstAmount: 57600, total: 377600 }] },
+  ];
+}
+
 export default function SalesTaxInvoices() {
   const [records, setRecords] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -49,9 +72,17 @@ export default function SalesTaxInvoices() {
       setLoading(true);
       const [inv, c] = await Promise.all([fetch('/api/sales/tax-invoices'), fetch('/api/customers')]);
       const [ij, cj] = await Promise.all([inv.json(), c.json()]);
-      if (ij.success) setRecords(ij.data);
-      if (cj.success) setCustomers(cj.data);
-    } catch { toast.error('Failed to fetch'); } finally { setLoading(false); }
+      const invOk = ij.success && Array.isArray(ij.data) && ij.data.length > 0;
+      const custOk = cj.success && Array.isArray(cj.data) && cj.data.length > 0;
+      if (invOk) setRecords(ij.data);
+      else { setRecords(generateMockInvoices()); toast.info('Showing sample data — API unavailable'); }
+      if (custOk) setCustomers(cj.data);
+      else setCustomers(mockCustomers);
+    } catch {
+      setRecords(generateMockInvoices());
+      setCustomers(mockCustomers);
+      toast.info('Showing sample data — API unavailable');
+    } finally { setLoading(false); }
   }, []);
   useEffect(() => { fetch_(); }, [fetch_]);
   useEffect(() => { setPage(1); }, [search, statusFilter]);
@@ -138,7 +169,7 @@ export default function SalesTaxInvoices() {
   // ═══════════════════════════════════════════ FORM VIEW
   if (view === 'form') {
     return (
-      <div className="space-y-5">
+      <div className="space-y-5 p-6">
         <div className="flex items-start justify-between">
           <div>
             <div className="text-[11px] text-[#f5a623] mb-1"><button onClick={() => setView('list')} className="hover:underline">Tax Invoices</button><span className="text-[#5a6878]"> › </span><span className="text-[#e2e8f0]">{editTarget ? 'Edit' : 'New Invoice'}</span></div>
@@ -154,10 +185,10 @@ export default function SalesTaxInvoices() {
 
         {/* Summary badges */}
         <div className="grid grid-cols-4 gap-3">
-          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Taxable</span><span className="text-[13px] font-bold text-[#e2e8f0] font-mono">₹{totals.taxable.toLocaleString('en-IN')}</span></div>
-          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">CGST+SGST</span><span className="text-[13px] font-bold text-[#ffab40] font-mono">₹{(totals.cgst + totals.sgst).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
-          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">IGST</span><span className="text-[13px] font-bold text-[#ffab40] font-mono">₹{totals.igst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
-          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Grand Total</span><span className="text-[13px] font-bold text-[#00e676] font-mono">₹{totals.total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Taxable</span><span className="text-[13px] font-bold text-[#e2e8f0] font-mono">₹{(totals.taxable ?? 0).toLocaleString('en-IN')}</span></div>
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">CGST+SGST</span><span className="text-[13px] font-bold text-[#ffab40] font-mono">₹{((totals.cgst ?? 0) + (totals.sgst ?? 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">IGST</span><span className="text-[13px] font-bold text-[#ffab40] font-mono">₹{(totals.igst ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Grand Total</span><span className="text-[13px] font-bold text-[#00e676] font-mono">₹{(totals.total ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
         </div>
 
         {/* Invoice details */}
@@ -198,17 +229,17 @@ export default function SalesTaxInvoices() {
                 <td className="py-2.5 px-3"><input value={it.uom} onChange={e => updateItem(i, 'uom', e.target.value)} className="w-14 bg-transparent border-b border-[#252e3a] pb-1 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" /></td>
                 <td className="py-2.5 px-3"><input type="number" value={it.quantity || ''} onChange={e => updateItem(i, 'quantity', Number(e.target.value) || 0)} className="w-16 bg-transparent border-b border-[#252e3a] pb-1 text-[12px] text-right text-[#e2e8f0] font-mono focus:border-[#f5a623] focus:outline-none" /></td>
                 <td className="py-2.5 px-3"><input type="number" value={it.rate || ''} onChange={e => updateItem(i, 'rate', Number(e.target.value) || 0)} placeholder="0.00" className="w-24 bg-transparent border-b border-[#252e3a] pb-1 text-[12px] text-right text-[#e2e8f0] font-mono focus:border-[#f5a623] focus:outline-none" /></td>
-                <td className="py-2.5 px-3 text-right text-[#8899aa] font-mono">{it.taxableValue.toLocaleString('en-IN')}</td>
-                <td className="py-2.5 px-3 text-right text-[#ffab40] font-mono">{(it.cgstAmount + it.sgstAmount + it.igstAmount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
-                <td className="py-2.5 px-3 text-right text-[#00e676] font-mono font-medium">{it.total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                <td className="py-2.5 px-3 text-right text-[#8899aa] font-mono">{(it.taxableValue ?? 0).toLocaleString('en-IN')}</td>
+                <td className="py-2.5 px-3 text-right text-[#ffab40] font-mono">{((it.cgstAmount ?? 0) + (it.sgstAmount ?? 0) + (it.igstAmount ?? 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                <td className="py-2.5 px-3 text-right text-[#00e676] font-mono font-medium">{(it.total ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
                 <td className="py-2.5 px-3 text-center"><button onClick={() => removeItem(i)} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button></td>
               </tr>
             ))}
             <tr className="bg-[#0a0d12] border-t border-[#252e3a] font-bold">
               <td colSpan={5} className="py-2.5 px-3 text-right text-[10px] uppercase tracking-[1.5px] text-[#5a6878]">Totals</td>
-              <td className="py-2.5 px-3 text-right text-[#e2e8f0] font-mono">{totals.taxable.toLocaleString('en-IN')}</td>
-              <td className="py-2.5 px-3 text-right text-[#ffab40] font-mono">{(totals.cgst + totals.sgst + totals.igst).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
-              <td className="py-2.5 px-3 text-right text-[#00e676] font-mono">{totals.total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+              <td className="py-2.5 px-3 text-right text-[#e2e8f0] font-mono">{(totals.taxable ?? 0).toLocaleString('en-IN')}</td>
+              <td className="py-2.5 px-3 text-right text-[#ffab40] font-mono">{((totals.cgst ?? 0) + (totals.sgst ?? 0) + (totals.igst ?? 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+              <td className="py-2.5 px-3 text-right text-[#00e676] font-mono">{(totals.total ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
               <td></td>
             </tr>
           </tbody></table></div>
@@ -240,7 +271,7 @@ export default function SalesTaxInvoices() {
   const statuses = [...new Set(records.map(r => r.status))];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <div className="grid grid-cols-4 gap-3">
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00d4ff]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Total Value</div><div className="text-[20px] font-bold text-[#00d4ff]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>₹{(totalValue / 10000000).toFixed(2)} Cr</div></div>
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00e676]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Submitted</div><div className="text-[20px] font-bold text-[#00e676]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{submitted}</div></div>
@@ -292,9 +323,9 @@ export default function SalesTaxInvoices() {
                 <td className="py-2.5 px-3 text-[#8899aa] max-w-[120px] truncate">{r.placeOfSupply || '—'}</td>
                 <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.poNo || 'NA'}</td>
                 <td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.invoiceDate?.split('T')[0]}</td>
-                <td className="py-2.5 px-3 text-[#e2e8f0] font-mono text-right whitespace-nowrap">₹{Number(r.taxableAmount).toLocaleString('en-IN')}</td>
-                <td className="py-2.5 px-3 text-[#ffab40] font-mono text-right whitespace-nowrap">₹{gst.toLocaleString('en-IN')}</td>
-                <td className="py-2.5 px-3 text-[#00e676] font-mono text-right font-medium whitespace-nowrap">₹{Number(r.totalAmount).toLocaleString('en-IN')}</td>
+                <td className="py-2.5 px-3 text-[#e2e8f0] font-mono text-right whitespace-nowrap">₹{(Number(r.taxableAmount) || 0).toLocaleString('en-IN')}</td>
+                <td className="py-2.5 px-3 text-[#ffab40] font-mono text-right whitespace-nowrap">₹{(gst ?? 0).toLocaleString('en-IN')}</td>
+                <td className="py-2.5 px-3 text-[#00e676] font-mono text-right font-medium whitespace-nowrap">₹{(Number(r.totalAmount) || 0).toLocaleString('en-IN')}</td>
                 <td className="py-2.5 px-3"><span className={`vc-badge ${r.status === 'Paid' ? 'bg-[#00e676]/15 text-[#00e676]' : r.status === 'Credit Note' ? 'bg-[#a78bfa]/15 text-[#a78bfa]' : r.status === 'Draft' ? 'bg-[#5a6878]/15 text-[#5a6878]' : 'bg-[#00d4ff]/15 text-[#00d4ff]'}`}>{r.status}</span></td>
                 <td className="py-2.5 px-3" onClick={e => e.stopPropagation()}><div className="flex gap-1">
                   <button onClick={() => setViewInvoice(r)} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10" title="View / Print"><Printer size={13} /></button>

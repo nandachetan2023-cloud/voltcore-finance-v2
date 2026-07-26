@@ -3,6 +3,7 @@
 import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed } from '@/store/erp-store';
 import React, { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
+import { FinanceHelpChat } from '@/components/help/finance-help-chat';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useTenantBranding } from '@/hooks/use-tenant-branding';
 import {
@@ -29,8 +30,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   AlertTriangle, Send, Plane,
 };
 
-const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'fin-payments', 'financial-reports', 'trash'];
-const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'finance', 'projects', 'assets', 'system'];
+const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'fin-payments', 'financial-reports', 'fin-tally-sync', 'fin-sync-config', 'fin-client-follow-up', 'trash'];
+const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'finance', 'sales', 'projects', 'assets', 'system'];
 
 // ── Error Boundary ──────────────────────────────────────────────
 interface EBProps { children: ReactNode; moduleName: string; onBack: () => void }
@@ -608,6 +609,9 @@ export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
           </div>
         </main>
       </div>
+
+      {/* Finance Help — floating assistant, renders only on finance modules */}
+      <FinanceHelpChat />
     </div>
   );
 }

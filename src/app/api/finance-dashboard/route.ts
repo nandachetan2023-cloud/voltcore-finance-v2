@@ -7,21 +7,27 @@ export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
 
-    const [arRecords, apRecords, bankAccounts, journalEntries, budgetItems, workOrders, paymentAdvices, pettyCash, finInvoices, purchaseOrders, parties] = await Promise.all([
+    const [arRecords, apRecords, bankAccounts, journalEntries, budgetItems, paymentAdvices, pettyCash, finInvoices, purchaseOrders, parties, expenseClaims, creditNotes, assets, alerts, followUps, accounts, finJournalEntries] = await Promise.all([
       pdb.accountsReceivable.findMany(),
       pdb.accountsPayable.findMany(),
       pdb.bankAccount.findMany(),
       pdb.journalEntry.findMany(),
       pdb.budgetItem.findMany(),
-      pdb.finWorkOrder.findMany(),
       pdb.finPaymentAdvice.findMany(),
       pdb.finPettyCash.findMany(),
       pdb.finInvoice.findMany(),
       pdb.finPurchaseOrder.findMany(),
       pdb.finParty.findMany(),
+      pdb.finExpenseClaim.findMany(),
+      pdb.finCreditNote.findMany(),
+      pdb.finAsset.findMany(),
+      pdb.finAlert.findMany(),
+      pdb.finFollowUp.findMany(),
+      pdb.finAccount.findMany(),
+      pdb.finJournalEntry.findMany(),
     ])
 
-    // ── KPIs ──
+    // ── Legacy KPIs ──
     const totalRevenue = arRecords.filter(r => r.status === 'Received').reduce((s, r) => s + r.totalAmount, 0)
     const totalInvoiced = arRecords.reduce((s, r) => s + r.totalAmount, 0)
     const accountsReceivablePending = arRecords.filter(r => r.status === 'Pending' || r.status === 'Partially Received').reduce((s, r) => s + r.totalAmount, 0)
@@ -38,13 +44,6 @@ export async function GET(request: NextRequest) {
     const totalBudgetActual = budgetItems.reduce((s, b) => s + b.actual, 0)
     const budgetVariance = totalBudgetPlanned - totalBudgetActual
 
-    // ── Work Orders ──
-    const totalWorkOrderValue = workOrders.reduce((s, w) => s + (w.orderAmount || 0), 0)
-    const totalWorkOrderBilled = workOrders.reduce((s, w) => s + (w.billRaisedAmount || 0), 0)
-    const totalWorkOrderUnexecuted = workOrders.reduce((s, w) => s + (w.unexecutedAmount || 0), 0)
-    const totalWorkOrderReceived = workOrders.reduce((s, w) => s + (w.receivedAgainstBill || 0), 0)
-    const activeWorkOrders = workOrders.filter(w => w.status === 'Active').length
-
     // ── Payment Advices ──
     const totalPaymentAdvices = paymentAdvices.reduce((s, p) => s + (p.totalAmount || 0), 0)
 
@@ -56,6 +55,7 @@ export async function GET(request: NextRequest) {
     // ── Site Invoices (FinInvoice) ──
     const totalSiteInvoiceValue = finInvoices.reduce((s, i) => s + (i.grandTotal || 0), 0)
     const totalSiteInvoiceCount = finInvoices.length
+    const pendingSiteInvoices = finInvoices.filter(i => i.status === 'Pending' || i.status === 'Partially Paid').length
 
     // ── Purchase Orders ──
     const totalPOValueAll = purchaseOrders.reduce((s, p) => s + (p.totalAmount || 0), 0)
@@ -65,11 +65,49 @@ export async function GET(request: NextRequest) {
     // ── Active vendor/party count ──
     const activeVendorCount = parties.length
 
-    // ── Monthly Trends ──
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
-    const year = 2025
+    // ── Expense Claims ──
+    const totalExpenseClaims = expenseClaims.reduce((s, c) => s + (c.totalAmount || 0), 0)
+    const pendingExpenseClaims = expenseClaims.filter(c => c.status === 'Pending' || c.status === 'Submitted').length
+    const approvedExpenseClaims = expenseClaims.filter(c => c.status === 'Approved' || c.status === 'Paid').length
+
+    // ── Credit Notes ──
+    const totalCreditNotes = creditNotes.reduce((s, c) => s + (c.amount || 0), 0)
+    const openCreditNotes = creditNotes.filter(c => c.status !== 'Closed' && c.status !== 'Adjusted').length
+
+    // ── Fixed Assets ──
+    const totalAssetCost = assets.reduce((s, a) => s + (a.cost || 0), 0)
+    const activeAssets = assets.filter(a => a.status === 'Active' || a.status === 'In Use').length
+
+    // ── Alerts ──
+    const alertCount = alerts.length
+    const urgentAlerts = alerts.filter(a => a.type === 'Overdue' || a.type === 'Critical').length
+    const unreadAlerts = alerts.filter(a => !a.isRead).length
+
+    // ── Follow-ups ──
+    const openFollowUps = followUps.filter(f => f.status === 'Open' || f.status === 'Pending').length
+    const overdueFollowUps = followUps.filter(f => f.status === 'Overdue').length
+
+    // ── Chart of Accounts ──
+    const assetAccountsCount = accounts.filter(a => a.type === 'Asset').length
+    const liabilityAccountsCount = accounts.filter(a => a.type === 'Liability').length
+    const equityAccountsCount = accounts.filter(a => a.type === 'Equity').length
+    const incomeAccountsCount = accounts.filter(a => a.type === 'Income' || a.type === 'Revenue').length
+    const expenseAccountsCount = accounts.filter(a => a.type === 'Expense').length
+
+    // ── Journal Entries (new) ──
+    const totalJournalDebits = finJournalEntries.reduce((s, je) => s + (je.totalDebit || 0), 0)
+    const totalJournalCredits = finJournalEntries.reduce((s, je) => s + (je.totalCredit || 0), 0)
+    const draftJournals = finJournalEntries.filter(je => je.status === 'Draft').length
+    const postedJournals = finJournalEntries.filter(je => je.status === 'Posted').length
+
+    // ── Monthly Trends (dynamic year — current FY) ──
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const now = new Date()
+    const year = now.getFullYear()
     const monthlyMap = new Map<string, { revenue: number; expenses: number; cashIn: number; cashOut: number }>()
     for (const m of months) monthlyMap.set(`${m} ${year}`, { revenue: 0, expenses: 0, cashIn: 0, cashOut: 0 })
+
+    // Aggregate from both legacy JournalEntry and FinJournalEntry
     for (const je of journalEntries) {
       const d = new Date(je.date)
       const key = `${months[d.getMonth()]} ${d.getFullYear()}`
@@ -78,6 +116,17 @@ export async function GET(request: NextRequest) {
         if (je.voucherType === 'Receipt') { entry.cashIn += je.debit; entry.revenue += je.debit }
         else if (je.voucherType === 'Payment') { entry.cashOut += je.credit; entry.expenses += je.credit }
         else if (je.voucherType === 'Journal' && je.debit > 0) { entry.expenses += je.debit }
+      }
+    }
+    for (const fje of finJournalEntries) {
+      const d = new Date(fje.date)
+      const key = `${months[d.getMonth()]} ${d.getFullYear()}`
+      if (monthlyMap.has(key)) {
+        const entry = monthlyMap.get(key)!
+        entry.cashIn += Number(fje.totalCredit || 0)
+        entry.revenue += Number(fje.totalCredit || 0)
+        entry.cashOut += Number(fje.totalDebit || 0)
+        entry.expenses += Number(fje.totalDebit || 0)
       }
     }
     const monthlyTrends = months.map(m => {
@@ -117,35 +166,43 @@ export async function GET(request: NextRequest) {
       actual: b.actual, variance: b.variance, period: b.period, month: b.month || '', status: b.status,
     }))
 
-    // ── Alerts: real overdue AR/AP + due-soon AP ──
+    // ── Alerts: real overdue AR/AP + due-soon AP + system alerts ──
     const fmtAmt = (n: number) => n >= 10000000 ? `₹${(n / 10000000).toFixed(2)} Cr` : n >= 100000 ? `₹${(n / 100000).toFixed(2)} L` : `₹${n.toLocaleString('en-IN')}`
-    const now = Date.now()
-    const soon = now + 7 * 86400000
-    const alerts: { type: string; desc: string; amount: string; urgent: boolean }[] = []
+    const nowTs = Date.now()
+    const soon = nowTs + 7 * 86400000
+    const alertsList: { type: string; desc: string; amount: string; urgent: boolean }[] = []
     for (const r of apRecords.filter(r => r.status === 'Overdue')) {
-      alerts.push({ type: 'Overdue Payable', desc: `${r.vendor} — bill ${r.billNo} overdue`, amount: fmtAmt(r.totalAmount), urgent: true })
+      alertsList.push({ type: 'Overdue Payable', desc: `${r.vendor} — bill ${r.billNo} overdue`, amount: fmtAmt(r.totalAmount), urgent: true })
     }
     for (const r of arRecords.filter(r => r.status === 'Overdue')) {
-      alerts.push({ type: 'Overdue Receivable', desc: `${r.client} — invoice ${r.invoiceNo} overdue`, amount: fmtAmt(r.totalAmount), urgent: true })
+      alertsList.push({ type: 'Overdue Receivable', desc: `${r.client} — invoice ${r.invoiceNo} overdue`, amount: fmtAmt(r.totalAmount), urgent: true })
     }
-    for (const r of apRecords.filter(r => r.status === 'Pending' && r.dueDate && new Date(r.dueDate).getTime() <= soon && new Date(r.dueDate).getTime() >= now)) {
-      alerts.push({ type: 'Approaching Due', desc: `${r.vendor} — bill ${r.billNo} due soon`, amount: fmtAmt(r.totalAmount), urgent: false })
+    for (const r of apRecords.filter(r => r.status === 'Pending' && r.dueDate && new Date(r.dueDate).getTime() <= soon && new Date(r.dueDate).getTime() >= nowTs)) {
+      alertsList.push({ type: 'Approaching Due', desc: `${r.vendor} — bill ${r.billNo} due soon`, amount: fmtAmt(r.totalAmount), urgent: false })
     }
-    const alertsTop = alerts.slice(0, 8)
+    for (const a of alerts.filter(a => !a.isRead).slice(0, 5)) {
+      alertsList.push({ type: a.type, desc: a.title, amount: a.amount ? fmtAmt(Number(a.amount)) : '—', urgent: a.type === 'Overdue' || a.type === 'Critical' })
+    }
+    const alertsTop = alertsList.slice(0, 8)
 
-    // ── Module counts (for Quick Links badges) ──
+    // ── Module counts ──
     const moduleCounts = {
       accountsPayable: apRecords.length,
       accountsReceivable: arRecords.length,
       bankCash: bankAccounts.length,
-      journalEntries: journalEntries.length,
+      journalEntries: journalEntries.length + finJournalEntries.length,
       budget: budgetItems.length,
-      workOrders: workOrders.length,
       paymentAdvices: paymentAdvices.length,
       pettyCash: pettyCash.length,
       siteInvoices: finInvoices.length,
       purchaseOrders: purchaseOrders.length,
       parties: parties.length,
+      expenseClaims: expenseClaims.length,
+      creditNotes: creditNotes.length,
+      assets: assets.length,
+      alerts: alerts.length,
+      followUps: followUps.length,
+      accounts: accounts.length,
     }
 
     return NextResponse.json({
@@ -158,13 +215,19 @@ export async function GET(request: NextRequest) {
           totalPayrollPaid: 0, totalPayrollPending: 0, totalPayrollGross: 0,
           totalPOValue: totalPOValueAll, totalPOOpen: openPOValue,
           totalBudgetPlanned, totalBudgetActual, budgetVariance,
-          // newly synced modules
-          totalWorkOrderValue, totalWorkOrderBilled, totalWorkOrderUnexecuted, totalWorkOrderReceived, activeWorkOrders,
           totalPaymentAdvices,
           pettyCashIn, pettyCashOut, pettyCashBalance,
-          totalSiteInvoiceValue, totalSiteInvoiceCount,
+          totalSiteInvoiceValue, totalSiteInvoiceCount, pendingSiteInvoices,
           openPOCount, openPOValue,
           activeVendorCount,
+          // New KPIs
+          totalExpenseClaims, pendingExpenseClaims, approvedExpenseClaims,
+          totalCreditNotes, openCreditNotes,
+          totalAssetCost, activeAssets,
+          alertCount, urgentAlerts, unreadAlerts,
+          openFollowUps, overdueFollowUps,
+          assetAccountsCount, liabilityAccountsCount, equityAccountsCount, incomeAccountsCount, expenseAccountsCount,
+          totalJournalDebits, totalJournalCredits, draftJournals, postedJournals,
         },
         monthlyTrends,
         apSummary,
@@ -174,6 +237,7 @@ export async function GET(request: NextRequest) {
         recentTransactions,
         alerts: alertsTop,
         moduleCounts,
+        syncedAt: new Date().toISOString(),
       },
     })
   } catch (error) {

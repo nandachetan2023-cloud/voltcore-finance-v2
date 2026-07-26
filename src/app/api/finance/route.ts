@@ -9,8 +9,6 @@ export async function GET() {
     endpoints: [
       '/api/finance/import/os-details/preview',
       '/api/finance/import/os-details/commit',
-      '/api/finance/import/work-order/preview',
-      '/api/finance/import/work-order/commit',
       '/api/finance/import/payment-advice/preview',
       '/api/finance/import/payment-advice/commit',
     ],

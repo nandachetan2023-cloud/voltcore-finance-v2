@@ -1,18 +1,57 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Loader2, Trash2, Search, Filter, Download } from 'lucide-react';
+import { FileText, Loader2, Trash2, Search, Filter, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
+import { ExportButton, type ExportColumn } from './_import-export';
+import ImportWizard, { type ImportField } from './_import-wizard';
 
 interface JournalEntry {
   id: number; entryNo: string; date: string; account: string;
   accountName: string | null; debit: number; credit: number;
   description: string | null; reference: string | null;
   voucherType: string | null; status: string;
+}
+
+const JE_COLUMNS: ExportColumn<JournalEntry>[] = [
+  { header: 'Entry No', accessor: 'entryNo' },
+  { header: 'Date', accessor: (r) => r.date?.split('T')[0] ?? '' },
+  { header: 'Account', accessor: 'account' },
+  { header: 'Account Name', accessor: 'accountName' },
+  { header: 'Description', accessor: 'description' },
+  { header: 'Reference', accessor: 'reference' },
+  { header: 'Voucher Type', accessor: 'voucherType' },
+  { header: 'Debit', accessor: 'debit' },
+  { header: 'Credit', accessor: 'credit' },
+  { header: 'Status', accessor: 'status' },
+];
+
+const JE_IMPORT_FIELDS: ImportField[] = [
+  { key: 'entryNo', label: 'Entry No', required: true },
+  { key: 'date', label: 'Date', type: 'date' },
+  { key: 'account', label: 'Account', required: true },
+  { key: 'accountName', label: 'Account Name' },
+  { key: 'description', label: 'Description' },
+  { key: 'reference', label: 'Reference' },
+  { key: 'voucherType', label: 'Voucher Type' },
+  { key: 'debit', label: 'Debit', type: 'number' },
+  { key: 'credit', label: 'Credit', type: 'number' },
+  { key: 'status', label: 'Status' },
+];
+const JE_SAMPLE_ROW = { entryNo: 'JE-2026-001', date: '2026-01-31', account: 'Project Revenue', accountName: 'Revenue', description: 'Monthly revenue', reference: 'INV-001', voucherType: 'Journal', debit: 0, credit: 2950000, status: 'Posted' };
+
+function generateMockJournal(): JournalEntry[] {
+  return [
+    { id: 1, entryNo: 'JE/2024-25/001', date: '2025-01-10T00:00:00', account: '1002', accountName: 'Bank Account — SBI', debit: 5310000, credit: 0, description: 'Receipt from NTPC — INV/001', reference: 'AR/2024-25/001', voucherType: 'Receipt', status: 'Posted' },
+    { id: 2, entryNo: 'JE/2024-25/002', date: '2025-01-12T00:00:00', account: '4001', accountName: 'Material Expense', debit: 0, credit: 3200000, description: 'ABB India — HT panel supply', reference: 'AP/2024-25/001', voucherType: 'Payment', status: 'Posted' },
+    { id: 3, entryNo: 'JE/2024-25/003', date: '2025-01-15T00:00:00', account: '1001', accountName: 'Cash in Hand', debit: 250000, credit: 0, description: 'Petty cash withdrawal', reference: 'PC/001', voucherType: 'Contra', status: 'Posted' },
+    { id: 4, entryNo: 'JE/2024-25/004', date: '2025-02-01T00:00:00', account: '3001', accountName: 'Revenue — NTPC', debit: 0, credit: 4500000, description: 'Monthly billing — NTPC Jan 2025', reference: 'AR/2024-25/002', voucherType: 'Journal', status: 'Posted' },
+    { id: 5, entryNo: 'JE/2024-25/005', date: '2025-02-05T00:00:00', account: '4002', accountName: 'Salary Expense', debit: 7500000, credit: 0, description: 'Feb 2025 salary — all sites', reference: 'PAY/02-2025', voucherType: 'Payment', status: 'Posted' },
+  ];
 }
 
 export default function JournalEntries() {
@@ -22,12 +61,18 @@ export default function JournalEntries() {
   const [deleteTarget, setDeleteTarget] = useState<JournalEntry | null>(null);
   const [search, setSearch] = useState('');
   const [voucherFilter, setVoucherFilter] = useState('all');
+  const [importOpen, setImportOpen] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
   const fetchData = useCallback(async () => {
-    try { setLoading(true); const res = await fetch('/api/journal-entries'); const json = await res.json(); if (json.success) setRecords(json.data); }
-    catch { toast.error('Failed to fetch journal entries'); }
+    try {
+      setLoading(true);
+      const res = await fetch('/api/journal-entries');
+      const json = await res.json();
+      if (json.success && json.data?.length) { setRecords(json.data); }
+      else { setRecords(generateMockJournal()); toast.info('Sample data — no server records found'); }
+    } catch { setRecords(generateMockJournal()); toast.info('Sample data — API unavailable'); }
     finally { setLoading(false); }
   }, []);
 
@@ -39,8 +84,6 @@ export default function JournalEntries() {
     try { const r = await fetch(`/api/journal-entries?id=${deleteTarget.id}`, { method: 'DELETE' }); const j = await r.json(); if (j.success) { toast.success('Entry deleted'); setDeleteOpen(false); await fetchData(); } else toast.error(j.error || 'Failed'); }
     catch { toast.error('Network error'); }
   };
-
-  const handleExport = () => { window.open('/api/journal-entries?format=csv', '_blank'); };
 
   // Filter + paginate
   const filtered = records.filter(r => {
@@ -69,8 +112,23 @@ export default function JournalEntries() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
 
+  if (importOpen) {
+    return (
+      <ImportWizard
+        title="Journal Entries"
+        fields={JE_IMPORT_FIELDS}
+        keyField="entryNo"
+        existingKeys={new Set(records.map(r => r.entryNo))}
+        commitEndpoint="/api/journal-entries/import"
+        sampleRow={JE_SAMPLE_ROW}
+        onClose={() => setImportOpen(false)}
+        onImported={fetchData}
+      />
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-3">
         <div className="vc-stat-card relative overflow-hidden">
@@ -91,7 +149,7 @@ export default function JournalEntries() {
         <div className="vc-stat-card relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00d4ff]" />
           <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Balance</div>
-          <div className={`text-[18px] font-bold ${Math.abs(totalDebit - totalCredit) < 0.01 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`} style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{Math.abs(totalDebit - totalCredit) < 0.01 ? 'Balanced' : `&#8377;${Math.abs(totalDebit - totalCredit).toLocaleString('en-IN')}`}</div>
+          <div className={`text-[18px] font-bold ${Math.abs(totalDebit - totalCredit) < 0.01 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`} style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{Math.abs(totalDebit - totalCredit) < 0.01 ? 'Balanced' : `&#8377;${(Math.abs(totalDebit - totalCredit) ?? 0).toLocaleString('en-IN')}`}</div>
         </div>
       </div>
 
@@ -100,7 +158,7 @@ export default function JournalEntries() {
         <div className="vc-panel-header">
           <FileText size={15} className="text-[#f5a623]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">General Ledger — Journal Entries</span>
-          <button onClick={handleExport} className="vc-btn-ghost flex items-center gap-1.5 ml-auto" title="Export CSV"><Download size={13} /> Export</button>
+          <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={JE_COLUMNS} filename="journal-entries" />
         </div>
 
         {/* Search + Filter bar */}
@@ -142,8 +200,8 @@ export default function JournalEntries() {
                   <td className="py-2.5 px-3 text-[#8899aa] max-w-[220px] truncate">{r.description || '—'}</td>
                   <td className="py-2.5 px-3 text-[#5a6878] font-mono">{r.reference || '—'}</td>
                   <td className="py-2.5 px-3"><span className={`vc-badge ${voucherColor(r.voucherType)}`}>{r.voucherType || '—'}</span></td>
-                  <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">{r.debit > 0 ? <span className="text-[#00e676]">&#8377;{r.debit.toLocaleString('en-IN')}</span> : <span className="text-[#5a6878]">—</span>}</td>
-                  <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">{r.credit > 0 ? <span className="text-[#ff3d3d]">&#8377;{r.credit.toLocaleString('en-IN')}</span> : <span className="text-[#5a6878]">—</span>}</td>
+                  <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">{r.debit > 0 ? <span className="text-[#00e676]">&#8377;{(r.debit ?? 0).toLocaleString('en-IN')}</span> : <span className="text-[#5a6878]">—</span>}</td>
+                  <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">{r.credit > 0 ? <span className="text-[#ff3d3d]">&#8377;{(r.credit ?? 0).toLocaleString('en-IN')}</span> : <span className="text-[#5a6878]">—</span>}</td>
                   <td className="py-2.5 px-3"><button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button></td>
                 </tr>
               ))}
@@ -174,8 +232,8 @@ export default function JournalEntries() {
             <span className="text-[#5a6878]">Status: <span className="text-[#00e676] font-medium">Period Open</span></span>
           </div>
           <div className="flex items-center gap-6 text-[12px] font-mono">
-            <span className="text-[#5a6878]">Dr: <span className="text-[#00e676] font-semibold">&#8377;{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
-            <span className="text-[#5a6878]">Cr: <span className="text-[#ff3d3d] font-semibold">&#8377;{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+            <span className="text-[#5a6878]">Dr: <span className="text-[#00e676] font-semibold">&#8377;{(totalDebit ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+            <span className="text-[#5a6878]">Cr: <span className="text-[#ff3d3d] font-semibold">&#8377;{(totalCredit ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
           </div>
         </div>
       </div>

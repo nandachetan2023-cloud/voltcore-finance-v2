@@ -926,7 +926,7 @@ export default function EmployeesModule() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={Users} label="Total Employees" value={totalEmployees} color="#f5a623" />
         <StatCard icon={MapPin} label="Active" value={activeCount} color="#00e676" />

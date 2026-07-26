@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
       pdb.accountsPayable.findMany({
         where: { status: { in: ['Pending', 'Partially Paid', 'Overdue'] } },
         orderBy: { dueDate: 'asc' },
+        include: { site: true },
       }),
       pdb.bankAccount.findMany({ where: { status: 'Active' }, orderBy: { accountName: 'asc' } }),
       pdb.bankTransaction.findMany({
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
       await tx.bankAccount.update({ where: { id: account.id }, data: { balance: newBalance } })
 
       // 3. Settle the bill if linked
-      let updatedBill = null
+      let updatedBill: Awaited<ReturnType<typeof tx.accountsPayable.update>> | null = null
       if (bill) {
         const fullyPaid = payAmount >= bill.totalAmount
         updatedBill = await tx.accountsPayable.update({

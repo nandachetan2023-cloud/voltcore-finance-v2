@@ -174,7 +174,7 @@ function HBarChart({ data, title, barKey, labelKey, useTotal = false }: {
             <div className="flex items-center justify-between mb-1">
               <span className="text-[11px] text-[#8899aa]">{d.name}</span>
               <span className="text-[12px] font-semibold text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                {typeof d.value === 'number' ? d.value.toLocaleString('en-IN') : d.value}
+                {typeof d.value === 'number' ? (d.value ?? 0).toLocaleString('en-IN') : d.value}
                 {d.value > 0 && <span className="text-[9px] text-[#5a6878] ml-1">({((d.value / baseVal) * 100).toFixed(0)}%)</span>}
               </span>
             </div>

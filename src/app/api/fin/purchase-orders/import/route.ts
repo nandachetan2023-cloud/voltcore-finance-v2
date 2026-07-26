@@ -28,63 +28,89 @@ function str(v: unknown): string {
 }
 
 function pick(row: Record<string, unknown>, ...keys: string[]): unknown {
-  for (const k of keys) {
-    if (k in row && row[k] !== '' && row[k] !== null && row[k] !== undefined) return row[k]
-  }
+  for (const k of keys) { if (k in row && row[k] !== '' && row[k] !== null && row[k] !== undefined) return row[k] }
   const lower: Record<string, unknown> = {}
   for (const rk of Object.keys(row)) lower[rk.toLowerCase().trim()] = row[rk]
-  for (const k of keys) {
-    const v = lower[k.toLowerCase().trim()]
-    if (v !== '' && v !== null && v !== undefined) return v
-  }
+  for (const k of keys) { const v = lower[k.toLowerCase().trim()]; if (v !== '' && v !== null && v !== undefined) return v }
   return ''
+}
+
+async function handleFileUpload(pdb: any, file: File) {
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const wb = XLSX.read(buffer, { type: 'buffer' })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+
+  const defaultSiteName = 'All Sites (Imported)'
+  let siteId: number
+  const existing = await pdb.finSite.findFirst({ where: { name: defaultSiteName } })
+  if (existing) siteId = existing.id
+  else { const s = await pdb.finSite.create({ data: { siteCode: 'IMP-001', name: defaultSiteName, status: 'Active' } }); siteId = s.id }
+
+  let created = 0, skipped = 0, errors = 0
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]
+    const poNo = str(pick(r, 'WORK ORDER NO', 'PO NO', 'PO No.', 'Work Order No', 'WO NO'))
+    if (!poNo) { skipped++; continue }
+    const vendorName = str(pick(r, 'PARTY', 'VENDOR', 'Vendor', 'Party Name')) || 'Unknown Vendor'
+    try {
+      const existingPo = await pdb.finPurchaseOrder.findFirst({ where: { poNo } })
+      const data = {
+        poNo, vendorId: str(pick(r, 'VENDOR ID', 'Vendor Code')) || 'NA', vendorName, siteId,
+        date: excelDateToJS(pick(r, 'DATE', 'PO DATE', 'Order Date')) || new Date(),
+        descriptionOfWork: str(pick(r, 'DESCRIPTION', 'Description of Work', 'WORK')) || null,
+        totalAmount: num(pick(r, 'ORDER AMOUNT', 'AMOUNT', 'Total Amount', 'TOTAL')),
+        status: 'Active', updatedAt: new Date(),
+      }
+      if (existingPo) await pdb.finPurchaseOrder.update({ where: { id: existingPo.id }, data })
+      else await pdb.finPurchaseOrder.create({ data })
+      created++
+    } catch { errors++ }
+  }
+  return { success: true, summary: { totalRows: rows.length, created, updated: 0, skipped, errors } }
+}
+
+async function handleJsonRecords(pdb: any, records: any[]) {
+  let created = 0, updated = 0, skipped = 0, errors = 0
+  const errorRows: { row: number; message: string }[] = []
+
+  for (let i = 0; i < records.length; i++) {
+    const r = records[i]
+    if (!r.poNo) { skipped++; continue }
+    try {
+      const data = {
+        poNo: r.poNo, vendorId: r.vendorId || 'NA', vendorName: r.vendorName || '',
+        siteId: Number(r.siteId) || 1, date: r.date ? new Date(r.date) : new Date(),
+        descriptionOfWork: r.descriptionOfWork || null, totalAmount: Number(r.totalAmount) || 0,
+        status: r.status || 'Draft',
+      }
+      const existing = await pdb.finPurchaseOrder.findFirst({ where: { poNo: r.poNo } })
+      if (existing) { await pdb.finPurchaseOrder.update({ where: { id: existing.id }, data }); updated++ }
+      else { await pdb.finPurchaseOrder.create({ data }); created++ }
+    } catch (e) { errors++; errorRows.push({ row: i + 1, message: (e as Error).message }) }
+  }
+  return { success: true, summary: { totalRows: records.length, created, updated, skipped, errors }, errorRows: errorRows.slice(0, 20) }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
+    const contentType = request.headers.get('content-type') || ''
+
+    if (contentType.includes('json')) {
+      const body = await request.json()
+      const records: any[] = Array.isArray(body?.records) ? body.records : []
+      if (records.length === 0) return NextResponse.json({ success: false, error: 'No records provided' }, { status: 400 })
+      const result = await handleJsonRecords(pdb, records)
+      return NextResponse.json(result)
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     if (!file) return NextResponse.json({ success: false, error: 'No file provided' }, { status: 400 })
 
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const wb = XLSX.read(buffer, { type: 'buffer' })
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
-
-    // Default rollup site
-    const defaultSiteName = 'All Sites (Imported)'
-    let siteId: number
-    const existing = await pdb.finSite.findFirst({ where: { name: defaultSiteName } })
-    if (existing) siteId = existing.id
-    else { const s = await pdb.finSite.create({ data: { siteCode: 'IMP-001', name: defaultSiteName, status: 'Active' } }); siteId = s.id }
-
-    let created = 0, skipped = 0, errors = 0
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i]
-      const poNo = str(pick(r, 'WORK ORDER NO', 'PO NO', 'PO No.', 'Work Order No', 'WO NO'))
-      if (!poNo) { skipped++; continue }
-      const vendorName = str(pick(r, 'PARTY', 'VENDOR', 'Vendor', 'Party Name')) || 'Unknown Vendor'
-      try {
-        const existingPo = await pdb.finPurchaseOrder.findFirst({ where: { poNo } })
-        const data = {
-          poNo,
-          vendorId: str(pick(r, 'VENDOR ID', 'Vendor Code')) || 'NA',
-          vendorName,
-          siteId,
-          date: excelDateToJS(pick(r, 'DATE', 'PO DATE', 'Order Date')) || new Date(),
-          descriptionOfWork: str(pick(r, 'DESCRIPTION', 'Description of Work', 'WORK')) || null,
-          totalAmount: num(pick(r, 'ORDER AMOUNT', 'AMOUNT', 'Total Amount', 'TOTAL')),
-          status: 'Active',
-          updatedAt: new Date(),
-        }
-        if (existingPo) await pdb.finPurchaseOrder.update({ where: { id: existingPo.id }, data })
-        else await pdb.finPurchaseOrder.create({ data })
-        created++
-      } catch { errors++ }
-    }
-
-    return NextResponse.json({ success: true, summary: { createdWorkOrders: created, updatedWorkOrders: 0, rowErrors: errors, skipped } })
+    const result = await handleFileUpload(pdb, file)
+    return NextResponse.json(result)
   } catch (error) {
     console.error('PO import error:', error)
     return NextResponse.json({ success: false, error: (error as Error).message || 'Import failed' }, { status: 500 })

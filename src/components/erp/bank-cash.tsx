@@ -34,7 +34,7 @@ export default function BankCash() {
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* Total Balance */}
       <div className="vc-stat-card relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00d4ff]" />
@@ -63,7 +63,7 @@ export default function BankCash() {
               </div>
             </div>
             <div className="text-[18px] font-bold text-[#00e676]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-              ₹{acc.balance.toLocaleString('en-IN')}
+              ₹{(acc.balance ?? 0).toLocaleString('en-IN')}
             </div>
             <div className="text-[9px] text-[#5a6878] mt-1">{acc.branch || ''}</div>
           </div>
@@ -99,10 +99,10 @@ export default function BankCash() {
                   <td className="py-2.5 px-3 text-[#8899aa] max-w-[200px] truncate">{t.description || '—'}</td>
                   <td className="py-2.5 px-3 font-mono font-medium">
                     <span className={t.type === 'Credit' ? 'text-[#00e676]' : 'text-[#ff3d3d]'}>
-                      {t.type === 'Credit' ? '+' : '-'}₹{t.amount.toLocaleString('en-IN')}
+                      {t.type === 'Credit' ? '+' : '-'}₹{(t.amount ?? 0).toLocaleString('en-IN')}
                     </span>
                   </td>
-                  <td className="py-2.5 px-3 text-[#e2e8f0] font-mono">₹{t.balance.toLocaleString('en-IN')}</td>
+                  <td className="py-2.5 px-3 text-[#e2e8f0] font-mono">₹{(t.balance ?? 0).toLocaleString('en-IN')}</td>
                   <td className="py-2.5 px-3 text-[#5a6878]">{t.category || '—'}</td>
                   <td className="py-2.5 px-3">
                     <span className={`w-2 h-2 rounded-full inline-block ${t.reconciled ? 'bg-[#00e676]' : 'bg-[#5a6878]'}`} />

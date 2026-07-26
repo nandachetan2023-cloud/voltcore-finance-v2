@@ -68,7 +68,7 @@ const MONTHS = [
 
 const YEARS = [2024, 2025, 2026, 2027];
 
-const formatCurrency = (val: number) => '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const formatCurrency = (val: number) => '₹' + (val ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const formatLakhs = (val: number) => {
   if (val >= 10000000) return '₹' + (val / 10000000).toFixed(2) + 'Cr';
   if (val >= 100000) return '₹' + (val / 100000).toFixed(1) + 'L';
@@ -591,7 +591,7 @@ export default function PayrollModule() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={IndianRupee} label="Total Runs" value={stats.totalRuns.toString()} color="#f5a623" />
         <StatCard icon={Users} label="Employees Processed" value={stats.totalEmployees.toString()} color="#00e676" />
@@ -670,7 +670,7 @@ export default function PayrollModule() {
 
       {/* Search & Download Payslips Dialog */}
       <Dialog open={searchPayslipOpen} onOpenChange={setSearchPayslipOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">Search & Download Payslips</DialogTitle>
           </DialogHeader>
@@ -768,7 +768,7 @@ export default function PayrollModule() {
 
       {/* Generate Payroll Dialog - Step 1A: Download Template */}
       <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">Generate Payroll Excel - Step 1</DialogTitle>
           </DialogHeader>
@@ -859,7 +859,7 @@ export default function PayrollModule() {
 
       {/* Upload & Calculate Dialog - Step 1B */}
       <Dialog open={uploadCalculateOpen} onOpenChange={setUploadCalculateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">Upload & Calculate - Step 2</DialogTitle>
           </DialogHeader>
@@ -940,7 +940,7 @@ export default function PayrollModule() {
 
       {/* View Details Dialog */}
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] w-[98vw] max-w-[98vw] sm:max-w-[98vw]">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] w-[98vw] max-w-[98vw] sm:max-w-[98vw]">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">{selectedRun?.name}</DialogTitle>
           </DialogHeader>

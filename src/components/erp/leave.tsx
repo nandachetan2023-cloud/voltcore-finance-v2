@@ -788,7 +788,7 @@ export default function LeaveModule() {
   if (loading) return <LoadingSkeleton />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Clock} label="Pending Requests" value={pendingCount} color="#ffab40" />
@@ -905,7 +905,7 @@ export default function LeaveModule() {
 
       {/* Create Leave Dialog */}
       <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) { setForm(EMPTY_FORM); setFieldErrors({}); } }}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
               <Plus size={16} /> New Leave Request
@@ -1032,7 +1032,7 @@ export default function LeaveModule() {
 
       {/* Approval chain not configured — block error dialog */}
       <Dialog open={!!blockError} onOpenChange={() => setBlockError(null)}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
               <AlertTriangle size={16} /> Cannot Create Leave Request

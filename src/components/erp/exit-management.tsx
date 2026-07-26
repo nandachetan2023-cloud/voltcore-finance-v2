@@ -252,7 +252,7 @@ export default function ExitManagement() {
 
       {/* Exit Interview Dialog */}
       <Dialog open={interviewOpen} onOpenChange={setInterviewOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-lg">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-[#a78bfa] flex items-center gap-2">
               <FileText size={16} />

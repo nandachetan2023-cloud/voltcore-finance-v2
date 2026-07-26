@@ -32,6 +32,10 @@ function str(v: unknown): string {
   return String(v).trim()
 }
 
+function isValidPartyName(name: string): boolean {
+  return name.trim().length >= 2 && !/^\d+\.?\d*$/.test(name.trim())
+}
+
 // Flexible column getter — tries multiple header spellings (handles typos in source files)
 function pick(row: Record<string, unknown>, ...keys: string[]): unknown {
   for (const k of keys) {
@@ -50,6 +54,92 @@ function pick(row: Record<string, unknown>, ...keys: string[]): unknown {
 export async function POST(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
+
+    // ── JSON records path (ImportWizard) ──
+    if (request.headers.get('content-type')?.includes('application/json')) {
+      const body = await request.json()
+      const records = body.records as Record<string, unknown>[]
+      if (!Array.isArray(records)) return NextResponse.json({ success: false, error: 'Expected { records: [...] }' }, { status: 400 })
+
+      let created = 0, updated = 0, skipped = 0, errors = 0
+      const partyCache = new Map<string, number>()
+      const defaultSiteName = 'All Sites (Imported)'
+      let defaultSiteId: number
+      const existingSite = await pdb.finSite.findFirst({ where: { name: defaultSiteName } })
+      if (existingSite) defaultSiteId = existingSite.id
+      else { const s = await pdb.finSite.create({ data: { siteCode: 'IMP-001', name: defaultSiteName, status: 'Active' } }); defaultSiteId = s.id }
+
+      for (const r of records) {
+        const invoiceNo = str(r.invoiceNo)
+        if (!invoiceNo) { skipped++; continue }
+        try {
+          const clientName = str(r.client || r.partyName) || 'Unknown Client'
+          if (!isValidPartyName(clientName)) { skipped++; continue }
+          let partyId = partyCache.get(clientName)
+          if (!partyId) {
+            let party = await pdb.finParty.findFirst({ where: { name: clientName } })
+            if (!party) party = await pdb.finParty.create({ data: { name: clientName } })
+            partyId = party.id
+            partyCache.set(clientName, partyId)
+          }
+
+          const siteName = str(r.siteName) || defaultSiteName
+          let siteId: number
+          if (siteName === defaultSiteName) siteId = defaultSiteId
+          else {
+            const s = await pdb.finSite.findFirst({ where: { name: siteName } })
+            siteId = s ? s.id : defaultSiteId
+          }
+
+          const invoiceValue = num(r.invoiceValue)
+          const gstValue = num(r.gstValue)
+          const grandTotal = num(r.grandTotal) || (invoiceValue + gstValue)
+          const balanceAmount = num(r.balanceAmount) || grandTotal
+
+          const data = {
+            invoiceNo,
+            trackingNo: str(r.trackingNo) || null,
+            poNo: str(r.poNo) || null,
+            siteId,
+            partyId,
+            client: clientName,
+            area: str(r.area) || null,
+            month: str(r.month) || null,
+            invoiceDate: new Date(str(r.invoiceDate) || new Date()),
+            dueDate: new Date(str(r.dueDate) || str(r.invoiceDate) || new Date()),
+            eInvoiceDate: r.eInvoiceDate ? new Date(str(r.eInvoiceDate)) : null,
+            invoiceValue,
+            gstValue,
+            grandTotal,
+            balanceAmount,
+            description: str(r.description) || null,
+            remarks: str(r.remarks) || null,
+            status: str(r.status) || 'Unpaid',
+            tdsDeduction: num(r.tdsDeduction),
+            kpiDeduction: num(r.kpiDeduction),
+            safetyDeduction: num(r.safetyDeduction),
+            otherDeduction: num(r.otherDeduction),
+            totalDeduction: num(r.totalDeduction),
+            afterTdsBalance: num(r.afterTdsBalance),
+            receivedAmount: num(r.receivedAmount),
+            roundoffAmount: num(r.roundoffAmount),
+            voucherNo: str(r.voucherNo) || null,
+            receivedDate: r.receivedDate ? new Date(str(r.receivedDate)) : null,
+          }
+
+          const existing = await pdb.finInvoice.findFirst({ where: { invoiceNo } })
+          if (existing) { await pdb.finInvoice.update({ where: { id: existing.id }, data }); updated++ }
+          else { await pdb.finInvoice.create({ data }); created++ }
+        } catch { errors++ }
+      }
+
+      return NextResponse.json({
+        success: true,
+        summary: { totalRows: records.length, created, updated, skipped, errors },
+      })
+    }
+
+    // ── FormData (file upload) path ──
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     let sheetName = (formData.get('sheet') as string) || ''
@@ -96,6 +186,7 @@ export async function POST(request: NextRequest) {
       if (!billNo) { skipped++; continue }
 
       const clientName = str(pick(r, 'CLIENT', 'Clinent', 'Client', 'CLINENT')) || 'Unknown Client'
+      if (!isValidPartyName(clientName)) { skipped++; continue }
       const remarks = str(pick(r, 'REMARKS', 'Remarks'))
       const invoiceValue = num(pick(r, 'INVOICE VALUE', 'Invoice Value'))
 

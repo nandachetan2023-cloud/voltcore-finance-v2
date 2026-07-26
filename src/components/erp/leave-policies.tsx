@@ -171,7 +171,7 @@ export default function LeavePoliciesModule() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <div className="vc-panel">
         <div className="vc-panel-header">
           <FileText size={16} className="text-[#00d4ff]" />
@@ -260,7 +260,7 @@ export default function LeavePoliciesModule() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Create Leave Policy</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -413,7 +413,7 @@ export default function LeavePoliciesModule() {
 
       {/* Edit Dialog - Same structure */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Edit Leave Policy</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -566,7 +566,7 @@ export default function LeavePoliciesModule() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2"><AlertTriangle size={20} className="text-[#ff3d3d]" /> Delete Leave Policy</DialogTitle></DialogHeader>
           <p className="text-[13px] text-[#8899aa]">Are you sure you want to delete this leave policy? This action cannot be undone.</p>
           <DialogFooter className="gap-2">

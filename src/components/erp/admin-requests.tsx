@@ -71,7 +71,7 @@ export default function AdminRequests() {
         return;
       }
       if (approved > requested) {
-        toast.error(`Approved amount cannot exceed the requested amount of ₹${requested.toLocaleString('en-IN')}`);
+        toast.error(`Approved amount cannot exceed the requested amount of ₹${(requested ?? 0).toLocaleString('en-IN')}`);
         return;
       }
     }
@@ -235,7 +235,7 @@ export default function AdminRequests() {
                         <div className="flex items-center gap-2 mt-1 text-[12px] font-bold">
                           <span className="flex items-center gap-1 text-[#f5a623]">
                             <IndianRupee size={12} />
-                            {Number(r.amount).toLocaleString('en-IN')}
+                            {(Number(r.amount) || 0).toLocaleString('en-IN')}
                             <span className="text-[10px] font-normal text-[#8899aa]">requested</span>
                           </span>
                           {r.approvedAmount !== null && r.approvedAmount !== undefined && r.status === 'approved' && (
@@ -243,7 +243,7 @@ export default function AdminRequests() {
                               <span className="text-[#5a6878]">→</span>
                               <span className="flex items-center gap-1 text-[#00e676]">
                                 <IndianRupee size={12} />
-                                {Number(r.approvedAmount).toLocaleString('en-IN')}
+                                {(Number(r.approvedAmount) || 0).toLocaleString('en-IN')}
                                 <span className="text-[10px] font-normal text-[#8899aa]">approved</span>
                               </span>
                             </>
@@ -294,7 +294,7 @@ export default function AdminRequests() {
       {/* Action Dialog */}
       {actionTarget && (
         <Dialog open onOpenChange={() => { setActionTarget(null); setRejectionNote(''); setApprovedAmount(''); }}>
-          <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
+          <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
             <DialogHeader>
               <DialogTitle className={`flex items-center gap-2 ${actionTarget.action === 'approve' ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>
                 {actionTarget.action === 'approve' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
@@ -314,7 +314,7 @@ export default function AdminRequests() {
                     <span className="text-[#8899aa]">Requested Amount:</span>
                     <span className="text-[#f5a623] font-bold flex items-center gap-1">
                       <IndianRupee size={11} />
-                      {Number(actionTarget.request.amount).toLocaleString('en-IN')}
+                      {(Number(actionTarget.request.amount) || 0).toLocaleString('en-IN')}
                     </span>
                   </div>
                   <div>

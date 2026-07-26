@@ -34,8 +34,8 @@ model BiometricRawLog {
   mFlag       String?
   rawJson     Json
   processed   Boolean   @default(false)
-  matched     Boolean   @default(false)   // true = attendance record created/updated
-  skipReason  String?                      // why it was processed without matching
+  matched     Boolean   @default(false) // true = attendance record created/updated
+  skipReason  String? // why it was processed without matching
   processedAt DateTime?
   createdAt   DateTime  @default(now())
   siteId      String?
@@ -71,38 +71,38 @@ model Branch {
 }
 
 model Customer {
-  id            Int          @id @default(autoincrement())
-  name          String
-  contactPerson String?
-  email         String?
-  phone         String?
-  address       String?
-  city          String?
-  state         String?
-  pincode       String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime
-  Invoice       Invoice[]
-  Quotation     Quotation[]
-  SalesOrder    SalesOrder[]
+  id              Int               @id @default(autoincrement())
+  name            String
+  contactPerson   String?
+  email           String?
+  phone           String?
+  address         String?
+  city            String?
+  state           String?
+  pincode         String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime
+  Invoice         Invoice[]
+  Quotation       Quotation[]
+  SalesOrder      SalesOrder[]
   SalesTaxInvoice SalesTaxInvoice[]
 }
 
 model Department {
-  id             Int              @id @default(autoincrement())
-  name           String           @unique
-  code           String           @unique
-  Employee       Employee[]
-  AttendanceRule AttendanceRule[]
-  LeavePolicy    LeavePolicy[]
+  id                Int                 @id @default(autoincrement())
+  name              String              @unique
+  code              String              @unique
+  Employee          Employee[]
+  AttendanceRule    AttendanceRule[]
+  LeavePolicy       LeavePolicy[]
   ChecklistTemplate ChecklistTemplate[]
 }
 
 model Designation {
-  id          Int           @id @default(autoincrement())
-  name        String        @unique
-  Employee    Employee[]
-  LeavePolicy LeavePolicy[]
+  id                Int                 @id @default(autoincrement())
+  name              String              @unique
+  Employee          Employee[]
+  LeavePolicy       LeavePolicy[]
   ChecklistTemplate ChecklistTemplate[]
 }
 
@@ -193,18 +193,6 @@ model Invoice {
   updatedAt    DateTime
   Customer     Customer      @relation(fields: [customerId], references: [id])
   SalesOrder   SalesOrder?   @relation(fields: [salesOrderId], references: [id])
-  InvoiceItem  InvoiceItem[]
-}
-
-model InvoiceItem {
-  id        Int     @id @default(autoincrement())
-  invoiceId Int
-  itemId    Int
-  qty       Decimal @db.Decimal(15, 3)
-  rate      Decimal @db.Decimal(15, 2)
-  amount    Decimal @db.Decimal(15, 2)
-  Invoice   Invoice @relation(fields: [invoiceId], references: [id])
-  Item      Item    @relation(fields: [itemId], references: [id])
 }
 
 model Item {
@@ -231,12 +219,10 @@ model Item {
   isDeleted                   Boolean             @default(false)
   createdAt                   DateTime            @default(now())
   updatedAt                   DateTime
-  InvoiceItem                 InvoiceItem[]
   ItemCategory                ItemCategory?       @relation(fields: [categoryId], references: [id])
   Uom_Item_purchaseUomIdToUom Uom?                @relation("Item_purchaseUomIdToUom", fields: [purchaseUomId], references: [id])
   Uom_Item_salesUomIdToUom    Uom?                @relation("Item_salesUomIdToUom", fields: [salesUomId], references: [id])
   Uom_Item_uomIdToUom         Uom                 @relation("Item_uomIdToUom", fields: [uomId], references: [id])
-  PurchaseOrderItem           PurchaseOrderItem[]
   QuotationItem               QuotationItem[]
   SalesOrderItem              SalesOrderItem[]
   StockEntryLine              StockEntryLine[]
@@ -276,36 +262,36 @@ model LeaveRequest {
 }
 
 model PayrollItem {
-  id                   Int        @id @default(autoincrement())
-  payrollRunId         Int
-  employeeId           Int
-  workingDays          Int        @default(26)
-  presentDays          Int        @default(0)
-  paidLeaveDays        Int        @default(0)
-  lopDays              Int        @default(0)
-  otHours              Decimal    @default(0) @db.Decimal(5, 2)
-  basicSalary          Decimal    @default(0) @db.Decimal(15, 2)
-  hra                  Decimal    @default(0) @db.Decimal(15, 2)
-  conveyanceAllowance  Decimal    @default(0) @db.Decimal(15, 2)
-  medicalAllowance     Decimal    @default(0) @db.Decimal(15, 2)
-  specialAllowance     Decimal    @default(0) @db.Decimal(15, 2)
-  otAmount             Decimal    @default(0) @db.Decimal(15, 2)
-  grossEarning         Decimal    @db.Decimal(15, 2)
-  pfDeduction          Decimal    @default(0) @db.Decimal(15, 2)
-  esiDeduction         Decimal    @default(0) @db.Decimal(15, 2)
-  ptDeduction          Decimal    @default(0) @db.Decimal(15, 2)
-  tdsDeduction         Decimal    @default(0) @db.Decimal(15, 2)
-  lopDeduction         Decimal    @default(0) @db.Decimal(15, 2)
-  otherDeductions      Decimal    @default(0) @db.Decimal(15, 2)
-  totalDeduction       Decimal    @db.Decimal(15, 2)
-  netPay               Decimal    @db.Decimal(15, 2)
-  status               String     @default("pending")
-  payslipGenerated     Boolean    @default(false)
-  payslipPath          String?
-  remarks              String?
-  details              Json?
-  Employee             Employee   @relation(fields: [employeeId], references: [id])
-  PayrollRun           PayrollRun @relation(fields: [payrollRunId], references: [id])
+  id                  Int        @id @default(autoincrement())
+  payrollRunId        Int
+  employeeId          Int
+  workingDays         Int        @default(26)
+  presentDays         Int        @default(0)
+  paidLeaveDays       Int        @default(0)
+  lopDays             Int        @default(0)
+  otHours             Decimal    @default(0) @db.Decimal(5, 2)
+  basicSalary         Decimal    @default(0) @db.Decimal(15, 2)
+  hra                 Decimal    @default(0) @db.Decimal(15, 2)
+  conveyanceAllowance Decimal    @default(0) @db.Decimal(15, 2)
+  medicalAllowance    Decimal    @default(0) @db.Decimal(15, 2)
+  specialAllowance    Decimal    @default(0) @db.Decimal(15, 2)
+  otAmount            Decimal    @default(0) @db.Decimal(15, 2)
+  grossEarning        Decimal    @db.Decimal(15, 2)
+  pfDeduction         Decimal    @default(0) @db.Decimal(15, 2)
+  esiDeduction        Decimal    @default(0) @db.Decimal(15, 2)
+  ptDeduction         Decimal    @default(0) @db.Decimal(15, 2)
+  tdsDeduction        Decimal    @default(0) @db.Decimal(15, 2)
+  lopDeduction        Decimal    @default(0) @db.Decimal(15, 2)
+  otherDeductions     Decimal    @default(0) @db.Decimal(15, 2)
+  totalDeduction      Decimal    @db.Decimal(15, 2)
+  netPay              Decimal    @db.Decimal(15, 2)
+  status              String     @default("pending")
+  payslipGenerated    Boolean    @default(false)
+  payslipPath         String?
+  remarks             String?
+  details             Json?
+  Employee            Employee   @relation(fields: [employeeId], references: [id])
+  PayrollRun          PayrollRun @relation(fields: [payrollRunId], references: [id])
 
   @@index([employeeId, payrollRunId])
 }
@@ -333,7 +319,6 @@ model PurchaseOrder {
   id                Int                 @id @default(autoincrement())
   poNo              String              @unique
   poDate            DateTime
-  vendorId          Int
   warehouseId       Int
   status            String              @default("draft")
   subtotal          Decimal             @db.Decimal(15, 2)
@@ -341,23 +326,7 @@ model PurchaseOrder {
   totalAmount       Decimal             @db.Decimal(15, 2)
   createdAt         DateTime            @default(now())
   updatedAt         DateTime
-  Vendor            Vendor              @relation(fields: [vendorId], references: [id])
   Warehouse         Warehouse           @relation(fields: [warehouseId], references: [id])
-  PurchaseOrderItem PurchaseOrderItem[]
-}
-
-model PurchaseOrderItem {
-  id              Int           @id @default(autoincrement())
-  purchaseOrderId Int
-  itemId          Int
-  qty             Decimal       @db.Decimal(15, 3)
-  rate            Decimal       @db.Decimal(15, 2)
-  amount          Decimal       @db.Decimal(15, 2)
-  receivedQty     Decimal       @default(0) @db.Decimal(15, 3)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime
-  Item            Item          @relation(fields: [itemId], references: [id])
-  PurchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
 }
 
 model Quotation {
@@ -563,23 +532,6 @@ model User {
   WorkflowAction     WorkflowAction[]
 }
 
-model Vendor {
-  id            Int             @id @default(autoincrement())
-  vendorCode    String          @unique
-  vendorName    String
-  contactPerson String?
-  email         String?
-  phone         String?
-  address       String?
-  city          String?
-  state         String?
-  pincode       String?
-  isActive      Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime
-  PurchaseOrder PurchaseOrder[]
-}
-
 model Warehouse {
   id                                               Int                 @id @default(autoincrement())
   name                                             String              @unique
@@ -637,16 +589,16 @@ model WorkflowInstance {
 }
 
 model JobOpening {
-  id           Int      @id @default(autoincrement())
-  position     String
+  id            Int      @id @default(autoincrement())
+  position      String
   designationId Int?
-  site         String
-  openings     Int
-  applications Int      @default(0)
-  priority     String
-  status       String   @default("Open")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime
+  site          String
+  openings      Int
+  applications  Int      @default(0)
+  priority      String
+  status        String   @default("Open")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime
 }
 
 model Certification {
@@ -677,52 +629,52 @@ model TrainingSession {
 }
 
 model Holiday {
-  id            Int       @id @default(autoincrement())
-  name          String
-  date          DateTime
-  type          String    @default("public")
-  description   String?
-  isRecurring   Boolean   @default(false)
-  applicableTo  String    @default("all")
-  branchId      Int?
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime
-  Branch        Branch?   @relation(fields: [branchId], references: [id])
+  id           Int      @id @default(autoincrement())
+  name         String
+  date         DateTime
+  type         String   @default("public")
+  description  String?
+  isRecurring  Boolean  @default(false)
+  applicableTo String   @default("all")
+  branchId     Int?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+  Branch       Branch?  @relation(fields: [branchId], references: [id])
 
   @@index([date])
   @@index([branchId])
 }
 
 model LeavePolicy {
-  id                    Int          @id @default(autoincrement())
-  name                  String
-  code                  String       @unique
-  leaveType             String
-  annualQuota           Decimal      @default(0) @db.Decimal(5, 1)
-  carryForward          Boolean      @default(false)
-  maxCarryForward       Decimal      @default(0) @db.Decimal(5, 1)
-  encashable            Boolean      @default(false)
-  maxEncashment         Decimal      @default(0) @db.Decimal(5, 1)
-  minDaysNotice         Int          @default(0)
-  maxConsecutiveDays    Int          @default(0)
-  applicableAfterMonths Int          @default(0)
-  applicableGender      String       @default("all")
-  applicableTo          String       @default("all")
-  departmentId          Int?
-  designationId         Int?
-  requiresDocument      Boolean      @default(false)
-  isActive              Boolean      @default(true)
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime
+  id                           Int          @id @default(autoincrement())
+  name                         String
+  code                         String       @unique
+  leaveType                    String
+  annualQuota                  Decimal      @default(0) @db.Decimal(5, 1)
+  carryForward                 Boolean      @default(false)
+  maxCarryForward              Decimal      @default(0) @db.Decimal(5, 1)
+  encashable                   Boolean      @default(false)
+  maxEncashment                Decimal      @default(0) @db.Decimal(5, 1)
+  minDaysNotice                Int          @default(0)
+  maxConsecutiveDays           Int          @default(0)
+  applicableAfterMonths        Int          @default(0)
+  applicableGender             String       @default("all")
+  applicableTo                 String       @default("all")
+  departmentId                 Int?
+  designationId                Int?
+  requiresDocument             Boolean      @default(false)
+  isActive                     Boolean      @default(true)
+  createdAt                    DateTime     @default(now())
+  updatedAt                    DateTime
   // Earned Leave specific settings
-  earnedLeaveAccrualMethod   String?  // "monthly" | "quarterly" | "annual"
-  earnedLeaveAccrualRate     Decimal? @db.Decimal(5, 2) // days earned per accrual period
-  earnedLeaveMaxAccumulation Decimal? @db.Decimal(5, 1) // max days that can accumulate
-  earnedLeaveRoundingRule    String?  // "none" | "round_up" | "round_down" | "round_nearest"
-  earnedLeaveEligibleAfterDays Int?   // days of service before EL starts accruing
-  Department            Department?  @relation(fields: [departmentId], references: [id])
-  Designation           Designation? @relation(fields: [designationId], references: [id])
+  earnedLeaveAccrualMethod     String? // "monthly" | "quarterly" | "annual"
+  earnedLeaveAccrualRate       Decimal?     @db.Decimal(5, 2) // days earned per accrual period
+  earnedLeaveMaxAccumulation   Decimal?     @db.Decimal(5, 1) // max days that can accumulate
+  earnedLeaveRoundingRule      String? // "none" | "round_up" | "round_down" | "round_nearest"
+  earnedLeaveEligibleAfterDays Int? // days of service before EL starts accruing
+  Department                   Department?  @relation(fields: [departmentId], references: [id])
+  Designation                  Designation? @relation(fields: [designationId], references: [id])
 
   @@index([leaveType])
   @@index([departmentId])
@@ -730,26 +682,26 @@ model LeavePolicy {
 }
 
 model AttendanceRule {
-  id                    Int         @id @default(autoincrement())
-  name                  String
-  ruleType              String
-  gracePeriodMinutes    Int         @default(0)
-  lateMarkAfterMinutes  Int         @default(0)
-  halfDayAfterMinutes   Int         @default(0)
-  absentAfterMinutes    Int         @default(0)
-  fineAmount            Decimal     @default(0) @db.Decimal(10, 2)
-  fineType              String      @default("fixed")
-  finePerMinute         Decimal     @default(0) @db.Decimal(10, 2)
-  maxFinePerDay         Decimal     @default(0) @db.Decimal(10, 2)
-  applyToShiftId        Int?
-  applyToDepartmentId   Int?
-  applyToBranchId       Int?
-  isActive              Boolean     @default(true)
-  createdAt             DateTime    @default(now())
-  updatedAt             DateTime
-  Shift                 Shift?      @relation(fields: [applyToShiftId], references: [id])
-  Department            Department? @relation(fields: [applyToDepartmentId], references: [id])
-  Branch                Branch?     @relation(fields: [applyToBranchId], references: [id])
+  id                   Int         @id @default(autoincrement())
+  name                 String
+  ruleType             String
+  gracePeriodMinutes   Int         @default(0)
+  lateMarkAfterMinutes Int         @default(0)
+  halfDayAfterMinutes  Int         @default(0)
+  absentAfterMinutes   Int         @default(0)
+  fineAmount           Decimal     @default(0) @db.Decimal(10, 2)
+  fineType             String      @default("fixed")
+  finePerMinute        Decimal     @default(0) @db.Decimal(10, 2)
+  maxFinePerDay        Decimal     @default(0) @db.Decimal(10, 2)
+  applyToShiftId       Int?
+  applyToDepartmentId  Int?
+  applyToBranchId      Int?
+  isActive             Boolean     @default(true)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime
+  Shift                Shift?      @relation(fields: [applyToShiftId], references: [id])
+  Department           Department? @relation(fields: [applyToDepartmentId], references: [id])
+  Branch               Branch?     @relation(fields: [applyToBranchId], references: [id])
 }
 
 model Grade {
@@ -783,12 +735,12 @@ model CompanySettings {
 // Per-tenant biometric site configuration (stored in each tenant's DB)
 model BiometricSiteConfig {
   id          Int      @id @default(autoincrement())
-  siteId      String   @unique  // e.g. "site1", "site2"
+  siteId      String   @unique // e.g. "site1", "site2"
   siteName    String
   baseUrl     String   @default("https://api.etimeoffice.com/api")
   corporateId String
   username    String
-  password    String   // store encrypted in production
+  password    String // store encrypted in production
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime
@@ -796,25 +748,25 @@ model BiometricSiteConfig {
 
 // ── Employee Requests (general + advance payment) ────────────────
 model EmployeeRequest {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   employeeId     Int
-  requestType    String                        // "general" | "advance_payment"
+  requestType    String // "general" | "advance_payment"
   subject        String
   description    String
-  amount         Decimal? @db.Decimal(15, 2)   // requested amount (advance_payment only)
-  approvedAmount Decimal? @db.Decimal(15, 2)   // approver-adjusted amount (may differ from requested)
-  status         String   @default("pending")  // pending | approved | rejected
-  currentStep    Int      @default(1)          // which approval step we're waiting on
+  amount         Decimal?  @db.Decimal(15, 2) // requested amount (advance_payment only)
+  approvedAmount Decimal?  @db.Decimal(15, 2) // approver-adjusted amount (may differ from requested)
+  status         String    @default("pending") // pending | approved | rejected
+  currentStep    Int       @default(1) // which approval step we're waiting on
   approvedBy     Int?
   approvedDate   DateTime?
   rejectedBy     Int?
   rejectedDate   DateTime?
   rejectionNote  String?
-  isDeleted      Boolean  @default(false)
-  createdAt      DateTime @default(now())
+  isDeleted      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
   updatedAt      DateTime
 
-  Employee       Employee @relation(fields: [employeeId], references: [id])
+  Employee Employee @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId, status])
   @@index([requestType, status])
@@ -822,17 +774,17 @@ model EmployeeRequest {
 
 // ── In-app Notifications ─────────────────────────────────────────
 model Notification {
-  id          Int      @id @default(autoincrement())
-  userId      Int                               // TenantUser id (from superadmin DB) — stored as string ref
-  userEmail   String                            // email of recipient (easier lookup)
-  title       String
-  message     String
-  type        String   @default("info")         // info | warning | success | error
-  link        String   @default("")             // optional deep link
-  isRead      Boolean  @default(false)
-  entityType  String   @default("")             // "leave" | "request" | "attendance"
-  entityId    Int?                              // id of the related record
-  createdAt   DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  userId     Int // TenantUser id (from superadmin DB) — stored as string ref
+  userEmail  String // email of recipient (easier lookup)
+  title      String
+  message    String
+  type       String   @default("info") // info | warning | success | error
+  link       String   @default("") // optional deep link
+  isRead     Boolean  @default(false)
+  entityType String   @default("") // "leave" | "request" | "attendance"
+  entityId   Int? // id of the related record
+  createdAt  DateTime @default(now())
 
   @@index([userEmail, isRead])
   @@index([createdAt])
@@ -840,16 +792,16 @@ model Notification {
 
 // ── Onboarding Checklist Templates (defined in Organization) ─────
 model ChecklistTemplate {
-  id            Int                      @id @default(autoincrement())
+  id            Int                     @id @default(autoincrement())
   name          String
   description   String?
   departmentId  Int?
   designationId Int?
-  isActive      Boolean                  @default(true)
-  createdAt     DateTime                 @default(now())
+  isActive      Boolean                 @default(true)
+  createdAt     DateTime                @default(now())
   updatedAt     DateTime
-  Department    Department?              @relation(fields: [departmentId], references: [id])
-  Designation   Designation?             @relation(fields: [designationId], references: [id])
+  Department    Department?             @relation(fields: [departmentId], references: [id])
+  Designation   Designation?            @relation(fields: [designationId], references: [id])
   tasks         ChecklistTemplateTask[]
   instances     OnboardingChecklist[]
 
@@ -858,78 +810,78 @@ model ChecklistTemplate {
 }
 
 model ChecklistTemplateTask {
-  id                  Int                @id @default(autoincrement())
-  templateId          Int
-  title               String
-  description         String?
-  assignedRole        String             @default("hr")   // hr | it | manager | finance | admin
-  dueDayOffset        Int                @default(1)       // days after joining
-  dependsOnTaskId     Int?               // dependency
-  requiresDocument    Boolean            @default(false)
-  documentNecessary   Boolean            @default(false)  // if true, task cannot be marked complete without a document upload
-  order               Int                @default(0)
-  template            ChecklistTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  dependsOn           ChecklistTemplateTask? @relation("TaskDependency", fields: [dependsOnTaskId], references: [id])
-  dependents          ChecklistTemplateTask[] @relation("TaskDependency")
-  instanceTasks       OnboardingTask[]
+  id                Int                     @id @default(autoincrement())
+  templateId        Int
+  title             String
+  description       String?
+  assignedRole      String                  @default("hr") // hr | it | manager | finance | admin
+  dueDayOffset      Int                     @default(1) // days after joining
+  dependsOnTaskId   Int? // dependency
+  requiresDocument  Boolean                 @default(false)
+  documentNecessary Boolean                 @default(false) // if true, task cannot be marked complete without a document upload
+  order             Int                     @default(0)
+  template          ChecklistTemplate       @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  dependsOn         ChecklistTemplateTask?  @relation("TaskDependency", fields: [dependsOnTaskId], references: [id])
+  dependents        ChecklistTemplateTask[] @relation("TaskDependency")
+  instanceTasks     OnboardingTask[]
 
   @@index([templateId])
 }
 
 // ── Onboarding Checklist Instances (per employee, in HRMS) ────────
 model OnboardingChecklist {
-  id           Int                @id @default(autoincrement())
-  employeeId   Int
-  templateId   Int
-  status       String             @default("in_progress") // in_progress | completed | cancelled
-  startedAt    DateTime           @default(now())
-  completedAt  DateTime?
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime
-  Employee     Employee           @relation(fields: [employeeId], references: [id])
-  template     ChecklistTemplate  @relation(fields: [templateId], references: [id])
-  tasks        OnboardingTask[]
+  id          Int               @id @default(autoincrement())
+  employeeId  Int
+  templateId  Int
+  status      String            @default("in_progress") // in_progress | completed | cancelled
+  startedAt   DateTime          @default(now())
+  completedAt DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime
+  Employee    Employee          @relation(fields: [employeeId], references: [id])
+  template    ChecklistTemplate @relation(fields: [templateId], references: [id])
+  tasks       OnboardingTask[]
 
   @@index([employeeId])
 }
 
 model OnboardingTask {
-  id               Int                    @id @default(autoincrement())
+  id               Int                   @id @default(autoincrement())
   checklistId      Int
   templateTaskId   Int
-  status           String                 @default("pending") // pending | in_progress | completed | skipped
+  status           String                @default("pending") // pending | in_progress | completed | skipped
   completedBy      Int?
   completedAt      DateTime?
   notes            String?
-  documentPath     String?                // filename for display
-  documentData     Bytes?                 // file content stored in DB (Option 1)
-  documentMimeType String?                // e.g. "application/pdf", "image/jpeg"
+  documentPath     String? // filename for display
+  documentData     Bytes? // file content stored in DB (Option 1)
+  documentMimeType String? // e.g. "application/pdf", "image/jpeg"
   dueDate          DateTime?
-  checklist        OnboardingChecklist    @relation(fields: [checklistId], references: [id], onDelete: Cascade)
-  templateTask     ChecklistTemplateTask  @relation(fields: [templateTaskId], references: [id])
+  checklist        OnboardingChecklist   @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  templateTask     ChecklistTemplateTask @relation(fields: [templateTaskId], references: [id])
 
   @@index([checklistId])
 }
 
 // ── Resignation & Offboarding ─────────────────────────────────────
 model Resignation {
-  id                Int       @id @default(autoincrement())
+  id                Int             @id @default(autoincrement())
   employeeId        Int
-  submittedAt       DateTime  @default(now())
+  submittedAt       DateTime        @default(now())
   reason            String
-  requestedLwd      DateTime  // Last Working Day requested by employee
+  requestedLwd      DateTime // Last Working Day requested by employee
   calculatedLwd     DateTime? // System-calculated LWD
-  noticePeriodDays  Int       @default(30)
-  buyoutDays        Int       @default(0)  // days bought out
-  status            String    @default("pending") // pending | approved | rejected | withdrawn
-  currentStep       Int       @default(1)
+  noticePeriodDays  Int             @default(30)
+  buyoutDays        Int             @default(0) // days bought out
+  status            String          @default("pending") // pending | approved | rejected | withdrawn
+  currentStep       Int             @default(1)
   managerApprovedAt DateTime?
   hrApprovedAt      DateTime?
   rejectionReason   String?
   notes             String?
-  createdAt         DateTime  @default(now())
+  createdAt         DateTime        @default(now())
   updatedAt         DateTime
-  Employee          Employee  @relation(fields: [employeeId], references: [id])
+  Employee          Employee        @relation(fields: [employeeId], references: [id])
   exitInterview     ExitInterview?
   clearances        ExitClearance[]
 
@@ -938,24 +890,24 @@ model Resignation {
 
 // ── Exit Interview & Clearance ────────────────────────────────────
 model ExitInterview {
-  id              Int         @id @default(autoincrement())
-  resignationId   Int         @unique
-  conductedAt     DateTime?
-  primaryReason   String?     // compensation | growth | culture | personal | relocation | other
-  cultureFeedback String?
+  id                 Int         @id @default(autoincrement())
+  resignationId      Int         @unique
+  conductedAt        DateTime?
+  primaryReason      String? // compensation | growth | culture | personal | relocation | other
+  cultureFeedback    String?
   managementFeedback String?
-  suggestions     String?
-  wouldRejoin     Boolean?
-  rating          Int?        // 1-5 overall company rating
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime
-  resignation     Resignation @relation(fields: [resignationId], references: [id])
+  suggestions        String?
+  wouldRejoin        Boolean?
+  rating             Int? // 1-5 overall company rating
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime
+  resignation        Resignation @relation(fields: [resignationId], references: [id])
 }
 
 model ExitClearance {
   id            Int         @id @default(autoincrement())
   resignationId Int
-  department    String      // it | finance | admin | hr | manager
+  department    String // it | finance | admin | hr | manager
   status        String      @default("pending") // pending | cleared | flagged
   clearedBy     Int?
   clearedAt     DateTime?
@@ -969,21 +921,21 @@ model ExitClearance {
 
 // ── Notice Board ──────────────────────────────────────────────────
 model Notice {
-  id            Int          @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   title         String
   body          String
-  type          String       @default("general") // general | policy | payroll | safety | hr | it
-  targetDept    String?      // null = all departments
-  targetDesig   String?      // null = all designations
-  isPinned      Boolean      @default(false)
-  publishedAt   DateTime     @default(now())
+  type          String    @default("general") // general | policy | payroll | safety | hr | it
+  targetDept    String? // null = all departments
+  targetDesig   String? // null = all designations
+  isPinned      Boolean   @default(false)
+  publishedAt   DateTime  @default(now())
   expiresAt     DateTime?
   createdBy     Int?
   createdByName String
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  reads         NoticeRead[]
+  reads NoticeRead[]
 
   @@index([publishedAt])
   @@index([targetDept])
@@ -996,7 +948,7 @@ model NoticeRead {
   employeeId Int
   readAt     DateTime @default(now())
 
-  notice     Notice   @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  notice Notice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
 
   @@unique([noticeId, employeeId])
   @@index([employeeId])
@@ -1029,7 +981,6 @@ model TourRequest {
   @@index([fromDate, toDate])
 }
 
-
 // ── Finance & Accounting Models ──────────────────────────────────
 model LedgerAccount {
   id            Int      @id @default(autoincrement())
@@ -1049,21 +1000,28 @@ model LedgerAccount {
 }
 
 model JournalEntry {
-  id          Int      @id @default(autoincrement())
-  entryNo     String
-  date        DateTime @db.Date
-  account     String
-  accountName String?
-  debit       Float    @default(0)
-  credit      Float    @default(0)
-  description String?
-  reference   String?
-  voucherType String?
-  status      String   @default("Posted")
-  createdBy   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  entryNo        String
+  date           DateTime @db.Date
+  account        String
+  accountName    String?
+  siteId         Int?
+  partyId        Int?
+  jobCode        String? // job wise costing
+  costCenter     String?
+  department     String? // department wise costing
+  projectManager String? // accountability
+  debit          Float    @default(0)
+  credit         Float    @default(0)
+  description    String?
+  reference      String?
+  voucherType    String?
+  status         String   @default("Posted")
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
+  @@unique([entryNo, account, debit, credit])
   @@index([entryNo])
   @@index([date])
   @@index([account])
@@ -1086,13 +1044,24 @@ model AccountsPayable {
   paymentRef    String?
   status        String    @default("Pending")
   remarks       String?
+  siteId        Int? // site wise costing
+  partyId       Int? // linked vendor master (FinParty), backfilled by name match
+  poId          Int? // linked purchase order
+  jobCode       String? // job wise costing
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  site  FinSite?          @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  party FinParty?         @relation(fields: [partyId], references: [id], onDelete: SetNull)
+  po    FinPurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
 
   @@index([billNo])
   @@index([vendor])
   @@index([status])
   @@index([dueDate])
+  @@index([siteId])
+  @@index([partyId])
+  @@index([poId])
   @@map("AccountsPayable")
 }
 
@@ -1112,13 +1081,21 @@ model AccountsReceivable {
   paymentRef    String?
   status        String    @default("Pending")
   remarks       String?
+  siteId        Int? // site wise costing
+  partyId       Int? // linked customer master (FinParty), backfilled by name match
+  jobCode       String? // job wise costing
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  site  FinSite?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  party FinParty? @relation(fields: [partyId], references: [id], onDelete: SetNull)
 
   @@index([invoiceNo])
   @@index([client])
   @@index([status])
   @@index([dueDate])
+  @@index([siteId])
+  @@index([partyId])
   @@map("AccountsReceivable")
 }
 
@@ -1136,7 +1113,9 @@ model BankAccount {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  transactions BankTransaction[]
+  transactions      BankTransaction[]
+  finPayments       FinPayment[]
+  finPaymentAdvices FinPaymentAdvice[]
 
   @@index([accountNo])
   @@map("BankAccount")
@@ -1179,6 +1158,7 @@ model TaxRecord {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
+  @@unique([taxType, period])
   @@index([taxType])
   @@index([period])
   @@map("TaxRecord")
@@ -1193,72 +1173,89 @@ model BudgetItem {
   variance    Float    @default(0)
   period      String
   month       String?
+  siteId      Int? // site wise budget vs actual
   status      String   @default("On Track")
   remarks     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  site FinSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
   @@index([category])
   @@index([period])
+  @@index([siteId])
   @@map("BudgetItem")
 }
 
-
 // ── Finance – Site & AR Management ──────────────────────────────────
 model FinSite {
-  id            Int      @id @default(autoincrement())
-  siteCode      String   @unique
-  name          String
-  location      String?
-  state         String?
-  contactPerson String?
-  contactPhone  String?
-  contactEmail  String?
-  budget        Float    @default(0)
-  status        String   @default("Active")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                Int      @id @default(autoincrement())
+  siteCode          String   @unique
+  name              String
+  location          String?
+  state             String?
+  projectType       String?
+  billingEntity     String?
+  responsiblePerson String?
+  contactPerson     String?
+  contactPhone      String?
+  contactEmail      String?
+  budget            Float    @default(0)
+  status            String   @default("Active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  invoices          FinInvoice[]
-  areas             FinArea[]
-  workOrders        FinWorkOrder[]
-  expenseClaims     FinExpenseClaim[]
-  purchaseOrders    FinPurchaseOrder[]
-  paymentAdvices    FinPaymentAdvice[]
-  creditNotes       FinCreditNote[]
-  outstanding       FinOutstanding[]
-  alerts            FinAlert[]
-  finJournalEntries FinJournalEntry[]
-  finBudgets        FinBudget[]
-  finAssets         FinAsset[]
+  invoices           FinInvoice[]
+  areas              FinArea[]
+  expenseClaims      FinExpenseClaim[]
+  purchaseOrders     FinPurchaseOrder[]
+  paymentAdvices     FinPaymentAdvice[]
+  creditNotes        FinCreditNote[]
+  outstanding        FinOutstanding[]
+  alerts             FinAlert[]
+  finJournalEntries  FinJournalEntry[]
+  finBudgets         FinBudget[]
+  finAssets          FinAsset[]
+  finPettyCashes     FinPettyCash[]
+  budgetItems        BudgetItem[]
+  accountsPayables   AccountsPayable[]
+  accountsReceivables AccountsReceivable[]
 
   @@index([siteCode])
   @@map("FinSite")
 }
 
-
 // ── Finance Master: Party (Client/Vendor) ─────────────────────────────────────
 model FinParty {
-  id        Int      @id @default(autoincrement())
-  code      String?  @unique
-  name      String   @unique
-  gstin     String?
-  pan       String?
-  address   String?
-  state     String?
-  stateCode String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  code         String?  @unique
+  name         String   @unique
+  shortName    String?
+  partyType    String   @default("Other") // Customer | Vendor | Employee | Advance Holder | Other
+  gstin        String?
+  pan          String?
+  address      String?
+  state        String?
+  stateCode    String?
+  contact      String?
+  udyam        String?
+  tdsSection   String?
+  tdsRate      Float    @default(0)
+  gstTreatment String   @default("Unregistered") // Unregistered | Registered | Composition
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  invoices       FinInvoice[]
-  workOrders     FinWorkOrder[]
-  paymentAdvices FinPaymentAdvice[]
+  invoices            FinInvoice[]
+  paymentAdvices      FinPaymentAdvice[]
+  tdsDeductions       FinTdsDeduction[]
+  finPettyCashes      FinPettyCash[]
+  accountsPayables    AccountsPayable[]
+  accountsReceivables AccountsReceivable[]
 
   @@index([name])
   @@map("FinParty")
 }
-
 
 // ── Finance Master: Area (under a Site) ──────────────────────────────────────
 model FinArea {
@@ -1294,10 +1291,18 @@ model FinInvoice {
   invoiceDate     DateTime  @db.Date
   eInvoiceDate    DateTime? @db.Date
   dueDate         DateTime  @db.Date
+  jobCode         String? // job wise costing
+  hsnSac          String?
+  taxableValue    Float     @default(0)
+  cgstAmount      Float     @default(0)
+  sgstAmount      Float     @default(0)
+  igstAmount      Float     @default(0)
+  cessAmount      Float     @default(0)
   invoiceValue    Float     @default(0)
   gstValue        Float     @default(0)
   grandTotal      Float     @default(0)
   tdsDeduction    Float     @default(0)
+  retentionAmount Float     @default(0)
   kpiDeduction    Float     @default(0)
   safetyDeduction Float     @default(0)
   otherDeduction  Float     @default(0)
@@ -1313,15 +1318,19 @@ model FinInvoice {
   description     String?
   remarks         String?
   status          String    @default("Unpaid")
+  postedBy        String?
+  approvedBy      String?
+  postedAt        DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  party              FinParty?              @relation(fields: [partyId], references: [id])
-  site               FinSite                @relation(fields: [siteId], references: [id])
-  areaRef            FinArea?               @relation(fields: [areaId], references: [id])
-  po                 FinPurchaseOrder?      @relation(fields: [poId], references: [id])
+  party              FinParty?            @relation(fields: [partyId], references: [id])
+  site               FinSite              @relation(fields: [siteId], references: [id])
+  areaRef            FinArea?             @relation(fields: [areaId], references: [id])
+  po                 FinPurchaseOrder?    @relation(fields: [poId], references: [id])
   payments           FinPayment[]
   deductions         FinInvoiceDeduction[]
+  tdsDeductions      FinTdsDeduction[]
   followUps          FinFollowUp[]
   creditNotes        FinCreditNote[]
   alerts             FinAlert[]
@@ -1336,7 +1345,6 @@ model FinInvoice {
   @@index([dueDate])
   @@map("FinInvoice")
 }
-
 
 // ── Finance: Deductions (normalized; many per invoice) ───────────────────────
 model FinInvoiceDeduction {
@@ -1396,101 +1404,28 @@ model FinOutstanding {
 }
 
 model FinPayment {
-  id          Int      @id @default(autoincrement())
-  invoiceId   Int
-  amount      Float    @default(0)
-  paymentDate DateTime @db.Date
-  paymentMode String   @default("Bank Transfer")
-  voucherNo   String?
-  referenceNo String?
-  remarks     String?
-  createdAt   DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  invoiceId     Int
+  amount        Float    @default(0)
+  paymentDate   DateTime @db.Date
+  paymentMode   String   @default("Bank Transfer")
+  bankAccountId Int?
+  voucherNo     String?
+  referenceNo   String?
+  status        String   @default("Received")
+  remarks       String?
+  createdAt     DateTime @default(now())
 
-  invoice FinInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice     FinInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
+  @@index([paymentDate])
   @@map("FinPayment")
-}
-
-
-// ── Finance: Work Order master (from WO Excel) ───────────────────────────────
-model FinWorkOrder {
-  id                  Int       @id @default(autoincrement())
-  partyId             Int
-  siteId              Int?
-  workOrderNo         String
-  description         String?
-  initiationDate      DateTime? @db.Date
-  completionDate      DateTime? @db.Date
-  bidLessPercent      Float?
-  bgAmount            Float?
-  bgSource            String?
-  orderAmount         Float     @default(0)
-  unexecutedAmount    Float     @default(0)
-  bookedLastFY        Float     @default(0)
-  bookedCurrentFY     Float     @default(0)
-  toBeBookedEndFY     Float     @default(0)
-  billRaisedAmount    Float     @default(0)
-  receivedAgainstBill Float     @default(0)
-  workDoneNotBilled   Float     @default(0)
-  extensionLetter     String?
-  delayReason         String?
-  subcontractedTo     String?
-  financialYear       String?
-  status              String    @default("Active")
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-
-  party FinParty @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  site  FinSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
-
-  @@unique([partyId, workOrderNo])
-  @@index([financialYear])
-  @@map("FinWorkOrder")
-}
-
-
-// ── Finance: Excel template & mapping layer (controlled imports) ─────────────
-model FinExcelTemplate {
-  id           Int      @id @default(autoincrement())
-  name         String
-  workbookFile String? // e.g. "ALL SITE(2024-2026)...xlsx"
-  sheetName    String?
-  headerRow    Int      @default(1)
-  isActive     Boolean  @default(true)
-  notes        String   @default("")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  columns       FinExcelColumnMap[]
-  importBatches FinImportBatch[]
-
-  @@index([workbookFile])
-  @@index([sheetName])
-  @@map("FinExcelTemplate")
-}
-
-model FinExcelColumnMap {
-  id           Int      @id @default(autoincrement())
-  templateId   Int
-  sourceColumn String // exact header text (as seen in Excel)
-  targetModel  String // e.g. "FinInvoice", "FinPayment", "FinInvoiceDeduction"
-  targetField  String // e.g. "invoiceNo", "amount"
-  transform    String   @default("identity") // identity|date|float|trim|upper|lower|...
-  required     Boolean  @default(false)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-
-  template FinExcelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-
-  @@unique([templateId, sourceColumn, targetModel, targetField])
-  @@index([templateId])
-  @@map("FinExcelColumnMap")
 }
 
 model FinImportBatch {
   id          String   @id @default(cuid())
-  templateId  Int?
   fileName    String
   fileHash    String   @default("")
   importedBy  String   @default("")
@@ -1498,12 +1433,10 @@ model FinImportBatch {
   status      String   @default("completed") // preview|completed|failed
   summaryJson Json?
 
-  template FinExcelTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  rows     FinImportRow[]
-  errors   FinImportRowError[]
+  rows   FinImportRow[]
+  errors FinImportRowError[]
 
   @@index([importedAt])
-  @@index([templateId])
   @@map("FinImportBatch")
 }
 
@@ -1568,22 +1501,35 @@ model FinFollowUp {
   @@map("FinFollowUp")
 }
 
-
 // ── Finance – Site Expense Claims ───────────────────────────────────
 model FinExpenseClaim {
-  id          Int      @id @default(autoincrement())
-  claimNo     String   @unique
-  siteId      Int
-  submittedBy String
-  date        DateTime @db.Date
-  totalAmount Float    @default(0)
-  status      String   @default("Draft")
-  remarks     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             Int       @id @default(autoincrement())
+  claimNo        String    @unique
+  siteId         Int
+  poId           Int?
+  jobCode        String? // job wise costing
+  siteType       String    @default("Site") // Site | HO
+  expenseType    String    @default("") // GAP FOODING | Advance | ABF | etc.
+  submittedBy    String
+  date           DateTime  @db.Date
+  receivedAmount Float     @default(0) // Cash received from HO
+  totalAmount    Float     @default(0) // Incurred / spent
+  gstAmount      Float     @default(0)
+  tdsAmount      Float     @default(0)
+  billNo         String?
+  approvalStatus String    @default("Draft") // Draft | Pending | Approved | Rejected | Paid
+  status         String    @default("Draft")
+  remarks        String?
+  postedAt       DateTime?
+  approvedBy     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  site  FinSite          @relation(fields: [siteId], references: [id])
-  items FinExpenseItem[]
+  site        FinSite            @relation(fields: [siteId], references: [id])
+  po          FinPurchaseOrder?  @relation(fields: [poId], references: [id], onDelete: SetNull)
+  items       FinExpenseItem[]
+  approvals   FinApprovalLog[]
+  pettyCashes FinPettyCash[]
 
   @@index([claimNo])
   @@index([siteId])
@@ -1592,13 +1538,16 @@ model FinExpenseClaim {
 }
 
 model FinExpenseItem {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   claimId     Int
-  category    String   @default("Material")
+  itemDate    DateTime? @db.Date
+  category    String    @default("")
+  name        String?
   description String?
-  amount      Float    @default(0)
+  amount      Float     @default(0)
+  remark      String?
   receiptUrl  String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   claim FinExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
 
@@ -1606,50 +1555,86 @@ model FinExpenseItem {
   @@map("FinExpenseItem")
 }
 
-
 // ── Finance – Petty Cash (HO) ───────────────────────────────────────
 model FinPettyCash {
-  id           Int      @id @default(autoincrement())
-  voucherNo    String   @unique
-  date         DateTime @db.Date
-  description  String
-  amount       Float
-  type         String   @default("Debit")
-  category     String?
-  authorizedBy String?
-  balance      Float    @default(0)
-  referenceNo  String?
-  remarks      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               Int      @id @default(autoincrement())
+  voucherNo        String   @unique
+  date             DateTime @db.Date
+  description      String
+  amount           Float
+  type             String   @default("Debit")
+  category         String?
+  partyId          Int?
+  siteId           Int?
+  poId             Int?
+  jobCode          String? // job wise costing
+  expenseClaimId   Int?
+  linkedType       String   @default("Direct")
+  authorizedBy     String?
+  custodian        String? // person holding this petty cash float (Site Incharge / Store Incharge / Admin Executive)
+  limitAmount      Float? // the custodian's sanctioned petty cash limit
+  paymentMode      String?
+  balance          Float    @default(0)
+  referenceNo      String?
+  remarks          String?
+  billAttachmentPath String?
+  approvalStatus   String   @default("Draft") // Draft | Pending | Approved | Rejected
+  submittedBy      String?
+  submittedAt      DateTime?
+  approvedBy       String?
+  approvedAt       DateTime?
+  rejectionReason  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  party        FinParty?          @relation(fields: [partyId], references: [id], onDelete: SetNull)
+  site         FinSite?           @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  po           FinPurchaseOrder?  @relation(fields: [poId], references: [id], onDelete: SetNull)
+  expenseClaim FinExpenseClaim?   @relation(fields: [expenseClaimId], references: [id], onDelete: SetNull)
+  approvals    FinApprovalLog[]
 
   @@index([voucherNo])
   @@index([date])
   @@index([type])
+  @@index([poId])
+  @@index([expenseClaimId])
+  @@index([approvalStatus])
   @@map("FinPettyCash")
 }
 
-
 // ── Finance – Payment Advice ────────────────────────────────────────
 model FinPaymentAdvice {
-  id          Int       @id @default(autoincrement())
-  adviceNo    String    @unique
-  partyId     Int?
-  siteId      Int?
-  poId        Int?
-  totalAmount Float
-  paymentDate DateTime  @db.Date
-  paymentMode String    @default("Bank Transfer")
-  referenceNo String?
-  notes       String?
-  emailedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id            Int       @id @default(autoincrement())
+  adviceNo      String    @unique
+  partyId       Int?
+  siteId        Int?
+  poId          Int?
+  jobCode       String? // job wise costing
+  totalAmount   Float
+  paymentDate   DateTime  @db.Date
+  paymentMode   String    @default("Bank Transfer")
+  referenceNo   String?
+  bankName      String?
+  accountNo     String?
+  ifscCode      String?
+  supplierName  String?
+  vendorCode    String?
+  panNo         String?
+  bankAccountId Int?
+  status        String    @default("Draft")
+  postedBy      String?
+  approvedBy    String?
+  notes         String?
+  emailedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  party FinParty?              @relation(fields: [partyId], references: [id])
-  site  FinSite?               @relation(fields: [siteId], references: [id])
-  po    FinPurchaseOrder?      @relation(fields: [poId], references: [id])
-  lines FinPaymentAdviceLine[]
+  party       FinParty?              @relation(fields: [partyId], references: [id])
+  site        FinSite?               @relation(fields: [siteId], references: [id])
+  po          FinPurchaseOrder?      @relation(fields: [poId], references: [id])
+  bankAccount BankAccount?           @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  lines       FinPaymentAdviceLine[]
+  approvals   FinApprovalLog[]
 
   @@index([adviceNo])
   @@index([partyId])
@@ -1657,13 +1642,21 @@ model FinPaymentAdvice {
 }
 
 model FinPaymentAdviceLine {
-  id        Int      @id @default(autoincrement())
-  adviceId  Int
-  invoiceId Int? // Link to FinInvoice
-  billNo    String? // If invoice not yet imported
-  amount    Float
-  remarks   String?
-  createdAt DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  adviceId      Int
+  invoiceId     Int? // Link to FinInvoice
+  billNo        String? // If invoice not yet imported
+  invDate       String? // Invoice date
+  month         String? // e.g. "December Month"
+  invAmount     Float? // Total rent / gross invoice amount (before TDS/GST)
+  gst           Float? // GST amount
+  tdsAmount     Float? // TDS deducted
+  paidAmount    Float? // Paid amount
+  balanceAmount Float? // Balance amount
+  amount        Float
+  remarks       String?
+  voucherNo     String? // Voucher number
+  createdAt     DateTime @default(now())
 
   advice  FinPaymentAdvice @relation(fields: [adviceId], references: [id], onDelete: Cascade)
   invoice FinInvoice?      @relation(fields: [invoiceId], references: [id])
@@ -1672,7 +1665,6 @@ model FinPaymentAdviceLine {
   @@index([invoiceId])
   @@map("FinPaymentAdviceLine")
 }
-
 
 // ── Finance – Purchase Order ────────────────────────────────────────
 model FinPurchaseOrder {
@@ -1684,6 +1676,7 @@ model FinPurchaseOrder {
   vendorName              String
   vendorAddress           String?
   siteId                  Int
+  jobCode                 String? // job wise costing
   date                    DateTime  @db.Date
   descriptionOfWork       String?
   orderInitiationDate     DateTime? @db.Date
@@ -1718,6 +1711,10 @@ model FinPurchaseOrder {
   items          FinPOItem[]
   invoices       FinInvoice[]
   paymentAdvices FinPaymentAdvice[]
+  pettyCashes    FinPettyCash[]
+  expenseClaims  FinExpenseClaim[]
+  clientFollowUps FinClientFollowUp[]
+  accountsPayables AccountsPayable[]
 
   @@index([poNo])
   @@index([siteId])
@@ -1742,7 +1739,6 @@ model FinPOItem {
   @@map("FinPOItem")
 }
 
-
 // ── Finance – Credit Notes ──────────────────────────────────────────
 model FinCreditNote {
   id                         Int       @id @default(autoincrement())
@@ -1751,6 +1747,7 @@ model FinCreditNote {
   poNo                       String?
   invoiceId                  Int
   siteId                     Int
+  jobCode                    String? // job wise costing
   creditNoteAgainstInvoiceNo String?
   client                     String?
   area                       String?
@@ -1781,7 +1778,6 @@ model FinCreditNote {
   @@map("FinCreditNote")
 }
 
-
 // ── Finance – Alerts / Notifications ────────────────────────────────
 model FinAlert {
   id        Int      @id @default(autoincrement())
@@ -1802,29 +1798,30 @@ model FinAlert {
   @@map("FinAlert")
 }
 
-
 // ── Finance – Chart of Accounts ──────────────────────────────────────
 model FinAccount {
-  id          Int      @id @default(autoincrement())
-  accountCode String   @unique
-  name        String
-  type        String // Asset | Liability | Equity | Income | Expense
-  parentId    Int? // self-relation for hierarchy
-  isActive    Boolean  @default(true)
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  accountCode   String   @unique
+  name          String
+  group         String   @default("Assets") // Assets | Liabilities | Capital | Income | Expenses | Direct Income | Direct Expenses | Indirect Income | Indirect Expenses
+  type          String   @default("Asset") // Asset | Liability | Equity | Income | Expense
+  parentId      Int? // self-relation for hierarchy
+  taxApplicable Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  description   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  parent       FinAccount?      @relation("AccountHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children     FinAccount[]     @relation("AccountHierarchy")
+  parent       FinAccount?         @relation("AccountHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     FinAccount[]        @relation("AccountHierarchy")
   journalLines FinJournalLine[]
   budgetLines  FinBudgetLine[]
 
   @@index([type])
   @@index([parentId])
+  @@index([group])
   @@map("FinAccount")
 }
-
 
 // ── Finance – Journal Entry ──────────────────────────────────────────
 model FinJournalEntry {
@@ -1836,12 +1833,18 @@ model FinJournalEntry {
   siteId      Int
   status      String    @default("Draft") // Draft | Posted | Reversed
   postedAt    DateTime?
+  postedBy    String?
+  approvedBy  String?
+  approvedAt  DateTime?
+  totalDebit  Float     @default(0)
+  totalCredit Float     @default(0)
   createdBy   String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   site      FinSite          @relation(fields: [finSiteId], references: [id])
   lines     FinJournalLine[]
+  approvals FinApprovalLog[]
   finSiteId Int
 
   @@index([siteId])
@@ -1850,17 +1853,20 @@ model FinJournalEntry {
   @@map("FinJournalEntry")
 }
 
-
 // ── Finance – Journal Entry Lines (debit/credit) ─────────────────────
 model FinJournalLine {
-  id          Int      @id @default(autoincrement())
-  entryId     Int
-  accountId   Int
-  description String?
-  debit       Float    @default(0)
-  credit      Float    @default(0)
-  costCenter  Int? // optional cost center reference
-  createdAt   DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  entryId        Int
+  accountId      Int
+  description    String?
+  debit          Float    @default(0)
+  credit         Float    @default(0)
+  costCenter     String? // optional cost center reference
+  jobCode        String? // job wise costing
+  siteCode       String? // site wise costing (mirrors parent entry's site by default)
+  department     String? // department wise costing
+  projectManager String? // accountability
+  createdAt      DateTime @default(now())
 
   entry   FinJournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   account FinAccount      @relation(fields: [accountId], references: [id], onDelete: Restrict)
@@ -1869,7 +1875,6 @@ model FinJournalLine {
   @@index([accountId])
   @@map("FinJournalLine")
 }
-
 
 // ── Finance – Budget Plan ────────────────────────────────────────────
 model FinBudget {
@@ -1893,7 +1898,6 @@ model FinBudget {
   @@map("FinBudget")
 }
 
-
 // ── Finance – Budget Lines (12-month grid) ────────────────────────
 model FinBudgetLine {
   id        Int      @id @default(autoincrement())
@@ -1911,7 +1915,6 @@ model FinBudgetLine {
   @@index([accountId])
   @@map("FinBudgetLine")
 }
-
 
 // ── Finance – Fixed Asset ───────────────────────────────────────────
 model FinAsset {
@@ -1942,7 +1945,6 @@ model FinAsset {
   @@map("FinAsset")
 }
 
-
 // ── Finance – Fixed Asset Depreciation ───────────────────────────────
 model FinAssetDepreciation {
   id        Int      @id @default(autoincrement())
@@ -1959,8 +1961,56 @@ model FinAssetDepreciation {
   @@map("FinAssetDepreciation")
 }
 
+model FinTdsDeduction {
+  id              Int      @id @default(autoincrement())
+  documentType    String   @default("INVOICE") // INVOICE | PURCHASE_BILL
+  documentId      String
+  invoiceId       Int?
+  partyId         Int?
+  deductionDate   DateTime @db.Date
+  section         String
+  rate            Float    @default(0)
+  taxableAmount   Float    @default(0)
+  deductionAmount Float    @default(0)
+  paidAmount      Float    @default(0)
+  status          String   @default("Deducted") // Deducted | Paid | Reversed
+  remarks         String?
+  createdAt       DateTime @default(now())
 
-// ── Sales – Tax Invoice ─────────────────────────────────────────────
+  invoice FinInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  party   FinParty?   @relation(fields: [partyId], references: [id], onDelete: SetNull)
+
+  @@index([documentType])
+  @@index([documentId])
+  @@index([partyId])
+  @@index([status])
+  @@map("FinTdsDeduction")
+}
+
+model FinApprovalLog {
+  id                 Int               @id @default(autoincrement())
+  entityType         String
+  entityId           String
+  status             String            @default("Pending") // Pending | Approved | Rejected
+  action             String
+  makerId            String?
+  checkerId          String?
+  comments           String?
+  createdAt          DateTime          @default(now())
+  finExpenseClaim    FinExpenseClaim?  @relation(fields: [finExpenseClaimId], references: [id])
+  finExpenseClaimId  Int?
+  finPaymentAdvice   FinPaymentAdvice? @relation(fields: [finPaymentAdviceId], references: [id])
+  finPaymentAdviceId Int?
+  finJournalEntry    FinJournalEntry? @relation(fields: [finJournalEntryId], references: [id])
+  finJournalEntryId  Int?
+  finPettyCash       FinPettyCash?    @relation(fields: [finPettyCashId], references: [id])
+  finPettyCashId     Int?
+
+  @@index([entityType, entityId])
+  @@index([status])
+  @@map("FinApprovalLog")
+}
+
 model SalesTaxInvoice {
   id                Int       @id @default(autoincrement())
   invoiceNo         String    @unique
@@ -2022,22 +2072,560 @@ model SalesTaxInvoiceItem {
   @@map("SalesTaxInvoiceItem")
 }
 
-
 // ── Profit & Loss Account ────────────────────────────────────────────
 model ProfitLossEntry {
-  id          Int      @id @default(autoincrement())
-  site        String   // e.g. "Atmastco", "Balco", "Birla", "Hilti", "Workshop"
-  month       String   // e.g. "April-25", "May-25"
-  side        String   // "debit" or "credit"
-  category    String   // e.g. "Purchase Accounts", "Direct Expenses", "Indirect Expenses", "Sales Accounts", "Indirect Incomes"
-  particular  String   // line item name
-  amount      Float    @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  site       String // e.g. "Atmastco", "Balco", "Birla", "Hilti", "Workshop"
+  month      String // e.g. "April-25", "May-25"
+  side       String // "debit" or "credit"
+  category   String // e.g. "Purchase Accounts", "Direct Expenses", "Indirect Expenses", "Sales Accounts", "Indirect Incomes"
+  particular String // line item name
+  amount     Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([site])
   @@index([month])
   @@index([category])
   @@map("ProfitLossEntry")
 }
+
+// ── Sales – Client Accounts ─────────────────────────────────────────
+model FinClient {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  sector    String // Power | Mining | Industrial
+  strength  String   @default("Medium") // Strong | Medium | Weak
+  website   String?
+  industry  String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contacts      FinClientContact[]
+  projects      FinClientProject[]
+  opportunities FinClientOpportunity[]
+
+  @@map("FinClient")
+}
+
+model FinClientContact {
+  id       Int     @id @default(autoincrement())
+  clientId Int
+  name     String
+  role     String?
+  phone    String?
+  email    String?
+  notes    String?
+  strength String  @default("Medium") // Strong | Medium | Weak
+
+  client FinClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("FinClientContact")
+}
+
+model FinClientProject {
+  id        Int      @id @default(autoincrement())
+  clientId  Int
+  name      String
+  value     Float    @default(0)
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  sector    String // Power | Mining | Industrial
+
+  client FinClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("FinClientProject")
+}
+
+model FinClientOpportunity {
+  id             Int      @id @default(autoincrement())
+  clientId       Int
+  name           String
+  stage          String // Qualification | Proposal | Negotiation | Closed Won | Closed Lost
+  value          Float    @default(0)
+  winProbability Int      @default(0)
+  expectedClose  DateTime @db.Date
+  bdOwner        String?
+
+  client FinClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("FinClientOpportunity")
+}
+
+// ── Sales – Opportunity Pipeline ─────────────────────────────────────
+model FinOpportunity {
+  id             Int      @id @default(autoincrement())
+  projectName    String
+  clientName     String
+  value          Float    @default(0)
+  sector         String // Power | Mining | Industrial
+  winProbability Int      @default(50)
+  dueDate        DateTime @db.Date
+  bdOwner        String?
+  stage          String // Identify | Qualify | Bid Prep | Submitted | Negotiate | Won | Lost
+  scope          String?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  contacts     FinOpportunityContact[]
+  documents    FinOpportunityDocument[]
+  bidCosts     FinOpportunityBidCost[]
+  competitors  FinOpportunityCompetitor[]
+  goNoGo       FinOppGoNoGo[]
+  stageHistory FinOppStageHistory[]
+
+  @@index([stage])
+  @@index([sector])
+  @@map("FinOpportunity")
+}
+
+model FinOpportunityContact {
+  id            Int     @id @default(autoincrement())
+  opportunityId Int
+  name          String
+  role          String?
+  phone         String?
+  email         String?
+
+  opportunity FinOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@map("FinOpportunityContact")
+}
+
+model FinOpportunityDocument {
+  id            Int     @id @default(autoincrement())
+  opportunityId Int
+  name          String
+  type          String?
+  uploadDate    String?
+  status        String  @default("Pending") // Uploaded | Pending
+
+  opportunity FinOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@map("FinOpportunityDocument")
+}
+
+model FinOpportunityBidCost {
+  id            Int    @id @default(autoincrement())
+  opportunityId Int
+  item          String
+  estimated     Float  @default(0)
+  actual        Float  @default(0)
+
+  opportunity FinOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@map("FinOpportunityBidCost")
+}
+
+model FinOpportunityCompetitor {
+  id            Int     @id @default(autoincrement())
+  opportunityId Int
+  name          String
+  estimatedBid  Float   @default(0)
+  strengths     String?
+  weaknesses    String?
+
+  opportunity FinOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@map("FinOpportunityCompetitor")
+}
+
+model FinOppGoNoGo {
+  id            Int     @id @default(autoincrement())
+  opportunityId Int
+  label         String
+  checked       Boolean @default(false)
+  signOff       String?
+
+  opportunity FinOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@map("FinOppGoNoGo")
+}
+
+model FinOppStageHistory {
+  id            Int    @id @default(autoincrement())
+  opportunityId Int
+  stage         String
+  timestamp     String
+
+  opportunity FinOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@map("FinOppStageHistory")
+}
+
+// ── Sales – Tender Register ──────────────────────────────────────────
+model FinTender {
+  id                 Int      @id @default(autoincrement())
+  tenderNo           String   @unique
+  client             String
+  project            String
+  sector             String // Power | Mining | Industrial
+  rftIssueDate       DateTime @db.Date
+  submissionDeadline DateTime @db.Date
+  estimatedValue     Float    @default(0)
+  estimator          String?
+  status             String // Identify | Qualify | Bid Prep | Submitted | Won | Lost
+  description        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  documents  FinTenderDocument[]
+  bidTeam    FinTenderBidTeam[]
+  evaluation FinTenderEvaluation?
+
+  @@index([status])
+  @@index([sector])
+  @@map("FinTender")
+}
+
+model FinTenderDocument {
+  id           Int     @id @default(autoincrement())
+  tenderId     Int
+  name         String
+  status       String  @default("Pending") // Submitted | Pending | Not Required
+  uploadedDate String?
+
+  tender FinTender @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+
+  @@index([tenderId])
+  @@map("FinTenderDocument")
+}
+
+model FinTenderBidTeam {
+  id           Int     @id @default(autoincrement())
+  tenderId     Int
+  name         String?
+  role         String?
+  email        String?
+  assignedDate String?
+
+  tender FinTender @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+
+  @@index([tenderId])
+  @@map("FinTenderBidTeam")
+}
+
+model FinTenderEvaluation {
+  id              Int     @id @default(autoincrement())
+  tenderId        Int     @unique
+  technicalScore  Float   @default(0)
+  commercialScore Float   @default(0)
+  totalScore      Float   @default(0)
+  evaluatorNotes  String?
+
+  tender FinTender @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+
+  @@map("FinTenderEvaluation")
+}
+
+// ── Procurement – Purchase Requisition ───────────────────────────────
+model FinPurchaseRequisition {
+  id           Int       @id @default(autoincrement())
+  prNo         String    @unique
+  date         DateTime  @db.Date
+  requester    String
+  project      String
+  totalEstCost Float     @default(0)
+  requiredBy   DateTime? @db.Date
+  status       String    @default("Draft") // Draft | Pending Approval | Approved | Converted to RFQ/PO
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  items     FinPRLineItem[]
+  approvals FinPRApproval[]
+
+  @@index([status])
+  @@map("FinPurchaseRequisition")
+}
+
+model FinPRLineItem {
+  id          Int    @id @default(autoincrement())
+  prId        Int
+  description String
+  qty         Float  @default(1)
+  unit        String @default("pcs")
+  estCost     Float  @default(0)
+  total       Float  @default(0)
+
+  pr FinPurchaseRequisition @relation(fields: [prId], references: [id], onDelete: Cascade)
+
+  @@index([prId])
+  @@map("FinPRLineItem")
+}
+
+model FinPRApproval {
+  id       Int       @id @default(autoincrement())
+  prId     Int
+  role     String
+  label    String
+  status   String    @default("Pending") // Pending | Approved | Rejected
+  actedBy  String?
+  actedAt  DateTime?
+  comments String?
+
+  pr FinPurchaseRequisition @relation(fields: [prId], references: [id], onDelete: Cascade)
+
+  @@index([prId])
+  @@map("FinPRApproval")
+}
+
+// ── Procurement – Request for Quotation ──────────────────────────────
+model FinRFQ {
+  id               Int      @id @default(autoincrement())
+  rfqNo            String   @unique
+  description      String?
+  issueDate        DateTime @db.Date
+  responseDeadline DateTime @db.Date
+  project          String?
+  notes            String?
+  status           String   @default("Draft") // Draft | Sent | Responses Received | Awarded | Cancelled
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  lineItems FinRFQLineItem[]
+  bids      FinRFQBid[]
+
+  @@index([status])
+  @@map("FinRFQ")
+}
+
+model FinRFQLineItem {
+  id          Int    @id @default(autoincrement())
+  rfqId       Int
+  description String
+  qty         Float  @default(1)
+  unit        String @default("Nos")
+
+  rfq FinRFQ @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+
+  @@index([rfqId])
+  @@map("FinRFQLineItem")
+}
+
+model FinRFQBid {
+  id         Int     @id @default(autoincrement())
+  rfqId      Int
+  vendorId   Int
+  lineItemId Int
+  unitPrice  Float   @default(0)
+  leadTime   Int     @default(0)
+  notes      String?
+  compliant  Boolean @default(true)
+
+  rfq FinRFQ @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+
+  @@index([rfqId])
+  @@index([vendorId])
+  @@map("FinRFQBid")
+}
+
+// ── Procurement – Subcontract ───────────────────────────────────────
+model FinSubcontract {
+  id               Int      @id @default(autoincrement())
+  subcontractNo    String   @unique
+  vendor           String
+  project          String
+  scopeSummary     String?
+  value            Float    @default(0)
+  startDate        DateTime @db.Date
+  endDate          DateTime @db.Date
+  percentComplete  Float    @default(0)
+  status           String   @default("Active") // Active | Completed | On Hold | Terminated
+  retentionPercent Float    @default(0)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  milestones        FinSubcontractMilestone[]
+  retentionReleases FinSubcontractRetentionRelease[]
+  progressClaims    FinSubcontractProgressClaim[]
+
+  @@index([status])
+  @@map("FinSubcontract")
+}
+
+model FinSubcontractMilestone {
+  id              Int      @id @default(autoincrement())
+  subcontractId   Int
+  description     String
+  scheduledAmount Float    @default(0)
+  percentOfTotal  Float    @default(0)
+  dueDate         DateTime @db.Date
+  amountPaid      Float    @default(0)
+  percentComplete Float    @default(0)
+  balance         Float    @default(0)
+  status          String   @default("Pending") // Pending | Paid | Overdue
+
+  subcontract FinSubcontract @relation(fields: [subcontractId], references: [id], onDelete: Cascade)
+
+  @@index([subcontractId])
+  @@map("FinSubcontractMilestone")
+}
+
+model FinSubcontractRetentionRelease {
+  id             Int      @id @default(autoincrement())
+  subcontractId  Int
+  date           DateTime @db.Date
+  amountReleased Float    @default(0)
+  status         String   @default("Pending") // Released | Pending
+  condition      String?
+
+  subcontract FinSubcontract @relation(fields: [subcontractId], references: [id], onDelete: Cascade)
+
+  @@index([subcontractId])
+  @@map("FinSubcontractRetentionRelease")
+}
+
+model FinSubcontractProgressClaim {
+  id              Int      @id @default(autoincrement())
+  subcontractId   Int
+  claimNo         String
+  date            DateTime @db.Date
+  amountClaimed   Float    @default(0)
+  certifiedAmount Float    @default(0)
+  amountPaid      Float    @default(0)
+  balance         Float    @default(0)
+  status          String   @default("Submitted") // Submitted | Certified | Paid | Disputed
+
+  subcontract FinSubcontract @relation(fields: [subcontractId], references: [id], onDelete: Cascade)
+
+  @@index([subcontractId])
+  @@map("FinSubcontractProgressClaim")
+}
+
+// ── Procurement – Material Tracking ──────────────────────────────────
+model FinMaterialTrackingItem {
+  id            Int       @id @default(autoincrement())
+  poNo          String
+  vendor        String
+  project       String
+  site          String?
+  material      String
+  category      String
+  unit          String    @default("Nos")
+  qtyRequired   Float     @default(0)
+  qtyStock      Float     @default(0)
+  qtyInTransit  Float     @default(0)
+  scheduledDate DateTime  @db.Date
+  expectedDate  DateTime? @db.Date
+  status        String    @default("Upcoming") // On-Time | Overdue | Upcoming
+  daysOverdue   Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([poNo, material])
+  @@index([project])
+  @@index([status])
+  @@map("FinMaterialTrackingItem")
+}
+
+// ── Tally Sync Management ──────────────────────────────────────────
+model FinTallySync {
+  id          Int      @id @default(autoincrement())
+  syncType    String   // DayBook | TallyBook | SundryDebtors | SundryCreditors | PettyCash | ExpenseClaim
+  fileName    String
+  periodFrom  DateTime? @db.Date
+  periodTo    DateTime? @db.Date
+  totalRows   Int      @default(0)
+  createdRows Int      @default(0)
+  updatedRows Int      @default(0)
+  skippedRows Int      @default(0)
+  errorRows   Int      @default(0)
+  status      String   @default("Pending") // Pending | Processing | Completed | Failed
+  rawJson     String?  // JSON snapshot of parsed records (for audit)
+  log         String?  // error log / messages
+  syncedAt    DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([syncType])
+  @@index([status])
+  @@index([syncedAt])
+  @@map("FinTallySync")
+}
+
+// ── Data Sync Configuration ─────────────────────────────────────
+// Per-module sync configuration (used by /api/sync/route.ts)
+model SyncConfig {
+  module       String    @id
+  enabled      Boolean   @default(true)
+  autoSync     Boolean   @default(false)
+  syncInterval Int       @default(300) // seconds between auto-syncs
+  lastSyncAt   DateTime?
+  lastStatus   String    @default("Never") // Never | Syncing | Success | Completed with Errors | Failed
+  totalSynced  Int       @default(0)
+  totalErrors  Int       @default(0)
+  endpoint     String?
+  authKey      String?
+  nextSyncAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("SyncConfig")
+}
+
+// ── Data Sync Log ────────────────────────────────────────────────
+// Individual sync operation log entries
+model SyncLog {
+  id            Int      @id @default(autoincrement())
+  module        String
+  action        String   // CREATE | UPDATE | DELETE | SYNC | RESOLVE
+  recordId      String?
+  recordData    String?  // JSON snapshot
+  status        String   @default("Pending") // Pending | Success | Conflict | Error | Resolved
+  direction     String   @default("Pull") // Pull | Push | Bidirectional
+  conflictReason String?
+  syncBatchId   String?
+  duration      Int      @default(0) // ms
+  recordsSynced Int      @default(0)
+  errorMessage  String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  resolved      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([module])
+  @@index([status])
+  @@index([syncBatchId])
+  @@index([createdAt])
+  @@map("SyncLog")
+}
+
+// ── Client Follow Up ────────────────────────────────────────────
+model FinClientFollowUp {
+  id              Int       @id @default(autoincrement())
+  clientName      String
+  balanceAmount   Float     @default(0)
+  poId            Int?
+  invoiceNos      String?   // comma-separated invoice references
+  contactNo       String?
+  contactPerson   String?
+  matterDiscussed String?
+  callBackDate    DateTime? @db.Date
+  remarks         String?
+  status          String    @default("Pending") // Pending | In Progress | Resolved | Closed
+  followUpDate    DateTime? @db.Date
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  po FinPurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
+
+  @@index([clientName])
+  @@index([status])
+  @@index([callBackDate])
+  @@index([poId])
+  @@map("FinClientFollowUp")
+}
+
 
