@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { getHolidaysInRange } from './holiday-service'
 
 type DbClient = PrismaClient
@@ -208,8 +208,73 @@ export async function buildMonthPerformanceWorkbook(
     aoa.push(r0, r1, dayNums, dayWk, rIn, rOut, rWork, rBreak, rOt, rStatus)
   }
 
-  const ws = XLSX.utils.aoa_to_sheet(aoa)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+  // ── Render with ExcelJS so the register is colour-coded & bordered ──
+  // (SheetJS community build silently drops all styling on write.)
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Sheet1', { views: [{ state: 'frozen', xSplit: 1 }] })
+
+  const C = {
+    deptBg: 'FF1F4E79', deptFg: 'FFFFFFFF',   // dept/company band
+    sumBg: 'FF2E75B6', sumFg: 'FFFFFFFF',      // summary band
+    dayBg: 'FFDDEBF7', dayFg: 'FF1F4E79',      // day-number / weekday header
+    labelBg: 'FFF2F2F2', border: 'FFD9D9D9',
+  }
+  const STATUS_FILL: Record<string, { fill: string; font: string }> = {
+    P: { fill: 'FFE2EFDA', font: 'FF375623' },
+    A: { fill: 'FFFCE4E4', font: 'FFC00000' },
+    WO: { fill: 'FFEDEDED', font: 'FF7F7F7F' },
+    HL: { fill: 'FFEDEDED', font: 'FF7F7F7F' },
+    LV: { fill: 'FFDDEBF7', font: 'FF1F4E79' },
+    HD: { fill: 'FFFFF2CC', font: 'FF7F6000' },
+  }
+  const thin = { style: 'thin' as const, color: { argb: C.border } }
+  const allBorders = { top: thin, left: thin, bottom: thin, right: thin }
+  const totalCols = daysInMonth + 1 // col 0 label + day columns
+
+  // Column widths: label column wider, day columns compact.
+  ws.getColumn(1).width = 10
+  for (let c = 2; c <= totalCols; c++) ws.getColumn(c).width = 6
+
+  // Each employee occupies a 10-row block in the same order they were pushed:
+  //   0 r0(dept) 1 r1(summary) 2 dayNums 3 dayWk 4 IN 5 OUT 6 WORK 7 Break 8 OT 9 Status
+  aoa.forEach((rowVals, i) => {
+    const kind = i % 10
+    const row = ws.addRow(rowVals as ExcelJS.CellValue[])
+    row.height = kind === 0 || kind === 1 ? 18 : 15
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      cell.border = allBorders
+      cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'center', vertical: 'middle' }
+      cell.font = { size: 9 }
+      if (kind === 0) {
+        cell.font = { size: 10, bold: true, color: { argb: C.deptFg } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.deptBg } }
+      } else if (kind === 1) {
+        cell.font = { size: 9, bold: true, color: { argb: C.sumFg } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.sumBg } }
+      } else if (kind === 2 || kind === 3) {
+        // day-number & weekday rows → light-blue header band
+        cell.font = { size: 9, bold: true, color: { argb: C.dayFg } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.dayBg } }
+      } else if (kind === 9) {
+        // Status row — colour each day cell by its code; label cell stays plain.
+        if (colNumber === 1) {
+          cell.font = { size: 9, bold: true }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.labelBg } }
+        } else {
+          const code = String(cell.value ?? '').toUpperCase()
+          const st = STATUS_FILL[code]
+          if (st) {
+            cell.font = { size: 9, bold: true, color: { argb: st.font } }
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: st.fill } }
+          }
+        }
+      } else if (colNumber === 1) {
+        // IN/OUT/WORK/Break/OT row labels
+        cell.font = { size: 9, bold: true }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.labelBg } }
+      }
+    })
+  })
+
+  return Buffer.from(await wb.xlsx.writeBuffer())
 }

@@ -239,6 +239,13 @@
 .vc-input:hover { border-color: var(--vc-text3); }
 .vc-input:focus { border-color: #f5a623; box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.15); }
 .vc-input::placeholder { color: var(--vc-text3); }
+/* Native <option> popups inherit the OS list background (often white), so a
+   dark-theme text colour made them invisible. Force a readable dark background
+   and light text on every option inside a vc-input <select>. */
+.vc-input option {
+  background: #1a2028;
+  color: #e2e8f0;
+}
 
 .vc-btn-primary {
   background: #f5a623;
