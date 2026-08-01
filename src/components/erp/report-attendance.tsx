@@ -149,7 +149,7 @@ export default function ReportAttendance() {
     const base = `Attendance_Report_${startDate}_to_${endDate}${tags}`
     if (fmt === 'csv') downloadCSV(rows, headers, `${base}.csv`)
     else if (fmt === 'pdf') downloadPDF(rows, headers, `${base}.pdf`, `Attendance Report  ${startDate} to ${endDate}`)
-    else downloadExcel(rows, headers, `${base}.xlsx`, 'Attendance')
+    else downloadExcel(rows, headers, `${base}.xlsx`, 'Attendance', { statusColumn: 6, numericColumns: [9, 10] })
   }
 
   // ── Sitewise (ManHour) report — vertical, one row per employee per day,
@@ -222,7 +222,7 @@ export default function ReportAttendance() {
     if (!view.length) { toast.error('Generate the report first (no rows to export)'); return }
     const rows = buildManHourRows()
     const site = siteFilter !== 'all' ? `_${siteFilter.replace(/\s+/g, '')}` : ''
-    downloadExcel(rows, MANHOUR_HEADERS, `Sitewise_ManHour_${startDate}_to_${endDate}${site}.xlsx`, 'Attendance Report')
+    downloadExcel(rows, MANHOUR_HEADERS, `Sitewise_ManHour_${startDate}_to_${endDate}${site}.xlsx`, 'Attendance Report', { statusColumn: 11, numericColumns: [8, 9, 10] })
   }
 
   return (

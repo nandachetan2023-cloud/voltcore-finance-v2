@@ -1,5 +1,4 @@
 'use client'
-import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 
 export const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -18,13 +17,99 @@ export function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export function downloadExcel(rows: any[][], headers: string[], filename: string, sheetName = 'Report') {
+// Fill/font colours for attendance-style status codes (used when the export
+// declares a status column via options.statusColumn).
+const STATUS_STYLE: Record<string, { fill: string; font: string }> = {
+  present: { fill: 'FFE2EFDA', font: 'FF375623' },
+  p: { fill: 'FFE2EFDA', font: 'FF375623' },
+  late: { fill: 'FFFCE4D6', font: 'FF833C00' },
+  half_day: { fill: 'FFFFF2CC', font: 'FF7F6000' },
+  half: { fill: 'FFFFF2CC', font: 'FF7F6000' },
+  hd: { fill: 'FFFFF2CC', font: 'FF7F6000' },
+  absent: { fill: 'FFFCE4E4', font: 'FFC00000' },
+  a: { fill: 'FFFCE4E4', font: 'FFC00000' },
+  leave: { fill: 'FFDDEBF7', font: 'FF1F4E79' },
+  on_leave: { fill: 'FFDDEBF7', font: 'FF1F4E79' },
+  l: { fill: 'FFDDEBF7', font: 'FF1F4E79' },
+  week_off: { fill: 'FFEDEDED', font: 'FF7F7F7F' },
+  weekoff: { fill: 'FFEDEDED', font: 'FF7F7F7F' },
+  wo: { fill: 'FFEDEDED', font: 'FF7F7F7F' },
+  holiday: { fill: 'FFEDEDED', font: 'FF7F7F7F' },
+  hl: { fill: 'FFEDEDED', font: 'FF7F7F7F' },
+  'p/wo': { fill: 'FFC6E0B4', font: 'FF375623' },
+  sp: { fill: 'FFC6E0B4', font: 'FF375623' },
+}
+
+/**
+ * Styled Excel export via ExcelJS (SheetJS community build drops all cell styling
+ * on write). Coloured title-less header band, borders, zebra striping, and — when
+ * `options.statusColumn` (1-based) is given — the status cell is tinted by its
+ * value so Present/Absent/Leave/etc. read at a glance.
+ */
+export async function downloadExcel(
+  rows: any[][],
+  headers: string[],
+  filename: string,
+  sheetName = 'Report',
+  options?: { statusColumn?: number; numericColumns?: number[] },
+) {
   try {
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-    ws['!cols'] = headers.map(() => ({ wch: 18 }))
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, sheetName)
-    XLSX.writeFile(wb, filename)
+    const ExcelJS = (await import('exceljs')).default
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet(sheetName, { views: [{ state: 'frozen', ySplit: 1 }] })
+
+    const C = { headBg: 'FF2E75B6', headFg: 'FFFFFFFF', border: 'FFBFBFBF', zebra: 'FFF2F6FC' }
+    const thin = { style: 'thin' as const, color: { argb: C.border } }
+    const allBorders = { top: thin, left: thin, bottom: thin, right: thin }
+    const numericCols = new Set(options?.numericColumns ?? [])
+
+    ws.columns = headers.map((h) => ({ width: Math.max(12, Math.min(30, h.length + 4)) }))
+
+    // Header row
+    const headerRow = ws.addRow(headers)
+    headerRow.height = 22
+    headerRow.eachCell({ includeEmpty: true }, (cell) => {
+      cell.font = { bold: true, size: 10, color: { argb: C.headFg } }
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.headBg } }
+      cell.border = allBorders
+    })
+
+    // Data rows
+    rows.forEach((r, i) => {
+      const row = ws.addRow(r)
+      row.height = 15
+      const zebra = i % 2 === 1
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        cell.font = { size: 9 }
+        cell.border = allBorders
+        cell.alignment = { vertical: 'middle', horizontal: numericCols.has(colNumber) ? 'right' : 'left' }
+        if (options?.statusColumn && colNumber === options.statusColumn) {
+          const key = String(cell.value ?? '').toLowerCase().replace(/[\s-]+/g, '_')
+          const st = STATUS_STYLE[key] || STATUS_STYLE[key.replace(/_/g, '')]
+          if (st) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: st.fill } }
+            cell.font = { size: 9, bold: true, color: { argb: st.font } }
+            cell.alignment = { vertical: 'middle', horizontal: 'center' }
+          }
+        } else if (zebra) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.zebra } }
+        }
+      })
+    })
+
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } }
+
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename.endsWith('.xlsx') ? filename : filename.replace(/\.[^.]+$/, '') + '.xlsx'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
     toast.success('Report downloaded')
   } catch {
     toast.error('Failed to download report')

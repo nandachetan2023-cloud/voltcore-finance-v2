@@ -192,8 +192,12 @@ export async function applyAttendanceRules(
   let status: 'present' | 'late' | 'half_day' | 'absent' = 'present';
   let isLate = false, isHalfDay = false, isAbsent = false;
 
+  // Policy: an employee who PUNCHED IN is never "absent" purely for lateness —
+  // at worst they are half-day. (Absent is reserved for no punch at all, or for
+  // working below the shift's minimum hours, handled by classifyAttendance.)
+  // So a late arrival past absentAfterMinutes is capped to half_day here.
   if (rule.absentAfterMinutes > 0 && effectiveLateness >= rule.absentAfterMinutes) {
-    status = 'absent'; isAbsent = true;
+    status = 'half_day'; isHalfDay = true;
   } else if (rule.halfDayAfterMinutes > 0 && effectiveLateness >= rule.halfDayAfterMinutes) {
     status = 'half_day'; isHalfDay = true;
   } else if (rule.lateMarkAfterMinutes > 0 && effectiveLateness >= rule.lateMarkAfterMinutes) {
