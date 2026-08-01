@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
       employmentType,
       otType,
       monthlyGrossSalary,
+      dailyWage,
       natureOfDesignation,
       gradeLabel,
       // User account fields
@@ -86,6 +87,7 @@ export async function POST(request: NextRequest) {
         employmentStatus: 'active',
         natureOfDesignation: natureOfDesignation || gradeLabel || null,
         monthlyGrossSalary: monthlyGrossSalary ? parseFloat(monthlyGrossSalary) : null,
+        dailyWage: dailyWage ? parseFloat(dailyWage) : null,
         // Use placeholders for fields we no longer require — will be filled via form
         phone: '',
         gender: null,

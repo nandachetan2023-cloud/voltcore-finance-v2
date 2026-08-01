@@ -137,6 +137,7 @@ export async function POST(request: NextRequest) {
       'ESIC',
       '', // TDS — removed
       'ADVANCE',
+      'LEAVE AMOUNT', // col 70 — ROUND((MONTHLY GROSS/26)*LEAVE DAYS,0)
     ]);
 
     // Data rows
@@ -290,6 +291,9 @@ export async function POST(request: NextRequest) {
         esiDeduction, // ESIC
         '', // TDS — removed (blank)
         advance, // ADVANCE
+        // col 70: LEAVE AMOUNT = ROUND((MONTHLY GROSS/26)*LEAVE DAYS,0). Prefer the
+        // imported value; else recompute from gross + leave days.
+        rv('leaveAmount', Math.round((grossEarnings / 26) * leaveDays)),
       ]);
     });
 
@@ -370,7 +374,7 @@ export async function POST(request: NextRequest) {
 
     // ---- Data rows ----------------------------------------------------------
     // Columns holding rupee amounts get a number format + right alignment.
-    const moneyCols = new Set([18, 22, 24, 25, 26, 32, 33, 34, 35, 36, 37, 38, 40, 41, 45, 46, 47, 48, 49, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 68]);
+    const moneyCols = new Set([18, 22, 24, 25, 26, 32, 33, 34, 35, 36, 37, 38, 40, 41, 45, 46, 47, 48, 49, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 68, 70]);
     const grandTotalCol = 49; // GRAND TOTAL NETT PAYBLE SALARY
 
     dataRows.forEach((rowValues, i) => {

@@ -121,6 +121,10 @@ model Employee {
   tokenNumber               String?                     @unique
   workmenSlNo               String?
   monthlyGrossSalary        Decimal?                    @db.Decimal(15, 2)
+  // Fixed daily rate of wages — the compliance "Register of Wages" column K
+  // ("daily rate of wages/piece rate/monthly"). When set it is used verbatim in
+  // payroll (compliance daily rate) instead of deriving basicSalary/workingDays.
+  dailyWage                 Decimal?                    @db.Decimal(10, 2)
   natureOfDesignation       String?
   userId                    Int?                        @unique
   firstName                 String

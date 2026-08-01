@@ -41,6 +41,8 @@ interface Employee {
     id: number;
     name: string;
   };
+  monthlyGrossSalary?: number | string | null;
+  dailyWage?: number | string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -89,6 +91,7 @@ interface EmployeeFormData {
   noticePeriodDays: string;
   // Salary
   monthlyGrossSalary: string;
+  dailyWage: string;
   // Statutory
   panNumber: string;
   aadharNumber: string;
@@ -123,7 +126,7 @@ const emptyForm: EmployeeFormData = {
   dateOfJoining: '', confirmationDate: '',
   employmentType: 'non_fixed', otType: 1, employmentStatus: 'active',
   probationMonths: '6', noticePeriodDays: '30',
-  monthlyGrossSalary: '',
+  monthlyGrossSalary: '', dailyWage: '',
   panNumber: '', aadharNumber: '', uanNumber: '', esicNumber: '',
   bankName: '', bankAccount: '', bankIfsc: '',
   emergencyContactName: '', emergencyContactRelation: '', emergencyContactPhone: '',
@@ -499,6 +502,7 @@ export default function EmployeesModule() {
       probationMonths: emp.probationMonths?.toString() || '6',
       noticePeriodDays: emp.noticePeriodDays?.toString() || '30',
       monthlyGrossSalary: emp.monthlyGrossSalary?.toString() || '',
+      dailyWage: emp.dailyWage?.toString() || '',
       panNumber: emp.panNumber || '',
       aadharNumber: emp.aadharNumber || '',
       uanNumber: emp.uanNumber || '',
@@ -582,6 +586,7 @@ export default function EmployeesModule() {
           natureOfDesignation: form.natureOfDesignation.trim() || null,
           gradeLabel: form.gradeId.trim() || null,
           monthlyGrossSalary: form.monthlyGrossSalary || null,
+          dailyWage: form.dailyWage || null,
           password: form.password,
           orgRoleId: form.orgRoleId,
         };
@@ -710,6 +715,7 @@ export default function EmployeesModule() {
         probationMonths: parseInt(form.probationMonths) || 6,
         noticePeriodDays: parseInt(form.noticePeriodDays) || 30,
         monthlyGrossSalary: form.monthlyGrossSalary ? parseFloat(form.monthlyGrossSalary) : null,
+        dailyWage: form.dailyWage ? parseFloat(form.dailyWage) : null,
         panNumber: form.panNumber.trim() || null,
         aadharNumber: form.aadharNumber.trim() || null,
         uanNumber: form.uanNumber.trim() || null,
@@ -984,6 +990,7 @@ export default function EmployeesModule() {
             </select>
           </F>
           <F label="Monthly Gross Salary"><input className={inp} type="number" min="0" step="0.01" value={form.monthlyGrossSalary} onChange={e => setForm(f => ({ ...f, monthlyGrossSalary: e.target.value }))} placeholder="15000.00" /></F>
+          <F label="Daily Wage (Compliance Rate)"><input className={inp} type="number" min="0" step="0.01" value={form.dailyWage} onChange={e => setForm(f => ({ ...f, dailyWage: e.target.value }))} placeholder="e.g. 439 (daily rate of wages)" /><p className="text-[10px] text-[#5a6878] mt-1">Fixed daily rate used in the compliance sheet (col K). Leave blank to auto-derive from gross ÷ working days.</p></F>
           <F label="Probation Months"><input className={inp} type="number" min="0" value={form.probationMonths} onChange={e => setForm(f => ({ ...f, probationMonths: e.target.value }))} /></F>
           <F label="Notice Period Days"><input className={inp} type="number" min="0" value={form.noticePeriodDays} onChange={e => setForm(f => ({ ...f, noticePeriodDays: e.target.value }))} /></F>
         </>}

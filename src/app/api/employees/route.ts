@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
       probationMonths: true,
       noticePeriodDays: true,
       monthlyGrossSalary: true,
+      dailyWage: true,
       panNumber: true,
       aadharNumber: true,
       uanNumber: true,
@@ -235,6 +236,7 @@ export async function POST(request: NextRequest) {
         probationMonths: body.probationMonths ? parseInt(body.probationMonths) : 6,
         noticePeriodDays: body.noticePeriodDays ? parseInt(body.noticePeriodDays) : 30,
         monthlyGrossSalary: body.monthlyGrossSalary ? parseFloat(body.monthlyGrossSalary) : null,
+        dailyWage: body.dailyWage ? parseFloat(body.dailyWage) : null,
         panNumber: body.panNumber || null,
         aadharNumber: body.aadharNumber || null,
         uanNumber: body.uanNumber || null,
@@ -395,6 +397,7 @@ export async function PUT(request: NextRequest) {
     if (updateData.otType !== undefined) updateData.otType = parseInt(updateData.otType) || 1
     if (updateData.noticePeriodDays !== undefined) updateData.noticePeriodDays = parseInt(updateData.noticePeriodDays) || 30
     if (updateData.monthlyGrossSalary !== undefined) updateData.monthlyGrossSalary = updateData.monthlyGrossSalary ? parseFloat(updateData.monthlyGrossSalary) : null
+    if (updateData.dailyWage !== undefined) updateData.dailyWage = updateData.dailyWage ? parseFloat(updateData.dailyWage) : null
     updateData.updatedAt = new Date()
 
     const employee = await db.employee.update({

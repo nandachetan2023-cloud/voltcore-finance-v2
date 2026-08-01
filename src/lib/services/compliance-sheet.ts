@@ -17,6 +17,9 @@ export interface ComplianceSheetItem {
     lastName: string;
     uanNumber?: string | null;
     esicNumber?: string | null;
+    // Fixed daily rate (compliance col K). When present it is used verbatim
+    // instead of deriving basicSalary / workingDays.
+    dailyWage?: number | { toString(): string } | null;
     Designation?: { name: string } | null;
     Branch?: { name: string } | null;
   };
@@ -73,7 +76,7 @@ const MONEY_COLS = new Set([11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
  * non-compliance Upload & Calculate ZIP so both outputs are always identical.
  */
 export function buildComplianceSheetData(items: ComplianceSheetItem[], month: number, year: number): any[][] {
-  const num = (v: number | { toString(): string }) => Number(v) || 0;
+  const num = (v: number | { toString(): string } | null | undefined) => Number(v) || 0;
   const sheetData: any[][] = [];
 
   sheetData.push(['FORM NUMBER.XVII/XIII']);
@@ -132,9 +135,11 @@ export function buildComplianceSheetData(items: ComplianceSheetItem[], month: nu
     const totalDeduction = num(item.totalDeduction);
     const netPay = num(item.netPay);
 
-    // The reference "Register of Wages" carries whole-rupee figures (no paise),
-    // so round the derived daily rate to an integer to match it exactly.
-    const dailyRate = Math.round(basicSalary / workingDays);
+    // Daily rate of wages (col K). Prefer the fixed value stored on the employee
+    // master (dailyWage); only fall back to deriving basicSalary / workingDays
+    // when the master has no fixed rate. Whole rupees to match the reference.
+    const fixedDaily = num(employee.dailyWage);
+    const dailyRate = fixedDaily > 0 ? Math.round(fixedDaily) : Math.round(basicSalary / workingDays);
     const dearnessAllowance = hra + conveyance + medical + special;
     const otherCashPayment = 0;
     const totalWagesForESI = basicSalary + dearnessAllowance + otAmount + otherCashPayment;

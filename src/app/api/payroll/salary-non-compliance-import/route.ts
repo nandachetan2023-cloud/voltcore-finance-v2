@@ -56,6 +56,7 @@ interface SalaryNonComplianceRow {
   monthlyAttendanceAllow: number;
   totalSalary: number;
   tds: number;
+  leaveAmount: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -263,6 +264,7 @@ export async function POST(request: NextRequest) {
           monthlyAttendanceAllow: Number(row[63]) || 0,  // col 63: MonthlyAttendence Allow.
           totalSalary: Number(row[64]) || 0,             // col 64: TOTAL SALARY
           tds: Number(row[67]) || 0,                     // col 67: TDS
+          leaveAmount: Number(row[69]) || 0,             // col 70: LEAVE AMOUNT
         };
 
         // Check if payroll item already exists

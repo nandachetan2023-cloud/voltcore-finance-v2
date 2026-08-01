@@ -123,7 +123,11 @@ export async function GET(request: NextRequest) {
       'MONTHLY BASIC SALARY', 'PH AMOUNT', 'OT AMOUNT', 'EARN SALARY',
       'MONTHLY House Rent Allow.', 'Monthly Site Allow.', 'Monthly Leave Travel Allow.',
       'Monthly Special Allow.', 'MonthlyAttendence Allow.', 'TOTAL SALARY',
-      'EPF', 'ESIC', '', 'ADVANCE'
+      'EPF', 'ESIC', '', 'ADVANCE',
+      // col 70 (index 69): Leave Amount = ROUND((MONTHLY GROSS / 26) * LEAVE DAYS, 0)
+      // Matches the JUNE reference's "Leave Amount" column. Appended at the end so
+      // the existing fixed column indices used by the calc/import/download stay put.
+      'LEAVE AMOUNT'
     ];
 
     // Add header row
@@ -224,7 +228,8 @@ export async function GET(request: NextRequest) {
         advance, // col 46: ADVANCE (EDITABLE AUTO-FILL)
         '',      // col 47: ARREARS (USER INPUT)
         '', // AU-BP: CALCULATED
-        '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''
+        '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+        '' // col 70: LEAVE AMOUNT (CALCULATED after upload)
       ]);
 
       // Apply styles to data cells

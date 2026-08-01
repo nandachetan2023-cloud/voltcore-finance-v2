@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     //     * attendance, and no non-compliance OT.
     //   Non-fixed: earn = gross / 26 * attendance; OT paid at otType× hourly.
     const allEmployees = await db.employee.findMany({
-      select: { employeeCode: true, employmentType: true, otType: true,
+      select: { employeeCode: true, employmentType: true, otType: true, dailyWage: true,
                 Branch: { select: { monthlyWorkingDays: true, otType1Divisor: true, otType2Divisor: true } } },
     });
     const empByCode = new Map(allEmployees.map(e => [e.employeeCode, e]));
@@ -172,6 +172,11 @@ export async function POST(request: NextRequest) {
         const AX = Math.round((AB / 20) * (AD / 26)); // LEAVE
         const AY = Math.round(AE * 0.0833); // BONUS (8.33%)
 
+        // LEAVE AMOUNT (col 70) — matches the JUNE reference formula:
+        //   Leave Amount = ROUND((MONTHLY GROSS / 26) * LEAVE DAYS, 0)
+        // Kept as a separate column; it is NOT folded into GROSS EARN WAGES.
+        const leaveAmount = Math.round((Q / 26) * S);
+
         // Compliance Breakdown (BC-BL)
         const BC = AE; // MONTHLY BASIC SALARY
         const BD = AF; // PH AMOUNT
@@ -231,6 +236,7 @@ export async function POST(request: NextRequest) {
         row.getCell(67).value = BN; // col 67: BN - ESIC
         row.getCell(68).value = ''; // col 68: TDS — removed (blank)
         row.getCell(69).value = BP; // col 69: BP - ADVANCE
+        row.getCell(70).value = leaveAmount; // col 70: LEAVE AMOUNT
 
         complianceItems.push({
           Employee: {
@@ -240,6 +246,8 @@ export async function POST(request: NextRequest) {
             lastName: '',
             uanNumber: getVal(13)?.toString() || '',
             esicNumber: getVal(14)?.toString() || '',
+            // Fixed compliance daily rate from the employee master (col K).
+            dailyWage: emp?.dailyWage ?? null,
             Designation: { name: getVal(15)?.toString() || '' },
             Branch: { name: getVal(12)?.toString() || '' }, // col 12: SITE
           },
