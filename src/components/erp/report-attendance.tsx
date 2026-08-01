@@ -168,14 +168,28 @@ export default function ReportAttendance() {
     return Math.max(0, Math.round(h * 100) / 100)
   }
 
+  // Status code follows the ManHour reference and is PUNCH-DRIVEN, not driven by
+  // a possibly-stale stored status:
+  //   • both punches            → P   (present, full pair)
+  //   • single punch (in only)  → SP  (present, single-punch — NOT absent)
+  //   • no punch, week-off       → WO
+  //   • no punch at all          → A
+  // A punch-in therefore NEVER reads as 'A' (fixes single-punch-marked-absent).
   const manHourStatus = (a: any): string => {
-    const s = (a.status || '').toLowerCase()
-    if (s === 'week_off' || s === 'weekoff' || s === 'wo') return 'WO'
-    if (s === 'absent') return 'A'
-    if (a.punchIn && !a.punchOut) return 'SP'          // single punch — in, no out
-    if (s === 'present' || s === 'late' || s === 'half_day') return 'P'
-    return a.punchIn ? 'P' : 'A'
+    const s = (a.status || '').toLowerCase().replace(/[\s-]+/g, '_')
+    const hasIn = !!a.punchIn
+    const hasOut = !!a.punchOut
+    const isWeekOff = s === 'week_off' || s === 'weekoff' || s === 'wo'
+    if (hasIn && hasOut) return isWeekOff ? 'P/WO' : 'P'
+    if (hasIn) return 'SP'                     // single punch — present, no out yet
+    if (isWeekOff) return 'WO'
+    if (s === 'holiday' || s === 'hl') return 'HL'
+    return 'A'                                 // no punch at all → absent
   }
+
+  // A day counts as a man-day whenever the person actually showed up (any punch).
+  const manDaysFor = (code: string): number =>
+    (code === 'P' || code === 'P/WO' || code === 'SP') ? 1 : 0
 
   const fmtTime = (t: string | null) =>
     t ? new Date(t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''
@@ -194,12 +208,14 @@ export default function ReportAttendance() {
     for (const recs of byEmp.values()) {
       recs.sort((x, y) => new Date(x.logDate).getTime() - new Date(y.logDate).getTime())
       for (const a of recs) {
-        const worked = hoursBetween(a.punchIn, a.punchOut)
-        // We don't store per-log OT, so derive it as worked hours beyond an
-        // 8-hour standard day (0 when there's no complete in/out pair).
-        const ot = worked > 8 ? Math.round((worked - 8) * 100) / 100 : 0
         const code = manHourStatus(a)
-        const manDays = (code === 'P' || code === 'P/WO') ? 1 : 0
+        const paired = !!a.punchIn && !!a.punchOut
+        // Man Hrs only exists for a complete in/out pair; a single punch leaves it
+        // blank (matches the reference) but the day still counts as a man-day.
+        const worked = paired ? hoursBetween(a.punchIn, a.punchOut) : 0
+        // OT = worked hours beyond an 8-hour standard day (only when paired).
+        const ot = worked > 8 ? Math.round((worked - 8) * 100) / 100 : 0
+        const manDays = manDaysFor(code)
         rows.push([
           'UPASANA ASSOCIATE',
           `${a.Employee?.firstName || ''} ${a.Employee?.lastName || ''}`.trim(),
@@ -209,8 +225,8 @@ export default function ReportAttendance() {
           fmtTime(a.punchIn),
           fmtTime(a.punchOut),
           manDays,
-          worked,
-          Math.round(ot * 100) / 100,
+          paired ? worked : '',       // Man Hrs blank for single-punch days
+          paired ? Math.round(ot * 100) / 100 : '',
           code,
         ])
       }
