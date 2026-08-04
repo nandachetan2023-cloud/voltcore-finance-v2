@@ -47,6 +47,11 @@ interface Employee {
   updatedAt: string;
 }
 
+// Statuses that count as "currently working". Notice-period employees are still
+// on the job (they're only auto-marked inactive once offboarding completes / the
+// separation date passes), so they belong under Active — not Inactive/Separated.
+const ACTIVE_STATUSES = ['active', 'notice_period'];
+
 interface EmployeeFormData {
   // Identity
   empId: string;
@@ -277,6 +282,8 @@ export default function EmployeesModule() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewEmp, setViewEmp] = useState<Employee | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<EmployeeFormData>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -359,7 +366,12 @@ export default function EmployeesModule() {
     }
     if (siteFilter !== 'all') list = list.filter(e => e.Branch?.name === siteFilter);
     if (tradeFilter !== 'all') list = list.filter(e => e.Department?.name === tradeFilter);
-    if (statusFilter !== 'all') list = list.filter(e => e.employmentStatus === statusFilter.toLowerCase().replace(' ', '_'));
+    if (statusFilter !== 'all') {
+      const target = statusFilter.toLowerCase().replace(' ', '_');
+      // "Active" surfaces notice-period employees too (still working).
+      if (target === 'active') list = list.filter(e => ACTIVE_STATUSES.includes(e.employmentStatus));
+      else list = list.filter(e => e.employmentStatus === target);
+    }
     return list;
   }, [employees, search, siteFilter, tradeFilter, statusFilter]);
 
@@ -446,7 +458,7 @@ export default function EmployeesModule() {
   };
 
   const totalEmployees = employees.length;
-  const activeCount = employees.filter(e => e.employmentStatus === 'active').length;
+  const activeCount = employees.filter(e => ACTIVE_STATUSES.includes(e.employmentStatus)).length;
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0];
   const newJoiners = employees.filter(e => e.dateOfJoining >= thirtyDaysAgo).length;
@@ -523,6 +535,7 @@ export default function EmployeesModule() {
     setEditOpen(true);
   };
   const openDelete = (id: number) => { setSelectedId(id.toString()); setDeleteOpen(true); };
+  const openView = (emp: Employee) => { setViewEmp(emp); setViewOpen(true); };
 
   const handleSubmit = async (mode: 'create' | 'edit') => {
     setSubmitting(true);
@@ -1154,8 +1167,9 @@ export default function EmployeesModule() {
                     </div>
                     <span className={`vc-badge ${st.bg} ${st.text}`} style={{ border: `1px solid ${st.border}` }}>{emp.employmentStatus}</span>
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#f5a623] hover:bg-[#f5a623]/10 transition-colors" onClick={() => openEdit(emp)}><Pencil size={12} /></button>
-                      <button className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-colors" onClick={() => openDelete(emp.id)}><Trash2 size={12} /></button>
+                      <button title="View details" className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10 transition-colors" onClick={() => openView(emp)}><Eye size={12} /></button>
+                      <button title="Edit" className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#f5a623] hover:bg-[#f5a623]/10 transition-colors" onClick={() => openEdit(emp)}><Pencil size={12} /></button>
+                      <button title="Delete" className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-colors" onClick={() => openDelete(emp.id)}><Trash2 size={12} /></button>
                     </div>
                   </div>
                 );
@@ -1234,6 +1248,98 @@ export default function EmployeesModule() {
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button className="bg-[#ff3d3d] text-white hover:bg-[#cc2020] font-semibold" disabled={submitting} onClick={handleDelete}>{submitting ? 'Deleting...' : 'Delete Employee'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Dialog — read-only employee details */}
+      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" aria-describedby="view-employee-description">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base">Employee Details</DialogTitle>
+          </DialogHeader>
+          {viewEmp && (() => {
+            const e = viewEmp as unknown as Record<string, any>;
+            const fullName = getFullName(viewEmp);
+            const avatar = getAvatarColor(fullName);
+            const st = getStatusStyle(viewEmp.employmentStatus || 'active');
+            const fmt = (v: any) => (v === null || v === undefined || v === '' ? '—' : String(v));
+            const fmtDt = (v: any) => (v ? formatDate(String(v)) : '—');
+            const typeLabel = viewEmp.employmentType === 'fixed'
+              ? 'Fixed'
+              : viewEmp.employmentType === 'non_fixed'
+                ? `Non-Fixed ${viewEmp.otType ?? 1}×`
+                : '—';
+            const Field = ({ label, value }: { label: string; value: any }) => (
+              <div className="min-w-0">
+                <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-0.5">{label}</div>
+                <div className="text-[12px] text-[#e2e8f0] truncate" title={String(value ?? '')}>{fmt(value)}</div>
+              </div>
+            );
+            const GroupTitle = ({ children }: { children: React.ReactNode }) => (
+              <div className="text-[10px] font-bold uppercase tracking-wider text-[#f5a623] mt-4 mb-2 border-b border-[#252e3a] pb-1">{children}</div>
+            );
+            return (
+              <div id="view-employee-description" className="flex-1 overflow-y-auto pr-1">
+                {/* Header card */}
+                <div className="flex items-center gap-3 bg-[#141920] border border-[#252e3a] rounded-lg p-3">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 text-[13px] font-bold ${avatar.bg} ${avatar.text}`}>{getInitials(viewEmp)}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[15px] font-bold text-[#e2e8f0] truncate">{fullName}</div>
+                    <div className="text-[10px] text-[#5a6878] font-mono">{viewEmp.employeeCode}</div>
+                  </div>
+                  <span className={`vc-badge ${st.bg} ${st.text}`} style={{ border: `1px solid ${st.border}` }}>{viewEmp.employmentStatus}</span>
+                </div>
+
+                <GroupTitle>Organisation</GroupTitle>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Field label="Department" value={viewEmp.Department?.name} />
+                  <Field label="Designation" value={viewEmp.Designation?.name} />
+                  <Field label="Site / Branch" value={viewEmp.Branch?.name} />
+                  <Field label="Grade / Level" value={e.gradeLabel ?? e.Grade?.name} />
+                  <Field label="Nature of Designation" value={e.natureOfDesignation} />
+                </div>
+
+                <GroupTitle>Employment</GroupTitle>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Field label="Type" value={typeLabel} />
+                  <Field label="Date of Joining" value={fmtDt(viewEmp.dateOfJoining)} />
+                  <Field label="Confirmation Date" value={fmtDt(e.confirmationDate)} />
+                  <Field label="Probation Months" value={e.probationMonths} />
+                  <Field label="Notice Period (days)" value={e.noticePeriodDays} />
+                  <Field label="Monthly Gross Salary" value={viewEmp.monthlyGrossSalary} />
+                  <Field label="Daily Wage" value={viewEmp.dailyWage} />
+                </div>
+
+                <GroupTitle>Contact</GroupTitle>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Field label="Work Email" value={viewEmp.email} />
+                  <Field label="Phone" value={viewEmp.phone} />
+                  <Field label="Date of Birth" value={fmtDt(viewEmp.dateOfBirth)} />
+                  <Field label="Gender" value={viewEmp.gender} />
+                  <Field label="Father's Name" value={e.fatherName} />
+                </div>
+
+                <GroupTitle>Statutory</GroupTitle>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Field label="PAN" value={e.panNumber} />
+                  <Field label="Aadhar" value={e.aadharNumber} />
+                  <Field label="UAN" value={e.uanNumber} />
+                  <Field label="ESIC IP No." value={e.esicNumber} />
+                </div>
+
+                <GroupTitle>Bank</GroupTitle>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Field label="Bank Name" value={e.bankName} />
+                  <Field label="Account No." value={e.bankAccount} />
+                  <Field label="IFSC" value={e.bankIfsc} />
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter className="gap-2 pt-2 border-t border-[#252e3a]">
+            <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setViewOpen(false)}>Close</Button>
+            {viewEmp && <Button className="bg-[#f5a623] text-[#0f141a] hover:bg-[#e0961a] font-semibold" onClick={() => { setViewOpen(false); openEdit(viewEmp); }}>Edit</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>
