@@ -31,6 +31,30 @@ export default function DesignationsModule() {
   // Per-card "add sub-designation" text inputs, keyed by designation id.
   const [subInput, setSubInput] = useState<Record<number, string>>({});
   const [subBusy, setSubBusy] = useState(false);
+  // Sub-designations staged in the CREATE dialog. They have no parent id yet,
+  // so they are held here and sent with the designation in one request.
+  const [draftSubs, setDraftSubs] = useState<string[]>([]);
+  const [draftSubInput, setDraftSubInput] = useState('');
+
+  const addDraftSub = () => {
+    const n = draftSubInput.trim();
+    if (!n) return;
+    if (draftSubs.some(s => s.toLowerCase() === n.toLowerCase())) {
+      toast.error('That sub-designation is already in the list');
+      return;
+    }
+    setDraftSubs(s => [...s, n]);
+    setDraftSubInput('');
+  };
+
+  const closeDialog = () => {
+    setShowDialog(false);
+    setFormData({ name: '' });
+    setEditingId(null);
+    setFieldErrors({});
+    setDraftSubs([]);
+    setDraftSubInput('');
+  };
 
   useEffect(() => { fetchDesignations(); }, []);
 
@@ -87,21 +111,40 @@ export default function DesignationsModule() {
     setFieldErrors(errors);
     if (!isValid(errors)) return;
     try {
+      // Any name still sitting in the input is included, so a user who types a
+      // sub-designation and hits Create without pressing + doesn't lose it.
+      const pending = draftSubInput.trim();
+      const subs = pending && !draftSubs.some(s => s.toLowerCase() === pending.toLowerCase())
+        ? [...draftSubs, pending]
+        : draftSubs;
+
       const res = await fetch('/api/designations', {
         method: editingId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingId ? { id: editingId, ...formData } : formData),
+        body: JSON.stringify(
+          editingId ? { id: editingId, ...formData } : { ...formData, subDesignations: subs }
+        ),
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(editingId ? 'Designation updated' : 'Designation created');
-        setShowDialog(false); setFormData({ name: '' }); setEditingId(null); setFieldErrors({});
+        toast.success(
+          editingId ? 'Designation updated'
+            : subs.length ? `Designation created with ${subs.length} sub-designation${subs.length > 1 ? 's' : ''}`
+            : 'Designation created'
+        );
+        closeDialog();
         fetchDesignations();
       } else toast.error(data.error || 'Operation failed');
     } catch { toast.error('Failed to save designation'); }
   };
 
-  const handleEdit = (d: Designation) => { setFormData({ name: d.name }); setEditingId(d.id); setShowDialog(true); };
+  const handleEdit = (d: Designation) => {
+    setFormData({ name: d.name });
+    setEditingId(d.id);
+    setDraftSubs([]);
+    setDraftSubInput('');
+    setShowDialog(true);
+  };
 
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this designation?')) return;
@@ -135,7 +178,7 @@ export default function DesignationsModule() {
           <h2 className="text-xl font-bold text-[#e2e8f0]">Designations</h2>
           <p className="text-sm text-[#5a6878]">Manage job roles and positions</p>
         </div>
-        <button onClick={() => { setFormData({ name: '' }); setEditingId(null); setShowDialog(true); }} className="vc-btn-primary">
+        <button onClick={() => { setFormData({ name: '' }); setEditingId(null); setFieldErrors({}); setDraftSubs([]); setDraftSubInput(''); setShowDialog(true); }} className="vc-btn-primary">
           <Plus size={16} /> Add Designation
         </button>
       </div>
@@ -235,8 +278,59 @@ export default function DesignationsModule() {
                   placeholder="e.g., Senior Engineer" />
                 <FieldError message={fieldErrors.name} />
               </div>
+
+              {/* Sub-designations — create only. When editing, the card's own
+                  inline editor is the place to change them, since those rows
+                  already exist and are edited individually. */}
+              {!editingId && (
+                <div>
+                  <label className="block text-sm font-medium text-[#e2e8f0] mb-2">
+                    Sub-Designations <span className="text-[#5a6878] font-normal">(optional)</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={draftSubInput}
+                      onChange={e => setDraftSubInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addDraftSub(); } }}
+                      placeholder="e.g., Grade A — press Enter to add"
+                      className="flex-1 min-w-0 px-3 py-2 bg-[#0d1117] border border-[#2e3a48] rounded-lg text-[#e2e8f0] focus:outline-none focus:ring-2 focus:ring-[#f5a623]"
+                    />
+                    <button
+                      type="button"
+                      onClick={addDraftSub}
+                      disabled={!draftSubInput.trim()}
+                      className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center bg-[#00d4ff]/10 text-[#00d4ff] hover:bg-[#00d4ff]/20 disabled:opacity-40 transition-colors"
+                      title="Add sub-designation"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                  {draftSubs.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {draftSubs.map(s => (
+                        <span key={s} className="inline-flex items-center gap-1 text-[10px] px-2 py-[3px] rounded-full bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/20">
+                          {s}
+                          <button
+                            type="button"
+                            onClick={() => setDraftSubs(list => list.filter(x => x !== s))}
+                            title="Remove"
+                            className="opacity-60 hover:opacity-100 hover:text-[#ff3d3d] transition"
+                          >
+                            <Trash2 size={10} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-[#5a6878] mt-1.5">
+                    You can also add or remove these later from the designation&apos;s card.
+                  </p>
+                </div>
+              )}
+
               <div className="flex gap-2 pt-4">
-                <button type="button" onClick={() => { setShowDialog(false); setFormData({ name: '' }); setEditingId(null); }}
+                <button type="button" onClick={closeDialog}
                   className="flex-1 px-4 py-2 bg-[#252e3a] text-[#e2e8f0] rounded-lg hover:bg-[#2e3a48] transition-colors">Cancel</button>
                 <button type="submit" className="flex-1 vc-btn-primary">{editingId ? 'Update' : 'Create'}</button>
               </div>
