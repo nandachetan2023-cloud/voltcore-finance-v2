@@ -89,6 +89,7 @@ interface SheetInfo {
 
 export default function SalaryNonComplianceBulkImport({ onImportComplete }: { onImportComplete: () => void }) {
   const [open, setOpen] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [validating, setValidating] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -119,132 +120,44 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
   const [importMonth, setImportMonth] = useState<number>(new Date().getMonth() + 1);
   const [importYear, setImportYear] = useState<number>(new Date().getFullYear());
 
-  const downloadTemplate = () => {
+  /**
+   * Download the template from the server route that also drives payroll
+   * generation. This used to build its own 69-column header array locally,
+   * which had drifted from the server's 70-column layout — it was missing the
+   * trailing "LEAVE AMOUNT" column and left col 12 ("SITE") blank, so a sheet
+   * filled from this template did not line up with the importer's fixed column
+   * indices. One source of truth now.
+   */
+  const downloadTemplate = async () => {
+    setDownloadingTemplate(true);
     try {
-      const XLSX = require('xlsx');
+      const params = new URLSearchParams({
+        month: String(importMonth),
+        year: String(importYear),
+      });
+      const res = await fetch(`/api/payroll/generate-template?${params.toString()}`);
 
-      // 69-column non-compliance format: SL NO. first, then EMPLOYEE ID, then original 67 columns
-      const headers = [
-        'SL NO.',
-        'EMPLOYEE ID',
-        'WORKMEN SL. NO.',
-        'TOKEN NO.',
-        'NAME OF EMPLOYEE',
-        "FATHER'S NAME",
-        'DOJ',
-        'DOB',
-        'BANK NAME',
-        'ACCOUNT NO.',
-        'IFSC CODE NO.',
-        '',           // col 11 empty
-        'UAN NO.',
-        'ESIC IP NO',
-        'DESIGNATION',
-        'DEPARTMENT',
-        'NATURE OF DESIGNATION',
-        'MONTHLY GROSS SALARY',
-        'ACTUAL ATTENDANCE',
-        'LEAVE DAYS',
-        'PH DAYS',
-        'ACTUAL EARN WAGES',
-        'ACTUAL OT HRS',
-        'ACTUAL OT AMOUNT',
-        'GROSS EARN WAGES',
-        'BASIC WAGES/DAY',
-        'MONTHLY WORKING DAYS',
-        'OT. HRS',
-        'ATTENDANCE',
-        'PH',
-        'WAGES/MONTH',
-        'EARN WAGES',
-        'PH AMOUNT',
-        'TOTAL EARN WAGES',
-        'OT HRS PAYMENT',
-        'TOTAL NETT PAYBLE',
-        'EPF',
-        'ESIC',
-        'PT',
-        'TOTAL DEDUCTION',
-        'NETT PAYBLE',
-        'EMPLOYEE SIGNATURE/THUMB IMPRESSION',
-        '',           // col 42 empty
-        '',           // col 43 empty
-        'TOTAL NON COMPLIANCE AMOUNT',
-        'ADVANCE',
-        'ARREARS',
-        'NETT PAYBLE NON COMPLIANCE',
-        'GRAND TOTAL NETT PAYBLE SALARY',
-        '',           // col 49 empty
-        'LEAVE',
-        'BONUS',
-        '',           // col 52 empty
-        '',           // col 53 empty
-        '',           // col 54 empty
-        'MONTHLY BASIC SALARY',
-        'PH AMOUNT',
-        'OT AMOUNT',
-        'EARN SALARY',
-        'MONTHLY House Rent Allow.',
-        'Monthly Site Allow.',
-        'Monthly Leave Travel Allow.',
-        'Monthly Special Allow.',
-        'MonthlyAttendence Allow.',
-        'TOTAL SALARY',
-        'EPF',
-        'ESIC',
-        'TDS',
-        'ADVANCE',
-      ];
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        toast.error(json.error || 'Failed to generate template');
+        return;
+      }
 
-      const instructionsData = [
-        ['Non-Compliance Salary Sheet — Import Template'],
-        [''],
-        ['COLUMN 1 — SL NO.'],
-        ['  Auto-generated row number. Leave blank or fill sequentially.'],
-        [''],
-        ['COLUMN 2 — EMPLOYEE ID'],
-        ['  Enter the unique employee code (e.g. EMP001). Used for direct lookup.'],
-        ['  If blank, TOKEN NO. (col 4) will be used as fallback.'],
-        [''],
-        ['KEY COLUMNS FOR IMPORT'],
-        ['  Col 1:  SL NO. — row number (auto-generated)'],
-        ['  Col 2:  EMPLOYEE ID — unique employee code'],
-        ['  Col 4:  TOKEN NO. — employee code (fallback if col 2 is blank)'],
-        ['  Col 5:  NAME OF EMPLOYEE'],
-        ['  Col 18: MONTHLY GROSS SALARY'],
-        ['  Col 19: ACTUAL ATTENDANCE (days present)'],
-        ['  Col 23: ACTUAL OT HRS'],
-        ['  Col 24: ACTUAL OT AMOUNT'],
-        ['  Col 37: EPF deduction'],
-        ['  Col 38: ESIC deduction'],
-        ['  Col 39: PT deduction'],
-        ['  Col 40: TOTAL DEDUCTION'],
-        ['  Col 41: NETT PAYBLE'],
-        ['  Col 56: MONTHLY BASIC SALARY'],
-        ['  Col 60: MONTHLY House Rent Allow.'],
-        ['  Col 68: TDS'],
-        [''],
-        ['NOTES'],
-        ['  - Do NOT modify the header row'],
-        ['  - All numeric fields: numbers only, no currency symbols'],
-        ['  - Sheet name should be "NON-COMPLIANCE SALARY SHEET" or will auto-detect'],
-      ];
-
-      const instructionsSheet = XLSX.utils.aoa_to_sheet(instructionsData);
-      instructionsSheet['!cols'] = [{ wch: 80 }];
-
-      const ws = XLSX.utils.aoa_to_sheet([headers]);
-      ws['!cols'] = headers.map((_: string, i: number) => ({
-        wch: i === 0 ? 14 : i === 4 ? 25 : i === 5 ? 20 : 13,
-      }));
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, instructionsSheet, 'Instructions');
-      XLSX.utils.book_append_sheet(wb, ws, 'NON-COMPLIANCE SALARY SHEET');
-      XLSX.writeFile(wb, 'Non_Compliance_Salary_Template.xlsx');
-      toast.success('Template downloaded');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Non_Compliance_Salary_Template_${getMonthName(importMonth)}_${importYear}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Template downloaded — pre-filled with active employees');
     } catch (e) {
-      toast.error('Failed to generate template');
+      toast.error('Failed to download template');
+      console.error(e);
+    } finally {
+      setDownloadingTemplate(false);
     }
   };
 
@@ -672,8 +585,9 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
                 <div className="text-[11px] text-[#8899aa] space-y-2">
                   <p className="font-semibold text-[#e2e8f0]">Import Instructions:</p>
                   <ol className="list-decimal list-inside space-y-1">
-                    <li>Download the template file below (68-column detailed format)</li>
-                    <li>Fill in the salary data (TOKEN NO. must match employee codes)</li>
+                    <li>Pick the salary period below</li>
+                    <li>Download the template — it arrives pre-filled with your active employees</li>
+                    <li>Fill in the highlighted input columns (TOKEN NO. must match employee codes)</li>
                     <li>Save the file and upload it here</li>
                     <li>System will validate employee codes before import</li>
                     <li>Review validation results and proceed with import</li>
@@ -685,15 +599,50 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
               </div>
             </div>
 
+            {/* Period selector — drives BOTH the template download and the
+                period the imported rows are filed under, so it comes first. */}
+            <div className="border border-[#2e3a48] rounded-lg p-4 bg-[#141920]">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="text-[12px] font-semibold text-[#e2e8f0]">Salary Period</div>
+              </div>
+              <div className="text-[10px] text-[#5a6878] mb-3">
+                Select the month this sheet belongs to. Importing an older month? Change it here — the data is filed under this period, not today&apos;s month.
+              </div>
+              <div className="flex items-center gap-3">
+                <select
+                  value={importMonth}
+                  onChange={e => setImportMonth(parseInt(e.target.value))}
+                  className="flex-1 bg-[#0d1117] border border-[#2e3a48] rounded px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                    <option key={m} value={m}>{getMonthName(m)}</option>
+                  ))}
+                </select>
+                <select
+                  value={importYear}
+                  onChange={e => setImportYear(parseInt(e.target.value))}
+                  className="w-28 bg-[#0d1117] border border-[#2e3a48] rounded px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]"
+                >
+                  {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {/* Download Template */}
-            <div className="flex items-center justify-center">
+            <div className="flex flex-col items-center gap-1.5">
               <button
-                className="vc-btn-primary flex items-center gap-2"
+                className="vc-btn-primary flex items-center gap-2 disabled:opacity-50"
                 onClick={downloadTemplate}
+                disabled={downloadingTemplate}
               >
                 <Download size={14} />
-                Download Template
+                {downloadingTemplate ? 'Generating…' : `Download Template — ${getMonthName(importMonth)} ${importYear}`}
               </button>
+              <p className="text-[10px] text-[#5a6878] text-center">
+                Pre-filled with your active employees for the period above.
+              </p>
             </div>
 
             {/* Upload Section */}
@@ -727,36 +676,6 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
                   )}
                 </div>
               </label>
-            </div>
-
-            {/* Period selector — which month/year this sheet is for */}
-            <div className="border border-[#2e3a48] rounded-lg p-4 bg-[#141920]">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="text-[12px] font-semibold text-[#e2e8f0]">Salary Period</div>
-              </div>
-              <div className="text-[10px] text-[#5a6878] mb-3">
-                Select the month this sheet belongs to. Importing an older month? Change it here — the data is filed under this period, not today's month.
-              </div>
-              <div className="flex items-center gap-3">
-                <select
-                  value={importMonth}
-                  onChange={e => setImportMonth(parseInt(e.target.value))}
-                  className="flex-1 bg-[#0d1117] border border-[#2e3a48] rounded px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]"
-                >
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                    <option key={m} value={m}>{getMonthName(m)}</option>
-                  ))}
-                </select>
-                <select
-                  value={importYear}
-                  onChange={e => setImportYear(parseInt(e.target.value))}
-                  className="w-28 bg-[#0d1117] border border-[#2e3a48] rounded px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]"
-                >
-                  {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-              </div>
             </div>
 
             {/* Sheet Selector */}

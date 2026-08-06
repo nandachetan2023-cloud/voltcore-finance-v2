@@ -10,6 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Download, MapPin } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import {
+  EMPLOYEE_IMPORT_COLUMNS,
+  EMPLOYEE_IMPORT_HEADERS,
+  EMPLOYEE_IMPORT_SAMPLE_ROW,
+  EMPLOYEE_IMPORT_WIDTHS,
+} from '@/lib/services/employee-import-columns';
 
 interface ImportResult {
   success: boolean;
@@ -273,44 +279,10 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
 
   const downloadTemplate = () => {
     const XLSX = require('xlsx');
-    const headers = [
-      'Employee ID*',
-      'First Name*', 'Middle Name', 'Last Name*',
-      'Work Email', 'Personal Email', 'Phone*', 'Alternate Phone',
-      'Date of Birth* (YYYY-MM-DD)', 'Gender* (male/female/other)',
-      'Marital Status (single/married/divorced/widowed)', 'Blood Group (A+/A-/B+/B-/AB+/AB-/O+/O-)',
-      "Father's Name",
-      'Current Address', 'Current City', 'Current State', 'Current Pincode',
-      'Permanent Address', 'Permanent City', 'Permanent State', 'Permanent Pincode',
-      'Department* (exact name from system)', 'Designation* (exact name from system)', 'Grade',
-      'Reporting Manager (Employee Code)',
-      'Date of Joining* (YYYY-MM-DD)', 'Confirmation Date (YYYY-MM-DD)',
-      'Employment Type (permanent/contract/probation/intern/part_time)',
-      'Employment Status* (active/inactive)',
-      'Probation Months', 'Notice Period Days',
-      'PAN Number', 'Aadhar Number', 'UAN Number', 'ESIC Number',
-      'Bank Name', 'Bank Account Number', 'Bank IFSC Code',
-      'Emergency Contact Name', 'Emergency Contact Relation', 'Emergency Contact Phone',
-    ];
-
-    const sampleRow = [
-      'UA0001',
-      'John', '', 'Doe',
-      'john.doe@company.com', 'john.personal@email.com', '9876543210', '',
-      '1990-01-15', 'male',
-      'single', 'O+',
-      'Parent Name',
-      '123 Main Street', 'Mumbai', 'Maharashtra', '400001',
-      '', '', '', '',
-      'Engineering', 'Engineer', 'L1',
-      '',
-      '2024-01-01', '',
-      'permanent', 'active',
-      '6', '30',
-      'ABCDE1234F', '123456789012', '100123456789', '1234567890',
-      'Bank Name', '1234567890123', 'BANK0001234',
-      'Emergency Contact Name', 'Relation', '9876543210',
-    ];
+    // Headers/sample come from the shared column definition, which the export
+    // and the server-side parser also use — so the three can no longer drift.
+    const headers = EMPLOYEE_IMPORT_HEADERS;
+    const sampleRow = EMPLOYEE_IMPORT_SAMPLE_ROW;
 
     const instructionsData = [
       ['Employee Bulk Import Template — Instructions'],
@@ -323,14 +295,20 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
       ['  Example: If Enrolled ID is 00000005, use UA0005'],
       [''],
       ['SITE / BRANCH ASSIGNMENT'],
-      ['  The site/branch is NOT in this Excel file.'],
-      ['  After you validate the data, the system will show all employees in a mapping table.'],
-      ['  You can assign a different site to each employee, or use "Set All" for bulk assignment.'],
+      ['  The "Site / Branch" column is optional and is IGNORED on import.'],
+      ['  After you validate the data, the system shows all employees in a mapping table'],
+      ['  where you assign the site per employee (or use "Set All").'],
+      ['  The column exists so an exported file can be edited and re-imported unchanged.'],
       [''],
       ['DEPARTMENT & DESIGNATION ASSIGNMENT'],
       ['  Simply type the department and designation name you want.'],
       ['  If it does not exist in the system it will be AUTOMATICALLY CREATED during import.'],
       ['  Names are case-insensitive — "engineering", "Engineering", "ENGINEERING" are all treated the same.'],
+      [''],
+      ['SUB-DESIGNATION'],
+      ['  Must already exist under the designation named in the same row.'],
+      ['  Unlike departments and designations it is NOT auto-created — an unknown'],
+      ['  name imports the employee without it and reports a warning.'],
       [''],
       ['REQUIRED FIELDS (marked with *)'],
       ['  Employee ID, First Name, Last Name, Phone,'],
@@ -347,15 +325,34 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
       ['GENDER'],
       ['  Use: male / female / other'],
       [''],
-      ['EMPLOYMENT TYPE (optional)'],
-      ['  Use: permanent / contract / probation / intern / part_time'],
+      ['EMPLOYMENT TYPE — drives payroll, please read'],
+      ['  Use exactly: fixed  or  non_fixed'],
+      ['  fixed     = earns over the site\'s monthly working days, no overtime'],
+      ['  non_fixed = earns over 26 days and receives OT at the "OT Type" multiplier'],
+      ['  If left blank it defaults to non_fixed (same as the employee form).'],
+      [''],
+      ['OT TYPE (non-fixed employees only)'],
+      ['  1 = overtime paid at 1x the hourly rate'],
+      ['  2 = overtime paid at 2x the hourly rate'],
+      ['  Ignored for fixed employees. Blank defaults to 1.'],
+      [''],
+      ['TOKEN NUMBER'],
+      ['  Must be unique across all employees if provided. Leave blank if unused.'],
+      ['  This is the column the non-compliance salary sheet import matches on.'],
+      [''],
+      ['NATURE OF DESIGNATION (compliance register)'],
+      ['  Use: Skilled / Semi-skilled / Unskilled / Highly Skilled'],
+      [''],
+      ['MONTHLY GROSS SALARY & DAILY WAGE'],
+      ['  Numbers only — no currency symbols or thousands separators.'],
+      ['  Daily Wage is the fixed daily rate used verbatim by compliance payroll.'],
     ];
 
     const instructionsSheet = XLSX.utils.aoa_to_sheet(instructionsData);
     instructionsSheet['!cols'] = [{ wch: 90 }];
 
     const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
-    ws['!cols'] = headers.map((h: string, i: number) => ({ wch: i === 0 ? 14 : 22 }));
+    ws['!cols'] = EMPLOYEE_IMPORT_WIDTHS;
     headers.forEach((_: any, i: number) => {
       const cell = XLSX.utils.encode_cell({ r: 0, c: i });
       if (!ws[cell]) ws[cell] = {};
@@ -375,49 +372,81 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
       if (!json.success) { toast.error('Failed to fetch employees'); return; }
 
       const XLSX = require('xlsx');
-      const headers = [
-        'Employee ID*',
-        'First Name*', 'Middle Name', 'Last Name*',
-        'Work Email', 'Personal Email', 'Phone*', 'Alternate Phone',
-        'Date of Birth* (YYYY-MM-DD)', 'Gender* (male/female/other)',
-        'Marital Status (single/married/divorced/widowed)', 'Blood Group (A+/A-/B+/B-/AB+/AB-/O+/O-)',
-        "Father's Name",
-        'Current Address', 'Current City', 'Current State', 'Current Pincode',
-        'Permanent Address', 'Permanent City', 'Permanent State', 'Permanent Pincode',
-        'Department* (exact name from system)', 'Designation* (exact name from system)', 'Site / Branch', 'Grade',
-        'Reporting Manager (Employee Code)',
-        'Date of Joining* (YYYY-MM-DD)', 'Confirmation Date (YYYY-MM-DD)',
-        'Employment Type (permanent/contract/probation/intern/part_time)',
-        'Employment Status* (active/inactive)',
-        'Probation Months', 'Notice Period Days',
-        'PAN Number', 'Aadhar Number', 'UAN Number', 'ESIC Number',
-        'Bank Name', 'Bank Account Number', 'Bank IFSC Code',
-        'Emergency Contact Name', 'Emergency Contact Relation', 'Emergency Contact Phone',
-      ];
+      // Same headers as the template, so export → edit → re-import round-trips.
+      const headers = EMPLOYEE_IMPORT_HEADERS;
 
       const fmt = (d: any) => d ? new Date(d).toISOString().split('T')[0] : '';
 
-      const rows = json.data.map((e: any) => [
-        e.employeeCode || '',
-        e.firstName || '', e.middleName || '', e.lastName || '',
-        e.email || '', e.personalEmail || '', e.phone || '', e.alternatePhone || '',
-        fmt(e.dateOfBirth), e.gender || '',
-        e.maritalStatus || '', e.bloodGroup || '',
-        e.fatherName || '',
-        e.currentAddress || '', e.currentCity || '', e.currentState || '', e.currentPincode || '',
-        e.permanentAddress || '', e.permanentCity || '', e.permanentState || '', e.permanentPincode || '',
-        e.Department?.name || '', e.Designation?.name || '', e.Branch?.name || '', e.Grade?.name || '',
-        e.reportingManager?.employeeCode || '',
-        fmt(e.dateOfJoining), fmt(e.confirmationDate),
-        e.employmentType || '', e.employmentStatus || '',
-        e.probationMonths ?? '', e.noticePeriodDays ?? '',
-        e.panNumber || '', e.aadharNumber || '', e.uanNumber || '', e.esicNumber || '',
-        e.bankName || '', e.bankAccount || '', e.bankIfsc || '',
-        e.emergencyContactName || '', e.emergencyContactRelation || '', e.emergencyContactPhone || '',
-      ]);
+      // The employees API returns reportingManagerId but no manager relation,
+      // so resolve the code from the same payload rather than exporting blanks.
+      const codeById = new Map<number, string>(
+        json.data.map((e: any) => [e.id, e.employeeCode || ''])
+      );
+
+      // Keyed by column `key` rather than positionally: adding a column to the
+      // shared definition can no longer silently shift every later value.
+      const valueByKey = (e: any): Record<string, any> => ({
+        employeeId: e.employeeCode || '',
+        tokenNumber: e.tokenNumber || '',
+        workmenSlNo: e.workmenSlNo || '',
+        firstName: e.firstName || '',
+        middleName: e.middleName || '',
+        lastName: e.lastName || '',
+        email: e.email || '',
+        personalEmail: e.personalEmail || '',
+        phone: e.phone || '',
+        alternatePhone: e.alternatePhone || '',
+        dateOfBirth: fmt(e.dateOfBirth),
+        gender: e.gender || '',
+        maritalStatus: e.maritalStatus || '',
+        bloodGroup: e.bloodGroup || '',
+        fatherName: e.fatherName || '',
+        currentAddress: e.currentAddress || '',
+        currentCity: e.currentCity || '',
+        currentState: e.currentState || '',
+        currentPincode: e.currentPincode || '',
+        permanentAddress: e.permanentAddress || '',
+        permanentCity: e.permanentCity || '',
+        permanentState: e.permanentState || '',
+        permanentPincode: e.permanentPincode || '',
+        department: e.Department?.name || '',
+        designation: e.Designation?.name || '',
+        subDesignation: e.SubDesignation?.name || '',
+        branch: e.Branch?.name || '',
+        grade: e.Grade?.name || '',
+        reportingManager: e.reportingManagerId ? (codeById.get(e.reportingManagerId) || '') : '',
+        dateOfJoining: fmt(e.dateOfJoining),
+        confirmationDate: fmt(e.confirmationDate),
+        employmentType: e.employmentType || '',
+        otType: e.otType ?? '',
+        employmentStatus: e.employmentStatus || '',
+        natureOfDesignation: e.natureOfDesignation || '',
+        probationMonths: e.probationMonths ?? '',
+        noticePeriodDays: e.noticePeriodDays ?? '',
+        monthlyGrossSalary: e.monthlyGrossSalary ?? '',
+        dailyWage: e.dailyWage ?? '',
+        panNumber: e.panNumber || '',
+        aadharNumber: e.aadharNumber || '',
+        uanNumber: e.uanNumber || '',
+        esicNumber: e.esicNumber || '',
+        bankName: e.bankName || '',
+        bankAccount: e.bankAccount || '',
+        bankIfsc: e.bankIfsc || '',
+        emergencyContactName: e.emergencyContactName || '',
+        emergencyContactRelation: e.emergencyContactRelation || '',
+        emergencyContactPhone: e.emergencyContactPhone || '',
+        nomineeName: e.nomineeName || '',
+        nomineeRelation: e.nomineeRelation || '',
+        nomineeAddress: e.nomineeAddress || '',
+      });
+
+      const rows = json.data.map((e: any) => {
+        const v = valueByKey(e);
+        return EMPLOYEE_IMPORT_COLUMNS.map(c => v[c.key] ?? '');
+      });
 
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-      ws['!cols'] = headers.map((_: string, i: number) => ({ wch: i === 0 ? 14 : 22 }));
+      ws['!cols'] = EMPLOYEE_IMPORT_WIDTHS;
       headers.forEach((_: any, i: number) => {
         const cell = XLSX.utils.encode_cell({ r: 0, c: i });
         if (!ws[cell]) ws[cell] = {};

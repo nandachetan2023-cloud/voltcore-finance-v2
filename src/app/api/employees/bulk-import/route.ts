@@ -1,6 +1,10 @@
 import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
+import {
+  HEADER_TO_KEY,
+  LEGACY_HEADER_ALIASES,
+} from '@/lib/services/employee-import-columns'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,52 +48,19 @@ interface EmployeeRow {
   'Date of Exit'?: string
   'Reason of Exit'?: string
   
-  // New format (current template)
+  // New format — resolved dynamically via HEADER_TO_KEY / LEGACY_HEADER_ALIASES
+  // from src/lib/services/employee-import-columns.ts, which is the single
+  // source of truth shared with the template and export. Only the two headers
+  // used for format DETECTION are named here; the rest are read by caption.
   'Employee ID*'?: string
   'First Name*'?: string
-  'Middle Name'?: string
-  'Last Name*'?: string
-  'Work Email'?: string
-  'Personal Email'?: string
-  'Phone*'?: string
-  'Alternate Phone'?: string
-  'Date of Birth* (YYYY-MM-DD)'?: string
-  'Gender* (male/female/other)'?: string
-  'Marital Status (single/married/divorced/widowed)'?: string
-  'Blood Group (A+/A-/B+/B-/AB+/AB-/O+/O-)'?: string
-  'Current Address'?: string
-  'Current City'?: string
-  'Current State'?: string
-  'Current Pincode'?: string
-  'Permanent Address (new)'?: string
-  'Permanent City'?: string
-  'Permanent State'?: string
-  'Permanent Pincode'?: string
-  'Department* (exact name from system)'?: string
-  'Designation* (exact name from system)'?: string
-  'Site / Branch*'?: string
-  'Branch*'?: string
-  'Grade'?: string
-  'Reporting Manager (Employee Code)'?: string
-  'Date of Joining* (YYYY-MM-DD)'?: string
-  'Confirmation Date (YYYY-MM-DD)'?: string
-  'Employment Type (permanent/contract/probation/intern/part_time)'?: string
-  'Employment Status* (active/inactive)'?: string
-  'Probation Months'?: number
-  'Notice Period Days'?: number
-  'PAN Number'?: string
-  'Aadhar Number'?: string
-  'UAN Number'?: string
-  'ESIC Number'?: string
-  'Bank Account Number'?: string
-  'Bank IFSC Code'?: string
-  'Emergency Contact Name'?: string
-  'Emergency Contact Relation'?: string
-  'Emergency Contact Phone'?: string
+
+  // Legacy-only captions that have no counterpart in the current column list.
   "Father's Name (old)"?: string
-  "Father's Name (new)"?: string
-  "Father's Name"?: string
   'Permanent Address (old)'?: string
+
+  // Any other column is looked up by its header string at runtime.
+  [header: string]: any
 }
 
 interface ValidationError {
@@ -198,52 +169,74 @@ export async function POST(request: NextRequest) {
 function normalizeRow(row: EmployeeRow) {
   // Detect which format is being used
   const isNewFormat = 'Employee ID*' in row || 'First Name*' in row
-  
+
   if (isNewFormat) {
-    // New format - direct mapping
+    // New format — resolved through the shared column definition so the
+    // template, the export and this parser can never drift apart again.
+    // Legacy captions from older template builds are still accepted.
+    const v: Record<string, any> = {}
+    for (const [header, value] of Object.entries(row)) {
+      const key = HEADER_TO_KEY[header] ?? LEGACY_HEADER_ALIASES[header]
+      // First non-empty wins, so a current caption beats a legacy alias when
+      // a hand-merged sheet happens to carry both.
+      if (key && (v[key] === undefined || v[key] === '' || v[key] === null)) {
+        v[key] = value
+      }
+    }
+
     return {
-      employeeId: row['Employee ID*'],
-      firstName: row['First Name*'],
-      middleName: row['Middle Name'],
-      lastName: row['Last Name*'],
-      email: row['Work Email'],
-      personalEmail: row['Personal Email'],
-      phone: row['Phone*'],
-      alternatePhone: row['Alternate Phone'],
-      dateOfBirth: row['Date of Birth* (YYYY-MM-DD)'],
-      gender: row['Gender* (male/female/other)'],
-      maritalStatus: row['Marital Status (single/married/divorced/widowed)'],
-      bloodGroup: row['Blood Group (A+/A-/B+/B-/AB+/AB-/O+/O-)'],
-      fatherName: row["Father's Name"] || row["Father's Name (new)"],
-      currentAddress: row['Current Address'],
-      currentCity: row['Current City'],
-      currentState: row['Current State'],
-      currentPincode: row['Current Pincode'],
-      permanentAddress: row['Permanent Address (new)'],
-      permanentCity: row['Permanent City'],
-      permanentState: row['Permanent State'],
-      permanentPincode: row['Permanent Pincode'],
-      department: row['Department* (exact name from system)'],
-      designation: row['Designation* (exact name from system)'],
-      branch: row['Site / Branch*'] || row['Branch*'],
-      grade: row['Grade'],
-      reportingManager: row['Reporting Manager (Employee Code)'],
-      dateOfJoining: row['Date of Joining* (YYYY-MM-DD)'],
-      confirmationDate: row['Confirmation Date (YYYY-MM-DD)'],
-      employmentType: row['Employment Type (permanent/contract/probation/intern/part_time)'],
-      employmentStatus: row['Employment Status* (active/inactive)'],
-      probationMonths: row['Probation Months'],
-      noticePeriodDays: row['Notice Period Days'],
-      panNumber: row['PAN Number'],
-      aadharNumber: row['Aadhar Number'],
-      uanNumber: row['UAN Number'],
-      esicNumber: row['ESIC Number'],
-      bankName: row['Bank Name'],
-      bankAccount: row['Bank Account Number'],
-      bankIfsc: row['Bank IFSC Code'],
-      emergencyContactName: row['Emergency Contact Name'],
-      emergencyContactRelation: row['Emergency Contact Relation'],
-      emergencyContactPhone: row['Emergency Contact Phone'],
+      employeeId: v.employeeId,
+      tokenNumber: v.tokenNumber,
+      workmenSlNo: v.workmenSlNo,
+      firstName: v.firstName,
+      middleName: v.middleName,
+      lastName: v.lastName,
+      email: v.email,
+      personalEmail: v.personalEmail,
+      phone: v.phone,
+      alternatePhone: v.alternatePhone,
+      dateOfBirth: v.dateOfBirth,
+      gender: v.gender,
+      maritalStatus: v.maritalStatus,
+      bloodGroup: v.bloodGroup,
+      fatherName: v.fatherName,
+      currentAddress: v.currentAddress,
+      currentCity: v.currentCity,
+      currentState: v.currentState,
+      currentPincode: v.currentPincode,
+      permanentAddress: v.permanentAddress,
+      permanentCity: v.permanentCity,
+      permanentState: v.permanentState,
+      permanentPincode: v.permanentPincode,
+      department: v.department,
+      designation: v.designation,
+      subDesignation: v.subDesignation,
+      branch: v.branch,
+      grade: v.grade,
+      reportingManager: v.reportingManager,
+      dateOfJoining: v.dateOfJoining,
+      confirmationDate: v.confirmationDate,
+      employmentType: v.employmentType,
+      otType: v.otType,
+      employmentStatus: v.employmentStatus,
+      natureOfDesignation: v.natureOfDesignation,
+      probationMonths: v.probationMonths,
+      noticePeriodDays: v.noticePeriodDays,
+      monthlyGrossSalary: v.monthlyGrossSalary,
+      dailyWage: v.dailyWage,
+      panNumber: v.panNumber,
+      aadharNumber: v.aadharNumber,
+      uanNumber: v.uanNumber,
+      esicNumber: v.esicNumber,
+      bankName: v.bankName,
+      bankAccount: v.bankAccount,
+      bankIfsc: v.bankIfsc,
+      emergencyContactName: v.emergencyContactName,
+      emergencyContactRelation: v.emergencyContactRelation,
+      emergencyContactPhone: v.emergencyContactPhone,
+      nomineeName: v.nomineeName,
+      nomineeRelation: v.nomineeRelation,
+      nomineeAddress: v.nomineeAddress,
     }
   } else {
     // Old format - parse name and map fields
@@ -252,6 +245,8 @@ function normalizeRow(row: EmployeeRow) {
     
     return {
       employeeId: row['Employee ID'],
+      tokenNumber: null,
+      workmenSlNo: null,
       firstName: nameParts.firstName,
       middleName: nameParts.middleName,
       lastName: nameParts.lastName,
@@ -274,15 +269,20 @@ function normalizeRow(row: EmployeeRow) {
       permanentPincode: null,
       department: row['Department'],
       designation: row['Designation'],
+      subDesignation: null,
       branch: row['Company'] || row['Location'],
       grade: null,
       reportingManager: row['Report To'],
       dateOfJoining: row['Date of Joining'],
       confirmationDate: null,
       employmentType: row['Type of Employment'],
+      otType: null,
       employmentStatus: row['Date of Exit'] ? 'separated' : 'active',
+      natureOfDesignation: row['Skill Category'],
       probationMonths: null,
       noticePeriodDays: null,
+      monthlyGrossSalary: row['Basic Salary'],
+      dailyWage: null,
       panNumber: row['PAN'],
       aadharNumber: row['Aadhar No.'],
       uanNumber: row['UAN'],
@@ -293,6 +293,9 @@ function normalizeRow(row: EmployeeRow) {
       emergencyContactName: null,
       emergencyContactRelation: null,
       emergencyContactPhone: null,
+      nomineeName: null,
+      nomineeRelation: null,
+      nomineeAddress: null,
       dateOfExit: row['Date of Exit'],
       reasonOfExit: row['Reason of Exit'],
     }
@@ -370,6 +373,22 @@ async function validateAndImport(
     }
     desigCache.set(key, -1)
     return -1
+  }
+
+  // Existing sub-designations, keyed "<designationId>::<lowercased name>".
+  // Look-up only — never auto-created (see the call site for why).
+  const subDesigs = await db.subDesignation.findMany({
+    select: { id: true, name: true, designationId: true },
+  }).catch(() => [] as any[])
+  const subDesigCache = new Map<string, number>()
+  for (const s of subDesigs) {
+    subDesigCache.set(`${s.designationId}::${s.name.toLowerCase().trim()}`, s.id)
+  }
+  const resolveSubDesig = async (designationId: number, name: string): Promise<number | null> => {
+    // On a dry run the parent designation may not exist yet (id -1), so the
+    // pairing cannot be verified — skip rather than report a bogus warning.
+    if (designationId <= 0) return null
+    return subDesigCache.get(`${designationId}::${name.toLowerCase().trim()}`) ?? null
   }
 
   for (let i = 0; i < rows.length; i++) {
@@ -456,6 +475,26 @@ async function validateAndImport(
     // Resolve designation — auto-create if not found (case-insensitive)
     const designationId = await getOrCreateDesig(data.designation!)
 
+    // Resolve sub-designation — must belong to the row's designation. Unlike
+    // dept/designation this is NOT auto-created: a sub-designation is only
+    // meaningful under its parent, and inventing one from a typo would quietly
+    // pollute the list. An unknown name is a warning and imports as null.
+    let subDesignationId: number | null = null
+    if (data.subDesignation && String(data.subDesignation).trim()) {
+      const subName = String(data.subDesignation).trim()
+      subDesignationId = await resolveSubDesig(designationId, subName)
+      // designationId <= 0 means the parent is being auto-created in this same
+      // run, so the pairing genuinely cannot be checked yet — stay quiet then.
+      if (subDesignationId === null && designationId > 0) {
+        warnings.push({
+          row: rowNum,
+          employeeCode: data.employeeId!,
+          field: 'subDesignation',
+          message: `Sub-designation "${subName}" does not exist under designation "${data.designation}" — imported without it.`,
+        })
+      }
+    }
+
     // Resolve branch — priority: per-employee mapping > global override > Excel column > default
     let branchId: number | undefined
     if (branchMapping && branchMapping[normalizedEmployeeId]) {
@@ -484,6 +523,14 @@ async function validateAndImport(
     // Prepare employee data for import
     const employeeData = {
       employeeCode: normalizedEmployeeId,  // Use normalized ID (UA + 8 digits)
+      // tokenNumber is UNIQUE in the schema, so a blank cell must stay null
+      // rather than becoming "" — two blanks would collide on the second row.
+      tokenNumber: data.tokenNumber != null && String(data.tokenNumber).trim()
+        ? String(data.tokenNumber).trim()
+        : null,
+      workmenSlNo: data.workmenSlNo != null && String(data.workmenSlNo).trim()
+        ? String(data.workmenSlNo).trim()
+        : null,
       firstName: data.firstName!,
       middleName: data.middleName || null,
       lastName: data.lastName!,
@@ -506,13 +553,18 @@ async function validateAndImport(
       permanentPincode: data.permanentPincode ? String(data.permanentPincode) : null,
       departmentId,
       designationId,
+      subDesignationId,
       branchId,
       gradeId: null, // TODO: Handle grade lookup
       reportingManagerId: null, // TODO: Handle reporting manager lookup
       dateOfJoining: parseDate(data.dateOfJoining!),
       confirmationDate: data.confirmationDate ? parseDate(data.confirmationDate) : null,
       employmentType: normalizeEmploymentType(data.employmentType),
+      otType: normalizeOtType(data.otType),
       employmentStatus: normalizeEmploymentStatus(data.employmentStatus),
+      natureOfDesignation: normalizeNatureOfDesignation(data.natureOfDesignation),
+      monthlyGrossSalary: parseDecimal(data.monthlyGrossSalary),
+      dailyWage: parseDecimal(data.dailyWage),
       probationMonths: data.probationMonths || 6,
       noticePeriodDays: data.noticePeriodDays || 30,
       separationDate: data.dateOfExit ? parseDate(data.dateOfExit) : null,
@@ -528,6 +580,9 @@ async function validateAndImport(
       emergencyContactName: data.emergencyContactName || null,
       emergencyContactRelation: data.emergencyContactRelation || null,
       emergencyContactPhone: data.emergencyContactPhone ? String(data.emergencyContactPhone) : null,
+      nomineeName: data.nomineeName || null,
+      nomineeRelation: data.nomineeRelation || null,
+      nomineeAddress: data.nomineeAddress || null,
       isActive: data.employmentStatus !== 'separated' && !data.dateOfExit,
       isDeleted: false,
       updatedAt: new Date(),
@@ -565,7 +620,12 @@ async function validateAndImport(
   return {
     success: true,
     summary: {
-      totalRows: rows.filter(r => r['Employee ID'] || r['Name of Employee']).length,
+      // Count non-empty rows in EITHER format. This previously tested only the
+      // legacy 'Employee ID' / 'Name of Employee' captions, so a new-format
+      // file always reported "0 total rows" next to a correct valid count.
+      totalRows: rows.filter(r =>
+        r['Employee ID*'] || r['First Name*'] || r['Employee ID'] || r['Name of Employee']
+      ).length,
       validRows: validRows.length,
       importedRows: dryRun ? 0 : imported.length,
       skippedRows: errors.length,
@@ -642,15 +702,51 @@ function normalizeMaritalStatus(status?: string): string {
   return 'single'
 }
 
-function normalizeEmploymentType(type?: string): string | null {
-  if (!type) return null
-  const t = type.toLowerCase()
-  if (t.includes('contract')) return 'contract'
-  if (t.includes('intern')) return 'intern'
-  if (t.includes('consultant')) return 'consultant'
-  if (t.includes('probation')) return 'probation'
-  if (t.includes('part')) return 'part_time'
-  return 'permanent'
+/**
+ * employmentType classifies PAYROLL behaviour and only has two legal values:
+ * "fixed" (earns over the branch's monthly working days, no OT) and
+ * "non_fixed" (earns over 26 days, gets OT at the otType multiplier).
+ *
+ * Older templates offered permanent/contract/probation/intern/part_time and
+ * this function passed them straight through, so every bulk-imported employee
+ * ended up with a value payroll could not interpret. Those legacy words are
+ * now mapped onto the two real ones instead: only an explicit "fixed" (or the
+ * salaried-style words that imply it) becomes fixed; everything else defaults
+ * to non_fixed, matching the manual employee form's default.
+ */
+function normalizeEmploymentType(type?: string): string {
+  if (!type) return 'non_fixed'
+  const t = String(type).toLowerCase().replace(/[\s-]+/g, '_')
+  if (t === 'fixed') return 'fixed'
+  if (t === 'non_fixed' || t === 'nonfixed') return 'non_fixed'
+  // Legacy captions: permanent/probation staff were salaried → fixed.
+  if (t.includes('permanent') || t.includes('probation') || t.includes('confirm')) return 'fixed'
+  // contract / intern / part_time / consultant / anything else → non_fixed
+  return 'non_fixed'
+}
+
+/** OT multiplier class: 1 = 1x, 2 = 2x. Anything else falls back to 1. */
+function normalizeOtType(value?: any): number {
+  const n = parseInt(String(value ?? '').trim(), 10)
+  return n === 2 ? 2 : 1
+}
+
+/** Nature of designation — matched case-insensitively to the canonical labels. */
+function normalizeNatureOfDesignation(value?: string): string | null {
+  if (!value) return null
+  const v = String(value).toLowerCase().replace(/[\s-]+/g, '')
+  if (v === 'highlyskilled') return 'Highly Skilled'
+  if (v === 'semiskilled') return 'Semi-skilled'
+  if (v === 'skilled') return 'Skilled'
+  if (v === 'unskilled') return 'Unskilled'
+  return null
+}
+
+/** Parse a money/decimal cell. Blank, junk or negative → null. */
+function parseDecimal(value?: any): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = typeof value === 'number' ? value : parseFloat(String(value).replace(/[,\s₹]/g, ''))
+  return Number.isFinite(n) && n >= 0 ? n : null
 }
 
 function normalizeEmploymentStatus(status?: string): string {
