@@ -9,6 +9,12 @@ export async function GET(request: NextRequest) {
   try {
     const designations = await db.designation.findMany({
       include: {
+        // Sub-designations travel with each designation so every consumer
+        // (employee form, filters, etc.) can build a dependent dropdown.
+        SubDesignation: {
+          select: { id: true, name: true, designationId: true },
+          orderBy: { name: 'asc' },
+        },
         _count: {
           select: {
             Employee: {

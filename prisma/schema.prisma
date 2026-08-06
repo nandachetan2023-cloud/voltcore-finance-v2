@@ -113,6 +113,20 @@ model Designation {
   Employee    Employee[]
   LeavePolicy LeavePolicy[]
   ChecklistTemplate ChecklistTemplate[]
+  SubDesignation SubDesignation[]
+}
+
+// A sub-designation is a child of a Designation (e.g. Fitter → Fitter Grade-1).
+// Name is unique WITHIN its parent designation, not globally.
+model SubDesignation {
+  id            Int         @id @default(autoincrement())
+  name          String
+  designationId Int
+  Designation   Designation @relation(fields: [designationId], references: [id], onDelete: Cascade)
+  Employee      Employee[]
+
+  @@unique([designationId, name])
+  @@index([designationId])
 }
 
 model Employee {
@@ -148,6 +162,7 @@ model Employee {
   permanentPincode          String?
   departmentId              Int
   designationId             Int
+  subDesignationId          Int?
   branchId                  Int
   reportingManagerId        Int?
   dateOfJoining             DateTime
@@ -188,6 +203,7 @@ model Employee {
   Branch                    Branch                      @relation(fields: [branchId], references: [id])
   Department                Department                  @relation(fields: [departmentId], references: [id])
   Designation               Designation                 @relation(fields: [designationId], references: [id])
+  SubDesignation            SubDesignation?             @relation(fields: [subDesignationId], references: [id])
   Grade                     Grade?                      @relation(fields: [gradeId], references: [id])
   Employee                  Employee?                   @relation("EmployeeToEmployee", fields: [reportingManagerId], references: [id])
   other_Employee            Employee[]                  @relation("EmployeeToEmployee")

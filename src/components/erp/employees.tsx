@@ -82,6 +82,7 @@ interface EmployeeFormData {
   // Organisation
   departmentId: string;
   designationId: string;
+  subDesignationId: string;
   natureOfDesignation: string;
   branchId: string;
   gradeId: string;
@@ -127,7 +128,7 @@ const emptyForm: EmployeeFormData = {
   fatherName: '',
   currentAddress: '', currentCity: '', currentState: '', currentPincode: '',
   permanentAddress: '', permanentCity: '', permanentState: '', permanentPincode: '',
-  departmentId: '', designationId: '', natureOfDesignation: '', branchId: '', gradeId: '', reportingManagerId: '',
+  departmentId: '', designationId: '', subDesignationId: '', natureOfDesignation: '', branchId: '', gradeId: '', reportingManagerId: '',
   dateOfJoining: '', confirmationDate: '',
   employmentType: 'non_fixed', otType: 1, employmentStatus: 'active',
   probationMonths: '6', noticePeriodDays: '30',
@@ -300,7 +301,7 @@ export default function EmployeesModule() {
   const { triggerCreate } = useERPStore();
 
   // Fetch designations for dropdown
-  const [designations, setDesignations] = useState<Array<{ id: number; name: string }>>([]);
+  const [designations, setDesignations] = useState<Array<{ id: number; name: string; SubDesignation?: Array<{ id: number; name: string; designationId: number }> }>>([]);
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
   const [branches, setBranches] = useState<Array<{ id: number; name: string }>>([]);
   const [orgRoles, setOrgRoles] = useState<Array<{ id: string; name: string; level: number; moduleAccess: string }>>([]);
@@ -502,6 +503,7 @@ export default function EmployeesModule() {
       permanentPincode: emp.permanentPincode || '',
       departmentId: emp.departmentId?.toString() || emp.Department?.id?.toString() || '',
       designationId: emp.designationId?.toString() || emp.Designation?.id?.toString() || '',
+      subDesignationId: (emp as any).subDesignationId?.toString() || (emp as any).SubDesignation?.id?.toString() || '',
       natureOfDesignation: emp.natureOfDesignation || '',
       branchId: emp.branchId?.toString() || emp.Branch?.id?.toString() || '',
       gradeId: emp.gradeId?.toString() || '',
@@ -592,6 +594,7 @@ export default function EmployeesModule() {
           email: form.email.trim(),
           departmentId: parseInt(form.departmentId),
           designationId: parseInt(form.designationId),
+          subDesignationId: form.subDesignationId ? parseInt(form.subDesignationId) : null,
           branchId: parseInt(form.branchId),
           dateOfJoining: new Date(form.dateOfJoining).toISOString(),
           employmentType: form.employmentType,
@@ -716,6 +719,7 @@ export default function EmployeesModule() {
         permanentPincode: form.permanentPincode.trim() || null,
         departmentId: parseInt(form.departmentId),
         designationId: parseInt(form.designationId),
+        subDesignationId: form.subDesignationId ? parseInt(form.subDesignationId) : null,
         natureOfDesignation: form.gradeId.trim() || form.natureOfDesignation.trim() || null,
         branchId: parseInt(form.branchId),
         gradeId: null, // Grade FK not used — grade is entered as free text in natureOfDesignation
@@ -940,12 +944,24 @@ export default function EmployeesModule() {
             <FieldError message={fieldErrors.departmentId} />
           </F>
           <F label="Designation" req>
-            <select className={`${sel} ${fieldBorderError(fieldErrors.designationId)}`} value={form.designationId} onChange={e => { setForm(f => ({ ...f, designationId: e.target.value })); setFieldErrors(fe => ({ ...fe, designationId: '' })); }}>
+            <select className={`${sel} ${fieldBorderError(fieldErrors.designationId)}`} value={form.designationId} onChange={e => { const v = e.target.value; setForm(f => ({ ...f, designationId: v, subDesignationId: '' })); setFieldErrors(fe => ({ ...fe, designationId: '' })); }}>
               <option value="">Select designation...</option>
               {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
             <FieldError message={fieldErrors.designationId} />
           </F>
+          {(() => {
+            const subs = designations.find(d => String(d.id) === form.designationId)?.SubDesignation || [];
+            if (!form.designationId || subs.length === 0) return null;
+            return (
+              <F label="Sub-Designation">
+                <select className={sel} value={form.subDesignationId} onChange={e => setForm(f => ({ ...f, subDesignationId: e.target.value }))}>
+                  <option value="">None</option>
+                  {subs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </F>
+            );
+          })()}
           <F label="Branch / Site" req>
             <select className={`${sel} ${fieldBorderError(fieldErrors.branchId)}`} value={form.branchId} onChange={e => { setForm(f => ({ ...f, branchId: e.target.value })); setFieldErrors(fe => ({ ...fe, branchId: '' })); }}>
               <option value="">Select site...</option>
@@ -1295,6 +1311,7 @@ export default function EmployeesModule() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <Field label="Department" value={viewEmp.Department?.name} />
                   <Field label="Designation" value={viewEmp.Designation?.name} />
+                  <Field label="Sub-Designation" value={e.SubDesignation?.name} />
                   <Field label="Site / Branch" value={viewEmp.Branch?.name} />
                   <Field label="Grade / Level" value={e.gradeLabel ?? e.Grade?.name} />
                   <Field label="Nature of Designation" value={e.natureOfDesignation} />

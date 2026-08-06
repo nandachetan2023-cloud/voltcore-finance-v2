@@ -7,9 +7,16 @@ import { toast } from 'sonner';
 import { FieldError, fieldBorderError } from '@/components/ui/field-error';
 import { validateFields, isValid, type FieldErrors } from '@/lib/form-validation';
 
+interface SubDesignation {
+  id: number;
+  name: string;
+  designationId: number;
+}
+
 interface Designation {
   id: number;
   name: string;
+  SubDesignation?: SubDesignation[];
   _count?: { Employee: number };
 }
 
@@ -21,8 +28,49 @@ export default function DesignationsModule() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({ name: '' });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  // Per-card "add sub-designation" text inputs, keyed by designation id.
+  const [subInput, setSubInput] = useState<Record<number, string>>({});
+  const [subBusy, setSubBusy] = useState(false);
 
   useEffect(() => { fetchDesignations(); }, []);
+
+  const addSub = async (designationId: number) => {
+    const name = (subInput[designationId] || '').trim();
+    if (!name) return;
+    setSubBusy(true);
+    try {
+      const res = await fetch('/api/sub-designations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, designationId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to add');
+      setSubInput(s => ({ ...s, [designationId]: '' }));
+      await fetchDesignations();
+      toast.success('Sub-designation added');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to add sub-designation');
+    } finally {
+      setSubBusy(false);
+    }
+  };
+
+  const deleteSub = async (id: number) => {
+    try {
+      const res = await fetch('/api/sub-designations', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete');
+      await fetchDesignations();
+      toast.success('Sub-designation removed');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete sub-designation');
+    }
+  };
 
   const fetchDesignations = async () => {
     try {
@@ -121,6 +169,41 @@ export default function DesignationsModule() {
               </div>
               <div className="flex items-center gap-2 text-xs text-[#8899aa]">
                 <Users size={14} /><span>{d._count?.Employee || 0} employees</span>
+              </div>
+
+              {/* Sub-designations */}
+              <div className="mt-3 pt-3 border-t border-[#252e3a]">
+                <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-1.5 font-semibold">Sub-Designations</div>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {(d.SubDesignation || []).length === 0 && (
+                    <span className="text-[10px] text-[#5a6878] italic">None yet</span>
+                  )}
+                  {(d.SubDesignation || []).map(sub => (
+                    <span key={sub.id} className="group/sub inline-flex items-center gap-1 text-[10px] px-2 py-[2px] rounded-full bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/20">
+                      {sub.name}
+                      <button onClick={() => deleteSub(sub.id)} title="Remove" className="opacity-60 hover:opacity-100 hover:text-[#ff3d3d] transition">
+                        <Trash2 size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    value={subInput[d.id] || ''}
+                    onChange={e => setSubInput(s => ({ ...s, [d.id]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') addSub(d.id); }}
+                    placeholder="Add sub-designation..."
+                    className="flex-1 min-w-0 bg-[#0f141a] border border-[#2e3a48] rounded px-2 py-1 text-[10px] text-[#e2e8f0] focus:border-[#f5a623] outline-none placeholder:text-[#5a6878]"
+                  />
+                  <button
+                    onClick={() => addSub(d.id)}
+                    disabled={subBusy || !(subInput[d.id] || '').trim()}
+                    className="shrink-0 w-6 h-6 rounded flex items-center justify-center bg-[#00d4ff]/10 text-[#00d4ff] hover:bg-[#00d4ff]/20 disabled:opacity-40 transition"
+                    title="Add"
+                  >
+                    <Plus size={12} />
+                  </button>
+                </div>
               </div>
             </div>
           );

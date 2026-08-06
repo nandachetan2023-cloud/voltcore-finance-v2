@@ -43,6 +43,8 @@ export async function GET(request: NextRequest) {
       permanentPincode: true,
       departmentId: true,
       designationId: true,
+      subDesignationId: true,
+      SubDesignation: { select: { id: true, name: true } },
       natureOfDesignation: true,
       branchId: true,
       gradeId: true,
@@ -224,6 +226,7 @@ export async function POST(request: NextRequest) {
         permanentPincode: body.permanentPincode || null,
         departmentId: parseInt(departmentId),
         designationId: parseInt(designationId),
+        subDesignationId: body.subDesignationId ? parseInt(body.subDesignationId) : null,
         natureOfDesignation: body.natureOfDesignation || null,
         branchId: parseInt(branchId),
         gradeId: body.gradeId ? parseInt(body.gradeId) : null,
@@ -390,6 +393,7 @@ export async function PUT(request: NextRequest) {
     if (updateData.confirmationDate) updateData.confirmationDate = new Date(updateData.confirmationDate)
     if (updateData.departmentId) updateData.departmentId = parseInt(updateData.departmentId)
     if (updateData.designationId) updateData.designationId = parseInt(updateData.designationId)
+    if (updateData.subDesignationId !== undefined) updateData.subDesignationId = updateData.subDesignationId ? parseInt(updateData.subDesignationId) : null
     if (updateData.branchId) updateData.branchId = parseInt(updateData.branchId)
     if (updateData.gradeId !== undefined) updateData.gradeId = updateData.gradeId ? parseInt(updateData.gradeId) : null
     if (updateData.reportingManagerId !== undefined) updateData.reportingManagerId = updateData.reportingManagerId ? parseInt(updateData.reportingManagerId) : null
