@@ -3,6 +3,13 @@ import { superadminDb } from '@/lib/superadmin-db'
 import { NextRequest, NextResponse } from 'next/server'
 import { getHolidaysInRange, calculateWorkingDays } from '@/lib/services/holiday-service'
 import { annotateRequesterStage } from '@/lib/services/approval-stage'
+import {
+  resolveStepRecipients,
+  loadScopeSubjects,
+  getRoleScope,
+  isInScope,
+  isUniversalScope,
+} from '@/lib/services/approval-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,14 +29,18 @@ async function getLeaveApprovalChain(tenantId: string, requesterRoleId?: string 
   } catch { return null }
 }
 
-// ── Find TenantUsers with a given OrgRole ─────────────────────────
-async function findUsersForRole(tenantId: string, roleId: string): Promise<{ email: string }[]> {
-  try {
-    return await superadminDb.tenantUser.findMany({
-      where: { tenantId, orgRoleId: roleId, isActive: true },
-      select: { email: true },
-    })
-  } catch { return [] }
+// ── Find the approvers for a step, honouring the approver role's scope ──
+// A role scoped to a department/designation/site may only be notified about —
+// and may only act on — employees inside that scope. When nobody is in scope
+// the request escalates to the tenant admin rather than going nowhere.
+// See src/lib/services/approval-scope.ts.
+async function findScopedApprovers(
+  db: any,
+  tenantId: string,
+  roleId: string,
+  requesterEmployeeId: number,
+): Promise<{ recipients: { email: string }[]; escalated: boolean; note: string }> {
+  return await resolveStepRecipients(db, tenantId, roleId, requesterEmployeeId)
 }
 
 // GET: List all leave requests
@@ -133,6 +144,14 @@ export async function GET(request: NextRequest) {
           requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ?? null] as [number, string | null])
         )
 
+        // Caller's own role scope — the hard boundary on whose requests they
+        // may see. Loaded once; a universal scope skips the per-row check.
+        const callerScope = await getRoleScope(callerOrgRoleId)
+        const callerUniversal = isUniversalScope(callerScope)
+        const scopeSubjects = callerUniversal
+          ? new Map()
+          : await loadScopeSubjects(db, requesterEmpIds)
+
         enriched = leaveRequests
           .filter(r => {
             const reqOrgRoleId = empOrgRoleMap.get(r.employeeId)
@@ -143,7 +162,13 @@ export async function GET(request: NextRequest) {
             // Only show if caller is the approver for the CURRENT step
             const currentStepNum = (r as any).currentStep || 1
             const currentStepDef = steps.find((s: any) => s.stepNumber === currentStepNum)
-            return currentStepDef?.approverRoleId === callerOrgRoleId
+            if (currentStepDef?.approverRoleId !== callerOrgRoleId) return false
+
+            // …and only if the requester falls inside the caller's role scope.
+            // Mirrors the PUT gate so the list never shows an un-approvable row.
+            if (callerUniversal) return true
+            const subject = scopeSubjects.get(r.employeeId)
+            return !!subject && isInScope(callerScope, subject)
           })
           .map(r => ({ ...r, canApprove: true }))
 
@@ -465,19 +490,26 @@ export async function POST(request: NextRequest) {
         // Non-level-1 → chain is guaranteed to exist (pre-checked above)
         const chain = await getLeaveApprovalChain(tenantId, requesterUser?.orgRoleId)
         const step1 = chain!.steps[0]
-        const approvers = await findUsersForRole(tenantId, step1.approverRoleId)
-        if (approvers.length > 0) {
-          for (const approver of approvers) {
+        // Scoped fan-out: only approvers whose role scope covers this employee.
+        const { recipients, escalated, note } = await findScopedApprovers(
+          db, tenantId, step1.approverRoleId, leaveRequest.employeeId,
+        )
+        if (recipients.length > 0) {
+          for (const approver of recipients) {
             await db.notification.create({
               data: { userId: 0, userEmail: approver.email,
-                title: 'New Leave Request — Approval Needed', message: notifMsg,
-                type: 'info', link: '', entityType: 'leave', entityId: leaveRequest.id },
+                title: escalated
+                  ? 'New Leave Request — Admin Approval Required'
+                  : 'New Leave Request — Approval Needed',
+                message: notifMsg + note,
+                type: escalated ? 'warning' : 'info',
+                link: '', entityType: 'leave', entityId: leaveRequest.id },
             }).catch(() => {})
           }
         } else {
           await db.notification.create({
             data: { userId: 0, userEmail: '__admin_broadcast__',
-              title: 'New Leave Request — No Approver Found', message: notifMsg,
+              title: 'New Leave Request — No Approver Found', message: notifMsg + note,
               type: 'warning', link: '', entityType: 'leave', entityId: leaveRequest.id },
           }).catch(() => {})
         }
@@ -570,6 +602,21 @@ export async function PATCH(request: NextRequest) {
 
     // Chain approvers may act ONLY on their current step. The full admin bypasses this.
     if (!isFullAdmin && callerUser?.orgRoleId) {
+      // Role scope is a hard boundary: a dept/designation/site-scoped approver
+      // cannot action a request from an employee outside that scope, even when
+      // they hold the right approver role for the current step.
+      const callerScope = await getRoleScope(callerUser.orgRoleId)
+      if (!isUniversalScope(callerScope)) {
+        const subjects = await loadScopeSubjects(db, [existing.employeeId])
+        const subject = subjects.get(existing.employeeId)
+        if (!subject || !isInScope(callerScope, subject)) {
+          return NextResponse.json(
+            { success: false, error: 'This request is outside your assigned department/designation/site scope.' },
+            { status: 403 }
+          )
+        }
+      }
+
       const requesterUser = await superadminDb.tenantUser.findFirst({
         where: { tenantId: tenantId!, employeeId: existing.employeeId, isActive: true },
         select: { orgRoleId: true },
@@ -704,15 +751,20 @@ export async function PATCH(request: NextRequest) {
     if (chain && tenantId) {
       const nextStepDef = chain.steps.find(s => s.stepNumber === nextStep)
       if (nextStepDef) {
-        const nextApprovers = await findUsersForRole(tenantId, nextStepDef.approverRoleId)
+        // Scoped fan-out for the next step — same boundary as step 1.
+        const { recipients: nextApprovers, escalated, note } = await findScopedApprovers(
+          db, tenantId, nextStepDef.approverRoleId, existing.employeeId,
+        )
         for (const approver of nextApprovers) {
           await db.notification.create({
             data: {
               userId: 0,
               userEmail: approver.email,
-              title: `Leave Request — Step ${nextStep} Approval Needed`,
-              message: `${empName}'s ${existing.leaveType} leave (${fromStr} – ${toStr}) passed step ${currentStep} and now requires your approval.`,
-              type: 'info',
+              title: escalated
+                ? `Leave Escalated — Step ${nextStep}`
+                : `Leave Request — Step ${nextStep} Approval Needed`,
+              message: `${empName}'s ${existing.leaveType} leave (${fromStr} – ${toStr}) passed step ${currentStep} and now requires your approval.${note}`,
+              type: escalated ? 'warning' : 'info',
               link: '',
               entityType: 'leave',
               entityId: leaveId,
@@ -726,7 +778,7 @@ export async function PATCH(request: NextRequest) {
               userId: 0,
               userEmail: '__admin_broadcast__',
               title: `Leave Escalated — Step ${nextStep}`,
-              message: `${empName}'s ${existing.leaveType} leave needs step ${nextStep} approval. No users found for the required role.`,
+              message: `${empName}'s ${existing.leaveType} leave needs step ${nextStep} approval. No users found for the required role.${note}`,
               type: 'warning',
               link: '',
               entityType: 'leave',

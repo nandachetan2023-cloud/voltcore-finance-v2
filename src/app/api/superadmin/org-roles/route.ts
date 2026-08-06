@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { tenantId, name, level, maxUsers, moduleAccess, departments, designations, color } = body
+    const { tenantId, name, level, maxUsers, moduleAccess, departments, designations, branches, color } = body
     if (!tenantId || !name) {
       return NextResponse.json({ success: false, error: 'tenantId and name are required' }, { status: 400 })
     }
@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
         moduleAccess: moduleAccess || 'all',
         departments: departments || '',
         designations: designations || '',
+        branches: branches || '',
         color: color || '#5a6878',
       },
     })

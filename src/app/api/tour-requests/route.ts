@@ -1,6 +1,13 @@
 import { getDbForRequest } from '@/lib/db'
 import { superadminDb } from '@/lib/superadmin-db'
 import { annotateRequesterStage } from '@/lib/services/approval-stage'
+import {
+  resolveStepRecipients,
+  loadScopeSubjects,
+  getRoleScope,
+  isInScope,
+  isUniversalScope,
+} from '@/lib/services/approval-scope'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -108,6 +115,13 @@ export async function GET(request: NextRequest) {
           chainStepsMap.set(roleId, chain?.steps || [])
         }
 
+        // Caller's role scope — hard boundary on whose requests they may see.
+        const callerScope = await getRoleScope(callerOrgRoleId)
+        const callerUniversal = isUniversalScope(callerScope)
+        const scopeSubjects = callerUniversal
+          ? new Map()
+          : await loadScopeSubjects(db, requesterEmpIds)
+
         enriched = tourRequests
           .filter(r => {
             const reqOrgRoleId = empOrgRoleMap.get(r.employeeId)
@@ -117,7 +131,12 @@ export async function GET(request: NextRequest) {
             const steps = chainStepsMap.get(reqOrgRoleId) || []
             const currentStepNum = (r as any).currentStep || 1
             const currentStepDef = steps.find((s: any) => s.stepNumber === currentStepNum)
-            return currentStepDef?.approverRoleId === callerOrgRoleId
+            if (currentStepDef?.approverRoleId !== callerOrgRoleId) return false
+
+            // …and only if the requester is inside the caller's role scope.
+            if (callerUniversal) return true
+            const subject = scopeSubjects.get(r.employeeId)
+            return !!subject && isInScope(callerScope, subject)
           })
           .map(r => ({ ...r, canApprove: true }))
       } else if (callerIsAdmin) {
@@ -158,13 +177,16 @@ async function getTourApprovalChain(tenantId: string, requesterRoleId?: string |
   } catch { return null }
 }
 
-async function findUsersForRole(tenantId: string, roleId: string): Promise<{ email: string }[]> {
-  try {
-    return await superadminDb.tenantUser.findMany({
-      where: { tenantId, orgRoleId: roleId, isActive: true },
-      select: { email: true },
-    })
-  } catch { return [] }
+// Scope-aware approver lookup — a dept/designation/site-scoped role is only
+// notified about employees inside its scope, else the request goes to admin.
+// See src/lib/services/approval-scope.ts.
+async function findScopedApprovers(
+  db: any,
+  tenantId: string,
+  roleId: string,
+  requesterEmployeeId: number,
+): Promise<{ recipients: { email: string }[]; escalated: boolean; note: string }> {
+  return await resolveStepRecipients(db, tenantId, roleId, requesterEmployeeId)
 }
 
 // POST: Create tour request
@@ -237,19 +259,26 @@ export async function POST(request: NextRequest) {
         const chain = await getTourApprovalChain(tenantId, requesterUser?.orgRoleId)
         if (chain && chain.steps.length > 0) {
           const step1 = chain.steps[0]
-          const approvers = await findUsersForRole(tenantId, step1.approverRoleId)
-          if (approvers.length > 0) {
-            for (const approver of approvers) {
+          // Scoped fan-out: only approvers whose role scope covers this employee.
+          const { recipients, escalated, note } = await findScopedApprovers(
+            db, tenantId, step1.approverRoleId, tourRequest.employeeId,
+          )
+          if (recipients.length > 0) {
+            for (const approver of recipients) {
               await db.notification.create({
                 data: { userId: 0, userEmail: approver.email,
-                  title: 'New Tour Request — Approval Needed', message: notifMsg,
-                  type: 'info', link: '', entityType: 'tour', entityId: tourRequest.id },
+                  title: escalated
+                    ? 'New Tour Request — Admin Approval Required'
+                    : 'New Tour Request — Approval Needed',
+                  message: notifMsg + note,
+                  type: escalated ? 'warning' : 'info',
+                  link: '', entityType: 'tour', entityId: tourRequest.id },
               }).catch(() => {})
             }
           } else {
             await db.notification.create({
               data: { userId: 0, userEmail: '__admin_broadcast__',
-                title: 'New Tour Request — No Approver Found', message: notifMsg,
+                title: 'New Tour Request — No Approver Found', message: notifMsg + note,
                 type: 'warning', link: '', entityType: 'tour', entityId: tourRequest.id },
             }).catch(() => {})
           }
@@ -320,6 +349,20 @@ export async function PATCH(request: NextRequest) {
 
     // Chain approvers may act ONLY on their current step. The full admin bypasses this.
     if (!isFullAdmin && callerUser?.orgRoleId && tenantId) {
+      // Role scope is a hard boundary — holding the approver role is not enough
+      // if the requester falls outside the caller's dept/designation/site.
+      const callerScope = await getRoleScope(callerUser.orgRoleId)
+      if (!isUniversalScope(callerScope)) {
+        const subjects = await loadScopeSubjects(db, [tourRequest.employeeId])
+        const subject = subjects.get(tourRequest.employeeId)
+        if (!subject || !isInScope(callerScope, subject)) {
+          return NextResponse.json(
+            { success: false, error: 'This request is outside your assigned department/designation/site scope.' },
+            { status: 403 }
+          )
+        }
+      }
+
       const requesterUser = await superadminDb.tenantUser.findFirst({
         where: { tenantId, employeeId: tourRequest.employeeId, isActive: true },
         select: { orgRoleId: true },
@@ -419,20 +462,25 @@ export async function PATCH(request: NextRequest) {
     if (chain && tenantId) {
       const nextStepDef = chain.steps.find(s => s.stepNumber === nextStep)
       if (nextStepDef) {
-        const nextApprovers = await findUsersForRole(tenantId, nextStepDef.approverRoleId)
+        // Scoped fan-out for the next step — same boundary as step 1.
+        const { recipients: nextApprovers, escalated, note } = await findScopedApprovers(
+          db, tenantId, nextStepDef.approverRoleId, tourRequest.employeeId,
+        )
         for (const approver of nextApprovers) {
           await db.notification.create({
             data: { userId: 0, userEmail: approver.email,
-              title: `Tour Request — Step ${nextStep} Approval Needed`,
-              message: `${empName}'s tour to ${tourRequest.destination} (${fromStr} – ${toStr}) passed step ${currentStep} and now requires your approval.`,
-              type: 'info', link: '', entityType: 'tour', entityId: parseInt(id) },
+              title: escalated
+                ? `Tour Escalated — Step ${nextStep}`
+                : `Tour Request — Step ${nextStep} Approval Needed`,
+              message: `${empName}'s tour to ${tourRequest.destination} (${fromStr} – ${toStr}) passed step ${currentStep} and now requires your approval.${note}`,
+              type: escalated ? 'warning' : 'info', link: '', entityType: 'tour', entityId: parseInt(id) },
           }).catch(() => {})
         }
         if (nextApprovers.length === 0) {
           await db.notification.create({
             data: { userId: 0, userEmail: '__admin_broadcast__',
               title: `Tour Escalated — Step ${nextStep}`,
-              message: `${empName}'s tour needs step ${nextStep} approval. No users found for the required role.`,
+              message: `${empName}'s tour needs step ${nextStep} approval. No users found for the required role.${note}`,
               type: 'warning', link: '', entityType: 'tour', entityId: parseInt(id) },
           }).catch(() => {})
         }

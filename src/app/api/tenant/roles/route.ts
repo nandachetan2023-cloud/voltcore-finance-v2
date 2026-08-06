@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true, name: true, level: true,
         moduleAccess: true, departments: true,
-        designations: true, color: true,
+        designations: true, branches: true, color: true,
       },
     })
 
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { name, level, moduleAccess, departments, designations, color } = body
+    const { name, level, moduleAccess, departments, designations, branches, color } = body
     if (!name) return NextResponse.json({ success: false, error: 'Role name is required' }, { status: 400 })
 
     // Clamp requested module access to the tenant-wide cap set by the superadmin.
@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
         moduleAccess: clampedAccess,
         departments: departments || '',
         designations: designations || '',
+        branches: branches || '',
         color: color || '#5a6878',
       },
     })
@@ -101,7 +102,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { id, name, level, moduleAccess, departments, designations, color } = body
+    const { id, name, level, moduleAccess, departments, designations, branches, color } = body
     if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 })
 
     const existing = await superadminDb.orgRole.findFirst({ where: { id, tenantId } })
@@ -122,6 +123,7 @@ export async function PUT(request: NextRequest) {
         ...(clampedAccess !== undefined ? { moduleAccess: clampedAccess } : {}),
         ...(departments !== undefined ? { departments } : {}),
         ...(designations !== undefined ? { designations } : {}),
+        ...(branches !== undefined ? { branches } : {}),
         ...(color !== undefined ? { color } : {}),
       },
     })

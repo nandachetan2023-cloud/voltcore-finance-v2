@@ -11,7 +11,7 @@ import ModuleSelect from '@/components/superadmin/module-select';
 /* ── Types ─────────────────────────────────────────────────────── */
 interface OrgRole {
   id: string; name: string; level: number;
-  moduleAccess: string; departments: string; designations: string;
+  moduleAccess: string; departments: string; designations: string; branches: string;
   color: string; currentCount?: number;
 }
 interface ApprovalStep {
@@ -31,6 +31,15 @@ const SCOPE_OPTIONS = [
   { value: 'same_branch', label: 'Same Branch only' },
 ];
 const ROLE_COLORS = ['#f5a623', '#00d4ff', '#00e676', '#a78bfa', '#ff3d3d', '#ff9800', '#00bcd4', '#4caf50', '#9c27b0', '#f44336'];
+
+/** Compact one-line summary of a role's scope. Empty string = fully universal. */
+function scopeLabel(r: Pick<OrgRole, 'departments' | 'designations' | 'branches'>): string {
+  const parts: string[] = [];
+  if (r.departments?.trim()) parts.push(r.departments);
+  if (r.designations?.trim()) parts.push(r.designations);
+  if (r.branches?.trim()) parts.push(r.branches);
+  return parts.join(' · ');
+}
 
 const inp = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]/60 transition-colors placeholder:text-[#5a6878]';
 const lbl = 'block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5';
@@ -169,23 +178,26 @@ export default function RolesAccessModule() {
   const [chains, setChains] = useState<ApprovalChain[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
   const [designations, setDesignations] = useState<string[]>([]);
+  const [branches, setBranches] = useState<string[]>([]);
   const [usage, setUsage] = useState<AccountUsage | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [rolesRes, chainsRes, deptRes, desigRes, usageRes] = await Promise.all([
+      const [rolesRes, chainsRes, deptRes, desigRes, branchRes, usageRes] = await Promise.all([
         fetch('/api/tenant/roles').then(r => r.json()),
         fetch('/api/tenant/approval-chains').then(r => r.json()),
         fetch('/api/departments').then(r => r.json()),
         fetch('/api/designations').then(r => r.json()),
+        fetch('/api/branches').then(r => r.json()),
         fetch('/api/tenant/account-limit').then(r => r.json()),
       ]);
       if (rolesRes.success) setRoles(rolesRes.data);
       if (chainsRes.success) setChains(chainsRes.data);
       if (deptRes.success) setDepartments(deptRes.data.map((d: any) => d.name));
       if (desigRes.success) setDesignations(desigRes.data.map((d: any) => d.name));
+      if (branchRes.success) setBranches(branchRes.data.map((b: any) => b.name));
       if (usageRes.success) setUsage(usageRes.data);
     } catch { toast.error('Failed to load roles & access data'); }
     finally { setLoading(false); }
@@ -221,7 +233,7 @@ export default function RolesAccessModule() {
       {loading ? (
         <div className="text-center py-10 text-[#5a6878] text-[12px]">Loading...</div>
       ) : subTab === 'roles' ? (
-        <RolesPanel roles={roles} departments={departments} designations={designations} moduleCap={usage?.enabledModules || 'all'} onRefresh={fetchData} />
+        <RolesPanel roles={roles} departments={departments} designations={designations} branches={branches} moduleCap={usage?.enabledModules || 'all'} onRefresh={fetchData} />
       ) : (
         <ChainsPanel chains={chains} roles={roles} onRefresh={fetchData} />
       )}
@@ -230,10 +242,10 @@ export default function RolesAccessModule() {
 }
 
 /* ── Roles Panel ─────────────────────────────────────────────── */
-function RolesPanel({ roles, departments, designations, moduleCap, onRefresh }: {
-  roles: OrgRole[]; departments: string[]; designations: string[]; moduleCap: string; onRefresh: () => void;
+function RolesPanel({ roles, departments, designations, branches, moduleCap, onRefresh }: {
+  roles: OrgRole[]; departments: string[]; designations: string[]; branches: string[]; moduleCap: string; onRefresh: () => void;
 }) {
-  const empty = { name: '', level: '1', moduleAccess: 'all', departments: '', designations: '', color: '#f5a623' };
+  const empty = { name: '', level: '1', moduleAccess: 'all', departments: '', designations: '', branches: '', color: '#f5a623' };
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -328,6 +340,19 @@ function RolesPanel({ roles, departments, designations, moduleCap, onRefresh }: 
             <Field label="Designations (blank = universal)">
               <TagInput value={form.designations} options={designations} placeholder="All designations" onChange={v => setForm(f => ({ ...f, designations: v }))} />
             </Field>
+            <Field label="Sites / Branches (blank = universal)" span2>
+              <TagInput value={form.branches} options={branches} placeholder="All sites" onChange={v => setForm(f => ({ ...f, branches: v }))} />
+            </Field>
+          </div>
+
+          <div className="flex items-start gap-2.5 rounded-lg border border-[#00d4ff]/25 bg-[#00d4ff]/[0.06] px-3 py-2.5">
+            <Shield size={13} className="text-[#00d4ff] shrink-0 mt-0.5" />
+            <p className="text-[10px] text-[#8899aa] leading-relaxed">
+              These three filters are a <span className="text-[#e2e8f0] font-semibold">hard access boundary</span>, not just labels.
+              A user with this role only sees notifications and approvals for employees matching
+              <span className="text-[#e2e8f0]"> every</span> filter you set — a role limited to dept <span className="text-[#e2e8f0]">HR</span> and site <span className="text-[#e2e8f0]">Mumbai</span> reaches only HR staff at Mumbai.
+              Leave a filter blank to leave that axis unrestricted.
+            </p>
           </div>
           <div className="flex gap-2 pt-1">
             <button onClick={save} disabled={saving} className="vc-btn-primary disabled:opacity-50">{saving ? 'Saving...' : 'Save Role'}</button>
@@ -412,15 +437,16 @@ function RolesPanel({ roles, departments, designations, moduleCap, onRefresh }: 
                       {r.moduleAccess === 'all' ? 'All Modules' : r.moduleAccess.split(',').length + ' groups'}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-[10px] text-[#5a6878]">
+                  <div className="flex items-center gap-3 mt-1 text-[10px] text-[#5a6878] flex-wrap">
                     <span>Depts: <span className="text-[#8899aa]">{r.departments || 'Universal'}</span></span>
                     <span>Desig: <span className="text-[#8899aa]">{r.designations || 'Universal'}</span></span>
+                    <span>Sites: <span className="text-[#8899aa]">{r.branches || 'Universal'}</span></span>
                     <span>Users: <span className="text-[#8899aa]">{r.currentCount ?? 0}</span></span>
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                <button onClick={() => { setForm({ name: r.name, level: String(r.level), moduleAccess: r.moduleAccess, departments: r.departments, designations: r.designations, color: r.color }); setEditId(r.id); setShowForm(true); }} className="p-1.5 text-[#5a6878] hover:text-[#f5a623] transition-colors"><Pencil size={12} /></button>
+                <button onClick={() => { setForm({ name: r.name, level: String(r.level), moduleAccess: r.moduleAccess, departments: r.departments, designations: r.designations, branches: r.branches || '', color: r.color }); setEditId(r.id); setShowForm(true); }} className="p-1.5 text-[#5a6878] hover:text-[#f5a623] transition-colors"><Pencil size={12} /></button>
                 <button onClick={() => confirmDelete(r)} className="p-1.5 text-[#5a6878] hover:text-[#ff3d3d] transition-colors"><Trash2 size={12} /></button>
               </div>
             </div>
@@ -574,7 +600,7 @@ function ChainsPanel({ chains, roles, onRefresh }: {
                       <div className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-black shrink-0" style={{ background: `${role.color}20`, color: role.color }}>{role.level}</div>
                       <div className="flex-1 min-w-0">
                         <div className="text-[11px] font-semibold truncate" style={{ color: inChain ? role.color : '#e2e8f0' }}>{role.name}</div>
-                        {role.departments && <div className="text-[9px] text-[#5a6878] truncate">{role.departments}</div>}
+                        {scopeLabel(role) && <div className="text-[9px] text-[#5a6878] truncate">{scopeLabel(role)}</div>}
                       </div>
                       {inChain && <Check size={11} className="text-[#f5a623] shrink-0" />}
                     </button>

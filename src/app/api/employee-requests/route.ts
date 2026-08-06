@@ -1,6 +1,13 @@
 import { getDbForRequest } from '@/lib/db'
 import { superadminDb } from '@/lib/superadmin-db'
 import { annotateRequesterStage } from '@/lib/services/approval-stage'
+import {
+  resolveStepRecipients,
+  loadScopeSubjects,
+  getRoleScope,
+  isInScope,
+  isUniversalScope,
+} from '@/lib/services/approval-scope'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -24,24 +31,22 @@ async function getChainForRole(tenantId: string, requesterRoleId: string | undef
   } catch { return null }
 }
 
+/**
+ * Resolve a step's approvers, honouring the approver role's scope.
+ *
+ * This previously returned every holder of the role tenant-wide with a note
+ * that scoping was "enforced at role definition level" — it was not enforced
+ * anywhere, so scoped approvers received (and could action) out-of-scope
+ * requests. Scope is now applied for real in approval-scope.ts, with an admin
+ * fallback when nobody is in scope.
+ */
 async function findApproversForRole(
+  db: any,
   tenantId: string,
   roleId: string,
-  scope: string,
-  employeeDeptName: string | null
-): Promise<{ email: string; name: string }[]> {
-  try {
-    const where: any = { tenantId, orgRoleId: roleId, isActive: true }
-    const users = await superadminDb.tenantUser.findMany({ where, select: { email: true, name: true } })
-
-    // If scope is same_department, filter by users whose linked employee is in the same dept
-    // We can't join across DBs, so we use the role's departments field as a proxy
-    // The role itself has a departments field — if it's set, only users in that dept qualify
-    // For now return all users with that role (dept scoping is enforced at role definition level)
-    return users
-  } catch {
-    return []
-  }
+  requesterEmployeeId: number,
+): Promise<{ recipients: { email: string; name?: string }[]; escalated: boolean; note: string }> {
+  return await resolveStepRecipients(db, tenantId, roleId, requesterEmployeeId)
 }
 
 // ── Create notifications for a list of approvers ─────────────────
@@ -179,6 +184,13 @@ export async function GET(request: NextRequest) {
           requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ?? null] as [number, string | null])
         )
 
+        // Caller's role scope — hard boundary on whose requests they may see.
+        const callerScope = await getRoleScope(callerOrgRoleId)
+        const callerUniversal = isUniversalScope(callerScope)
+        const scopeSubjects = callerUniversal
+          ? new Map()
+          : await loadScopeSubjects(db, requesterEmployeeIds)
+
         enriched = requests
           .filter(r => {
             const reqOrgRoleId = empOrgRoleMap.get(r.employeeId)
@@ -189,7 +201,12 @@ export async function GET(request: NextRequest) {
             // Only show if caller is the approver for the CURRENT step
             const currentStepNum = r.currentStep || 1
             const currentStepDef = steps.find((s: any) => s.stepNumber === currentStepNum)
-            return currentStepDef?.approverRoleId === callerOrgRoleId
+            if (currentStepDef?.approverRoleId !== callerOrgRoleId) return false
+
+            // …and only if the requester is inside the caller's role scope.
+            if (callerUniversal) return true
+            const subject = scopeSubjects.get(r.employeeId)
+            return !!subject && isInScope(callerScope, subject)
           })
           .map(r => ({ ...r, canApprove: true }))
 
@@ -306,16 +323,20 @@ export async function POST(request: NextRequest) {
         // Non-level-1 → chain is guaranteed to exist (pre-checked above)
         const chain = await getChainForRole(tenantId, requesterUser?.orgRoleId)
         const step1 = chain!.steps[0]
-        const approvers = await findApproversForRole(tenantId, step1.approverRoleId, step1.scope, deptName)
-        if (approvers.length > 0) {
-          await notifyUsers(db, approvers, `New ${typeLabel} — Step 1 Approval`,
-            `${empName} submitted: "${subject}"${deptName ? ` (${deptName})` : ''}`,
+        // Scoped fan-out: only approvers whose role scope covers this employee.
+        const { recipients, escalated, note } = await findApproversForRole(
+          db, tenantId, step1.approverRoleId, parseInt(employeeId),
+        )
+        if (recipients.length > 0) {
+          await notifyUsers(db, recipients,
+            escalated ? `New ${typeLabel} — Admin Approval Required` : `New ${typeLabel} — Step 1 Approval`,
+            `${empName} submitted: "${subject}"${deptName ? ` (${deptName})` : ''}${note}`,
             req.id, 'request', 'requests')
         } else {
           await db.notification.create({
             data: { userId: parseInt(employeeId), userEmail: '__admin_broadcast__',
               title: `New ${typeLabel} — No Approver Found`,
-              message: `${empName} submitted: "${subject}". No users found for step-1 approver role.`,
+              message: `${empName} submitted: "${subject}". No users found for step-1 approver role.${note}`,
               type: 'warning', link: 'requests', entityType: 'request', entityId: req.id },
           }).catch(() => {})
         }
@@ -392,6 +413,20 @@ export async function PATCH(request: NextRequest) {
 
     // Chain approvers may act ONLY on their current step. The full admin bypasses this.
     if (!isFullAdmin && callerUser?.orgRoleId) {
+      // Role scope is a hard boundary — holding the approver role is not enough
+      // if the requester falls outside the caller's dept/designation/site.
+      const callerScope = await getRoleScope(callerUser.orgRoleId)
+      if (!isUniversalScope(callerScope)) {
+        const subjects = await loadScopeSubjects(db, [existing.employeeId])
+        const subject = subjects.get(existing.employeeId)
+        if (!subject || !isInScope(callerScope, subject)) {
+          return NextResponse.json(
+            { success: false, error: 'This request is outside your assigned department/designation/site scope.' },
+            { status: 403 }
+          )
+        }
+      }
+
       const requesterUser = await superadminDb.tenantUser.findFirst({
         where: { tenantId: tenantId!, employeeId: existing.employeeId, isActive: true },
         select: { orgRoleId: true },
@@ -563,8 +598,9 @@ export async function PATCH(request: NextRequest) {
     if (chain) {
       const nextStepDef = chain.steps.find(s => s.stepNumber === nextStep)
       if (nextStepDef) {
-        const nextApprovers = await findApproversForRole(
-          tenantId!, nextStepDef.approverRoleId, nextStepDef.scope, deptName
+        // Scoped fan-out for the next step — same boundary as step 1.
+        const { recipients: nextApprovers, escalated, note } = await findApproversForRole(
+          db, tenantId!, nextStepDef.approverRoleId, existing.employeeId,
         )
         if (nextApprovers.length > 0) {
           // Build amount context for advance payment requests
@@ -573,8 +609,10 @@ export async function PATCH(request: NextRequest) {
             : '';
           await notifyUsers(
             db, nextApprovers,
-            `Request Needs Your Approval — Step ${nextStep}`,
-            `${empName}'s request "${existing.subject}" has been approved at step ${currentStep} and now requires your approval.${amountMsg}${deptName ? ` (${deptName})` : ''}`,
+            escalated
+              ? `Request Escalated to Admin — Step ${nextStep}`
+              : `Request Needs Your Approval — Step ${nextStep}`,
+            `${empName}'s request "${existing.subject}" has been approved at step ${currentStep} and now requires your approval.${amountMsg}${deptName ? ` (${deptName})` : ''}${note}`,
             existing.id, 'request', 'requests'
           )
         } else {

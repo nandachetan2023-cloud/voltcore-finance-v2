@@ -106,7 +106,14 @@ model PasswordResetOTP {
 // level: 1=lowest authority, higher=more authority
 // departments: "" = universal, "HR,Finance" = scoped to those depts
 // designations: "" = universal, "Manager,Executive" = scoped
+// branches:    "" = universal, "Mumbai,Delhi" = scoped to those sites
 // moduleAccess: "all" or "organization,hrms" — controls what this role can see
+//
+// SCOPE SEMANTICS (see src/lib/services/approval-scope.ts):
+// These three fields are a hard boundary on the population a holder of this
+// role may ever see or act on. A blank field means "no restriction on that
+// axis". Non-blank fields are ANDed: a role scoped to dept "HR" AND branch
+// "Mumbai" only reaches employees who are in HR *and* at Mumbai.
 model OrgRole {
   id            String   @id @default(cuid())
   tenantId      String
@@ -118,6 +125,7 @@ model OrgRole {
   moduleAccess  String   @default("all")      // module access for this role
   departments   String   @default("")         // "" = universal, else comma-separated dept names
   designations  String   @default("")         // "" = universal, else comma-separated designation names
+  branches      String   @default("")         // "" = universal, else comma-separated site/branch names
   color         String   @default("#5a6878")  // UI badge color
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
