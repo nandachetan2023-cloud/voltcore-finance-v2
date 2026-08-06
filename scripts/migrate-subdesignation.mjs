@@ -15,6 +15,10 @@ const STATEMENTS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS "SubDesignation_designationId_name_key" ON "SubDesignation"("designationId", name)`,
   `CREATE INDEX IF NOT EXISTS "SubDesignation_designationId_idx" ON "SubDesignation"("designationId")`,
   `ALTER TABLE "Employee" ADD COLUMN IF NOT EXISTS "subDesignationId" INTEGER REFERENCES "SubDesignation"(id)`,
+  // Sub-designation scoping on the other designation-selecting records.
+  `ALTER TABLE "LeavePolicy" ADD COLUMN IF NOT EXISTS "subDesignationId" INTEGER REFERENCES "SubDesignation"(id)`,
+  `ALTER TABLE "ChecklistTemplate" ADD COLUMN IF NOT EXISTS "subDesignationId" INTEGER REFERENCES "SubDesignation"(id)`,
+  `ALTER TABLE "JobOpening" ADD COLUMN IF NOT EXISTS "subDesignationId" INTEGER`,
 ];
 
 const stripQuery = (url) => url.split('?')[0];

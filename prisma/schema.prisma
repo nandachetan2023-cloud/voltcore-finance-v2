@@ -124,6 +124,8 @@ model SubDesignation {
   designationId Int
   Designation   Designation @relation(fields: [designationId], references: [id], onDelete: Cascade)
   Employee      Employee[]
+  LeavePolicy       LeavePolicy[]
+  ChecklistTemplate ChecklistTemplate[]
 
   @@unique([designationId, name])
   @@index([designationId])
@@ -697,6 +699,7 @@ model JobOpening {
   id           Int      @id @default(autoincrement())
   position     String
   designationId Int?
+  subDesignationId Int?
   site         String
   openings     Int
   applications Int      @default(0)
@@ -779,8 +782,10 @@ model LeavePolicy {
   earnedLeaveMaxAccumulation Decimal? @db.Decimal(5, 1) // max days that can accumulate
   earnedLeaveRoundingRule    String?  // "none" | "round_up" | "round_down" | "round_nearest"
   earnedLeaveEligibleAfterDays Int?   // days of service before EL starts accruing
+  subDesignationId      Int?
   Department            Department?  @relation(fields: [departmentId], references: [id])
   Designation           Designation? @relation(fields: [designationId], references: [id])
+  SubDesignation        SubDesignation? @relation(fields: [subDesignationId], references: [id])
 
   @@index([leaveType])
   @@index([departmentId])
@@ -907,8 +912,10 @@ model ChecklistTemplate {
   isActive      Boolean                  @default(true)
   createdAt     DateTime                 @default(now())
   updatedAt     DateTime
+  subDesignationId Int?
   Department    Department?              @relation(fields: [departmentId], references: [id])
   Designation   Designation?             @relation(fields: [designationId], references: [id])
+  SubDesignation SubDesignation?         @relation(fields: [subDesignationId], references: [id])
   tasks         ChecklistTemplateTask[]
   instances     OnboardingChecklist[]
 

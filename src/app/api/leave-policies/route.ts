@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
       applicableTo = 'all',
       departmentId,
       designationId,
+      subDesignationId,
       employeeId,
       requiresDocument = false,
       // Earned leave settings
@@ -111,6 +112,7 @@ export async function POST(request: NextRequest) {
         applicableTo,
         departmentId: departmentId ? parseInt(departmentId) : null,
         designationId: designationId ? parseInt(designationId) : null,
+        subDesignationId: subDesignationId ? parseInt(subDesignationId) : null,
         employeeId: applicableTo === 'employee' && employeeId ? parseInt(employeeId) : null,
         requiresDocument,
         isActive: true,
@@ -176,6 +178,9 @@ export async function PUT(request: NextRequest) {
     }
     if (updateData.designationId !== undefined) {
       updateData.designationId = updateData.designationId ? parseInt(updateData.designationId) : null;
+    }
+    if (updateData.subDesignationId !== undefined) {
+      updateData.subDesignationId = updateData.subDesignationId ? parseInt(updateData.subDesignationId) : null;
     }
     if (updateData.employeeId !== undefined) {
       updateData.employeeId = updateData.employeeId ? parseInt(updateData.employeeId) : null;

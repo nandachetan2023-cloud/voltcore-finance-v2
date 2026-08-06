@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { SearchInput, matchesSearch } from './search-input';
 import { FileText, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { SubDesignationSelect } from './sub-designation-select';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -49,7 +50,7 @@ export default function LeavePoliciesModule() {
     name: '', code: '', leaveType: 'paid', annualQuota: '0', carryForward: false, maxCarryForward: '0', 
     encashable: false, maxEncashment: '0', minDaysNotice: '0', maxConsecutiveDays: '0', 
     applicableAfterMonths: '0', applicableGender: 'all', applicableTo: 'all',
-    departmentId: '', designationId: '', employeeId: '', requiresDocument: false,
+    departmentId: '', designationId: '', subDesignationId: '', employeeId: '', requiresDocument: false,
     // Earned leave settings
     earnedLeaveAccrualMethod: 'monthly',
     earnedLeaveAccrualRate: '1.25',
@@ -63,7 +64,7 @@ export default function LeavePoliciesModule() {
       name: '', code: '', leaveType: 'paid', annualQuota: '0', carryForward: false, maxCarryForward: '0', 
       encashable: false, maxEncashment: '0', minDaysNotice: '0', maxConsecutiveDays: '0', 
       applicableAfterMonths: '0', applicableGender: 'all', applicableTo: 'all', 
-      departmentId: '', designationId: '', employeeId: '', requiresDocument: false,
+      departmentId: '', designationId: '', subDesignationId: '', employeeId: '', requiresDocument: false,
       earnedLeaveAccrualMethod: 'monthly',
       earnedLeaveAccrualRate: '1.25',
       earnedLeaveMaxAccumulation: '30',
@@ -260,6 +261,7 @@ export default function LeavePoliciesModule() {
                             maxConsecutiveDays: policy.maxConsecutiveDays.toString(), applicableAfterMonths: policy.applicableAfterMonths.toString(), 
                             applicableGender: policy.applicableGender, applicableTo: (policy as any).applicableTo || 'all',
                             departmentId: (policy as any).departmentId?.toString() || '', designationId: (policy as any).designationId?.toString() || '',
+                            subDesignationId: (policy as any).subDesignationId?.toString() || '',
                             employeeId: (policy as any).employeeId?.toString() || '',
                             requiresDocument: policy.requiresDocument,
                             earnedLeaveAccrualMethod: policy.earnedLeaveAccrualMethod || 'monthly',
@@ -404,13 +406,24 @@ export default function LeavePoliciesModule() {
             {(form.applicableTo === 'designation' || form.applicableTo === 'both') && (
               <div>
                 <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Designation</label>
-                <select className={selectCls} value={form.designationId} onChange={e => setForm(f => ({ ...f, designationId: e.target.value }))}>
+                <select className={selectCls} value={form.designationId} onChange={e => setForm(f => ({ ...f, designationId: e.target.value, subDesignationId: '' }))}>
                   <option value="">Select Designation</option>
                   {designations.map(desig => (
                     <option key={desig.id} value={desig.id}>{desig.name}</option>
                   ))}
                 </select>
               </div>
+            )}
+            {(form.applicableTo === 'designation' || form.applicableTo === 'both') && (
+              <SubDesignationSelect
+                designations={designations}
+                designationId={form.designationId}
+                value={form.subDesignationId}
+                onChange={v => setForm(f => ({ ...f, subDesignationId: v }))}
+                className={selectCls}
+                labelClassName="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2"
+                noneLabel="Any Sub-Designation"
+              />
             )}
             {form.applicableTo === 'employee' && (
               <div className="col-span-2">
@@ -569,13 +582,24 @@ export default function LeavePoliciesModule() {
             {(form.applicableTo === 'designation' || form.applicableTo === 'both') && (
               <div>
                 <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">Designation</label>
-                <select className={selectCls} value={form.designationId} onChange={e => setForm(f => ({ ...f, designationId: e.target.value }))}>
+                <select className={selectCls} value={form.designationId} onChange={e => setForm(f => ({ ...f, designationId: e.target.value, subDesignationId: '' }))}>
                   <option value="">Select Designation</option>
                   {designations.map(desig => (
                     <option key={desig.id} value={desig.id}>{desig.name}</option>
                   ))}
                 </select>
               </div>
+            )}
+            {(form.applicableTo === 'designation' || form.applicableTo === 'both') && (
+              <SubDesignationSelect
+                designations={designations}
+                designationId={form.designationId}
+                value={form.subDesignationId}
+                onChange={v => setForm(f => ({ ...f, subDesignationId: v }))}
+                className={selectCls}
+                labelClassName="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2"
+                noneLabel="Any Sub-Designation"
+              />
             )}
             {form.applicableTo === 'employee' && (
               <div className="col-span-2">

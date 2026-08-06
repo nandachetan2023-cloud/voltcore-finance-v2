@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp, GripVertical, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
+import { SubDesignationSelect } from './sub-designation-select';
 
 const inp = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]/60 transition-colors placeholder:text-[#5a6878]';
 const lbl = 'block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5';
@@ -16,7 +17,7 @@ export default function ChecklistTemplates() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({ name: '', description: '', departmentId: '', designationId: '' });
+  const [form, setForm] = useState({ name: '', description: '', departmentId: '', designationId: '', subDesignationId: '' });
   const [tasks, setTasks] = useState<{ title: string; description: string; dueDayOffset: number; requiresDocument: boolean; documentNecessary: boolean }[]>([]);
 
   const fetchData = useCallback(async () => {
@@ -37,7 +38,7 @@ export default function ChecklistTemplates() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const openEdit = (t: any) => {
-    setForm({ name: t.name, description: t.description || '', departmentId: t.departmentId?.toString() || '', designationId: t.designationId?.toString() || '' });
+    setForm({ name: t.name, description: t.description || '', departmentId: t.departmentId?.toString() || '', designationId: t.designationId?.toString() || '', subDesignationId: t.subDesignationId?.toString() || '' });
     setTasks(t.tasks.map((tk: any) => ({ title: tk.title, description: tk.description || '', dueDayOffset: tk.dueDayOffset, requiresDocument: tk.requiresDocument, documentNecessary: tk.documentNecessary || false })));
     setEditId(t.id);
     setShowForm(true);
@@ -58,7 +59,7 @@ export default function ChecklistTemplates() {
         toast.success(editId ? 'Template updated' : 'Template created');
         fetchData();
         setShowForm(false);
-        setForm({ name: '', description: '', departmentId: '', designationId: '' });
+        setForm({ name: '', description: '', departmentId: '', designationId: '', subDesignationId: '' });
         setTasks([]);
         setEditId(null);
       } else toast.error(data.error);
@@ -85,7 +86,7 @@ export default function ChecklistTemplates() {
             <p className="text-[11px] text-[#5a6878]">Define reusable onboarding checklists by department or designation</p>
           </div>
         </div>
-        <button onClick={() => { setShowForm(true); setForm({ name: '', description: '', departmentId: '', designationId: '' }); setTasks([]); setEditId(null); }}
+        <button onClick={() => { setShowForm(true); setForm({ name: '', description: '', departmentId: '', designationId: '', subDesignationId: '' }); setTasks([]); setEditId(null); }}
           className="flex items-center gap-1.5 px-3 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] transition-colors">
           <Plus size={13} /> New Template
         </button>
@@ -111,11 +112,21 @@ export default function ChecklistTemplates() {
             </div>
             <div>
               <label className={lbl}>Designation (optional)</label>
-              <select className={inp} value={form.designationId} onChange={e => setForm(f => ({ ...f, designationId: e.target.value }))}>
+              <select className={inp} value={form.designationId} onChange={e => setForm(f => ({ ...f, designationId: e.target.value, subDesignationId: '' }))}>
                 <option value="">All Designations</option>
                 {designations.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
+            <SubDesignationSelect
+              designations={designations}
+              designationId={form.designationId}
+              value={form.subDesignationId}
+              onChange={v => setForm(f => ({ ...f, subDesignationId: v }))}
+              className={inp}
+              label="Sub-Designation (optional)"
+              noneLabel="All Sub-Designations"
+              labelClassName={lbl}
+            />
           </div>
 
           {/* Tasks */}

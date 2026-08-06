@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
     const body = await request.json()
-    const { position, designationId, site, openings, priority, status } = body
+    const { position, designationId, subDesignationId, site, openings, priority, status } = body
 
     if (!position || !site || !openings || !priority) {
       return NextResponse.json(
@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
       data: {
         position,
         designationId: designationId || null,
+        subDesignationId: subDesignationId || null,
         site,
         openings: Number(openings),
         applications: 0,
