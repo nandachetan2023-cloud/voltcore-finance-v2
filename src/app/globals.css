@@ -405,10 +405,15 @@ html:not(.dark) .bg-\[\#0d1017\]  { background-color: #f5f7fa !important; }
 html:not(.dark) .bg-\[\#0d1117\]  { background-color: #f5f7fa !important; }
 html:not(.dark) .bg-\[\#0f1318\]  { background-color: #edf0f4 !important; }
 html:not(.dark) .bg-\[\#0f1419\]  { background-color: #edf0f4 !important; }
+/* #0f141a is used as an input background alongside text-[#e2e8f0]; without
+   this the field stayed near-black while its text was remapped to dark ink,
+   making anything typed into it unreadable. */
+html:not(.dark) .bg-\[\#0f141a\]  { background-color: #f5f7fa !important; }
 html:not(.dark) .bg-\[\#141920\]  { background-color: #e8eaed !important; }
 html:not(.dark) .bg-\[\#161b22\]  { background-color: #ffffff !important; }
 html:not(.dark) .bg-\[\#161c24\]  { background-color: #ffffff !important; }
 html:not(.dark) .bg-\[\#1a2028\]  { background-color: #f0f2f5 !important; }
+html:not(.dark) .bg-\[\#1a212c\]  { background-color: #edf0f4 !important; }
 html:not(.dark) .bg-\[\#1a2030\]  { background-color: #f0f2f5 !important; }
 html:not(.dark) .bg-\[\#1a2332\]  { background-color: #edf0f4 !important; }
 html:not(.dark) .bg-\[\#1a2430\]  { background-color: #edf0f4 !important; }
@@ -424,7 +429,10 @@ html:not(.dark) .bg-\[\#3a4858\]  { background-color: #c8d0d8 !important; }
 html:not(.dark) .bg-\[\#3a4a5a\]  { background-color: #c8d0d8 !important; }
 
 /* ── Dark text overrides ──────────────────────────────────────── */
+/* These are the light-on-dark text colours; in light mode they must become
+   dark ink or they vanish against the light surface. */
 html:not(.dark) .text-\[\#e2e8f0\] { color: #1a2332 !important; }
+html:not(.dark) .text-\[\#c8d2dc\] { color: #1a2332 !important; }
 html:not(.dark) .text-\[\#8899aa\] { color: #4a5568 !important; }
 html:not(.dark) .text-\[\#5a6878\] { color: #718096 !important; }
 html:not(.dark) .text-\[\#3a4858\] { color: #4a5568 !important; }
@@ -433,6 +441,9 @@ html:not(.dark) .text-\[\#3a4858\] { color: #4a5568 !important; }
 html:not(.dark) .border-\[\#252e3a\] { border-color: #d1d9e0 !important; }
 html:not(.dark) .border-\[\#2e3a48\] { border-color: #b8c4ce !important; }
 html:not(.dark) .border-\[\#1e252e\] { border-color: #dde1e7 !important; }
+html:not(.dark) .border-\[\#1e2530\] { border-color: #dde1e7 !important; }
+html:not(.dark) .border-\[\#1e2a38\] { border-color: #dde1e7 !important; }
+html:not(.dark) .border-\[\#1a2028\] { border-color: #e2e6eb !important; }
 html:not(.dark) .border-\[\#3a4858\] { border-color: #a0aec0 !important; }
 html:not(.dark) .border-\[\#30363d\] { border-color: #d1d9e0 !important; }
 html:not(.dark) .border-\[\#161b22\] { border-color: #d1d9e0 !important; }

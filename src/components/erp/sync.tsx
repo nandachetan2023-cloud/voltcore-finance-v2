@@ -702,7 +702,7 @@ export default function SyncDashboard() {
                 <div>
                   <div
                     className="text-[16px] font-bold leading-none"
-                    style={{ fontFamily: "'Share Tech Mono', monospace", color: '#e2e8f0' }}
+                    style={{ fontFamily: "'Share Tech Mono', monospace", color: 'var(--vc-text)' }}
                   >
                     {stats.totalRecordsSynced.toLocaleString()}
                   </div>
