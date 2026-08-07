@@ -146,7 +146,8 @@ function AccountCapacityCard({ usage }: { usage: AccountUsage }) {
             {[
               { label: 'Used', value: usage.used, color: accent },
               { label: 'Remaining', value: remaining, color: full ? '#ff3d3d' : '#00e676' },
-              { label: 'Limit', value: usage.maxAccounts, color: '#8899aa' },
+              // var(), not a literal grey — inline styles bypass the light-mode overrides.
+              { label: 'Limit', value: usage.maxAccounts, color: 'var(--vc-text2)' },
             ].map(s => (
               <div key={s.label} className="text-center px-3 py-1.5 rounded-lg bg-[#0d1117] border border-[#252e3a] min-w-[60px]">
                 <div className="text-[16px] font-black leading-none" style={{ color: s.color, fontFamily: "'Share Tech Mono', monospace" }}>{s.value}</div>
@@ -599,7 +600,16 @@ function ChainsPanel({ chains, roles, onRefresh }: {
                       className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-all ${inChain ? 'border-[#f5a623]/50 bg-[#f5a623]/10' : 'border-[#252e3a] hover:border-[#f5a623]/30 hover:bg-[#1a2028]'}`}>
                       <div className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-black shrink-0" style={{ background: `${role.color}20`, color: role.color }}>{role.level}</div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[11px] font-semibold truncate" style={{ color: inChain ? role.color : '#e2e8f0' }}>{role.name}</div>
+                        {/* Unselected role names must follow the theme. A literal
+                            #e2e8f0 here is invisible on the light panel, because
+                            inline styles are not reachable by the light-mode CSS
+                            overrides that remap the equivalent utility class. */}
+                        <div
+                          className="text-[11px] font-semibold truncate"
+                          style={{ color: inChain ? role.color : 'var(--vc-text)' }}
+                        >
+                          {role.name}
+                        </div>
                         {scopeLabel(role) && <div className="text-[9px] text-[#5a6878] truncate">{scopeLabel(role)}</div>}
                       </div>
                       {inChain && <Check size={11} className="text-[#f5a623] shrink-0" />}

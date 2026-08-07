@@ -439,12 +439,27 @@ html:not(.dark) .border-\[\#161b22\] { border-color: #d1d9e0 !important; }
 html:not(.dark) .border-\[\#161c24\] { border-color: #d1d9e0 !important; }
 
 /* ── Hover overrides ──────────────────────────────────────────── */
+/* Every dark hover background used inline must be remapped here. A missing
+   entry keeps the dark background while the paired hover TEXT colour is
+   remapped to dark ink by the rule below — the row then goes dark-on-dark and
+   the label disappears on hover. That is what happened to the sidebar nav,
+   which hovers to #1a212c. */
 html:not(.dark) .hover\:bg-\[\#1a2028\]:hover  { background-color: #f0f2f5 !important; }
 html:not(.dark) .hover\:bg-\[\#141920\]:hover  { background-color: #e8eaed !important; }
+html:not(.dark) .hover\:bg-\[\#1a212c\]:hover  { background-color: #edf0f4 !important; }
 html:not(.dark) .hover\:bg-\[\#1a2332\]:hover  { background-color: #edf0f4 !important; }
+html:not(.dark) .hover\:bg-\[\#1e252e\]:hover  { background-color: #dde1e7 !important; }
+html:not(.dark) .hover\:bg-\[\#1e2530\]:hover  { background-color: #dde1e7 !important; }
+html:not(.dark) .hover\:bg-\[\#1e2630\]:hover  { background-color: #dde1e7 !important; }
 html:not(.dark) .hover\:bg-\[\#1e2838\]:hover  { background-color: #e8eaed !important; }
+html:not(.dark) .hover\:bg-\[\#1e2a38\]:hover  { background-color: #e8eaed !important; }
+html:not(.dark) .hover\:bg-\[\#161b22\]:hover  { background-color: #f5f7fa !important; }
+html:not(.dark) .hover\:bg-\[\#161c24\]:hover  { background-color: #f5f7fa !important; }
+html:not(.dark) .hover\:bg-\[\#0d1117\]:hover  { background-color: #f5f7fa !important; }
 html:not(.dark) .hover\:bg-\[\#252e3a\]:hover  { background-color: #d1d9e0 !important; }
+html:not(.dark) .hover\:bg-\[\#2e3a48\]:hover  { background-color: #b8c4ce !important; }
 html:not(.dark) .hover\:text-\[\#e2e8f0\]:hover { color: #1a2332 !important; }
+html:not(.dark) .hover\:text-\[\#8899aa\]:hover { color: #4a5568 !important; }
 
 /* ── Border opacity variants ──────────────────────────────────── */
 html:not(.dark) .border-\[\#252e3a\]\/30 { border-color: rgba(209,217,224,0.7) !important; }
