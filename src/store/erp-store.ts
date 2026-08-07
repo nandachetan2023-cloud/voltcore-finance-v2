@@ -11,7 +11,9 @@ export const MODULE_TREE: Record<string, string[]> = {
   projects: ['projects', 'project-list', 'sites'],
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
   // A dedicated "self-service" group for employees
-  'self-service': ['my-dashboard', 'my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
+  // 'notifications' sits in self-service because it is a personal inbox —
+  // every role that can log in has one, admin and employee alike.
+  'self-service': ['my-dashboard', 'my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'notifications', 'my-payslips', 'my-documents', 'my-shifts'],
   system: ['system', 'reports', 'settings', 'user-management', 'onboarding-approvals', 'requests', 'notice-board'],
   reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
 }
@@ -86,6 +88,7 @@ export type ModuleId =
   | 'my-requests'
   | 'my-profile'
   | 'my-notices'
+  | 'notifications'
   | 'my-payslips'
   | 'my-documents'
   | 'my-shifts'
@@ -216,7 +219,8 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'my-tours', icon: 'Plane', label: 'My Tours', section: 'My Portal' },
     { id: 'my-requests', icon: 'FileText', label: 'My Requests', section: 'My Portal' },
     { id: 'my-profile', icon: 'User', label: 'My Profile', section: 'My Portal' },
-    { id: 'my-notices', icon: 'Bell', label: 'My Notices', section: 'My Portal' },
+    { id: 'my-notices', icon: 'Megaphone', label: 'My Notices', section: 'My Portal' },
+    { id: 'notifications', icon: 'Bell', label: 'Notifications', section: 'My Portal' },
     { id: 'my-payslips', icon: 'IndianRupee', label: 'My Payslips', section: 'My Portal' },
     { id: 'my-documents', icon: 'FolderOpen', label: 'My Documents', section: 'My Portal' },
     { id: 'my-shifts', icon: 'RotateCcw', label: 'My Shifts', section: 'My Portal' },
@@ -308,6 +312,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'my-documents': { title: 'My Documents', breadcrumb: 'My Portal › Documents' },
   'my-shifts':    { title: 'My Shifts',    breadcrumb: 'My Portal › Shifts' },
   'notice-board': { title: 'Notice Board', breadcrumb: 'System › Notice Board' },
+  notifications: { title: 'Notifications', breadcrumb: 'My Portal › Notifications' },
 };
 
 // Modules with sub-modules (clicking them shows sub-nav instead of a page)

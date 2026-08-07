@@ -555,6 +555,17 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
                   })
                 )}
               </div>
+
+              {/* Footer link into the full module — the dropdown only ever
+                  shows unread, so read history lives there. */}
+              {isModuleAllowed('notifications', allowedModules) && (
+                <button
+                  onClick={() => { setShowNotifications(false); setActiveModule('notifications' as any); }}
+                  className="w-full p-2.5 border-t border-[#252e3a] text-[11px] font-semibold text-[#f5a623] hover:bg-[#141920] transition-colors"
+                >
+                  View all notifications
+                </button>
+              )}
             </div>
           )}
         </div>
