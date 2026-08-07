@@ -11,9 +11,7 @@ export const MODULE_TREE: Record<string, string[]> = {
   projects: ['projects', 'project-list', 'sites'],
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
   // A dedicated "self-service" group for employees
-  // 'notifications' sits in self-service because it is a personal inbox —
-  // every role that can log in has one, admin and employee alike.
-  'self-service': ['my-dashboard', 'my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'notifications', 'my-payslips', 'my-documents', 'my-shifts'],
+  'self-service': ['my-dashboard', 'my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
   system: ['system', 'reports', 'settings', 'user-management', 'onboarding-approvals', 'requests', 'notice-board'],
   reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
 }
@@ -27,7 +25,15 @@ Object.entries(MODULE_TREE).forEach(([parent, children]) => {
 })
 
 // Check if a module is accessible given an allowedModules string
+// Modules every authenticated account can reach regardless of its grants.
+// A notification is addressed to one person, so withholding the screen would
+// only hide mail that is already theirs — and the module shows nothing but
+// their own rows. Admins in particular may hold no self-service grant yet are
+// the sole recipients of the broadcast inbox.
+export const UNIVERSAL_MODULES = ['notifications']
+
 export function isModuleAllowed(moduleId: string, allowedModules: string): boolean {
+  if (UNIVERSAL_MODULES.includes(moduleId)) return true
   if (!allowedModules || allowedModules === 'all') return true
   const allowed = allowedModules.split(',').map(s => s.trim()).filter(Boolean)
 
@@ -136,6 +142,11 @@ export const MAIN_MODULES: NavItem[] = [
   { id: 'assets', icon: 'Wrench', label: 'Assets' },
   { id: 'system', icon: 'Settings', label: 'System' },
   { id: 'self-service', icon: 'UserCircle', label: 'My Portal' },
+  // Notifications is a personal inbox every account has, so it is a top-level
+  // page module rather than a child of My Portal — an admin whose grants do
+  // not include self-service must still be able to read their own
+  // notifications, and admins are the ones who receive the broadcast inbox.
+  { id: 'notifications', icon: 'Bell', label: 'Notifications' },
 ];
 
 export const SUB_MODULES: Record<string, NavItem[]> = {
@@ -220,7 +231,6 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'my-requests', icon: 'FileText', label: 'My Requests', section: 'My Portal' },
     { id: 'my-profile', icon: 'User', label: 'My Profile', section: 'My Portal' },
     { id: 'my-notices', icon: 'Megaphone', label: 'My Notices', section: 'My Portal' },
-    { id: 'notifications', icon: 'Bell', label: 'Notifications', section: 'My Portal' },
     { id: 'my-payslips', icon: 'IndianRupee', label: 'My Payslips', section: 'My Portal' },
     { id: 'my-documents', icon: 'FolderOpen', label: 'My Documents', section: 'My Portal' },
     { id: 'my-shifts', icon: 'RotateCcw', label: 'My Shifts', section: 'My Portal' },
@@ -319,7 +329,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
 export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finance', 'projects', 'assets', 'system', 'self-service', 'reports'];
 
 // Main modules that have their own page (no sub-nav)
-export const PAGE_MODULES = ['dashboard'];
+export const PAGE_MODULES = ['dashboard', 'notifications'];
 
 // Reverse lookup: given a sub-module id, find its parent module
 const PARENT_MAP: Record<string, string> = {};

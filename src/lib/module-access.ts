@@ -25,7 +25,7 @@ export const MODULE_GROUPS: Record<string, string[]> = {
   assets: ['equipment', 'permits', 'safety', 'subcontractors'],
   system: ['reports', 'settings', 'user-management', 'onboarding-approvals', 'requests', 'notice-board'],
   reports: ['report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
-  'self-service': ['my-dashboard', 'my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'notifications', 'my-payslips', 'my-documents', 'my-shifts'],
+  'self-service': ['my-dashboard', 'my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
 }
 
 /**
@@ -110,9 +110,18 @@ export function intersectAccess(roleAccess: string, tenantCap: string): string {
 }
 
 /**
+ * Modules every account reaches regardless of grants OR the tenant cap.
+ * Mirrors UNIVERSAL_MODULES in src/store/erp-store.ts — keep the two in sync.
+ * Notifications is a personal inbox showing only the caller's own rows, so
+ * gating it would just hide mail already addressed to them.
+ */
+export const UNIVERSAL_MODULES = ['notifications']
+
+/**
  * Returns true if `tenantCap` permits `moduleKey` (group or sub-module).
  */
 export function tenantAllowsModule(moduleKey: string, tenantCap: string): boolean {
+  if (UNIVERSAL_MODULES.includes(moduleKey)) return true
   if (!tenantCap || tenantCap === 'all') return true
   return expandAccess(tenantCap).has(moduleKey)
 }

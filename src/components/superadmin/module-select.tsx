@@ -124,7 +124,6 @@ export const FULL_MODULE_TREE: {
       { key: 'my-requests',   label: 'My Requests' },
       { key: 'my-profile',    label: 'My Profile' },
       { key: 'my-notices',    label: 'My Notices' },
-      { key: 'notifications', label: 'Notifications' },
       { key: 'my-payslips',   label: 'My Payslips' },
       { key: 'my-documents',  label: 'My Documents' },
       { key: 'my-shifts',     label: 'My Shifts' },
