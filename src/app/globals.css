@@ -247,6 +247,28 @@
   color: #e2e8f0;
 }
 
+/* Same problem for bare <select> elements that style themselves with the raw
+   dark hexes instead of .vc-input — the employee bulk-import site picker is
+   one. Scope by the background class they carry so we don't restyle every
+   select on the page. */
+select.bg-\[\#0d1117\] option,
+select.bg-\[\#161b22\] option,
+select.bg-\[\#161c24\] option,
+select.bg-\[\#0f141a\] option {
+  background: #1a2028;
+  color: #e2e8f0;
+}
+/* In light mode the same selects are repainted light, so their options must
+   flip to dark ink on a light list or they become white-on-white. */
+html:not(.dark) .vc-input option,
+html:not(.dark) select.bg-\[\#0d1117\] option,
+html:not(.dark) select.bg-\[\#161b22\] option,
+html:not(.dark) select.bg-\[\#161c24\] option,
+html:not(.dark) select.bg-\[\#0f141a\] option {
+  background: #ffffff;
+  color: #1a2332;
+}
+
 .vc-btn-primary {
   background: #f5a623;
   color: #000000;

@@ -482,7 +482,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
         </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-[#0d1117] border-[#30363d]">
         <DialogHeader>
-          <DialogTitle className="text-white">Bulk Import Employees</DialogTitle>
+          <DialogTitle className="text-[#e2e8f0]">Bulk Import Employees</DialogTitle>
           <DialogDescription>
             Upload an Excel file to import multiple employees at once
           </DialogDescription>
@@ -492,7 +492,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
           {/* Step 1: File Upload */}
           <Card className="bg-[#161b22] border-[#30363d]">
             <CardHeader>
-              <CardTitle className="text-white text-sm">Step 1: Upload & Validate</CardTitle>
+              <CardTitle className="text-[#e2e8f0] text-sm">Step 1: Upload & Validate</CardTitle>
               <CardDescription>
                 Upload your Excel file and validate the data
               </CardDescription>
@@ -512,12 +512,12 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
                     <div className="flex-1">
                       {file ? (
                         <div>
-                          <p className="text-white font-medium">{file.name}</p>
+                          <p className="text-[#e2e8f0] font-medium">{file.name}</p>
                           <p className="text-sm text-gray-400">{(file.size / 1024).toFixed(2)} KB</p>
                         </div>
                       ) : (
                         <div>
-                          <p className="text-white">Click to select Excel file</p>
+                          <p className="text-[#e2e8f0]">Click to select Excel file</p>
                           <p className="text-sm text-gray-400">or drag and drop</p>
                         </div>
                       )}
@@ -534,12 +534,12 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
                 <div className="space-y-2">
                   <label className="text-sm text-gray-300">Select Sheet with Employee Data</label>
                   <Select value={selectedSheet} onValueChange={setSelectedSheet}>
-                    <SelectTrigger className="bg-[#0d1117] border-[#30363d] text-white">
+                    <SelectTrigger className="bg-[#0d1117] border-[#30363d] text-[#e2e8f0]">
                       <SelectValue placeholder="Choose a sheet..." />
                     </SelectTrigger>
                     <SelectContent className="bg-[#161b22] border-[#30363d]">
                       {sheetNames.map((name) => (
-                        <SelectItem key={name} value={name} className="text-white">{name}</SelectItem>
+                        <SelectItem key={name} value={name} className="text-[#e2e8f0]">{name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -558,7 +558,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
           {showSiteMapping && validationResult && validationResult.summary.errorRows === 0 && validationResult.validatedEmployees && validationResult.validatedEmployees.length > 0 && (
             <Card className="bg-[#161b22] border-[#f5a623]/40 border-2">
               <CardHeader>
-                <CardTitle className="text-white text-sm flex items-center gap-2">
+                <CardTitle className="text-[#e2e8f0] text-sm flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-[#f5a623]" />
                   Step 2: Assign Site / Branch to Each Employee
                 </CardTitle>
@@ -573,12 +573,12 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
                     Set All:
                   </span>
                   <Select onValueChange={(val) => setAllBranches(val)}>
-                    <SelectTrigger className="bg-[#161b22] border-[#30363d] text-white max-w-[200px]">
+                    <SelectTrigger className="bg-[#161b22] border-[#30363d] text-[#e2e8f0] max-w-[200px]">
                       <SelectValue placeholder="Assign all to..." />
                     </SelectTrigger>
                     <SelectContent className="bg-[#161b22] border-[#30363d]">
                       {branches.map((branch) => (
-                        <SelectItem key={branch.id} value={branch.id.toString()} className="text-white">
+                        <SelectItem key={branch.id} value={branch.id.toString()} className="text-[#e2e8f0]">
                           {branch.name}
                         </SelectItem>
                       ))}
@@ -610,13 +610,13 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
                       {validationResult.validatedEmployees.map((emp, idx) => (
                         <TableRow key={emp.employeeCode} className="border-[#30363d]">
                           <TableCell className="text-[#5a6878] text-[10px] py-1.5">{idx + 1}</TableCell>
-                          <TableCell className="text-white font-mono text-[11px] py-1.5">{emp.employeeCode}</TableCell>
+                          <TableCell className="text-[#e2e8f0] font-mono text-[11px] py-1.5">{emp.employeeCode}</TableCell>
                           <TableCell className="text-[#e2e8f0] text-[11px] py-1.5">{emp.firstName} {emp.lastName}</TableCell>
                           <TableCell className="py-1.5">
                             <select
                               value={branchMap[emp.employeeCode] || ''}
                               onChange={(e) => setBranchMap(prev => ({ ...prev, [emp.employeeCode]: e.target.value }))}
-                              className="w-full bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-[11px] text-white outline-none focus:border-[#f5a623] transition-colors"
+                              className="w-full bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-[11px] text-[#e2e8f0] outline-none focus:border-[#f5a623] transition-colors"
                             >
                               <option value="">Select site...</option>
                               {branches.map(b => (
@@ -658,14 +658,14 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
             <>
               <Card className="bg-[#161b22] border-[#30363d]">
                 <CardHeader>
-                  <CardTitle className="text-white text-sm">
+                  <CardTitle className="text-[#e2e8f0] text-sm">
                     {validationResult.summary.importedRows > 0 ? 'Import Summary' : 'Validation Summary'}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-white">{validationResult.summary.totalRows}</div>
+                      <div className="text-2xl font-bold text-[#e2e8f0]">{validationResult.summary.totalRows}</div>
                       <div className="text-sm text-gray-400">Total Rows</div>
                     </div>
                     <div className="text-center">
@@ -691,7 +691,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
               {validationResult.imported.length > 0 && (
                 <Card className="bg-[#161b22] border-[#30363d]">
                   <CardHeader>
-                    <CardTitle className="text-white text-sm flex items-center gap-2">
+                    <CardTitle className="text-[#e2e8f0] text-sm flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-green-500" />
                       Successfully Imported ({validationResult.imported.length})
                     </CardTitle>
@@ -708,8 +708,8 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
                         <TableBody>
                           {validationResult.imported.slice(0, 50).map((emp, idx) => (
                             <TableRow key={idx} className="border-[#30363d]">
-                              <TableCell className="text-white font-mono">{emp.employeeCode}</TableCell>
-                              <TableCell className="text-white">{emp.name}</TableCell>
+                              <TableCell className="text-[#e2e8f0] font-mono">{emp.employeeCode}</TableCell>
+                              <TableCell className="text-[#e2e8f0]">{emp.name}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -722,7 +722,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
               {validationResult.warnings.length > 0 && (
                 <Card className="bg-[#161b22] border-[#30363d]">
                   <CardHeader>
-                    <CardTitle className="text-white text-sm flex items-center gap-2">
+                    <CardTitle className="text-[#e2e8f0] text-sm flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 text-yellow-500" />
                       Warnings ({validationResult.warnings.length})
                     </CardTitle>
@@ -741,7 +741,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
                           {validationResult.warnings.map((warning, idx) => (
                             <TableRow key={idx} className="border-[#30363d]">
                               <TableCell className="text-yellow-500">{warning.row}</TableCell>
-                              <TableCell className="text-white font-mono">{warning.employeeCode}</TableCell>
+                              <TableCell className="text-[#e2e8f0] font-mono">{warning.employeeCode}</TableCell>
                               <TableCell className="text-gray-300">{warning.message}</TableCell>
                             </TableRow>
                           ))}
@@ -755,7 +755,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
               {validationResult.errors.length > 0 && (
                 <Card className="bg-[#161b22] border-[#30363d]">
                   <CardHeader>
-                    <CardTitle className="text-white text-sm flex items-center gap-2">
+                    <CardTitle className="text-[#e2e8f0] text-sm flex items-center gap-2">
                       <XCircle className="w-4 h-4 text-red-500" />
                       Errors ({validationResult.errors.length})
                     </CardTitle>
@@ -774,7 +774,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
                           {validationResult.errors.map((error, idx) => (
                             <TableRow key={idx} className="border-[#30363d]">
                               <TableCell className="text-red-500">{error.row}</TableCell>
-                              <TableCell className="text-white font-mono">{error.employeeCode}</TableCell>
+                              <TableCell className="text-[#e2e8f0] font-mono">{error.employeeCode}</TableCell>
                               <TableCell className="text-gray-300">{error.message}</TableCell>
                             </TableRow>
                           ))}
