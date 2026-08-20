@@ -86,17 +86,20 @@ function userCanApproveClearance(
   return clearanceDept.toLowerCase().trim() === userCtx.deptName.toLowerCase().trim()
 }
 
-// Role scope gate: the resigning employee must fall inside the approver's
-// department/designation/site scope. Admins bypass; a universal role passes.
-async function resigneeInCallerScope(
+// Role scope identifies the APPROVER, not the people they may act on, so it
+// is checked against the caller's own record — never the resigning employee's.
+// (Clearance rows are still matched to the caller's department by
+// userCanApproveClearance above; that is a different, legitimate check.)
+async function callerMatchesTheirRoleScope(
   db: any,
-  userCtx: { isAdmin: boolean; roleScope?: RoleScope | null },
-  resigneeEmployeeId: number,
+  userCtx: { isAdmin: boolean; roleScope?: RoleScope | null; employeeId?: number | null },
 ): Promise<boolean> {
   if (userCtx.isAdmin) return true
   if (isUniversalScope(userCtx.roleScope)) return true
-  const subject = await loadScopeSubject(db, resigneeEmployeeId)
-  return !!subject && isInScope(userCtx.roleScope!, subject)
+  if (!userCtx.employeeId) return true
+  const subject = await loadScopeSubject(db, userCtx.employeeId)
+  if (!subject) return true // unreadable — the explicit role assignment stands
+  return isInScope(userCtx.roleScope!, subject)
 }
 
 export async function GET(request: NextRequest) {
@@ -130,15 +133,14 @@ export async function GET(request: NextRequest) {
     // Resolve current user context to tell the UI what they can approve
     const userCtx = await getCurrentUserContext(request, db)
 
-    // Role scope is a hard boundary: a dept/designation/site-scoped approver
-    // only sees resignations from employees inside that scope. Self-lookups
+    // The role scope describes the approver, so it is a property of the CALLER
+    // and identical for every row — evaluate it once. A caller who does not
+    // match their own role's scope sees no approval queue at all. Self-lookups
     // (?employeeId=…) are the requester's own view and stay unfiltered.
     let visible = resignations
     if (!employeeId && !userCtx.isAdmin && !isUniversalScope(userCtx.roleScope)) {
-      const allowed = await Promise.all(
-        resignations.map(r => resigneeInCallerScope(db, userCtx, r.employeeId))
-      )
-      visible = resignations.filter((_, i) => allowed[i])
+      const callerOk = await callerMatchesTheirRoleScope(db, userCtx)
+      visible = callerOk ? resignations : []
     }
 
     return NextResponse.json({
@@ -242,7 +244,7 @@ export async function PATCH(request: NextRequest) {
         where: { id: existing.resignationId },
         select: { employeeId: true },
       })
-      if (parentResignation && !(await resigneeInCallerScope(db, userCtx, parentResignation.employeeId))) {
+      if (parentResignation && !(await callerMatchesTheirRoleScope(db, userCtx))) {
         return NextResponse.json(
           { success: false, error: 'This resignation is outside your assigned department/designation/site scope.' },
           { status: 403 }
@@ -285,7 +287,7 @@ export async function PATCH(request: NextRequest) {
           where: { id: parseInt(id) },
           select: { employeeId: true },
         })
-        if (!target || !(await resigneeInCallerScope(db, actionCtx, target.employeeId))) {
+        if (!target || !(await callerMatchesTheirRoleScope(db, actionCtx))) {
           return NextResponse.json(
             { success: false, error: 'This resignation is outside your assigned department/designation/site scope.' },
             { status: 403 }

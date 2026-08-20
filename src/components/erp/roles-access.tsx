@@ -349,9 +349,10 @@ function RolesPanel({ roles, departments, designations, branches, moduleCap, onR
           <div className="flex items-start gap-2.5 rounded-lg border border-[#00d4ff]/25 bg-[#00d4ff]/[0.06] px-3 py-2.5">
             <Shield size={13} className="text-[#00d4ff] shrink-0 mt-0.5" />
             <p className="text-[10px] text-[#8899aa] leading-relaxed">
-              These three filters are a <span className="text-[#e2e8f0] font-semibold">hard access boundary</span>, not just labels.
-              A user with this role only sees notifications and approvals for employees matching
-              <span className="text-[#e2e8f0]"> every</span> filter you set — a role limited to dept <span className="text-[#e2e8f0]">HR</span> and site <span className="text-[#e2e8f0]">Mumbai</span> reaches only HR staff at Mumbai.
+              These describe <span className="text-[#e2e8f0] font-semibold">who holds this role</span>, not who they can approve for.
+              A role set to dept <span className="text-[#e2e8f0]">HR</span> and site <span className="text-[#e2e8f0]">Mumbai</span> means its holders
+              <span className="text-[#e2e8f0]"> are</span> the HR staff at Mumbai — so when a chain step names this role, the request goes to those people.
+              Users assigned the role whose own department/designation/site disagrees are skipped.
               Leave a filter blank to leave that axis unrestricted.
             </p>
           </div>

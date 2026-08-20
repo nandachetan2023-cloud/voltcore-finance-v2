@@ -2,11 +2,8 @@ import { getDbForRequest } from '@/lib/db'
 import { superadminDb } from '@/lib/superadmin-db'
 import { annotateRequesterStage } from '@/lib/services/approval-stage'
 import {
+  callerMatchesOwnRoleScope,
   resolveStepRecipients,
-  loadScopeSubjects,
-  getRoleScope,
-  isInScope,
-  isUniversalScope,
 } from '@/lib/services/approval-scope'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -115,13 +112,6 @@ export async function GET(request: NextRequest) {
           chainStepsMap.set(roleId, chain?.steps || [])
         }
 
-        // Caller's role scope — hard boundary on whose requests they may see.
-        const callerScope = await getRoleScope(callerOrgRoleId)
-        const callerUniversal = isUniversalScope(callerScope)
-        const scopeSubjects = callerUniversal
-          ? new Map()
-          : await loadScopeSubjects(db, requesterEmpIds)
-
         enriched = tourRequests
           .filter(r => {
             const reqOrgRoleId = empOrgRoleMap.get(r.employeeId)
@@ -133,10 +123,12 @@ export async function GET(request: NextRequest) {
             const currentStepDef = steps.find((s: any) => s.stepNumber === currentStepNum)
             if (currentStepDef?.approverRoleId !== callerOrgRoleId) return false
 
-            // …and only if the requester is inside the caller's role scope.
-            if (callerUniversal) return true
-            const subject = scopeSubjects.get(r.employeeId)
-            return !!subject && isInScope(callerScope, subject)
+            // Being the named approver for the current step IS the
+            // authorization. The role's scope describes who the approver is,
+            // not who they may act on, so it is not tested against the
+            // requester here — doing so hid every request from every scoped
+            // approver.
+            return true
           })
           .map(r => ({ ...r, canApprove: true }))
       } else if (callerIsAdmin) {
@@ -349,18 +341,15 @@ export async function PATCH(request: NextRequest) {
 
     // Chain approvers may act ONLY on their current step. The full admin bypasses this.
     if (!isFullAdmin && callerUser?.orgRoleId && tenantId) {
-      // Role scope is a hard boundary — holding the approver role is not enough
-      // if the requester falls outside the caller's dept/designation/site.
-      const callerScope = await getRoleScope(callerUser.orgRoleId)
-      if (!isUniversalScope(callerScope)) {
-        const subjects = await loadScopeSubjects(db, [tourRequest.employeeId])
-        const subject = subjects.get(tourRequest.employeeId)
-        if (!subject || !isInScope(callerScope, subject)) {
-          return NextResponse.json(
-            { success: false, error: 'This request is outside your assigned department/designation/site scope.' },
-            { status: 403 }
-          )
-        }
+      // Confirm the caller really is the person their role describes — the
+      // scope identifies the approver, it is NOT a filter on the requester.
+      // Testing the requester here rejected every approver whose own
+      // department/designation/site differed from the person they approve for.
+      if (!(await callerMatchesOwnRoleScope(db, callerUser.orgRoleId, callerUser.employeeId))) {
+        return NextResponse.json(
+          { success: false, error: 'Your account does not match the department/designation/site of your assigned role. Contact your administrator.' },
+          { status: 403 }
+        )
       }
 
       const requesterUser = await superadminDb.tenantUser.findFirst({

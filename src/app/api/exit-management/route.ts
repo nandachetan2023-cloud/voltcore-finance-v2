@@ -14,18 +14,17 @@ export const dynamic = 'force-dynamic'
 // inside the caller's department/designation/site scope. Admins bypass.
 async function resignationInCallerScope(
   db: any,
-  userCtx: { isAdmin: boolean; roleScope?: RoleScope | null },
+  userCtx: { isAdmin: boolean; roleScope?: RoleScope | null; employeeId?: number | null },
   resignationId: number,
 ): Promise<boolean> {
+  // Scope identifies the APPROVER. Test the caller's own record, not the
+  // resigning employee's — the latter rejected every legitimate reviewer.
   if (userCtx.isAdmin) return true
   if (isUniversalScope(userCtx.roleScope)) return true
-  const resignation = await db.resignation.findUnique({
-    where: { id: resignationId },
-    select: { employeeId: true },
-  }).catch(() => null)
-  if (!resignation) return false
-  const subject = await loadScopeSubject(db, resignation.employeeId)
-  return !!subject && isInScope(userCtx.roleScope!, subject)
+  if (!userCtx.employeeId) return true
+  const subject = await loadScopeSubject(db, userCtx.employeeId)
+  if (!subject) return true // unreadable — the explicit role assignment stands
+  return isInScope(userCtx.roleScope!, subject)
 }
 
 // ── Reuse same user context resolution as offboarding ────────────

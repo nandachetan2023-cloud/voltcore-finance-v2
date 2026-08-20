@@ -8,10 +8,22 @@
  * approver role tenant-wide, so a site-scoped approver saw and could action
  * requests from every other site.
  *
- * The rule implemented here: a role's scope is a HARD boundary on the
- * population its holders may see or act on. Non-blank axes are ANDed — a role
- * scoped to dept "HR" and branch "Mumbai" only reaches employees who are in HR
- * *and* at Mumbai. This governs three things that must never disagree:
+ * WHAT THE SCOPE DESCRIBES — read this before changing anything.
+ *
+ * The three axes describe WHO THE ROLE-HOLDER IS, not who they may act upon.
+ * A role "Sr. Supervisor (GAP)" scoped to dept OPERATION, desig SENIOR
+ * SUPERVISOR, site GAP Lapanga means: holders of this role are the senior
+ * supervisors in Operation at GAP Lapanga. So an approval step naming that
+ * role resolves to the users who actually match that description.
+ *
+ * The first version of this module had it backwards: it tested the approver
+ * role's scope against the REQUESTER's department/designation/site. That asked
+ * "is the technician who filed this request themselves a Senior Supervisor in
+ * Operation?" — always false — so every scoped step found zero approvers and
+ * escalated to admin, making a correctly-built chain look broken.
+ *
+ * Non-blank axes are ANDed; a blank axis is unrestricted. This governs three
+ * things that must never disagree:
  *
  *   1. which pending requests appear in an approver's list  (visibility)
  *   2. whether a given approver may PUT an approve/reject   (authorization)
@@ -144,19 +156,31 @@ export async function getRoleScope(roleId: string | null | undefined): Promise<R
 }
 
 /**
- * May the caller holding `callerRoleId` act on a request raised by
- * `requesterEmployeeId`? This is the authorization gate the PUT handlers use,
- * and it is deliberately the same predicate that drives list visibility.
+ * Does the caller personally match their own role's scope?
+ *
+ * Used as the authorization gate for chain approvers. Being the named approver
+ * for the current step is what grants the right to act; this only additionally
+ * confirms the caller really is the person the role describes — so a user
+ * wrongly holding "Sr. Supervisor (GAP Lapanga)" while posted elsewhere cannot
+ * approve on that role's behalf.
+ *
+ * NOTE: this deliberately does NOT test the requester. An earlier version did,
+ * which rejected every approver whose own attributes differed from the person
+ * they were meant to approve for — i.e. nearly always.
+ *
+ * An unreadable/unlinked caller record passes, matching
+ * findScopedApproversForStep: the admin's explicit role assignment stands.
  */
-export async function callerCanActOn(
+export async function callerMatchesOwnRoleScope(
   db: any,
   callerRoleId: string | null | undefined,
-  requesterEmployeeId: number,
+  callerEmployeeId: number | null | undefined,
 ): Promise<boolean> {
   const scope = await getRoleScope(callerRoleId)
   if (isUniversalScope(scope)) return true
-  const subject = await loadScopeSubject(db, requesterEmployeeId)
-  if (!subject) return false
+  if (!callerEmployeeId) return true
+  const subject = await loadScopeSubject(db, callerEmployeeId)
+  if (!subject) return true
   return isInScope(scope, subject)
 }
 
@@ -166,14 +190,22 @@ export interface ScopedApprover {
 }
 
 /**
- * Resolve the users who should be notified for a chain step, honouring the
- * approver role's scope relative to the requesting employee.
+ * Resolve the users who should be notified for a chain step.
  *
- * Returns `{ approvers, fellBackToAdmin }`. When the role is scoped such that
- * nobody can act on this request, `approvers` is empty and `fellBackToAdmin`
- * is true — callers are expected to route to the tenant admin so the request
- * never becomes invisibly stuck. That fallback is the agreed behaviour for a
- * misconfigured or as-yet-unstaffed scope.
+ * The approver role's scope is matched against EACH CANDIDATE APPROVER's own
+ * department/designation/site — it describes who they are. It is deliberately
+ * NOT matched against the requester: an approver's whole purpose is to action
+ * requests from people unlike themselves, so testing the requester against an
+ * approver-shaped scope rejected everyone.
+ *
+ * A holder whose employee record cannot be read is still accepted when the
+ * role is scoped, because the admin explicitly assigned them this role;
+ * dropping them would silently unstaff a correctly-built chain. A holder whose
+ * record IS readable and contradicts the scope is dropped.
+ *
+ * Returns `{ approvers, fellBackToAdmin }`. `fellBackToAdmin` is true only
+ * when nobody at all is eligible, so callers route to the tenant admin and the
+ * request never becomes invisibly stuck.
  */
 export async function findScopedApproversForStep(
   db: any,
@@ -188,26 +220,23 @@ export async function findScopedApproversForStep(
 
   if (users.length === 0) return { approvers: [], fellBackToAdmin: true }
 
+  // An approver must never be the requester on their own request.
+  let eligible = users.filter((u: any) => u.employeeId !== requesterEmployeeId)
+  if (eligible.length === 0) return { approvers: [], fellBackToAdmin: true }
+
   const scope = await getRoleScope(approverRoleId)
 
-  // Universal role — every holder is a valid approver, no employee lookup needed.
-  if (isUniversalScope(scope)) {
-    return {
-      approvers: users.map((u: any) => ({ email: u.email, name: u.name })),
-      fellBackToAdmin: false,
-    }
+  // Scoped role — keep only holders who match the description themselves.
+  if (!isUniversalScope(scope)) {
+    const ids = eligible.map((u: any) => u.employeeId).filter((id: any) => typeof id === 'number')
+    const subjects = await loadScopeSubjects(db, ids)
+    eligible = eligible.filter((u: any) => {
+      const subj = u.employeeId ? subjects.get(u.employeeId) : undefined
+      if (!subj) return true // unlinked/unreadable — trust the explicit assignment
+      return isInScope(scope, subj)
+    })
+    if (eligible.length === 0) return { approvers: [], fellBackToAdmin: true }
   }
-
-  const subject = await loadScopeSubject(db, requesterEmployeeId)
-  // Requester's own attributes are unreadable — fail closed rather than
-  // notifying a scoped role about someone it may have no business seeing.
-  if (!subject || !isInScope(scope, subject)) {
-    return { approvers: [], fellBackToAdmin: true }
-  }
-
-  // An approver must never be the requester on their own request.
-  const eligible = users.filter((u: any) => u.employeeId !== requesterEmployeeId)
-  if (eligible.length === 0) return { approvers: [], fellBackToAdmin: true }
 
   return {
     approvers: eligible.map((u: any) => ({ email: u.email, name: u.name })),
