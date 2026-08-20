@@ -7,6 +7,7 @@ import {
   callerMatchesOwnRoleScope,
   resolveStepRecipients,
 } from '@/lib/services/approval-scope'
+import { runLeaveAutoApproval } from '@/lib/services/leave-auto-approval'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +46,12 @@ export async function GET(request: NextRequest) {
   const db = getDbForRequest(request)
   const tenantId = getTenantId(request)
   try {
+    // Pass any step that has been pending over 24h before reading, so the list
+    // never shows a request as awaiting an approver whose window has expired.
+    // Self-guarded and idempotent; failures are swallowed so a sweep problem
+    // can never stop the list from loading.
+    await runLeaveAutoApproval(db, tenantId).catch(() => {})
+
     const { searchParams } = new URL(request.url)
     const employeeId = searchParams.get('employeeId')
     const status = searchParams.get('status')
@@ -436,6 +443,9 @@ export async function POST(request: NextRequest) {
         supportingDocument: supportingDocument || undefined,
         status: 'pending',
         currentStep: 1,
+        // Starts the 24h auto-approval window for step 1.
+        // See src/lib/services/leave-auto-approval.ts
+        stepEnteredAt: new Date(),
         appliedDate: new Date(),
         updatedAt: new Date(),
       },
@@ -715,6 +725,9 @@ export async function PATCH(request: NextRequest) {
       where: { id: leaveId },
       data: {
         currentStep: nextStep,
+        // Restart the 24h window so the NEXT approver gets a full day, rather
+        // than inheriting however much of it the previous approver used.
+        stepEnteredAt: new Date(),
         ...(approvedBy ? { approvedBy: parseInt(approvedBy) } : {}),
       },
     })

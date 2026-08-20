@@ -305,6 +305,14 @@ model LeaveRequest {
   supportingDocument  Json?
   status              String    @default("pending")
   currentStep         Int       @default(1)
+  // When the request entered its CURRENT step. Reset on every step advance so
+  // the 24h auto-approval window restarts for each approver. Null on rows that
+  // predate the column; the sweep treats those as entering at appliedDate.
+  stepEnteredAt       DateTime?
+  // Steps that were passed by the 24h timer rather than by a person, as a
+  // comma-separated list of step numbers ("1,3"). Kept so the audit trail can
+  // distinguish an auto-approval from a real one.
+  autoApprovedSteps   String    @default("")
   appliedDate         DateTime  @default(now())
   approvedBy          Int?
   approvedDate        DateTime?
