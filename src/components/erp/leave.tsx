@@ -412,6 +412,11 @@ export default function LeaveModule() {
   const [blockError, setBlockError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<LeaveRequest | null>(null);
+  // Rejection remark — optional, so the approver can say why. The employee
+  // sees it alongside which step rejected in My Portal > My Leave.
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState<LeaveRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
   const [form, setForm] = useState<LeaveFormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -735,15 +740,17 @@ export default function LeaveModule() {
   };
 
   /* ── Approve / Reject ── */
-  const handleStatus = async (id: string, status: 'Approved' | 'Rejected') => {
+  const handleStatus = async (id: string, status: 'Approved' | 'Rejected', reason?: string) => {
     try {
       setActionLoading(id);
       const res = await fetch('/api/leave', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          id: parseInt(id), 
-          status: status.toLowerCase() // API expects lowercase
+        body: JSON.stringify({
+          id: parseInt(id),
+          status: status.toLowerCase(), // API expects lowercase
+          // Optional: omitted entirely when the approver left it blank.
+          ...(reason && reason.trim() ? { rejectionReason: reason.trim() } : {}),
         }),
       });
       const json = await res.json();
@@ -759,6 +766,22 @@ export default function LeaveModule() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  /* ── Reject with an optional remark ── */
+  const openReject = (r: LeaveRequest) => {
+    setRejectTarget(r);
+    setRejectReason('');
+    setRejectOpen(true);
+  };
+
+  const confirmReject = async () => {
+    if (!rejectTarget) return;
+    const target = rejectTarget;
+    setRejectOpen(false);
+    await handleStatus(target.id, 'Rejected', rejectReason);
+    setRejectTarget(null);
+    setRejectReason('');
   };
 
   /* ── Delete ── */
@@ -878,7 +901,7 @@ export default function LeaveModule() {
                                 {actionLoading === r.id ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle2 size={10} />}
                                 Approve
                               </button>
-                              <button onClick={() => handleStatus(r.id, 'Rejected')} disabled={actionLoading === r.id}
+                              <button onClick={() => openReject(r)} disabled={actionLoading === r.id}
                                 className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold bg-[#ff3d3d]/10 text-[#ff3d3d] hover:bg-[#ff3d3d]/20 border border-[#ff3d3d]/20 transition-all disabled:opacity-50">
                                 Reject
                               </button>
@@ -1029,6 +1052,54 @@ export default function LeaveModule() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Reject with optional remark */}
+      <Dialog open={rejectOpen} onOpenChange={(open) => { setRejectOpen(open); if (!open) { setRejectTarget(null); setRejectReason(''); } }}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#ff3d3d] flex items-center gap-2">
+              <XCircle size={16} /> Reject Leave Request
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {rejectTarget && (
+              <p className="text-[11px] text-[#8899aa]">
+                Rejecting <strong className="text-[#e2e8f0]">{rejectTarget.employee?.name}</strong>&apos;s{' '}
+                {rejectTarget.type} leave ({fmtDate(rejectTarget.fromDate)} to {fmtDate(rejectTarget.toDate)}).
+              </p>
+            )}
+            <div>
+              <label className="block text-[10px] font-semibold text-[#8899aa] mb-1.5 uppercase tracking-wide">
+                Remark <span className="text-[#5a6878] normal-case tracking-normal font-normal">(optional)</span>
+              </label>
+              <textarea
+                className="vc-input resize-none w-full text-[#e2e8f0]"
+                rows={3}
+                maxLength={500}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Why is this being rejected? The employee will see this."
+              />
+              <p className="text-[9px] text-[#5a6878] mt-1">
+                Shown to the employee along with the approval step that rejected it.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setRejectOpen(false)} className="vc-btn-ghost text-[11px] px-3 py-1.5">
+              Cancel
+            </button>
+            <button
+              onClick={confirmReject}
+              disabled={!!actionLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#ff3d3d] hover:bg-[#cc2020] text-white transition-all disabled:opacity-50"
+            >
+              {actionLoading ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
+              Reject
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Approval chain not configured — block error dialog */}
       <Dialog open={!!blockError} onOpenChange={() => setBlockError(null)}>

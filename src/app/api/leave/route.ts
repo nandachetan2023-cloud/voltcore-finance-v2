@@ -8,6 +8,7 @@ import {
   resolveStepRecipients,
 } from '@/lib/services/approval-scope'
 import { runLeaveAutoApproval } from '@/lib/services/leave-auto-approval'
+import { resolveRejectionPosition, formatRejectionPosition } from '@/lib/services/rejection-position'
 
 export const dynamic = 'force-dynamic'
 
@@ -648,13 +649,30 @@ export async function PATCH(request: NextRequest) {
 
     // ── REJECT ────────────────────────────────────────────────────
     if (status.toLowerCase() === 'rejected') {
+      // Record WHERE the rejection happened. Resolved now rather than on read
+      // because the chain can be edited later, and re-resolving would then name
+      // whoever holds the step today instead of who actually rejected.
+      // Optional remark, trimmed and capped — the textarea caps at 500 too, but
+      // the API is the boundary that actually has to hold.
+      const remark = typeof rejectionReason === 'string'
+        ? rejectionReason.trim().slice(0, 500)
+        : ''
+
+      const pos = await resolveRejectionPosition(
+        tenantId, existing.employeeId, (existing as any).currentStep, isFullAdmin,
+      )
+      const { step: rejectedAtStep, roleName: rejectedByRoleName } = pos
+      const positionText = formatRejectionPosition(pos.step, pos.roleName, pos.totalSteps)
+
       const leaveRequest = await db.leaveRequest.update({
         where: { id: leaveId },
         data: {
           status: 'rejected',
           rejectedDate: new Date(),
           ...(rejectedBy ? { rejectedBy: parseInt(rejectedBy) } : {}),
-          ...(rejectionReason ? { rejectionReason } : {}),
+          ...(remark ? { rejectionReason: remark } : {}),
+          ...(rejectedAtStep !== null ? { rejectedAtStep } : {}),
+          ...(rejectedByRoleName ? { rejectedByRoleName } : {}),
         },
       })
       await db.notification.create({
@@ -662,7 +680,7 @@ export async function PATCH(request: NextRequest) {
           userId: 0,
           userEmail: existing.Employee.email,
           title: 'Leave Rejected',
-          message: `Your ${existing.leaveType} leave (${fromStr} – ${toStr}) was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
+          message: `Your ${existing.leaveType} leave (${fromStr} – ${toStr}) was rejected${positionText}.${remark ? ` Reason: ${remark}` : ''}`,
           type: 'error',
           link: '',
           entityType: 'leave',

@@ -6,6 +6,7 @@ import {
   resolveStepRecipients,
 } from '@/lib/services/approval-scope'
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveRejectionPosition, formatRejectionPosition } from '@/lib/services/rejection-position'
 
 export const dynamic = 'force-dynamic'
 
@@ -386,14 +387,23 @@ export async function PATCH(request: NextRequest) {
 
     // ── REJECT ──
     if (action === 'reject') {
+      // Snapshot the chain position — see src/lib/services/rejection-position.ts
+      const pos = await resolveRejectionPosition(
+        tenantId, tourRequest.employeeId, (tourRequest as any).currentStep, isFullAdmin,
+      )
+      const positionText = formatRejectionPosition(pos.step, pos.roleName, pos.totalSteps)
+
       await db.tourRequest.update({
         where: { id: parseInt(id) },
-        data: { status: 'rejected', rejectedBy: approverEmployeeId, rejectedDate: new Date(), rejectionReason: rejectionReason || null, updatedAt: new Date() },
+        data: { status: 'rejected', rejectedBy: approverEmployeeId, rejectedDate: new Date(),
+          rejectionReason: rejectionReason || null,
+          rejectedAtStep: pos.step, rejectedByRoleName: pos.roleName,
+          updatedAt: new Date() },
       })
       await db.notification.create({
         data: { userId: 0, userEmail: tourRequest.Employee.email || '',
           title: 'Tour Request Rejected',
-          message: `Your tour to ${tourRequest.destination} (${fromStr} – ${toStr}) was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
+          message: `Your tour to ${tourRequest.destination} (${fromStr} – ${toStr}) was rejected${positionText}.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
           type: 'error', link: '', entityType: 'tour', entityId: parseInt(id) },
       }).catch(() => {})
       return NextResponse.json({ success: true, message: 'Tour request rejected' })

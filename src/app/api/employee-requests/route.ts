@@ -6,6 +6,7 @@ import {
   resolveStepRecipients,
 } from '@/lib/services/approval-scope'
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveRejectionPosition, formatRejectionPosition } from '@/lib/services/rejection-position'
 
 export const dynamic = 'force-dynamic'
 
@@ -450,6 +451,12 @@ export async function PATCH(request: NextRequest) {
 
     // ── REJECT: always final ──────────────────────────────────────
     if (action === 'reject') {
+      // Snapshot the chain position — see src/lib/services/rejection-position.ts
+      const pos = await resolveRejectionPosition(
+        tenantId, existing.employeeId, (existing as any).currentStep, isFullAdmin,
+      )
+      const positionText = formatRejectionPosition(pos.step, pos.roleName, pos.totalSteps)
+
       const updated = await db.employeeRequest.update({
         where: { id: parseInt(id) },
         data: {
@@ -457,6 +464,8 @@ export async function PATCH(request: NextRequest) {
           rejectedBy: approvedBy ? parseInt(approvedBy) : null,
           rejectedDate: new Date(),
           rejectionNote: rejectionNote || '',
+          rejectedAtStep: pos.step,
+          rejectedByRoleName: pos.roleName,
           updatedAt: new Date(),
         },
       })
@@ -467,7 +476,7 @@ export async function PATCH(request: NextRequest) {
           userId: existing.employeeId,
           userEmail: existing.Employee.email,
           title: 'Request Rejected',
-          message: `Your request "${existing.subject}" was rejected.${rejectionNote ? ` Reason: ${rejectionNote}` : ''}`,
+          message: `Your request "${existing.subject}" was rejected${positionText}.${rejectionNote ? ` Reason: ${rejectionNote}` : ''}`,
           type: 'error',
           link: 'my-requests',
           entityType: 'request',

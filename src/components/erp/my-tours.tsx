@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, X, MapPin, Calendar, RefreshCw, Plane, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { rejectionPositionLabel } from '@/lib/rejection-position-format';
 
 interface TourRequest {
   id: number;
@@ -206,6 +207,11 @@ export default function MyTours() {
                     <span className="font-semibold text-[#f5a623]">{Number(tr.days)} day{Number(tr.days) > 1 ? 's' : ''}</span>
                   </div>
                   <p className="text-[11px] text-[#5a6878] mt-1">{tr.purpose}</p>
+                  {rejectionPositionLabel((tr as any).rejectedAtStep, (tr as any).rejectedByRoleName) && (
+                    <p className="text-[10px] text-[#ff3d3d] font-semibold mt-1">
+                      Rejected at {rejectionPositionLabel((tr as any).rejectedAtStep, (tr as any).rejectedByRoleName)}
+                    </p>
+                  )}
                   {tr.rejectionReason && (
                     <p className="text-[10px] text-[#ff3d3d] mt-1">Reason: {tr.rejectionReason}</p>
                   )}

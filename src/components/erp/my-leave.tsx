@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   CalendarDays, Clock, CheckCircle2, XCircle, Plus, Trash2,
-  CalendarRange, FileCheck, RefreshCw, AlertTriangle, Paperclip
+  CalendarRange, FileCheck, RefreshCw, AlertTriangle, Paperclip, MessageSquare
 } from 'lucide-react';
+import { rejectionPositionLabel } from '@/lib/rejection-position-format';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -400,7 +401,15 @@ export default function MyLeave() {
                   <td className="py-2.5 px-3 text-[#8899aa]">{fmtDate(r.fromDate)}</td>
                   <td className="py-2.5 px-3 text-[#8899aa]">{fmtDate(r.toDate)}</td>
                   <td className="py-2.5 px-3 text-[#e2e8f0] font-semibold">{r.days}</td>
-                  <td className="py-2.5 px-3 text-[#8899aa] max-w-[160px] truncate" title={r.reason}>{r.reason || '—'}</td>
+                  <td className="py-2.5 px-3 max-w-[160px]">
+                    <div className="text-[#8899aa] truncate" title={r.reason}>{r.reason || '—'}</div>
+                    {r.status === 'Rejected' && r.rejectionReason && (
+                      <div className="flex items-start gap-1 text-[9px] text-[#ff3d3d] mt-1" title={r.rejectionReason}>
+                        <MessageSquare size={9} className="mt-[1px] shrink-0" />
+                        <span className="line-clamp-2">{r.rejectionReason}</span>
+                      </div>
+                    )}
+                  </td>
                   <td className="py-2.5 px-3 text-[#8899aa]">{fmtDate(r.appliedDate || r.createdAt)}</td>
                   <td className="py-2.5 px-3">
                     <span className={`vc-badge ${statusBadge(r.status)}`}>{r.status}</span>
@@ -408,6 +417,13 @@ export default function MyLeave() {
                       <div className="text-[9px] text-[#00d4ff] font-semibold mt-1">
                         Awaiting {r.approvalStage.approverRole}
                         {r.approvalStage.totalSteps > 1 ? ` · Step ${r.approvalStage.currentStep}/${r.approvalStage.totalSteps}` : ''}
+                      </div>
+                    )}
+                    {/* Where it was rejected. Absent on rows that predate this
+                        feature, which fall back to the bare status badge. */}
+                    {r.status === 'Rejected' && rejectionPositionLabel(r.rejectedAtStep, r.rejectedByRoleName) && (
+                      <div className="text-[9px] text-[#ff3d3d] font-semibold mt-1">
+                        Rejected at {rejectionPositionLabel(r.rejectedAtStep, r.rejectedByRoleName)}
                       </div>
                     )}
                   </td>

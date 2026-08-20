@@ -319,6 +319,12 @@ model LeaveRequest {
   rejectedBy          Int?
   rejectedDate        DateTime?
   rejectionReason     String?
+  // Which chain step rejected, and the approver role's name at that step.
+  // Captured at rejection time because the chain can be edited afterwards —
+  // resolving the role later could name whoever holds the step TODAY rather
+  // than who actually rejected it.
+  rejectedAtStep      Int?
+  rejectedByRoleName  String?
   isDeleted           Boolean   @default(false)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime
@@ -882,6 +888,8 @@ model EmployeeRequest {
   rejectedBy     Int?
   rejectedDate   DateTime?
   rejectionNote  String?
+  rejectedAtStep      Int?
+  rejectedByRoleName  String?
   isDeleted      Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime
@@ -1094,6 +1102,8 @@ model TourRequest {
   rejectedBy      Int?
   rejectedDate    DateTime?
   rejectionReason String?
+  rejectedAtStep      Int?
+  rejectedByRoleName  String?
   isDeleted       Boolean   @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime
