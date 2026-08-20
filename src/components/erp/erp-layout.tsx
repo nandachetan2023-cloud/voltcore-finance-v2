@@ -1,6 +1,7 @@
 'use client';
 
 import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed } from '@/store/erp-store';
+import { resolveNotificationTarget as resolveTarget, TYPE_COLOR } from '@/lib/notification-routing';
 import React, { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
@@ -386,78 +387,21 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
     } catch {}
   };
 
-  // Map entityType → module IDs: [adminModule, selfServiceModule]
-  // Admin/approver sees the management module; employee sees their self-service module.
-  const ENTITY_MODULE_MAP: Record<string, { admin: string; self: string }> = {
-    leave:      { admin: 'leave',           self: 'my-leave' },
-    tour:       { admin: 'tour-requests',   self: 'tour-requests' },
-    request:    { admin: 'requests',        self: 'my-requests' },
-    attendance: { admin: 'attendance',      self: 'my-attendance' },
-    payroll:    { admin: 'payroll',         self: 'my-payslips' },
-    notice:     { admin: 'notice-board',    self: 'my-notices' },
-    onboarding: { admin: 'onboarding-approvals', self: 'onboarding' },
-  };
-
-  const isApprovalRequestNotification = (notif: any) => {
-    if (notif.entityType !== 'request') return false;
-    const text = `${notif.title || ''} ${notif.message || ''}`.toLowerCase();
-    return (
-      text.includes('approval required') ||
-      text.includes('needs your approval') ||
-      text.includes('requires your approval') ||
-      text.includes('new general request') ||
-      text.includes('new advance payment') ||
-      text.includes('no approver found') ||
-      text.includes('escalated')
-    );
-  };
-
-  const resolveNotificationTarget = (notif: any): string | null => {
-    if (notif.link && isModuleAllowed(notif.link, allowedModules)) {
-      return notif.link;
-    }
-
-    const mapping = ENTITY_MODULE_MAP[notif.entityType as string];
-    if (!mapping) return null;
-
-    const shouldPreferAdminModule = userRole === 'admin' || isApprovalRequestNotification(notif);
-    const preferred = shouldPreferAdminModule ? mapping.admin : mapping.self;
-    const fallback = shouldPreferAdminModule ? mapping.self : mapping.admin;
-
-    if (isModuleAllowed(preferred, allowedModules)) return preferred;
-    if (isModuleAllowed(fallback, allowedModules)) return fallback;
-    return null;
-  };
+  // ENTITY_MODULE_MAP / resolveNotificationTarget live in @/lib/notification-routing
+  // so the bell and the Notifications module always agree on the destination.
+  // They were duplicated here once and drifted, which sent leave approvers to
+  // their own My Portal page instead of the approval queue.
+  const resolveNotificationTarget = (notif: any): string | null =>
+    resolveTarget(notif, userRole, allowedModules);
 
   const handleNotificationClick = async (notif: any) => {
     // Navigate to the relevant module — do NOT mark as read (user must explicitly click "Mark as Read")
     setShowNotifications(false);
 
+    // Returns null only when the recipient can reach neither the approver nor
+    // the self-service module, in which case there is nowhere to go.
     const targetModule = resolveNotificationTarget(notif);
-    if (targetModule) {
-      setActiveModule(targetModule as any);
-      return;
-    }
-
-    const entityType = notif.entityType as string;
-    const mapping = ENTITY_MODULE_MAP[entityType];
-    if (!mapping) return; // no known module for this type
-
-    const isAdmin = userRole === 'admin';
-    // Prefer admin module for admins, self-service for employees.
-    // But always check access first — fall back to the other if not allowed.
-    const preferred  = isAdmin ? mapping.admin : mapping.self;
-    const fallback   = isAdmin ? mapping.self  : mapping.admin;
-
-    const canPreferred = isModuleAllowed(preferred, allowedModules);
-    const canFallback  = isModuleAllowed(fallback,  allowedModules);
-
-    if (canPreferred) {
-      setActiveModule(preferred as any);
-    } else if (canFallback) {
-      setActiveModule(fallback as any);
-    }
-    // If neither is accessible, do nothing (notification is still marked read)
+    if (targetModule) setActiveModule(targetModule as any);
   };
 
   useEffect(() => {
@@ -521,10 +465,7 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
                 ) : (
                   notifications.map((notif, idx) => {
                     const targetModule = resolveNotificationTarget(notif);
-                    const typeColor: Record<string, string> = {
-                      info: '#00d4ff', success: '#00e676', warning: '#f5a623', error: '#ff3d3d',
-                    };
-                    const borderColor = typeColor[notif.type] || '#5a6878';
+                    const borderColor = TYPE_COLOR[notif.type] || '#5a6878';
                     return (
                       <div
                         key={idx}

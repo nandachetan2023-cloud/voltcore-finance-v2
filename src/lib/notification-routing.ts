@@ -37,22 +37,40 @@ export interface RoutableNotification {
 }
 
 /**
- * An approval-shaped request notification belongs in the APPROVER's queue even
- * when the recipient is not a full admin — a scoped approver receiving "needs
- * your approval" should land on the management view, not their own requests.
- * Detected from the wording the approval routes generate.
+ * An approval-shaped notification belongs in the APPROVER's queue even when the
+ * recipient is not a full admin — a scoped approver receiving "needs your
+ * approval" should land on the management view, not their own requests.
+ *
+ * Every module writes approver-bound notifications with the same vocabulary
+ * ("Approval Required", "Approval Needed", "Escalated", "New Leave Request"…)
+ * and requester-bound ones with the second person ("Your leave was rejected",
+ * "Leave Approved ✓"), so the wording is the signal. This is deliberately not
+ * limited to entityType 'request': leave and tour approvals are routed the same
+ * way, and restricting it to one entity type sent approvers to their own
+ * self-service page instead of the approval queue.
  */
 export function isApprovalRequestNotification(notif: RoutableNotification): boolean {
-  if (notif.entityType !== 'request') return false
-  const text = `${notif.title || ''} ${notif.message || ''}`.toLowerCase()
+  if (!notif.entityType || !ENTITY_MODULE_MAP[notif.entityType]) return false
+  const title = (notif.title || '').toLowerCase()
+  const text = `${title} ${notif.message || ''}`.toLowerCase()
+
+  // Second-person phrasing means the recipient is the requester, not an
+  // approver — checked first because "Your leave ... requires approval" would
+  // otherwise match the approver patterns below.
+  if (/\byour\b/.test(text) && !/requires your approval|needs your approval/.test(text)) {
+    return false
+  }
+
   return (
     text.includes('approval required') ||
+    text.includes('approval needed') ||
     text.includes('needs your approval') ||
     text.includes('requires your approval') ||
-    text.includes('new general request') ||
-    text.includes('new advance payment') ||
     text.includes('no approver found') ||
-    text.includes('escalated')
+    text.includes('escalated') ||
+    // "New Leave Request", "New Tour Request", "New General Request",
+    // "New Advance Payment" — all addressed to whoever must action it.
+    title.startsWith('new ')
   )
 }
 
