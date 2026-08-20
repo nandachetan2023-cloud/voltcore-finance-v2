@@ -9,6 +9,7 @@ import {
 } from '@/lib/services/approval-scope'
 import { runLeaveAutoApproval } from '@/lib/services/leave-auto-approval'
 import { resolveRejectionPosition, formatRejectionPosition } from '@/lib/services/rejection-position'
+import { resolveAdvance, informOptionalSteps, type ChainStepLike } from '@/lib/services/approval-flow'
 
 export const dynamic = 'force-dynamic'
 
@@ -457,6 +458,9 @@ export async function POST(request: NextRequest) {
             employeeCode: true,
             firstName: true,
             lastName: true,
+            // Needed to tell the requester when a fully-optional chain approves
+            // their request outright at submission time.
+            email: true,
           },
         },
       },
@@ -490,7 +494,44 @@ export async function POST(request: NextRequest) {
       } else {
         // Non-level-1 → chain is guaranteed to exist (pre-checked above)
         const chain = await getLeaveApprovalChain(tenantId, requesterUser?.orgRoleId)
-        const step1 = chain!.steps[0]
+        // A leading step whose "Approval required" box is unticked is skipped:
+        // the request starts at the first step that actually needs a decision.
+        const start = resolveAdvance(chain!.steps as ChainStepLike[], 1, true)
+
+        // Everything before that first required step is informational.
+        await informOptionalSteps(
+          db, tenantId, start.informed, leaveRequest.employeeId, leaveRequest.id, notifMsg,
+        )
+
+        if (start.fullyApproved) {
+          // No step in the chain requires anyone's approval, so there is nobody
+          // to wait for — approving is the honest outcome of that configuration.
+          await db.leaveRequest.update({
+            where: { id: leaveRequest.id },
+            data: { status: 'approved', approvedDate: new Date() },
+          }).catch(() => {})
+          await db.notification.create({
+            data: { userId: 0, userEmail: leaveRequest.Employee?.email || '',
+              title: 'Leave Approved ✓',
+              message: `Your leave request was approved automatically — its approval chain has no steps requiring approval.`,
+              type: 'success', link: '', entityType: 'leave', entityId: leaveRequest.id },
+          }).catch(() => {})
+          return NextResponse.json({
+            success: true,
+            data: { ...leaveRequest, status: 'approved' },
+            message: 'Leave request approved — no approval steps were required.',
+          }, { status: 201 })
+        }
+
+        // Park the request on the first required step rather than assuming 1.
+        if (start.nextStep && start.nextStep !== 1) {
+          await db.leaveRequest.update({
+            where: { id: leaveRequest.id },
+            data: { currentStep: start.nextStep },
+          }).catch(() => {})
+        }
+
+        const step1 = chain!.steps.find(s => s.stepNumber === start.nextStep) || chain!.steps[0]
         // Scoped fan-out: only approvers whose role scope covers this employee.
         const { recipients, escalated, note } = await findScopedApprovers(
           db, tenantId, step1.approverRoleId, leaveRequest.employeeId,
@@ -709,8 +750,18 @@ export async function PATCH(request: NextRequest) {
 
     const currentStep = (existing as any).currentStep || 1
     const totalSteps = chain?.steps.length || 1
-    // Full admin finalizes immediately (top authority); otherwise final at last step.
-    const isLastStep = !chain || currentStep >= totalSteps || isFullAdmin
+
+    // Where does this go once the current step is satisfied? Steps whose
+    // "Approval required" box is unticked are informational: their approvers
+    // are told, but the request does not wait for them.
+    // See src/lib/services/approval-flow.ts
+    const advance = chain
+      ? resolveAdvance(chain.steps as ChainStepLike[], currentStep, false)
+      : { nextStep: null, informed: [] as ChainStepLike[], fullyApproved: true }
+
+    // Full admin finalizes immediately (top authority); otherwise final once no
+    // required step remains.
+    const isLastStep = !chain || advance.fullyApproved || isFullAdmin
 
     if (isLastStep) {
       // Final approval
@@ -734,11 +785,22 @@ export async function PATCH(request: NextRequest) {
           entityId: leaveId,
         },
       }).catch(() => {})
+
+      // Optional steps between here and the end of the chain never got to act,
+      // so tell them for information. Skipped when an admin overrode the chain:
+      // the chain was not walked, so nothing was "passed through".
+      if (chain && tenantId && !isFullAdmin) {
+        await informOptionalSteps(
+          db, tenantId, advance.informed, existing.employeeId, leaveId,
+          `${empName}'s ${existing.leaveType} leave (${fromStr} – ${toStr}) has been fully approved.`,
+        )
+      }
       return NextResponse.json({ success: true, data: leaveRequest, fullyApproved: true })
     }
 
-    // Intermediate step — advance to next
-    const nextStep = currentStep + 1
+    // Intermediate step — advance to the next REQUIRED step, stepping over any
+    // informational ones in between.
+    const nextStep = advance.nextStep ?? currentStep + 1
     const leaveRequest = await db.leaveRequest.update({
       where: { id: leaveId },
       data: {
@@ -749,6 +811,15 @@ export async function PATCH(request: NextRequest) {
         ...(approvedBy ? { approvedBy: parseInt(approvedBy) } : {}),
       },
     })
+
+    // Optional steps between the one just approved and the next required one
+    // are informed, not awaited.
+    if (chain && tenantId) {
+      await informOptionalSteps(
+        db, tenantId, advance.informed, existing.employeeId, leaveId,
+        `${empName}'s ${existing.leaveType} leave (${fromStr} – ${toStr}) passed step ${currentStep}.`,
+      )
+    }
 
     // Notify employee of partial approval
     await db.notification.create({

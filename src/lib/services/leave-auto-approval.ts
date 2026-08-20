@@ -27,9 +27,14 @@
  *
  * Rows whose `stepEnteredAt` is NULL (submitted before the column existed) fall
  * back to `appliedDate`, so they are not immortal.
+ *
+ * Steps whose "Approval required" box is unticked are informational and are
+ * never waited on, so the timer hands off to the next REQUIRED step and treats
+ * "no required step remains" as the final step for escalation purposes.
  */
 import { superadminDb } from '@/lib/superadmin-db'
 import { resolveStepRecipients } from '@/lib/services/approval-scope'
+import { resolveAdvance, informOptionalSteps, type ChainStepLike } from '@/lib/services/approval-flow'
 
 /** How long one step may sit unactioned before it is passed automatically. */
 export const AUTO_APPROVE_AFTER_MS = 24 * 60 * 60 * 1000
@@ -139,10 +144,13 @@ async function sweep(db: any, tenantId: string, now: Date): Promise<AutoApproval
 
       const currentStep = leave.currentStep || 1
       const totalSteps = chain.steps.length
+      // Optional steps are informational and are never waited on, so the timer
+      // hands off to the next REQUIRED step. See approval-flow.ts.
+      const advance = resolveAdvance(chain.steps as ChainStepLike[], currentStep, false)
       const empName = `${leave.Employee?.firstName || ''} ${leave.Employee?.lastName || ''}`.trim() || 'An employee'
       const range = `${fmt(leave.fromDate)} – ${fmt(leave.toDate)}`
 
-      if (currentStep >= totalSteps) {
+      if (advance.fullyApproved) {
         // FINAL step expired. Auto-approving here would grant leave with no
         // human approval at all, so escalate and leave it pending instead.
         const escalatedAt = await claim(db, leave, now)
@@ -160,11 +168,18 @@ async function sweep(db: any, tenantId: string, now: Date): Promise<AutoApproval
         continue
       }
 
-      // Intermediate step expired — advance one step.
-      const nextStep = currentStep + 1
+      // Intermediate step expired — advance to the next required step.
+      const nextStep = advance.nextStep ?? currentStep + 1
       const claimed = await claim(db, leave, now, nextStep, currentStep)
       if (!claimed) continue // another sweep got there first
       result.advanced++
+
+      // Optional steps stepped over on the way get an FYI, same as a manual
+      // approval would send.
+      await informOptionalSteps(
+        db, tenantId, advance.informed, leave.employeeId, leave.id,
+        `${empName}'s ${leave.leaveType} leave (${range}) passed step ${currentStep}.`,
+      )
 
       // Tell the requester.
       await db.notification.create({

@@ -7,6 +7,7 @@ import {
 } from '@/lib/services/approval-scope'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveRejectionPosition, formatRejectionPosition } from '@/lib/services/rejection-position'
+import { resolveAdvance, informOptionalSteps, type ChainStepLike } from '@/lib/services/approval-flow'
 
 export const dynamic = 'force-dynamic'
 
@@ -281,6 +282,9 @@ export async function POST(request: NextRequest) {
         Employee: {
           select: {
             firstName: true, lastName: true,
+            // Needed to tell the requester when a fully-optional chain approves
+            // their request outright at submission time.
+            email: true,
             Department: { select: { name: true } },
           },
         },
@@ -315,7 +319,40 @@ export async function POST(request: NextRequest) {
       } else {
         // Non-level-1 → chain is guaranteed to exist (pre-checked above)
         const chain = await getChainForRole(tenantId, requesterUser?.orgRoleId)
-        const step1 = chain!.steps[0]
+        // Skip any leading informational steps. See approval-flow.ts.
+        const start = resolveAdvance(chain!.steps as ChainStepLike[], 1, true)
+        await informOptionalSteps(
+          db, tenantId, start.informed, parseInt(employeeId), req.id,
+          `${empName} submitted: "${subject}"`, 'request',
+        )
+
+        if (start.fullyApproved) {
+          // Nobody's approval is required by this chain.
+          await db.employeeRequest.update({
+            where: { id: req.id },
+            data: { status: 'approved', approvedDate: new Date(), updatedAt: new Date() },
+          }).catch(() => {})
+          await db.notification.create({
+            data: { userId: parseInt(employeeId), userEmail: req.Employee.email || '',
+              title: 'Request Approved ✓',
+              message: `Your request "${subject}" was approved automatically — its approval chain has no steps requiring approval.`,
+              type: 'success', link: 'my-requests', entityType: 'request', entityId: req.id },
+          }).catch(() => {})
+          return NextResponse.json({
+            success: true,
+            data: { ...req, status: 'approved' },
+            message: 'Request approved — no approval steps were required.',
+          }, { status: 201 })
+        }
+
+        if (start.nextStep && start.nextStep !== 1) {
+          await db.employeeRequest.update({
+            where: { id: req.id },
+            data: { currentStep: start.nextStep, updatedAt: new Date() },
+          }).catch(() => {})
+        }
+
+        const step1 = chain!.steps.find(s => s.stepNumber === start.nextStep) || chain!.steps[0]
         // Scoped fan-out: only approvers whose role scope covers this employee.
         const { recipients, escalated, note } = await findApproversForRole(
           db, tenantId, step1.approverRoleId, parseInt(employeeId),
@@ -507,9 +544,15 @@ export async function PATCH(request: NextRequest) {
     const currentStep = existing.currentStep || 1
     const totalSteps = chain?.steps.length || 1
 
+    // Steps with "Approval required" unticked are informational: their approvers
+    // are told but the request does not wait. See approval-flow.ts.
+    const advance = chain
+      ? resolveAdvance(chain.steps as ChainStepLike[], currentStep, false)
+      : { nextStep: null, informed: [] as ChainStepLike[], fullyApproved: true }
+
     // The full admin finalizes immediately (top authority — overrides the rest of
-    // the chain). Otherwise it's final only once the last chain step is approved.
-    const isLastStep = !chain || currentStep >= totalSteps || isFullAdmin
+    // the chain). Otherwise it's final once no required step remains.
+    const isLastStep = !chain || advance.fullyApproved || isFullAdmin
 
     if (isLastStep) {
       // Final approval — mark as approved, store approvedAmount if provided
@@ -529,6 +572,15 @@ export async function PATCH(request: NextRequest) {
           updatedAt: new Date(),
         },
       })
+
+      // Optional steps after this point never got to act — tell them.
+      if (chain && tenantId && !isFullAdmin) {
+        await informOptionalSteps(
+          db, tenantId, advance.informed, existing.employeeId, parseInt(id),
+          `${empName}'s request "${existing.subject}" has been fully approved.`,
+          'request',
+        )
+      }
 
       // Build notification message — mention adjusted amount if different from requested
       let approvalMessage = `Your request "${existing.subject}" has been fully approved.`;
@@ -558,8 +610,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: true, data: updated, fullyApproved: true })
     }
 
-    // Intermediate approval — advance to next step
-    const nextStep = currentStep + 1
+    // Intermediate approval — advance to the next REQUIRED step.
+    const nextStep = advance.nextStep ?? currentStep + 1
+    if (chain && tenantId) {
+      await informOptionalSteps(
+        db, tenantId, advance.informed, existing.employeeId, parseInt(id),
+        `${empName}'s request "${existing.subject}" passed step ${currentStep}.`,
+        'request',
+      )
+    }
 
     // Persist approvedAmount if the approver adjusted it, so the next
     // approver sees the correct amount. Use null explicitly so existing

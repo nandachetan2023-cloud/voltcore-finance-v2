@@ -7,6 +7,7 @@ import {
 } from '@/lib/services/approval-scope'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveRejectionPosition, formatRejectionPosition } from '@/lib/services/rejection-position'
+import { resolveAdvance, informOptionalSteps, type ChainStepLike } from '@/lib/services/approval-flow'
 
 export const dynamic = 'force-dynamic'
 
@@ -220,7 +221,7 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       },
       include: {
-        Employee: { select: { employeeCode: true, firstName: true, lastName: true } },
+        Employee: { select: { employeeCode: true, firstName: true, lastName: true, email: true } },
       },
     })
 
@@ -251,7 +252,40 @@ export async function POST(request: NextRequest) {
       } else {
         const chain = await getTourApprovalChain(tenantId, requesterUser?.orgRoleId)
         if (chain && chain.steps.length > 0) {
-          const step1 = chain.steps[0]
+          // Skip any leading informational steps — start at the first step that
+          // actually needs a decision. See approval-flow.ts.
+          const start = resolveAdvance(chain.steps as ChainStepLike[], 1, true)
+          await informOptionalSteps(
+            db, tenantId, start.informed, tourRequest.employeeId, tourRequest.id, notifMsg, 'tour',
+          )
+
+          if (start.fullyApproved) {
+            // Nobody's approval is required by this chain.
+            await db.tourRequest.update({
+              where: { id: tourRequest.id },
+              data: { status: 'approved', approvedDate: new Date(), updatedAt: new Date() },
+            }).catch(() => {})
+            await db.notification.create({
+              data: { userId: 0, userEmail: tourRequest.Employee.email || '',
+                title: 'Tour Request Approved ✓',
+                message: `Your tour to ${destination} (${fromStr} – ${toStr}) was approved automatically — its approval chain has no steps requiring approval.`,
+                type: 'success', link: '', entityType: 'tour', entityId: tourRequest.id },
+            }).catch(() => {})
+            return NextResponse.json({
+              success: true,
+              data: { ...tourRequest, status: 'approved' },
+              message: 'Tour request approved — no approval steps were required.',
+            }, { status: 201 })
+          }
+
+          if (start.nextStep && start.nextStep !== 1) {
+            await db.tourRequest.update({
+              where: { id: tourRequest.id },
+              data: { currentStep: start.nextStep, updatedAt: new Date() },
+            }).catch(() => {})
+          }
+
+          const step1 = chain.steps.find(s => s.stepNumber === start.nextStep) || chain.steps[0]
           // Scoped fan-out: only approvers whose role scope covers this employee.
           const { recipients, escalated, note } = await findScopedApprovers(
             db, tenantId, step1.approverRoleId, tourRequest.employeeId,
@@ -424,8 +458,14 @@ export async function PATCH(request: NextRequest) {
 
     const currentStep = tourRequest.currentStep || 1
     const totalSteps = chain?.steps.length || 1
-    // Full admin finalizes immediately (top authority); otherwise final at last step.
-    const isLastStep = !chain || currentStep >= totalSteps || isFullAdmin
+    // Steps with "Approval required" unticked are informational: their approvers
+    // are told but the request does not wait. See approval-flow.ts.
+    const advance = chain
+      ? resolveAdvance(chain.steps as ChainStepLike[], currentStep, false)
+      : { nextStep: null, informed: [] as ChainStepLike[], fullyApproved: true }
+    // Full admin finalizes immediately (top authority); otherwise final once no
+    // required step remains.
+    const isLastStep = !chain || advance.fullyApproved || isFullAdmin
 
     if (isLastStep) {
       // Final approval
@@ -439,15 +479,29 @@ export async function PATCH(request: NextRequest) {
           message: `Your tour to ${tourRequest.destination} (${fromStr} – ${toStr}) has been approved. These days will count as paid attendance.`,
           type: 'success', link: '', entityType: 'tour', entityId: parseInt(id) },
       }).catch(() => {})
+      if (chain && tenantId && !isFullAdmin) {
+        await informOptionalSteps(
+          db, tenantId, advance.informed, tourRequest.employeeId, parseInt(id),
+          `${empName}'s tour to ${tourRequest.destination} (${fromStr} – ${toStr}) has been approved.`,
+          'tour',
+        )
+      }
       return NextResponse.json({ success: true, message: 'Tour request approved', fullyApproved: true })
     }
 
-    // Intermediate step — advance to next
-    const nextStep = currentStep + 1
+    // Intermediate step — advance to the next REQUIRED step.
+    const nextStep = advance.nextStep ?? currentStep + 1
     await db.tourRequest.update({
       where: { id: parseInt(id) },
       data: { currentStep: nextStep, approvedBy: approverEmployeeId, updatedAt: new Date() },
     })
+    if (chain && tenantId) {
+      await informOptionalSteps(
+        db, tenantId, advance.informed, tourRequest.employeeId, parseInt(id),
+        `${empName}'s tour to ${tourRequest.destination} (${fromStr} – ${toStr}) passed step ${currentStep}.`,
+        'tour',
+      )
+    }
 
     // Notify employee of partial approval
     await db.notification.create({

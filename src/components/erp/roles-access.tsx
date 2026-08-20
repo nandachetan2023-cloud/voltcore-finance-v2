@@ -658,7 +658,12 @@ function ChainsPanel({ chains, roles, onRefresh }: {
                               </select>
                             </div>
                             <div className="flex items-end pb-1">
-                              <label className="flex items-center gap-1.5 cursor-pointer">
+                              <label
+                                className="flex items-center gap-1.5 cursor-pointer"
+                                title={step.isRequired
+                                  ? 'The request waits here for this role to approve.'
+                                  : 'Informational only — this role is notified, but the request moves straight on to the next required step.'}
+                              >
                                 <input type="checkbox" checked={step.isRequired} onChange={e => updateTreeStep(step.roleId, 'isRequired', e.target.checked)} className="accent-[#f5a623]" />
                                 <span className="text-[10px] text-[#8899aa]">Required</span>
                               </label>
@@ -723,7 +728,7 @@ function ChainsPanel({ chains, roles, onRefresh }: {
                         <ArrowRight size={12} className="text-[#2e3a48]" />
                         <div className="flex flex-col items-center gap-0.5">
                           <div className="px-3 py-1.5 rounded-lg text-[10px] font-semibold border" style={role ? { background: `${role.color}15`, color: role.color, borderColor: `${role.color}40` } : { background: '#252e3a', color: '#5a6878', borderColor: '#2e3a48' }}>{step.stepNumber}. {role?.name || '?'}</div>
-                          <div className="text-[9px] text-[#5a6878]">{step.scope === 'universal' ? 'any dept' : step.scope.replace('same_', '')}{!step.isRequired && ' · optional'}</div>
+                          <div className="text-[9px] text-[#5a6878]">{step.scope === 'universal' ? 'any dept' : step.scope.replace('same_', '')}{!step.isRequired && ' · informed only'}</div>
                         </div>
                       </div>
                     );
