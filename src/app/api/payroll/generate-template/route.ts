@@ -191,6 +191,42 @@ export async function GET(request: NextRequest) {
       const attendance = attendanceMap.get(employee.id) || { present: 0, leaveDays: 0 };
       const advance = advanceMap.get(employee.id) || 0;
 
+      // ── Wages, from the employee master ────────────────────────────────
+      // These two columns drive every downstream calculation (see
+      // calculate-from-template: it REJECTS a row whose BASIC WAGES/DAY or
+      // MONTHLY WORKING DAYS is blank). They used to ship blank for every
+      // employee, so the wages an admin had set on the employee record were
+      // never carried into the sheet and had to be retyped by hand.
+      //
+      // MONTHLY WORKING DAYS is the divisor the calculator uses, and it depends
+      // on the employee's type — mirror that here so the sheet agrees with what
+      // the calculator would do:
+      //   Fixed         → the site's monthlyWorkingDays
+      //   Non-Fixed OT1 → the site's otType1Divisor
+      //   Non-Fixed OT2 → the site's otType2Divisor
+      const isFixed = (employee.employmentType || '').toLowerCase() === 'fixed';
+      const workingDays = isFixed
+        ? (employee.Branch?.monthlyWorkingDays || 26)
+        : (employee.otType === 2
+            ? (employee.Branch?.otType2Divisor || 26)
+            : (employee.Branch?.otType1Divisor || 26));
+
+      // BASIC WAGES/DAY: an explicit dailyWage on the employee wins — it is the
+      // compliance "daily rate of wages" and is meant to be used verbatim.
+      // Otherwise derive it from the monthly gross over the same divisor the
+      // calculator will use, so gross ÷ days × days round-trips.
+      const grossSalary = employee.monthlyGrossSalary
+        ? parseFloat(employee.monthlyGrossSalary.toString())
+        : 0;
+      const explicitDailyWage = employee.dailyWage
+        ? parseFloat(employee.dailyWage.toString())
+        : 0;
+      const basicWagesPerDay = explicitDailyWage > 0
+        ? explicitDailyWage
+        : (grossSalary > 0 && workingDays > 0
+            ? Math.round((grossSalary / workingDays) * 100) / 100
+            : '');
+
       const row = worksheet.addRow([
         index + 1,               // col 0: SL NO.
         employee.employeeCode,   // col 1: EMPLOYEE ID
@@ -217,8 +253,8 @@ export async function GET(request: NextRequest) {
         '', // V: ACTUAL OT HRS (USER INPUT)
         '', // W: ACTUAL OT AMOUNT (CALCULATED)
         '', // X: GROSS EARN WAGES (CALCULATED)
-        '', // Y: BASIC WAGES/DAY (USER INPUT)
-        '', // Z: MONTHLY WORKING DAYS (USER INPUT)
+        basicWagesPerDay, // Y: BASIC WAGES/DAY (auto-filled from employee master)
+        workingDays,      // Z: MONTHLY WORKING DAYS (auto-filled from the site)
         '', // AA: OT HRS (USER INPUT)
         '', // AB: ATTENDANCE (USER INPUT)
         '', // AC: PH (USER INPUT)
@@ -249,11 +285,23 @@ export async function GET(request: NextRequest) {
       asCell.style = editableAutoFillStyle;
       asCell.note = 'Auto-filled from approved advance payment requests. You can edit this value if needed.';
 
+      // Wage columns (Light Green): auto-filled from the employee master and the
+      // site's working-day settings, but still editable for a one-off override.
+      // col 26=Y(BASIC WAGES/DAY), col 27=Z(MONTHLY WORKING DAYS)
+      const wageCell = row.getCell(26);
+      wageCell.style = editableAutoFillStyle;
+      wageCell.note = explicitDailyWage > 0
+        ? 'Auto-filled from the daily wage on the employee record. You can edit this value if needed.'
+        : 'Auto-filled: monthly gross salary ÷ monthly working days. You can edit this value if needed.';
+
+      const daysCell = row.getCell(27);
+      daysCell.style = editableAutoFillStyle;
+      daysCell.note = 'Auto-filled from this site’s working-day settings for the employee’s type. You can edit this value if needed.';
+
       // User input columns (Yellow):
-      // col 21=T(PH DAYS), col 23=V(OT HRS), col 26=Y(BASIC WAGES/DAY),
-      // col 27=Z(MONTHLY WORKING DAYS), col 28=AA(OT HRS), col 29=AB(ATTENDANCE),
-      // col 30=AC(PH), col 47=AT(ARREARS)
-      const userInputColumns = [21, 23, 26, 27, 28, 29, 30, 47];
+      // col 21=T(PH DAYS), col 23=V(OT HRS), col 28=AA(OT HRS),
+      // col 29=AB(ATTENDANCE), col 30=AC(PH), col 47=AT(ARREARS)
+      const userInputColumns = [21, 23, 28, 29, 30, 47];
       userInputColumns.forEach(col => {
         const cell = row.getCell(col);
         cell.style = userInputStyle;
