@@ -141,7 +141,7 @@ export default function AttendanceRulesModule() {
   }
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4">
       <div className="vc-panel">
         <div className="vc-panel-header">
           <Shield size={16} className="text-[#a78bfa]" />
@@ -229,7 +229,7 @@ export default function AttendanceRulesModule() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Create Attendance Rule</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
@@ -318,7 +318,7 @@ export default function AttendanceRulesModule() {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Edit Attendance Rule</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
@@ -407,7 +407,7 @@ export default function AttendanceRulesModule() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2"><AlertTriangle size={20} className="text-[#ff3d3d]" /> Delete Attendance Rule</DialogTitle></DialogHeader>
           <p className="text-[13px] text-[#8899aa]">Are you sure you want to delete this attendance rule? This action cannot be undone.</p>
           <DialogFooter className="gap-2">

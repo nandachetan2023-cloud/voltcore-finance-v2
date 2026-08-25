@@ -294,10 +294,10 @@ function LeaveLedger({ records, employees, leavePolicies }: {
                     <div className="font-semibold text-[#e2e8f0]">{emp.name}</div>
                     <div className="text-[9px] text-[#5a6878]">{emp.empId} · {emp.site}</div>
                   </td>
-                  {byType.map((t, ti) => (
-                    <td key={`${t.type}-${ti}`} className="py-2.5 px-2 text-center">
+                  {byType.map(t => (
+                    <td key={t.type} className="py-2.5 px-2 text-center">
                       <div className="text-[11px] font-bold" style={{ color: TYPE_COLORS[t.type] || '#e2e8f0' }}>
-                        {isNaN(t.remaining) ? '—' : t.remaining}
+                        {t.remaining}
                       </div>
                       <div className="text-[9px] text-[#5a6878]">/ {t.allocated}</div>
                     </td>
@@ -313,11 +313,11 @@ function LeaveLedger({ records, employees, leavePolicies }: {
                     <td colSpan={leaveTypes.length + 4} className="px-6 py-3">
                       {/* Per-type breakdown */}
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
-                        {byType.filter(t => t.allocated > 0).map((t, ti) => {
+                        {byType.filter(t => t.allocated > 0).map(t => {
                           const pct = t.allocated > 0 ? Math.min(100, Math.round((t.approved / t.allocated) * 100)) : 0;
                           const color = TYPE_COLORS[t.type] || '#5a6878';
                           return (
-                            <div key={`${t.type}-${ti}`} className="bg-[#0f1318] border border-[#1e2530] rounded-lg p-2.5">
+                            <div key={t.type} className="bg-[#0f1318] border border-[#1e2530] rounded-lg p-2.5">
                               <div className="flex items-center justify-between mb-1.5">
                                 <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color }}>{t.type}</span>
                                 <span className="text-[9px] text-[#5a6878]">{t.policyName}</span>
@@ -788,7 +788,7 @@ export default function LeaveModule() {
   if (loading) return <LoadingSkeleton />;
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4">
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Clock} label="Pending Requests" value={pendingCount} color="#ffab40" />
@@ -905,7 +905,7 @@ export default function LeaveModule() {
 
       {/* Create Leave Dialog */}
       <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) { setForm(EMPTY_FORM); setFieldErrors({}); } }}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
               <Plus size={16} /> New Leave Request
@@ -1032,7 +1032,7 @@ export default function LeaveModule() {
 
       {/* Approval chain not configured — block error dialog */}
       <Dialog open={!!blockError} onOpenChange={() => setBlockError(null)}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
+        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
               <AlertTriangle size={16} /> Cannot Create Leave Request

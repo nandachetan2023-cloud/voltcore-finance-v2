@@ -48,7 +48,7 @@ interface PayrollFormData {
 const MONTHS = ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12'];
 const emptyForm: PayrollFormData = { empId: '', month: '', days: 26, basic: 0, hra: 0, ot: 0, gross: 0, pf: 0, esi: 0, tds: 0, netPay: 0, status: 'Pending' };
 
-const formatCurrency = (val: number) => '₹' + (val ?? 0).toLocaleString('en-IN');
+const formatCurrency = (val: number) => '₹' + val.toLocaleString('en-IN');
 const formatLakhs = (val: number) => {
   if (val >= 10000000) return '₹' + (val / 10000000).toFixed(2) + 'Cr';
   if (val >= 100000) return '₹' + (val / 100000).toFixed(1) + 'L';
@@ -299,7 +299,7 @@ export default function PayrollModule() {
   );
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={TrendingUp} label="Total Gross" value={formatLakhs(stats.gross)} color="#f5a623" subtitle="This month" />
         <StatCard icon={TrendingDown} label="Net Disbursed" value={formatLakhs(stats.net)} color="#00e676" subtitle="After deductions" />
@@ -362,7 +362,7 @@ export default function PayrollModule() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Create Payroll Entry</DialogTitle></DialogHeader>{dialogContent()}
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Create Payroll Entry</DialogTitle></DialogHeader>{dialogContent()}
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('create')}>{submitting ? 'Creating...' : 'Create Entry'}</Button>
@@ -372,7 +372,7 @@ export default function PayrollModule() {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Edit Payroll Entry</DialogTitle></DialogHeader>{dialogContent()}
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Edit Payroll Entry</DialogTitle></DialogHeader>{dialogContent()}
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setEditOpen(false)}>Cancel</Button>
             <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('edit')}>{submitting ? 'Saving...' : 'Save Changes'}</Button>
@@ -382,7 +382,7 @@ export default function PayrollModule() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Delete Payroll Entry</DialogTitle></DialogHeader>
           <div className="flex items-start gap-3 py-2">
             <div className="w-10 h-10 rounded-full bg-[#ff3d3d]/15 flex items-center justify-center shrink-0 mt-0.5"><AlertTriangle size={20} className="text-[#ff3d3d]" /></div>

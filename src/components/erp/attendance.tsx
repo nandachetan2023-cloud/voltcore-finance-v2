@@ -724,7 +724,7 @@ export default function AttendanceModule() {
   );
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Users} label="Present" value={presentToday} color="#00e676" />
         <StatCard icon={UserX} label="Absent" value={absent} color="#ff3d3d" />

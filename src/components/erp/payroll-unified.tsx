@@ -12,7 +12,7 @@ export default function PayrollUnified() {
   const [activeView, setActiveView] = useState<ViewMode>('non-compliance');
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4">
       {/* Tab Navigation */}
       <div className="flex items-center gap-2 bg-[#161c24] border border-[#252e3a] rounded-lg p-1">
         <button

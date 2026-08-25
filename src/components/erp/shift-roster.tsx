@@ -599,7 +599,7 @@ export default function ShiftRosterModule() {
   );
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4">
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Clock} label="Total Shifts" value={stats.totalShifts} color="#f5a623" />

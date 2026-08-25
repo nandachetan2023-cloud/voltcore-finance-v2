@@ -273,7 +273,7 @@ export default function HolidaysModule() {
   if (loading) return <LoadingSkeleton />;
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -418,7 +418,7 @@ export default function HolidaysModule() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#0f1419] border-[#252e3a] text-[#e2e8f0] max-w-md">
+        <DialogContent className="bg-[#0f1419] border-[#252e3a] text-[#e2e8f0] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[16px] font-bold">Add New Holiday</DialogTitle>
           </DialogHeader>
@@ -508,7 +508,7 @@ export default function HolidaysModule() {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#0f1419] border-[#252e3a] text-[#e2e8f0] max-w-md">
+        <DialogContent className="bg-[#0f1419] border-[#252e3a] text-[#e2e8f0] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[16px] font-bold">Edit Holiday</DialogTitle>
           </DialogHeader>
@@ -596,7 +596,7 @@ export default function HolidaysModule() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#0f1419] border-[#252e3a] text-[#e2e8f0] max-w-md">
+        <DialogContent className="bg-[#0f1419] border-[#252e3a] text-[#e2e8f0] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[16px] font-bold">Delete Holiday</DialogTitle>
           </DialogHeader>
