@@ -67,7 +67,7 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   'fin-petty-cash-replenishment': () => import('@/components/erp/fin-petty-cash-replenishment'),
   'fin-payment-advices': () => import('@/components/erp/fin-payment-advices'),
   'fin-payments': () => import('@/components/erp/fin-payments'),
-  'fin-assets': () => import('@/components/erp/fin-assets'),
+  // 'fin-assets' excluded per request - do not disturb Assets module
   'fin-profit-loss': () => import('@/components/erp/fin-profit-loss'),
   'fin-expense-claims': () => import('@/components/erp/fin-expense-claims'),
   'fin-site-expenses': () => import('@/components/erp/fin-site-expenses'),

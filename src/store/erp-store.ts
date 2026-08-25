@@ -78,7 +78,7 @@ export type ModuleId =
   | 'finance-dashboard' | 'chart-of-accounts' | 'ledger' | 'accounts-payable' | 'accounts-receivable'
   | 'journal-entries' | 'bank-cash' | 'taxation' | 'budget' | 'financial-reports'
    | 'finance' | 'create-journal-entry' | 'fin-sites' | 'fin-jobs' | 'fin-parties'
-   | 'fin-invoices' | 'fin-payments' | 'fin-payment-advices' | 'fin-petty-cash' | 'fin-assets' | 'fin-profit-loss' | 'fin-bank-reconciliation'
+    | 'fin-invoices' | 'fin-payments' | 'fin-payment-advices' | 'fin-petty-cash' | 'fin-profit-loss' | 'fin-bank-reconciliation'
     | 'fin-purchase-orders' | 'fin-credit-notes' | 'fin-expense-claims' | 'fin-site-expenses' | 'fin-work-orders' | 'fin-client-follow-up'
     | 'fin-petty-cash-custodian' | 'fin-petty-cash-approval-queue' | 'fin-petty-cash-replenishment'
   | 'fin-user-management'
@@ -261,7 +261,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'fin-expense-claims', icon: 'Wallet', label: 'Expense Claims', section: 'Expense Management' },
     { id: 'fin-site-expenses', icon: 'FileSpreadsheet', label: 'Site Expenses', section: 'Expense Management' },
 
-    { id: 'fin-assets', icon: 'Package', label: 'Fixed Assets', section: 'Fixed Assets' },
+    // fin-assets excluded per request - do not disturb Assets module
 
     { id: 'taxation', icon: 'Scale', label: 'GST / TDS', section: 'Compliance' },
 
