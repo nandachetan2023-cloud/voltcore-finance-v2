@@ -21,6 +21,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const pdb = getDbForRequest(request)
     const { lineItems, bids, ...data } = body
+    if (!data.rfqNo) {
+      const year = new Date().getFullYear()
+      const count = (await pdb.finRFQ.count()) + 1
+      data.rfqNo = `RFQ/${year}/${String(count).padStart(3, '0')}`
+    }
     const record = await pdb.finRFQ.create({
       data: {
         ...data,

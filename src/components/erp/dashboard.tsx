@@ -467,13 +467,13 @@ export default function Dashboard() {
                             <ProgressBar pct={p.progress} />
                           </div>
                           <span className="text-[10px] text-[#8899aa] w-8 text-right" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                            {p.progress}%
+                            {(Number.isFinite(p.progress) ? p.progress : 0)}%
                           </span>
                         </div>
                       </div>
                       <div className="text-center">
                         <span className="text-[12px] font-semibold text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                          {p.people}
+                          {(Number.isFinite(p.people) ? p.people : 0)}
                         </span>
                       </div>
                       <div className="flex justify-end">
@@ -676,7 +676,7 @@ export default function Dashboard() {
                   <div className="absolute left-[7px] top-2 bottom-2 w-px bg-[#252e3a]" />
                   <div className="space-y-4">
                     {data.recentAttendance.map((item) => (
-                      <div key={item.id} className="flex items-start gap-3 relative">
+                      <div key={`att-${item.id}`} className="flex items-start gap-3 relative">
                         <div
                           className={`w-[15px] h-[15px] rounded-full border-2 shrink-0 mt-0.5 z-[1] flex items-center justify-center ${
                             item.status === 'Present'
@@ -707,7 +707,7 @@ export default function Dashboard() {
                       </div>
                     ))}
                     {data.leaves.recent.map((item) => (
-                      <div key={item.id} className="flex items-start gap-3 relative">
+                      <div key={`leave-${item.id}`} className="flex items-start gap-3 relative">
                         <div className="w-[15px] h-[15px] rounded-full border-2 border-[#a78bfa] bg-[#a78bfa]/20 shrink-0 mt-0.5 z-[1] flex items-center justify-center">
                           <div className="w-[5px] h-[5px] rounded-full bg-[#a78bfa]" />
                         </div>

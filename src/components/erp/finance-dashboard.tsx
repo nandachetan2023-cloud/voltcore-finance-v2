@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import {
   DollarSign, TrendingUp, AlertCircle, TrendingDown,
   ArrowUpRight, Package, Banknote,
-  Calendar, Users, FileText, PieChart as PieIcon, Plus, Loader2, ClipboardList, Wallet, Receipt, BarChart3, RefreshCw
+  Calendar, Users, FileText, PieChart as PieIcon, Plus, Loader2, ClipboardList, Wallet, Receipt, BarChart3, RefreshCw, PieChart, MapPin, Briefcase
 } from 'lucide-react';
 import { useERPStore } from '@/store/erp-store';
 import { DonutChart, BarChart } from './finance-charts';
@@ -31,6 +31,11 @@ interface DashboardData {
   apSummary: { pending: number; paid: number; overdue: number; total: number };
   arSummary: { pending: number; received: number; overdue: number; total: number };
   monthlyTrends: { month: string; revenue: number; expenses: number; cashIn: number; cashOut: number }[];
+  sitePnl: { siteCode: string; siteName: string; revenue: number; cost: number; profit: number }[];
+  jobPnl: { jobCode: string; revenue: number; cost: number; profit: number }[];
+  pendingApprovals: { module: string; ref: string; status: string }[];
+  pendingApprovalCount: number;
+  taxDue: { gstTotal: number; gstCount: number; tdsTotal: number; tdsCount: number };
   syncedAt?: string;
 }
 
@@ -70,11 +75,17 @@ export default function FinancialHome() {
     }
   }
 
-  // Initial load + auto-refresh every 60s
+  // Initial load + auto-refresh every 1 hour (3600s). Refreshes immediately
+  // whenever the Finance Assistant (or any data change) fires `finance:data-changed`.
   useEffect(() => {
     load();
-    const interval = setInterval(() => load(), 60000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => load(), 3600000);
+    const onDataChanged = () => load(false);
+    window.addEventListener('finance:data-changed', onDataChanged);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('finance:data-changed', onDataChanged);
+    };
   }, []);
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
@@ -112,6 +123,22 @@ export default function FinancialHome() {
     { name: 'Payment Advices', value: k.totalPaymentAdvices, color: '#00d4ff' },
     { name: 'Purchase Orders', value: k.totalPOValue, color: '#f5a623' },
   ];
+
+  // Extra donuts (Stage E)
+  const budgetDonut = [
+    { name: 'Budget Planned', value: k.totalBudgetPlanned || 0, color: '#00d4ff' },
+    { name: 'Budget Actual', value: k.totalBudgetActual || 0, color: '#f5a623' },
+    { name: 'Budget Variance', value: Math.abs(k.budgetVariance) || 0, color: '#ff3d3d' },
+  ].filter(d => d.value > 0);
+  const budgetTotal = budgetDonut.reduce((s, d) => s + d.value, 0);
+
+  const poInvoiceDonut = [
+    { name: 'PO Open', value: k.openPOValue || 0, color: '#f5a623' },
+    { name: 'Site Invoices', value: k.totalSiteInvoiceValue || 0, color: '#a78bfa' },
+    { name: 'AR Collected', value: data.arSummary.received || 0, color: '#00e676' },
+    { name: 'AP Owed', value: data.apSummary.pending || 0, color: '#ff3d3d' },
+  ].filter(d => d.value > 0);
+  const poInvoiceTotal = poInvoiceDonut.reduce((s, d) => s + d.value, 0);
 
   const apPct = (k.accountsPayablePaid + k.accountsPayablePending) > 0
     ? (k.accountsPayablePaid / (k.accountsPayablePaid + k.accountsPayablePending)) * 100 : 0;
@@ -183,6 +210,77 @@ export default function FinancialHome() {
         })}
       </div>
 
+      {/* Section 1 widgets: Site-wise P&L, Job-wise Profitability, Pending Approvals, GST/TDS due */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+        {/* Site-wise P&L */}
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <MapPin size={15} className="text-[#00d4ff]" />
+            <span className="text-[12px] font-semibold text-[#e2e8f0]">Site-wise P&L</span>
+          </div>
+          <div className="space-y-2">
+            {(data.sitePnl || []).slice(0, 4).map(s => (
+              <div key={s.siteCode} className="flex items-center justify-between text-[11px]">
+                <span className="text-[#8899aa] truncate">{s.siteName}</span>
+                <span className={`font-mono font-semibold ${s.profit >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{fmtCr(s.profit)}</span>
+              </div>
+            ))}
+            {(data.sitePnl || []).length === 0 && <div className="text-[10px] text-[#5a6878]">No site data</div>}
+          </div>
+        </div>
+        {/* Job-wise Profitability */}
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Briefcase size={15} className="text-[#a78bfa]" />
+            <span className="text-[12px] font-semibold text-[#e2e8f0]">Job-wise Profitability</span>
+          </div>
+          <div className="space-y-2">
+            {(data.jobPnl || []).slice(0, 4).map(j => (
+              <div key={j.jobCode} className="flex items-center justify-between text-[11px]">
+                <span className="text-[#8899aa] truncate">{j.jobCode}</span>
+                <span className={`font-mono font-semibold ${j.profit >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{fmtCr(j.profit)}</span>
+              </div>
+            ))}
+            {(data.jobPnl || []).length === 0 && <div className="text-[10px] text-[#5a6878]">No job data</div>}
+          </div>
+        </div>
+        {/* Pending Approvals */}
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ClipboardList size={15} className="text-[#f5a623]" />
+            <span className="text-[12px] font-semibold text-[#e2e8f0]">Pending Approvals</span>
+            <span className="ml-auto text-[10px] bg-[#f5a623]/20 text-[#f5a623] px-2 py-0.5 rounded-full">{data.pendingApprovalCount || 0}</span>
+          </div>
+          <div className="space-y-1.5">
+            {(data.pendingApprovals || []).slice(0, 5).map((p, i) => (
+              <div key={i} className="flex items-center justify-between text-[10px]">
+                <span className="text-[#8899aa]">{p.module} · {p.ref}</span>
+                <span className="text-[#f5a623] capitalize">{p.status}</span>
+              </div>
+            ))}
+            {(data.pendingApprovals || []).length === 0 && <div className="text-[10px] text-[#5a6878]">All caught up</div>}
+          </div>
+        </div>
+        {/* GST / TDS due */}
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Receipt size={15} className="text-[#ff3d3d]" />
+            <span className="text-[12px] font-semibold text-[#e2e8f0]">GST / TDS Due</span>
+          </div>
+          <div className="space-y-2 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[#8899aa]">GST ({data.taxDue?.gstCount || 0})</span>
+              <span className="font-mono font-semibold text-[#ff3d3d]">{fmtCr(data.taxDue?.gstTotal)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[#8899aa]">TDS</span>
+              <span className="font-mono font-semibold text-[#f5a623]">{fmtCr(data.taxDue?.tdsTotal)}</span>
+            </div>
+            <div className="text-[10px] text-[#5a6878] pt-1">Compliance due from open invoices</div>
+          </div>
+        </div>
+      </div>
+
       {/* Charts Row — AR/AP donut + Module comparison bars */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* AR vs AP Donut */}
@@ -207,6 +305,28 @@ export default function FinancialHome() {
           <div className="h-[200px] flex items-center justify-center">
             <BarChart data={moduleBars} />
           </div>
+        </div>
+      </div>
+
+      {/* Stage E: extra donuts — budget health + invoicing/PO mix */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <PieChart size={16} className="text-[#00d4ff]" />
+            <span className="text-[13px] font-semibold text-[#e2e8f0]">Budget — Planned vs Actual</span>
+          </div>
+          {budgetDonut.length === 0 ? (
+            <div className="h-[150px] flex items-center justify-center text-[#5a6878] text-xs">No budget data</div>
+          ) : <DonutChart data={budgetDonut} total={budgetTotal} />}
+        </div>
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <PieChart size={16} className="text-[#f5a623]" />
+            <span className="text-[13px] font-semibold text-[#e2e8f0]">Invoicing & Cash Mix</span>
+          </div>
+          {poInvoiceDonut.length === 0 ? (
+            <div className="h-[150px] flex items-center justify-center text-[#5a6878] text-xs">No PO/invoice data</div>
+          ) : <DonutChart data={poInvoiceDonut} total={poInvoiceTotal} />}
         </div>
       </div>
 

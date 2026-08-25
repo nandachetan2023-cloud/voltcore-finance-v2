@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < records.length; i++) {
       const r = records[i]
-      if (!r.taxType || !r.period) { skipped++; continue }
+      if (!r.taxType || !r.period || !r.siteCode || !r.jobCode || !r.poNo || !r.department || !r.projectManager) { skipped++; continue }
       try {
         const data = {
           taxType: r.taxType, period: r.period, amount: Number(r.amount) || 0,
@@ -23,6 +23,8 @@ export async function POST(request: NextRequest) {
           paidDate: r.paidDate ? new Date(r.paidDate) : null,
           paymentRef: r.paymentRef || null, status: r.status || 'Pending',
           remarks: r.remarks || null,
+          siteCode: r.siteCode, jobCode: r.jobCode, poNo: r.poNo,
+          costCenter: r.costCenter, department: r.department, projectManager: r.projectManager,
         }
         const existing = await pdb.taxRecord.findFirst({ where: { taxType: r.taxType, period: r.period } })
         if (existing) { await pdb.taxRecord.update({ where: { id: existing.id }, data }); updated++ }

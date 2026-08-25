@@ -1,8 +1,9 @@
 'use client';
 
-import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed } from '@/store/erp-store';
+import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed, getModuleParents } from '@/store/erp-store';
 import React, { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
+import { RoleScopeIndicator } from '@/components/erp/_role-scope-indicator';
 import { FinanceHelpChat } from '@/components/help/finance-help-chat';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useTenantBranding } from '@/hooks/use-tenant-branding';
@@ -15,7 +16,8 @@ import {
   ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileEdit, Landmark, Scale, Target, PieChart,
   Wallet, FileSpreadsheet, ReceiptIndianRupee, BadgeIndianRupee, CircleDollarSign, Undo2,
   ArrowRightLeft, HandCoins, RefreshCw, AlertTriangle, Award, Download, Fingerprint, Shield, Trash2,
-  UserCircle, UserCheck, UserX, FolderOpen, Megaphone, User, Send, Plane
+  UserCircle, UserCheck, UserX, FolderOpen, Megaphone, User, Send, Plane, ListChecks,
+  LogIn, Layers, BadgePercent, ShieldCheck, Recycle
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -27,11 +29,11 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Landmark, Scale, Target, PieChart, Wallet, FileSpreadsheet, ReceiptIndianRupee,
   BadgeIndianRupee, CircleDollarSign, Undo2, ArrowRightLeft, HandCoins, Award, Download,
   Fingerprint, Shield, Trash2, UserCircle, UserCheck, UserX, FolderOpen, Megaphone, Bell, User,
-  AlertTriangle, Send, Plane,
+  AlertTriangle, Send, Plane, ListChecks, LogIn, Layers, BadgePercent, ShieldCheck, Recycle,
 };
 
-const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'fin-payments', 'financial-reports', 'fin-tally-sync', 'fin-sync-config', 'fin-client-follow-up', 'trash'];
-const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'finance', 'sales', 'projects', 'assets', 'system'];
+const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'fin-payments', 'financial-reports', 'fin-client-follow-up', 'trash'];
+const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'sales', 'projects', 'assets', 'system', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'finance-accounts', 'petty-cash', 'mis'];
 
 // ── Error Boundary ──────────────────────────────────────────────
 interface EBProps { children: ReactNode; moduleName: string; onBack: () => void }
@@ -171,6 +173,8 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
     email: string;
     role?: string;
     moduleAccess?: string[];
+    employeeCode?: string;
+    orgRoleName?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -223,6 +227,30 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
     ? allSubModules
     : allSubModules.filter(item => isModuleAllowed(item.id, allowedModules));
 
+  // Group the flat sub-module list into a collapsible tree by its `section`
+  // field (e.g. Masters / Billing / Cash / Assets / Reports), preserving
+  // the order sections first appear in.
+  const sectionGroups = React.useMemo(() => {
+    const order: string[] = [];
+    const map = new Map<string, typeof subModules>();
+    for (const item of subModules) {
+      const key = item.section || 'General';
+      if (!map.has(key)) { map.set(key, []); order.push(key); }
+      map.get(key)!.push(item);
+    }
+    return order.map((key) => ({ section: key, items: map.get(key)! }));
+  }, [subModules]);
+
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  useEffect(() => { setCollapsedSections(new Set()); }, [activeParentModule]);
+  const toggleSection = (section: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section); else next.add(section);
+      return next;
+    });
+  };
+
   const isDemo = userRole === 'demo';
 
   return (
@@ -264,16 +292,52 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
               </button>
               <div className="mx-3 my-2 border-t border-[#252e3a]" />
               <div className="text-[9px] tracking-[2px] uppercase text-[#f5a623] font-bold px-4 py-2">{MODULE_CONFIG[isSubNav ? activeParentModule : activeModule]?.title || activeModule}</div>
-              {isSubNav ? subModules.map(item => {
-                const Icon = ICON_MAP[item.icon] || Zap;
-                const badge = item.id === 'my-notices' ? (unreadNotices > 0 ? unreadNotices : null) : item.badge;
+              {isSubNav && (() => {
+                const otherParents = getModuleParents(activeModule as string)
+                  .filter(p => EXPANDABLE_MODULES.includes(p) && p !== activeParentModule);
+                if (otherParents.length === 0) return null;
                 return (
-                  <button key={item.id} onClick={() => { setActiveModule(item.id as any); setSidebarOpen(false); }}
-                    className={`w-full flex items-center gap-2 px-4 py-[7px] text-left text-[12px] font-medium transition-all duration-150 border-l-[3px] ${activeModule === item.id ? 'text-[#f5a623] border-l-[#f5a623] bg-[#f5a623]/7' : 'text-[#8899aa] border-l-transparent hover:text-[#e2e8f0] hover:bg-[#141920]'}`}>
-                    <Icon size={14} className="w-4 text-center shrink-0" />
-                    <span className="flex-1">{item.label}</span>
-                    {badge && <span className="bg-[#ff3d3d] text-white text-[9px] font-bold px-[5px] py-[1px] rounded-full">{badge > 99 ? '99+' : badge}</span>}
-                  </button>
+                  <div className="px-4 pb-2">
+                    <div className="text-[8px] tracking-[1px] uppercase text-[#5a6878] mb-1">Also in</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {otherParents.map(p => (
+                        <button key={p} onClick={() => { setActiveModule(p as any); setSidebarOpen(false); }}
+                          className="px-2 py-[3px] rounded-md bg-[#1a2028] border border-[#252e3a] text-[10px] text-[#8899aa] hover:border-[#f5a623]/40 hover:text-[#f5a623] transition-colors">
+                          {MODULE_CONFIG[p]?.title || p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+              {isSubNav ? sectionGroups.map(({ section, items }) => {
+                const collapsed = collapsedSections.has(section);
+                const hasMultipleSections = sectionGroups.length > 1;
+                return (
+                  <div key={section}>
+                    {hasMultipleSections && (
+                      <button
+                        onClick={() => toggleSection(section)}
+                        className="w-full flex items-center gap-1.5 px-4 py-[6px] text-left text-[10px] font-bold uppercase tracking-[1px] text-[#5a6878] hover:text-[#8899aa] transition-colors"
+                      >
+                        <ChevronDown size={11} className={`shrink-0 transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`} />
+                        <span className="flex-1">{section}</span>
+                        <span className="text-[9px] text-[#5a6878]/70">{items.length}</span>
+                      </button>
+                    )}
+                    {!collapsed && items.map(item => {
+                      const Icon = ICON_MAP[item.icon] || Zap;
+                      const badge = item.id === 'my-notices' ? (unreadNotices > 0 ? unreadNotices : null) : item.badge;
+                      return (
+                        <button key={item.id} onClick={() => { setActiveModule(item.id as any); setSidebarOpen(false); }}
+                          className={`w-full flex items-center gap-2 py-[7px] text-left text-[12px] font-medium transition-all duration-150 border-l-[3px] ${hasMultipleSections ? 'pl-7 pr-4' : 'px-4'} ${activeModule === item.id ? 'text-[#f5a623] border-l-[#f5a623] bg-[#f5a623]/7' : 'text-[#8899aa] border-l-transparent hover:text-[#e2e8f0] hover:bg-[#141920]'}`}>
+                          <Icon size={14} className="w-4 text-center shrink-0" />
+                          <span className="flex-1">{item.label}</span>
+                          {badge && <span className="bg-[#ff3d3d] text-white text-[9px] font-bold px-[5px] py-[1px] rounded-full">{badge > 99 ? '99+' : badge}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
                 );
               }) : (() => {
                 const modInfo = MAIN_MODULE_MAP[activeModule];
@@ -352,7 +416,13 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
 
   const fetchNotifications = async () => {
     try {
-      const response = await fetch('/api/notifications');
+      let url = '/api/notifications';
+      try {
+        const user = localStorage.getItem('erp_auth_user');
+        const email = user ? JSON.parse(user).email : null;
+        if (email) url += `?userEmail=${encodeURIComponent(email)}`;
+      } catch {}
+      const response = await fetch(url);
       const data = await response.json();
       if (data.success) {
         setNotifications(data.data.notifications || []);
@@ -449,7 +519,8 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
         <p className="text-[10px] text-[#5a6878]">{config?.breadcrumb || ''}</p>
       </div>
       <div className="ml-auto flex items-center gap-2">
-        
+        <RoleScopeIndicator />
+
         {/* Notifications Bell */}
         <div className="relative notifications-container">
           <button 

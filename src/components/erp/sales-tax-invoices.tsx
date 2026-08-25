@@ -130,7 +130,15 @@ export default function SalesTaxInvoices() {
     total: acc.total + it.total,
   }), { taxable: 0, cgst: 0, sgst: 0, igst: 0, total: 0 });
 
-  const openCreate = () => { setEditTarget(null); setForm(EMPTY_FORM); setItems([{ ...EMPTY_ITEM }]); setView('form'); };
+  const generateInvoiceNo = () => {
+    const year = new Date().getFullYear();
+    const existing = new Set(records.map(r => r.invoiceNo));
+    let seq = records.length + 1;
+    let candidate = `SINV/${year}/${String(seq).padStart(3, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `SINV/${year}/${String(seq).padStart(3, '0')}`; }
+    return candidate;
+  };
+  const openCreate = () => { setEditTarget(null); setForm({ ...EMPTY_FORM, invoiceNo: generateInvoiceNo() }); setItems([{ ...EMPTY_ITEM }]); setView('form'); };
   const openEdit = (r: Invoice) => {
     setEditTarget(r);
     setForm({ invoiceNo: r.invoiceNo, invoiceDate: r.invoiceDate?.split('T')[0] || '', dueDate: r.dueDate?.split('T')[0] || '', customerId: r.customerId, placeOfSupply: r.placeOfSupply || '', poNo: r.poNo || '', gstMode: Number(r.igstAmount) > 0 ? 'inter' : 'intra' });
@@ -198,7 +206,7 @@ export default function SalesTaxInvoices() {
             <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">GST Type</label><select value={form.gstMode} onChange={e => { const mode = e.target.value as 'intra' | 'inter'; setForm(p => ({ ...p, gstMode: mode })); setItems(items.map(it => recalcItem(it, mode))); }} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none"><option value="intra">Intra-State (CGST 9% + SGST 9%)</option><option value="inter">Inter-State (IGST 18%)</option></select></div>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Invoice No *</label><input value={form.invoiceNo} onChange={e => setForm(p => ({ ...p, invoiceNo: e.target.value }))} placeholder="UA/25-26/001" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
+            <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Invoice No</label><input value={form.invoiceNo} readOnly placeholder="Auto-generated" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] opacity-60 placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
             <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Invoice Date *</label><input type="date" value={form.invoiceDate} onChange={e => setForm(p => ({ ...p, invoiceDate: e.target.value }))} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" /></div>
             <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">PO No</label><input value={form.poNo} onChange={e => setForm(p => ({ ...p, poNo: e.target.value }))} placeholder="PO-XXXX" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
             <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Place of Supply</label><input value={form.placeOfSupply} onChange={e => setForm(p => ({ ...p, placeOfSupply: e.target.value }))} placeholder="Area / State" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
@@ -268,7 +276,7 @@ export default function SalesTaxInvoices() {
   const creditNotes = filtered.filter(r => r.status === 'Credit Note').length;
 
   // Unique statuses for filter
-  const statuses = [...new Set(records.map(r => r.status))];
+  const statuses = [...new Set(records.map(r => r.status).filter(Boolean))];
 
   return (
     <div className="space-y-4 p-6">

@@ -18,14 +18,14 @@ import ImportWizard, { type ImportField } from './_import-wizard';
 interface Vendor { id: number; name: string; }
 interface RFQLineItem { id: number; description: string; qty: number; unit: string; }
 interface VendorBid { vendorId: number; lineItemId: number; unitPrice: number; leadTime: number; notes: string; compliant: boolean; }
-interface RFQ { id: number; rfqNo: string; description: string; issueDate: string; responseDeadline: string; project: string; notes: string; status: string; vendorIds: number[]; lineItems: RFQLineItem[]; bids: VendorBid[]; }
+interface RFQ { id: number; rfqNo: string; description: string; issueDate: string; responseDeadline: string; project: string; notes: string; status: string; vendorIds?: number[]; lineItems: RFQLineItem[]; bids: VendorBid[]; }
 
 const RFQ_COLUMNS: ExportColumn<RFQ>[] = [
   { header: 'RFQ No', accessor: 'rfqNo' },
   { header: 'Description', accessor: 'description' },
   { header: 'Issue Date', accessor: (r) => r.issueDate?.split('T')[0] ?? '' },
   { header: 'Project', accessor: 'project' },
-  { header: 'Vendors Invited', accessor: (r) => r.vendorIds.length },
+  { header: 'Vendors Invited', accessor: (r) => vendorIdsOf(r).length },
   { header: 'Responses', accessor: (r) => new Set(r.bids.map(b => b.vendorId)).size },
   { header: 'Response Deadline', accessor: (r) => r.responseDeadline?.split('T')[0] ?? '' },
   { header: 'Status', accessor: 'status' },
@@ -99,6 +99,12 @@ function totalBid(vendorId: number, items: RFQLineItem[], bids: VendorBid[]): nu
 
 function vendorName(id: number): string { return VENDORS.find(v => v.id === id)?.name ?? 'Unknown'; }
 
+function vendorIdsOf(r: any): number[] {
+  if (Array.isArray(r.vendorIds)) return r.vendorIds;
+  const fromBids = new Set((r.bids ?? []).map((b: any) => b.vendorId));
+  return [...fromBids].filter((v): v is number => typeof v === 'number');
+}
+
 function getMinPrice(lineItemId: number, bids: VendorBid[]): number {
   return Math.min(...bids.filter(b => b.lineItemId === lineItemId && b.compliant).map(b => b.unitPrice));
 }
@@ -156,16 +162,24 @@ export default function ProcurementRFQ() {
     draft: rfqs.filter(r => r.status === 'Draft').length,
   }), [rfqs]);
 
+  const generateRfqNo = () => {
+    const year = new Date().getFullYear();
+    const existing = new Set(rfqs.map(r => r.rfqNo));
+    let seq = rfqs.length + 1;
+    let candidate = `RFQ/${year}/${String(seq).padStart(3, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `RFQ/${year}/${String(seq).padStart(3, '0')}`; }
+    return candidate;
+  };
   const openCreate = () => {
     setEditTarget(null);
-    setForm({ rfqNo: 'RFQ-' + String(Date.now()).slice(-6), description: '', issueDate: new Date().toISOString().split('T')[0], responseDeadline: '', project: '', notes: '' });
+    setForm({ rfqNo: generateRfqNo(), description: '', issueDate: new Date().toISOString().split('T')[0], responseDeadline: '', project: '', notes: '' });
     setFormVendors([]); setFormLines([EMPTY_LINE()]); setFormSearch(''); setFormOpen(true);
   };
 
   const openEdit = (r: RFQ) => {
     setEditTarget(r);
     setForm({ rfqNo: r.rfqNo, description: r.description, issueDate: r.issueDate, responseDeadline: r.responseDeadline, project: r.project, notes: r.notes });
-    setFormVendors([...r.vendorIds]); setFormLines(r.lineItems.map(li => ({ ...li }))); setFormSearch(''); setFormOpen(true);
+    setFormVendors([...vendorIdsOf(r)]); setFormLines(r.lineItems.map(li => ({ ...li }))); setFormSearch(''); setFormOpen(true);
   };
 
   const saveForm = () => {
@@ -196,8 +210,9 @@ export default function ProcurementRFQ() {
 
   const openDetail = (r: RFQ) => {
     setDetailRfq(r);
-    setActiveVendorTab(r.vendorIds.length > 0 ? r.vendorIds[0] : null);
-    setVendorBidsEdit(r.bids.filter(b => b.vendorId === (r.vendorIds[0] ?? 0)));
+    const ids = vendorIdsOf(r);
+    setActiveVendorTab(ids.length > 0 ? ids[0] : null);
+    setVendorBidsEdit(r.bids.filter(b => b.vendorId === (ids[0] ?? 0)));
     setDetailTab('bids');
     setDetailOpen(true);
   };
@@ -225,7 +240,7 @@ export default function ProcurementRFQ() {
 
   const recommendVendor = (r: RFQ): number | null => {
     if (r.bids.length === 0) return null;
-    const responded = [...new Set(r.bids.map(b => b.vendorId))].filter(v => r.vendorIds.includes(v));
+    const responded = [...new Set(r.bids.map(b => b.vendorId))].filter(v => vendorIdsOf(r).includes(v));
     if (responded.length === 0) return null;
     let best = responded[0]; let bestTotal = totalBid(best, r.lineItems, r.bids);
     for (let i = 1; i < responded.length; i++) {
@@ -336,10 +351,10 @@ export default function ProcurementRFQ() {
                   <tr key={r.id} className="hover:bg-[#141920]">
                     <td className="py-2.5 px-3"><button onClick={() => openDetail(r)} className="text-[#f5a623] font-mono font-medium hover:underline">{r.rfqNo}</button></td>
                     <td className="py-2.5 px-3 text-[#e2e8f0] max-w-[200px] truncate">{r.description}</td>
-                    <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.vendorIds.length}</td>
+                    <td className="py-2.5 px-3 text-[#8899aa] font-mono">{vendorIdsOf(r).length}</td>
                     <td className="py-2.5 px-3">
                       <span className={'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ' + (responded > 0 ? 'bg-[#f5a623]/15 text-[#f5a623]' : 'bg-[#5a6878]/15 text-[#5a6878]')}>
-                        {responded} / {r.vendorIds.length}
+                        {responded} / {vendorIdsOf(r).length}
                       </span>
                     </td>
                     <td className="py-2.5 px-3">
@@ -367,7 +382,7 @@ export default function ProcurementRFQ() {
         <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editTarget ? 'Edit' : 'New'} RFQ</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
-            <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">RFQ No</label><input value={form.rfqNo} onChange={e => setForm({...form, rfqNo: e.target.value})} className="vc-input" /></div>
+            <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">RFQ No</label><input value={form.rfqNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated" /></div>
             <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Issue Date</label><input type="date" value={form.issueDate} onChange={e => setForm({...form, issueDate: e.target.value})} className="vc-input" /></div>
             <div className="col-span-2"><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Description</label><input value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="vc-input" /></div>
             <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Response Deadline</label><input type="date" value={form.responseDeadline} onChange={e => setForm({...form, responseDeadline: e.target.value})} className="vc-input" /></div>
@@ -454,7 +469,7 @@ export default function ProcurementRFQ() {
                 <div className="col-span-2 bg-[#0a0d12] rounded-lg p-3 border border-[#1a2028]">
                   <div className="text-[9px] uppercase tracking-wider text-[#5a6878] font-semibold mb-1">Invited Vendors</div>
                   <div className="flex flex-wrap gap-1.5">
-                    {detailRfq.vendorIds.map(vid => {
+                    {vendorIdsOf(detailRfq).map(vid => {
                       const hasBid = detailRfq.bids.some(b => b.vendorId === vid);
                       return (
                         <span key={vid} className={'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ' + (hasBid ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#5a6878]/15 text-[#5a6878]')}>
@@ -483,7 +498,7 @@ export default function ProcurementRFQ() {
                 <div>
                   {/* Vendor Tabs */}
                   <div className="flex gap-1 mb-3 flex-wrap">
-                    {detailRfq.vendorIds.map(vid => {
+                    {vendorIdsOf(detailRfq).map(vid => {
                       const hasBid = detailRfq.bids.some(b => b.vendorId === vid);
                       const isActive = activeVendorTab === vid;
                       return (
@@ -558,7 +573,7 @@ export default function ProcurementRFQ() {
               {detailTab === 'compare' && (
                 <div>
                   {(() => {
-                    const responded = detailRfq.vendorIds.filter(v => detailRfq.bids.some(b => b.vendorId === v));
+                    const responded = vendorIdsOf(detailRfq).filter(v => detailRfq.bids.some(b => b.vendorId === v));
                     if (responded.length === 0) return <div className="text-center py-8 text-[#5a6878] text-[12px]">No vendor responses yet. Enter bids in the Vendor Bids tab first.</div>;
                     return (
                       <div className="overflow-x-auto border border-[#252e3a] rounded-lg">

@@ -1,12 +1,19 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Plus, Trash2, Loader2, Send, Save, CircleDot, Pencil, Printer, Upload } from 'lucide-react';
+import { FileText, Plus, Trash2, Loader2, Send, Save, CircleDot, Pencil, Printer, Upload, History } from 'lucide-react';
 import { toast } from 'sonner';
 import InvoiceDocument from './fin-invoice-document';
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { FormField, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
+import { SortableTh } from './_table-controls';
+import { FilterBar, type ListFilters } from './_list-filter-bar';
+import { StatusBadge } from './_status-badge';
+import { WorkflowActions, AuditTab } from './_workflow-tabs';
+import { Checkbox } from '@/components/ui/checkbox';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 
 interface Invoice {
   id: number; invoiceNo: string; siteId: number; partyId: number | null; poId?: number | null; jobCode?: string | null;
@@ -14,9 +21,10 @@ interface Invoice {
   grandTotal: number; balanceAmount: number; status: string; description: string | null;
   trackingNo?: string | null; poNo?: string | null; month?: string | null; area?: string | null;
   client?: string | null; financialYear?: string | null;
+  costCenter: string | null; department: string | null; projectManager: string | null;
   tdsDeduction?: number; kpiDeduction?: number; safetyDeduction?: number; otherDeduction?: number;
   afterTdsBalance?: number; receivedAmount?: number; remarks?: string | null;
-  site?: { name: string; location?: string | null; state?: string | null } | null;
+  site?: { name: string; siteCode?: string | null; location?: string | null; state?: string | null } | null;
   party?: { name: string; gstin?: string | null; address?: string | null; state?: string | null } | null;
 }
 interface Site { id: number; name: string; siteCode: string; }
@@ -24,23 +32,29 @@ interface Party { id: number; name: string; }
 interface PoOption { id: number; poNo: string; vendorName: string; }
 
 interface LineItem { id: number; description: string; area: string; month: string; quantity: number; rate: number; }
-interface FormData { invoiceNo: string; siteId: number; partyId: number | null; poId: number | null; jobCode: string; invoiceDate: string; dueDate: string; description: string; status: string; poNo: string; trackingNo: string; }
-const EMPTY_FORM: FormData = { invoiceNo: '', siteId: 0, partyId: null, poId: null, jobCode: '', invoiceDate: '', dueDate: '', description: '', status: 'Unpaid', poNo: '', trackingNo: '' };
+interface FormData { invoiceNo: string; siteId: number; partyId: number | null; poId: number | null; jobCode: string; invoiceDate: string; dueDate: string; description: string; status: string; poNo: string; trackingNo: string; costCenter: string; department: string; projectManager: string; }
+const EMPTY_FORM: FormData = { invoiceNo: '', siteId: 0, partyId: null, poId: null, jobCode: '', invoiceDate: '', dueDate: '', description: '', status: 'Unpaid', poNo: '', trackingNo: '', costCenter: '', department: '', projectManager: '' };
 
 const INVOICE_COLUMNS: ExportColumn<Invoice>[] = [
   { header: 'Invoice No', accessor: 'invoiceNo' },
   { header: 'Tracking No', accessor: 'trackingNo' },
   { header: 'PO No', accessor: 'poNo' },
-  { header: 'Client', accessor: (r) => r.party?.name || r.client || '' },
-  { header: 'Site', accessor: (r) => r.site?.name || '' },
+  { header: 'Client / Party Name', accessor: (r) => r.party?.name || r.client || '' },
+  { header: 'Site Name', accessor: (r) => r.site?.name || '' },
+  { header: 'Site Code', accessor: (r) => r.site?.siteCode ?? '—' },
+  { header: 'Job Code', accessor: 'jobCode' },
+  { header: 'Cost Center', accessor: 'costCenter' },
+  { header: 'Department', accessor: 'department' },
+  { header: 'Project Manager', accessor: 'projectManager' },
   { header: 'Area', accessor: 'area' },
   { header: 'Month', accessor: 'month' },
   { header: 'Invoice Date', accessor: (r) => r.invoiceDate?.split('T')[0] || '' },
+  { header: 'E-Invoice Date', accessor: (r) => r.eInvoiceDate?.split('T')[0] || '' },
   { header: 'Due Date', accessor: (r) => r.dueDate?.split('T')[0] || '' },
   { header: 'Invoice Value', accessor: 'invoiceValue' },
   { header: 'GST Value', accessor: 'gstValue' },
   { header: 'Grand Total', accessor: 'grandTotal' },
-  { header: 'Balance', accessor: 'balanceAmount' },
+  { header: 'Balance Amount', accessor: 'balanceAmount' },
   { header: 'Status', accessor: 'status' },
 ];
 
@@ -48,6 +62,10 @@ const INVOICE_IMPORT_FIELDS: ImportField[] = [
   { key: 'invoiceNo', label: 'Invoice No', required: true },
   { key: 'trackingNo', label: 'Tracking No' },
   { key: 'poNo', label: 'PO No' },
+  { key: 'jobCode', label: 'Job Code' },
+  { key: 'costCenter', label: 'Cost Center' },
+  { key: 'department', label: 'Department' },
+  { key: 'projectManager', label: 'Project Manager' },
   { key: 'client', label: 'Client / Party Name', required: true },
   { key: 'siteName', label: 'Site Name' },
   { key: 'area', label: 'Area' },
@@ -87,11 +105,11 @@ const INVOICE_SAMPLE_ROW: Record<string, string | number> = {
 
 function generateMockInvoices(): Invoice[] {
   return [
-    { id: 1, invoiceNo: 'INV/2024-25/001', siteId: 1, partyId: 1, invoiceDate: '2024-11-20T00:00:00', dueDate: '2025-02-20T00:00:00', invoiceValue: 2500000, gstValue: 450000, grandTotal: 2950000, balanceAmount: 2950000, status: 'Unpaid', description: 'Civil works - Phase 1', trackingNo: 'TRK/24-25/001', poNo: 'PO/2024-25/001', month: 'Nov 2024', area: 'Block A', client: 'NTPC Ltd', site: { name: 'NTPC Rihand Dam Project' }, party: { name: 'Bharat Heavy Electricals Ltd' } },
-    { id: 2, invoiceNo: 'INV/2024-25/002', siteId: 2, partyId: 2, invoiceDate: '2024-12-10T00:00:00', dueDate: '2025-03-10T00:00:00', invoiceValue: 1800000, gstValue: 324000, grandTotal: 2124000, balanceAmount: 1062000, status: 'Partially Paid', description: 'Electrical panel installation', trackingNo: 'TRK/24-25/002', poNo: 'PO/2024-25/002', month: 'Dec 2024', area: 'Main Plant', client: 'BALCO', site: { name: 'BALCO Aluminium Smelter' }, party: { name: 'Tata Projects Ltd' } },
-    { id: 3, invoiceNo: 'INV/2024-25/003', siteId: 3, partyId: 1, invoiceDate: '2025-01-05T00:00:00', dueDate: '2025-04-05T00:00:00', invoiceValue: 3200000, gstValue: 576000, grandTotal: 3776000, balanceAmount: 0, status: 'Paid', description: 'Coal conveyor belt system', trackingNo: 'TRK/24-25/003', poNo: 'PO/2024-25/003', month: 'Jan 2025', area: 'Stockyard', client: 'Coal India Ltd', site: { name: 'Coal India Eastern Coalfield' }, party: { name: 'Bharat Heavy Electricals Ltd' } },
-    { id: 4, invoiceNo: 'INV/2024-25/004', siteId: 4, partyId: 3, invoiceDate: '2025-02-15T00:00:00', dueDate: '2025-05-15T00:00:00', invoiceValue: 4500000, gstValue: 810000, grandTotal: 5310000, balanceAmount: 5310000, status: 'Unpaid', description: 'Smelter expansion works', trackingNo: 'TRK/24-25/004', poNo: 'PO/2024-25/004', month: 'Feb 2025', area: 'Potline Area', client: 'Vedanta Ltd', site: { name: 'Vedanta Jharsuguda Smelter' }, party: { name: 'Larsen & Toubro Ltd' } },
-    { id: 5, invoiceNo: 'INV/2024-25/005', siteId: 5, partyId: 2, invoiceDate: '2025-03-20T00:00:00', dueDate: '2025-06-20T00:00:00', invoiceValue: 1250000, gstValue: 225000, grandTotal: 1475000, balanceAmount: 1475000, status: 'Unpaid', description: 'Commissioning & testing', trackingNo: 'TRK/24-25/005', poNo: 'PO/2024-25/005', month: 'Mar 2025', area: 'Substation', client: 'Hindalco Industries', site: { name: 'Hindalco Mahan Aluminium' }, party: { name: 'Tata Projects Ltd' } },
+    { id: 1, invoiceNo: 'INV/2024-25/001', siteId: 1, partyId: 1, invoiceDate: '2024-11-20T00:00:00', dueDate: '2025-02-20T00:00:00', invoiceValue: 2500000, gstValue: 450000, grandTotal: 2950000, balanceAmount: 2950000, status: 'Unpaid', description: 'Civil works - Phase 1', trackingNo: 'TRK/24-25/001', poNo: 'PO/2024-25/001', jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', month: 'Nov 2024', area: 'Block A', client: 'NTPC Ltd', site: { name: 'NTPC Rihand Dam Project' }, party: { name: 'Bharat Heavy Electricals Ltd' } },
+    { id: 2, invoiceNo: 'INV/2024-25/002', siteId: 2, partyId: 2, invoiceDate: '2024-12-10T00:00:00', dueDate: '2025-03-10T00:00:00', invoiceValue: 1800000, gstValue: 324000, grandTotal: 2124000, balanceAmount: 1062000, status: 'Partially Paid', description: 'Electrical panel installation', trackingNo: 'TRK/24-25/002', poNo: 'PO/2024-25/002', jobCode: 'JOB-2026-002', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'A. Verma', month: 'Dec 2024', area: 'Main Plant', client: 'BALCO', site: { name: 'BALCO Aluminium Smelter' }, party: { name: 'Tata Projects Ltd' } },
+    { id: 3, invoiceNo: 'INV/2024-25/003', siteId: 3, partyId: 1, invoiceDate: '2025-01-05T00:00:00', dueDate: '2025-04-05T00:00:00', invoiceValue: 3200000, gstValue: 576000, grandTotal: 3776000, balanceAmount: 0, status: 'Paid', description: 'Coal conveyor belt system', trackingNo: 'TRK/24-25/003', poNo: 'PO/2024-25/003', jobCode: 'JOB-2026-003', costCenter: 'CC-SIT-003', department: 'Operations', projectManager: 'P. Iyer', month: 'Jan 2025', area: 'Stockyard', client: 'Coal India Ltd', site: { name: 'Coal India Eastern Coalfield' }, party: { name: 'Bharat Heavy Electricals Ltd' } },
+    { id: 4, invoiceNo: 'INV/2024-25/004', siteId: 4, partyId: 3, invoiceDate: '2025-02-15T00:00:00', dueDate: '2025-05-15T00:00:00', invoiceValue: 4500000, gstValue: 810000, grandTotal: 5310000, balanceAmount: 5310000, status: 'Unpaid', description: 'Smelter expansion works', trackingNo: 'TRK/24-25/004', poNo: 'PO/2024-25/004', jobCode: 'JOB-2026-004', costCenter: 'CC-SIT-004', department: 'Projects', projectManager: 'S. Rao', month: 'Feb 2025', area: 'Potline Area', client: 'Vedanta Ltd', site: { name: 'Vedanta Jharsuguda Smelter' }, party: { name: 'Larsen & Toubro Ltd' } },
+    { id: 5, invoiceNo: 'INV/2024-25/005', siteId: 5, partyId: 2, invoiceDate: '2025-03-20T00:00:00', dueDate: '2025-06-20T00:00:00', invoiceValue: 1250000, gstValue: 225000, grandTotal: 1475000, balanceAmount: 1475000, status: 'Unpaid', description: 'Commissioning & testing', trackingNo: 'TRK/24-25/005', poNo: 'PO/2024-25/005', jobCode: 'JOB-2026-005', costCenter: 'CC-SIT-005', department: 'Site Execution', projectManager: 'M. Khan', month: 'Mar 2025', area: 'Substation', client: 'Hindalco Industries', site: { name: 'Hindalco Mahan Aluminium' }, party: { name: 'Tata Projects Ltd' } },
   ];
 }
 
@@ -108,7 +126,28 @@ export default function FinInvoices() {
   const [lines, setLines] = useState<LineItem[]>([{ id: 1, description: '', area: '', month: '', quantity: 1, rate: 0 }]);
   const [submitting, setSubmitting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const tc = useTableControls(records, (r) => `${r.invoiceNo} ${r.trackingNo ?? ''} ${r.poNo ?? ''} ${r.party?.name ?? ''} ${r.client ?? ''} ${r.area ?? ''} ${r.month ?? ''} ${r.status}`);
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [filters, setFilters] = useState<ListFilters>({});
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  const setFilter = (key: keyof ListFilters, value: string) => setFilters((p) => ({ ...p, [key]: value }));
+
+  const filtered = records.filter(r => {
+    if (statusFilter !== 'All' && r.status !== statusFilter) return false;
+    if (filters.site && !`${r.site?.name ?? ''} ${r.site?.siteCode ?? ''}`.toLowerCase().includes(filters.site.toLowerCase())) return false;
+    if (filters.jobCode && !(r.jobCode || '').toLowerCase().includes(filters.jobCode.toLowerCase())) return false;
+    if (filters.poNo && !(r.poNo || '').toLowerCase().includes(filters.poNo.toLowerCase())) return false;
+    if (filters.costCenter && !(r.costCenter || '').toLowerCase().includes(filters.costCenter.toLowerCase())) return false;
+    if (filters.department && !(r.department || '').toLowerCase().includes(filters.department.toLowerCase())) return false;
+    return true;
+  });
+  const tc = useTableControls(filtered, (r) => `${r.invoiceNo} ${r.trackingNo ?? ''} ${r.poNo ?? ''} ${r.party?.name ?? ''} ${r.client ?? ''} ${r.area ?? ''} ${r.month ?? ''} ${r.status}`);
+  const pageIds = tc.pageItems.map(r => r.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id));
+  const toggleRow = (id: number) => setSelected(s => { const next = new Set(s); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const toggleAllOnPage = () => setSelected(s => { const next = new Set(s); pageIds.forEach(id => allPageSelected ? next.delete(id) : next.add(id)); return next; });
+  const INVOICE_STATUSES = ['All', ...new Set(records.map(r => r.status).filter(Boolean))];
 
   const fetch_ = useCallback(async () => {
     setLoading(true);
@@ -138,9 +177,36 @@ export default function FinInvoices() {
     setLoading(false);
   }, []);
   useEffect(() => { fetch_(); }, [fetch_]);
+  useEffect(() => {
+    const onDataChanged = () => fetch_();
+    window.addEventListener('finance:data-changed', onDataChanged);
+    return () => window.removeEventListener('finance:data-changed', onDataChanged);
+  }, [fetch_]);
 
-  const openCreate = () => { setEditTarget(null); setForm(EMPTY_FORM); setLines([{ id: 1, description: '', area: '', month: '', quantity: 1, rate: 0 }]); setView('form'); };
-  const openEdit = (r: Invoice) => { setEditTarget(r); setForm({ invoiceNo: r.invoiceNo, siteId: r.siteId, partyId: r.partyId, poId: r.poId ?? null, jobCode: r.jobCode || '', invoiceDate: r.invoiceDate?.split('T')[0] || '', dueDate: r.dueDate?.split('T')[0] || '', description: r.description || '', status: r.status, poNo: r.poNo || '', trackingNo: r.trackingNo || '' }); setLines([{ id: 1, description: r.description || '', area: '', month: '', quantity: 1, rate: r.invoiceValue }]); setView('form'); };
+  const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<FormData>({
+    invoiceNo: required('Invoice No'),
+    siteId: (v) => (!v) ? 'Site is required' : undefined,
+    partyId: required('Client / Party'),
+    invoiceDate: required('Invoice Date'),
+    dueDate: required('Due Date'),
+    jobCode: required('Job Code'),
+    poNo: required('PO Number'),
+    costCenter: required('Cost Center'),
+    department: required('Department'),
+    projectManager: required('Project Manager'),
+  });
+  const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
+
+  const generateInvoiceNo = () => {
+    const year = new Date().getFullYear();
+    const existing = new Set(records.map(r => r.invoiceNo));
+    let seq = records.length + 1;
+    let candidate = `INV-${year}-${String(seq).padStart(3, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `INV-${year}-${String(seq).padStart(3, '0')}`; }
+    return candidate;
+  };
+  const openCreate = () => { setEditTarget(null); setForm({ ...EMPTY_FORM, invoiceNo: generateInvoiceNo() }); setFormErrors({}); setLines([{ id: 1, description: '', area: '', month: '', quantity: 1, rate: 0 }]); setView('form'); };
+  const openEdit = (r: Invoice) => { setEditTarget(r); setForm({ invoiceNo: r.invoiceNo, siteId: r.siteId, partyId: r.partyId, poId: r.poId ?? null, jobCode: r.jobCode || '', invoiceDate: r.invoiceDate?.split('T')[0] || '', dueDate: r.dueDate?.split('T')[0] || '', description: r.description || '', status: r.status, poNo: r.poNo || '', trackingNo: r.trackingNo || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' }); setFormErrors({}); setLines([{ id: 1, description: r.description || '', area: '', month: '', quantity: 1, rate: r.invoiceValue }]); setView('form'); };
 
   const addLine = () => { setLines([...lines, { id: Date.now(), description: '', area: '', month: '', quantity: 1, rate: 0 }]); };
   const removeLine = (i: number) => { if (lines.length <= 1) return; setLines(lines.filter((_, idx) => idx !== i)); };
@@ -151,11 +217,11 @@ export default function FinInvoices() {
   const grandTotal = invoiceValue + gstValue;
 
   const handleSubmit = async (status: string) => {
-    if (!form.invoiceNo || !form.siteId || !form.invoiceDate || !form.dueDate) { toast.error('Invoice No, Site, dates required'); return; }
+    if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
     setSubmitting(true);
     try {
       const method = editTarget ? 'PUT' : 'POST';
-      const common = { invoiceNo: form.invoiceNo, siteId: form.siteId, partyId: form.partyId, poId: form.poId, jobCode: form.jobCode || null, invoiceDate: new Date(form.invoiceDate), dueDate: new Date(form.dueDate), invoiceValue, gstValue, grandTotal, balanceAmount: grandTotal, description: form.description, status, poNo: form.poNo, trackingNo: form.trackingNo };
+      const common = { invoiceNo: form.invoiceNo, siteId: form.siteId, partyId: form.partyId, poId: form.poId, jobCode: form.jobCode || null, invoiceDate: new Date(form.invoiceDate), dueDate: new Date(form.dueDate), invoiceValue, gstValue, grandTotal, balanceAmount: grandTotal, description: form.description, status, poNo: form.poNo, trackingNo: form.trackingNo, costCenter: form.costCenter || null, department: form.department || null, projectManager: form.projectManager || null };
       const body = editTarget ? { id: editTarget.id, ...common } : common;
       const res = await fetch('/api/fin/invoices', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
@@ -165,6 +231,16 @@ export default function FinInvoices() {
   };
 
   const handleDelete = async (id: number) => { try { const r = await fetch(`/api/fin/invoices?id=${id}`, { method: 'DELETE' }); const j = await r.json(); if (j.success) { toast.success('Deleted'); await fetch_(); } else toast.error(j.error); } catch { toast.error('Network error'); } };
+
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return;
+    try {
+      const ids = [...selected].join(',');
+      const r = await fetch(`/api/fin/invoices?ids=${ids}`, { method: 'DELETE' });
+      const j = await r.json();
+      if (j.success) { toast.success(`Deleted ${j.deleted ?? selected.size} invoice${selected.size === 1 ? '' : 's'}`); setSelected(new Set()); setBulkDeleteOpen(false); await fetch_(); } else toast.error(j.error);
+    } catch { toast.error('Network error'); }
+  };
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
 
@@ -181,11 +257,14 @@ export default function FinInvoices() {
             <h2 className="text-[24px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>Create Site Invoice</h2>
             <p className="text-[11px] text-[#5a6878] mt-0.5">Raise invoice against client for site work completed.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => handleSubmit('Unpaid')} disabled={submitting} className="text-[#f5a623] text-[13px] font-semibold hover:underline underline-offset-4 transition-colors disabled:opacity-50 flex items-center gap-1.5"><Save size={14} /> Save Draft</button>
-            <span className="text-[#252e3a]">|</span>
-            <button onClick={() => handleSubmit('Unpaid')} disabled={submitting} className="text-[#f5a623] text-[13px] font-semibold hover:underline underline-offset-4 transition-colors disabled:opacity-50 flex items-center gap-1.5">{submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={14} />} Submit Invoice</button>
-          </div>
+          <WorkflowActions
+            onSave={() => handleSubmit('Unpaid')}
+            onSubmit={() => handleSubmit('Unpaid')}
+            saving={submitting}
+            submitting={submitting}
+            saveLabel="Save Draft"
+            submitLabel="Submit Invoice"
+          />
         </div>
 
         {/* Status Badges */}
@@ -207,35 +286,44 @@ export default function FinInvoices() {
         {/* Invoice Details */}
         <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-5 space-y-5">
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Client / Party *</label>
-              <select value={form.partyId ?? ''} onChange={e => setForm(p => ({ ...p, partyId: e.target.value ? Number(e.target.value) : null }))} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none">
-                <option value="">Select client...</option>{parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Site *</label>
-              <select value={form.siteId} onChange={e => setForm(p => ({ ...p, siteId: Number(e.target.value) }))} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none">
-                <option value={0}>Select site...</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
+            <FormField label="Client / Party" required error={formErrors.partyId}>
+              <SearchableSelect
+                value={form.partyId ? String(form.partyId) : ''}
+                onChange={v => setField('partyId', v ? Number(v) : null)}
+                options={parties.map(p => ({ value: String(p.id), label: p.name }))}
+                placeholder="Select client..."
+              />
+            </FormField>
+            <FormField label="Site" required error={formErrors.siteId}>
+              <SearchableSelect
+                value={form.siteId ? String(form.siteId) : ''}
+                onChange={v => setField('siteId', v ? Number(v) : 0)}
+                options={sites.map(s => ({ value: String(s.id), label: s.name }))}
+                placeholder="Select site..."
+              />
+            </FormField>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Invoice No *</label><input value={form.invoiceNo} onChange={e => setForm(p => ({ ...p, invoiceNo: e.target.value }))} placeholder="INV-2025-001" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
-            <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Invoice Date *</label><input type="date" value={form.invoiceDate} onChange={e => setForm(p => ({ ...p, invoiceDate: e.target.value }))} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" /></div>
-            <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Due Date *</label><input type="date" value={form.dueDate} onChange={e => setForm(p => ({ ...p, dueDate: e.target.value }))} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" /></div>
-            <div>
-              <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">PO No</label>
-              <select value={form.poId ?? ''} onChange={e => { const id = e.target.value ? Number(e.target.value) : null; const po = purchaseOrders.find(p => p.id === id); setForm(p => ({ ...p, poId: id, poNo: po?.poNo || '' })); }} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none">
-                <option value="">{form.poNo || 'No linked PO...'}</option>
-                {purchaseOrders.map(po => <option key={po.id} value={po.id}>{po.poNo} — {po.vendorName}</option>)}
-              </select>
-            </div>
+            <FormField label="Invoice No" required error={formErrors.invoiceNo}>
+              <input value={form.invoiceNo} readOnly placeholder="Auto-generated" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] opacity-60 placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
+            </FormField>
+            <FormField label="Invoice Date" required error={formErrors.invoiceDate}>
+              <input type="date" value={form.invoiceDate} onChange={e => setField('invoiceDate', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" />
+            </FormField>
+            <FormField label="Due Date" required error={formErrors.dueDate}>
+              <input type="date" value={form.dueDate} onChange={e => setField('dueDate', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" />
+            </FormField>
+            <FormField label="PO Number" required error={formErrors.poNo}>
+              <DatalistField id="fin-inv-po-no" value={form.poNo} onChange={v => setField('poNo', v)} options={[...new Set([...purchaseOrders.map(po => po.poNo), ...records.map(r => r.poNo).filter(Boolean) as string[]])]} placeholder="PO-1001" />
+            </FormField>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Job Code</label><input value={form.jobCode} onChange={e => setForm(p => ({ ...p, jobCode: e.target.value }))} placeholder="JOB-2026-001" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
+            <FormField label="Job Code" required error={formErrors.jobCode}>
+              <DatalistField id="fin-inv-job-code" value={form.jobCode} onChange={v => setField('jobCode', v)} options={[...new Set(records.map(r => r.jobCode).filter(Boolean) as string[])]} placeholder="JOB-2026-001" />
+            </FormField>
           </div>
           <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Description</label><input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Work description..." className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
+          <CostingFields prefix="fin-inv" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
         </div>
 
         {/* Line Items */}
@@ -277,6 +365,20 @@ export default function FinInvoices() {
             <div className="flex items-center gap-1.5"><CircleDot size={12} className="text-[#00e676]" /> GST @18% applied</div>
           </div>
         </div>
+
+        {/* Audit Trail */}
+        <div className="vc-panel">
+          <div className="vc-panel-header"><History size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Audit Trail</span></div>
+          <div className="p-3">
+            <AuditTab
+              currentStatus={editTarget?.status || 'Draft'}
+              entries={[
+                ...(editTarget ? [{ id: 1, date: editTarget.invoiceDate, action: 'Invoice created', by: editTarget.client || '—' }] : []),
+                { id: 2, date: new Date().toISOString(), action: 'Form opened', note: 'Record is being edited / created by the current user.' },
+              ]}
+            />
+          </div>
+        </div>
       </div>
     );
   }
@@ -304,16 +406,48 @@ export default function FinInvoices() {
 
   return (
     <div className="space-y-4 p-6">
+      <FilterBar
+        filters={filters}
+        setFilter={setFilter}
+        options={{
+          sites: sites.map(s => ({ value: s.siteCode || String(s.id), label: `${s.siteCode || s.name}`, sublabel: s.name })),
+          jobs: [...new Set(records.map(r => r.jobCode).filter(Boolean))].map(j => ({ value: j as string, label: j as string })),
+          poNos: [...new Set(records.map(r => r.poNo).filter(Boolean))].map(p => ({ value: p as string, label: p as string })),
+          costCenters: [...new Set(records.map(r => r.costCenter).filter(Boolean))] as string[],
+          departments: [...new Set(records.map(r => r.department).filter(Boolean))] as string[],
+        }}
+        search={tc.search}
+        setSearch={tc.setSearch}
+        searchPlaceholder="Search invoices..."
+      />
       <div className="grid grid-cols-3 gap-3">
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00d4ff]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Total Invoiced</div><div className="text-[20px] font-bold text-[#00d4ff]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>₹{(totalValue / 10000000).toFixed(2)} Cr</div></div>
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#ff3d3d]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Outstanding</div><div className="text-[20px] font-bold text-[#ff3d3d]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>₹{(totalBalance / 10000000).toFixed(2)} Cr</div></div>
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#f5a623]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Invoices</div><div className="text-[20px] font-bold text-[#f5a623]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{records.length}</div></div>
       </div>
 
-      <div className="vc-panel"><div className="vc-panel-header"><FileText size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Site Invoices</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{records.length}</span><div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search invoices..." /></div><div className="flex items-center gap-2 ml-2"><button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={INVOICE_COLUMNS} filename="fin-invoices" /></div><button onClick={openCreate} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Invoice</button></div>
-        <div className="overflow-x-auto"><div className="max-h-[440px] overflow-y-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">{['Tracking No.', 'PO No.', 'Bill No.', 'Client', 'Area', 'Month', 'Bill Date', 'E-Inv Date', 'Invoice Value', 'GST Value', 'Total Inv Value', 'Status', ''].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">{h}</th>)}</tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => <tr key={r.id} onClick={() => setViewInvoice(r)} className="hover:bg-[#141920] cursor-pointer"><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.trackingNo || 'NA'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.poNo || 'NA'}</td><td className="py-2.5 px-3 text-[#f5a623] font-mono font-medium whitespace-nowrap">{r.invoiceNo}</td><td className="py-2.5 px-3 text-[#e2e8f0] max-w-[180px] truncate">{r.party?.name || r.client || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] max-w-[120px] truncate">{r.area || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] whitespace-nowrap">{r.month || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.invoiceDate?.split('T')[0]}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.eInvoiceDate?.split('T')[0] || '—'}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-mono text-right whitespace-nowrap">₹{(r.invoiceValue ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3 text-[#ffab40] font-mono text-right whitespace-nowrap">₹{(r.gstValue ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3 text-[#00e676] font-mono text-right font-medium whitespace-nowrap">₹{(r.grandTotal ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3"><span className={`vc-badge ${r.status === 'Paid' ? 'bg-[#00e676]/15 text-[#00e676]' : r.status === 'Unpaid' ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : r.status === 'Cancelled' ? 'bg-[#5a6878]/15 text-[#5a6878]' : 'bg-[#ffab40]/15 text-[#ffab40]'}`}>{r.status}</span></td><td className="py-2.5 px-3" onClick={e => e.stopPropagation()}><div className="flex gap-1"><button onClick={() => setViewInvoice(r)} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10" title="View / Print"><Printer size={13} /></button><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10" title="Edit"><Pencil size={13} /></button><button onClick={() => handleDelete(r.id)} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10" title="Delete"><Trash2 size={13} /></button></div></td></tr>)}{tc.pageItems.length === 0 && <tr><td colSpan={13} className="py-8 text-center text-[#5a6878]">No matching invoices</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
+      <div className="vc-panel"><div className="vc-panel-header"><FileText size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Site Invoices</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{filtered.length}</span><select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="vc-input !w-auto !py-1 !px-2 ml-2 text-[11px] appearance-none">{INVOICE_STATUSES.map(s => <option key={s} value={s}>{s === 'All' ? 'All Status' : s}</option>)}</select><div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search invoices..." /></div>{selected.size > 0 && <div className="flex items-center gap-2 ml-2"><span className="text-[10px] text-[#8899aa]">{selected.size} selected</span><button onClick={() => setSelected(new Set())} className="text-[11px] text-[#5a6878] hover:text-[#e2e8f0] underline">Clear</button><button onClick={() => setBulkDeleteOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px] !text-[#ff3d3d] hover:!bg-[#ff3d3d]/10"><Trash2 size={13} /> Delete</button></div>}<div className="flex items-center gap-2 ml-2"><button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={INVOICE_COLUMNS} filename="fin-invoices" /></div><button onClick={openCreate} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Invoice</button></div>
+        <div className="overflow-x-auto"><div className="max-h-[440px] overflow-y-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
+        <th className="py-2 px-3 w-8"><Checkbox checked={allPageSelected} onCheckedChange={toggleAllOnPage} /></th>
+        <SortableTh label="Tracking No." sortKey="trackingNo" accessor={(r: Invoice) => r.trackingNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <SortableTh label="PO No." sortKey="poNo" accessor={(r: Invoice) => r.poNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: Invoice) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <SortableTh label="Bill No." sortKey="invoiceNo" accessor={(r: Invoice) => r.invoiceNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <SortableTh label="Client" sortKey="client" accessor={(r: Invoice) => r.party?.name || r.client} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <SortableTh label="Area" sortKey="area" accessor={(r: Invoice) => r.area} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <SortableTh label="Month" sortKey="month" accessor={(r: Invoice) => r.month} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <SortableTh label="Bill Date" sortKey="invoiceDate" accessor={(r: Invoice) => r.invoiceDate} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <SortableTh label="E-Inv Date" sortKey="eInvoiceDate" accessor={(r: Invoice) => r.eInvoiceDate} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <SortableTh label="Invoice Value" sortKey="invoiceValue" accessor={(r: Invoice) => r.invoiceValue} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+        <SortableTh label="GST Value" sortKey="gstValue" accessor={(r: Invoice) => r.gstValue} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+        <SortableTh label="Total Inv Value" sortKey="grandTotal" accessor={(r: Invoice) => r.grandTotal} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+        <SortableTh label="Status" sortKey="status" accessor={(r: Invoice) => r.status} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <th className="py-2 px-3"></th>
+      </tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => <tr key={r.id} onClick={() => setViewInvoice(r)} className="hover:bg-[#141920] cursor-pointer"><td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}><Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggleRow(r.id)} /></td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.trackingNo || 'NA'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.poNo || 'NA'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || 'NA'}</td><td className="py-2.5 px-3 text-[#f5a623] font-mono font-medium whitespace-nowrap">{r.invoiceNo}</td><td className="py-2.5 px-3 text-[#e2e8f0] max-w-[180px] truncate">{r.party?.name || r.client || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] max-w-[120px] truncate">{r.area || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] whitespace-nowrap">{r.month || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.invoiceDate?.split('T')[0]}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.eInvoiceDate?.split('T')[0] || '—'}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-mono text-right whitespace-nowrap">₹{(r.invoiceValue ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3 text-[#ffab40] font-mono text-right whitespace-nowrap">₹{(r.gstValue ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3 text-[#00e676] font-mono text-right font-medium whitespace-nowrap">₹{(r.grandTotal ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3"><StatusBadge status={r.status} /></td><td className="py-2.5 px-3" onClick={e => e.stopPropagation()}><div className="flex gap-1"><button onClick={() => setViewInvoice(r)} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10" title="View / Print"><Printer size={13} /></button><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10" title="Edit"><Pencil size={13} /></button><button onClick={() => handleDelete(r.id)} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10" title="Delete"><Trash2 size={13} /></button></div></td></tr>)}{tc.pageItems.length === 0 && <tr><td colSpan={15} className="py-8 text-center text-[#5a6878]">No matching invoices</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
 
       {viewInvoice && <InvoiceDocument invoice={viewInvoice} onClose={() => setViewInvoice(null)} />}
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}><AlertDialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0]"><AlertDialogHeader><AlertDialogTitle className="text-[#ff3d3d]">Delete {selected.size} Invoice{selected.size === 1 ? '' : 's'}</AlertDialogTitle><AlertDialogDescription className="text-[#8899aa]">This will permanently delete {selected.size} selected invoice{selected.size === 1 ? '' : 's'}. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="vc-btn-ghost">Cancel</AlertDialogCancel><AlertDialogAction onClick={handleBulkDelete} className="bg-[#ff3d3d] hover:bg-[#cc2020] text-white rounded-lg">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </div>
   );
 }

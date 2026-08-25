@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
 
-    const [arRecords, apRecords, bankAccounts, journalEntries, budgetItems, paymentAdvices, pettyCash, finInvoices, purchaseOrders, parties, expenseClaims, creditNotes, assets, alerts, followUps, accounts, finJournalEntries] = await Promise.all([
+    const [arRecords, apRecords, bankAccounts, journalEntries, budgetItems, paymentAdvices, pettyCash, finInvoices, purchaseOrders, parties, expenseClaims, creditNotes, assets, alerts, followUps, accounts, finJournalEntries, materialIssues, mootBills, finSites] = await Promise.all([
       pdb.accountsReceivable.findMany(),
       pdb.accountsPayable.findMany(),
       pdb.bankAccount.findMany(),
@@ -25,9 +25,13 @@ export async function GET(request: NextRequest) {
       pdb.finFollowUp.findMany(),
       pdb.finAccount.findMany(),
       pdb.finJournalEntry.findMany(),
+      pdb.finMaterialIssue.findMany(),
+      pdb.finMootBill.findMany(),
+      pdb.finSite.findMany(),
     ])
 
-    // ── Legacy KPIs ──
+    const finMaterialIssues = materialIssues
+    const raBills = mootBills    // ── Legacy KPIs ──
     const totalRevenue = arRecords.filter(r => r.status === 'Received').reduce((s, r) => s + r.totalAmount, 0)
     const totalInvoiced = arRecords.reduce((s, r) => s + r.totalAmount, 0)
     const accountsReceivablePending = arRecords.filter(r => r.status === 'Pending' || r.status === 'Partially Received').reduce((s, r) => s + r.totalAmount, 0)
@@ -119,7 +123,7 @@ export async function GET(request: NextRequest) {
       }
     }
     for (const fje of finJournalEntries) {
-      const d = new Date(fje.date)
+      const d = new Date(fje.entryDate)
       const key = `${months[d.getMonth()]} ${d.getFullYear()}`
       if (monthlyMap.has(key)) {
         const entry = monthlyMap.get(key)!
@@ -185,6 +189,82 @@ export async function GET(request: NextRequest) {
     }
     const alertsTop = alertsList.slice(0, 8)
 
+    // ── Site-wise P&L ──────────────────────────────
+    // Revenue from site invoices (grandTotal), cost from material issues + PO spend per site.
+    const siteRevenue = new Map<number, number>()
+    for (const inv of finInvoices) siteRevenue.set(inv.siteId, (siteRevenue.get(inv.siteId) || 0) + (inv.grandTotal || 0))
+    const siteCost = new Map<number, number>()
+    for (const mi of materialIssues) {
+      if (mi.siteId) siteCost.set(mi.siteId, (siteCost.get(mi.siteId) || 0) + (mi.amount || 0))
+    }
+    const sitePnl = finSites
+      .map(s => {
+        const revenue = siteRevenue.get(s.id) || 0
+        const cost = siteCost.get(s.id) || 0
+        return { siteCode: s.siteCode, siteName: s.name, revenue, cost, profit: revenue - cost }
+      })
+      .sort((a, b) => b.profit - a.profit)
+
+    // ── Job-wise Profitability ─────────────────────
+    const jobRevenue = new Map<string, number>()
+    for (const inv of finInvoices) if (inv.jobCode) jobRevenue.set(inv.jobCode, (jobRevenue.get(inv.jobCode) || 0) + (inv.grandTotal || 0))
+    const jobCost = new Map<string, number>()
+    for (const mi of materialIssues) if (mi.jobCode) jobCost.set(mi.jobCode, (jobCost.get(mi.jobCode) || 0) + (mi.amount || 0))
+    const jobPnl = [...new Set([...jobRevenue.keys(), ...jobCost.keys()])]
+      .map(job => {
+        const revenue = jobRevenue.get(job) || 0
+        const cost = jobCost.get(job) || 0
+        return { jobCode: job, revenue, cost, profit: revenue - cost }
+      })
+      .sort((a, b) => b.profit - a.profit)
+
+    // ── Pending Approvals ─────────────────────────
+    const pendingApprovals = [
+      ...finJournalEntries.filter(je => je.status === 'Draft' || je.status === 'Pending').map(je => ({ module: 'Journal', ref: je.entryNo, status: je.status })),
+      ...purchaseOrders.filter(p => p.status === 'Pending' || p.status === 'Draft').map(p => ({ module: 'Purchase Order', ref: p.poNo || `PO-${p.id}`, status: p.status })),
+      ...finInvoices.filter(i => i.status === 'Pending' || i.status === 'Draft').map(i => ({ module: 'Invoice', ref: i.invoiceNo, status: i.status })),
+      ...expenseClaims.filter(c => c.status === 'Pending' || c.status === 'Submitted').map(c => ({ module: 'Expense Claim', ref: c.claimNo || `EC-${c.id}`, status: c.status })),
+      ...raBills.filter(r => r.status === 'Draft' || r.status === 'Submitted').map(r => ({ module: 'RA Bill', ref: r.raNo, status: r.status })),
+    ]
+    const pendingApprovalCount = pendingApprovals.length
+
+    // ── GST / TDS due alerts ──────────────────────
+    const gstDueTotal = finInvoices.filter(i => i.status === 'Pending' || i.status === 'Unpaid').reduce((s, i) => s + (i.gstValue || 0), 0)
+    const gstDueCount = finInvoices.filter(i => (i.status === 'Pending' || i.status === 'Unpaid') && (i.gstValue || 0) > 0).length
+    const tdsDueTotal = finInvoices.reduce((s, i) => s + (i.tdsDeduction || 0), 0)
+    const taxDue = { gstTotal: gstDueTotal, gstCount: gstDueCount, tdsTotal: tdsDueTotal, tdsCount: finInvoices.length }
+
+    // ── Customer-wise Profitability ───────────────
+    // Revenue = site invoices (via partyId); Cost = material issues mapped to a
+    // customer through the invoice's site (a site belongs to one customer).
+    const customerById = new Map(parties.map(p => [p.id, p]))
+    const siteCustomer = new Map(finSites.map(s => [s.id, s.customerId]))
+    // Build invoice revenue per customer directly (invoices carry partyId).
+    const custRevenue = new Map<number, number>()
+    const custInvoiceCount = new Map<number, number>()
+    for (const inv of finInvoices) {
+      if (inv.partyId) {
+        custRevenue.set(inv.partyId, (custRevenue.get(inv.partyId) || 0) + (inv.grandTotal || 0))
+        custInvoiceCount.set(inv.partyId, (custInvoiceCount.get(inv.partyId) || 0) + 1)
+      }
+    }
+    // Cost per customer: for each material issue, find its site's customer.
+    const custCost = new Map<number, number>()
+    for (const mi of materialIssues) {
+      const custId = mi.siteId ? siteCustomer.get(mi.siteId) : undefined
+      if (custId != null) custCost.set(custId, (custCost.get(custId) || 0) + (mi.amount || 0))
+    }
+    const customerPnl = [...new Set([...custRevenue.keys(), ...custCost.keys()])]
+      .map(cid => {
+        const party = customerById.get(cid)
+        const revenue = custRevenue.get(cid) || 0
+        const cost = custCost.get(cid) || 0
+        const profit = revenue - cost
+        const margin = revenue > 0 ? (profit / revenue) * 100 : 0
+        return { customerId: cid, customer: party?.name || party?.shortName || `Customer ${cid}`, revenue, cost, profit, margin: Math.round(margin * 10) / 10, invoices: custInvoiceCount.get(cid) || 0 }
+      })
+      .sort((a, b) => b.profit - a.profit)
+
     // ── Module counts ──
     const moduleCounts = {
       accountsPayable: apRecords.length,
@@ -237,6 +317,12 @@ export async function GET(request: NextRequest) {
         recentTransactions,
         alerts: alertsTop,
         moduleCounts,
+        sitePnl,
+        jobPnl,
+        pendingApprovals,
+        pendingApprovalCount,
+        taxDue,
+        customerPnl,
         syncedAt: new Date().toISOString(),
       },
     })

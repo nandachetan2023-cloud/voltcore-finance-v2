@@ -9,23 +9,36 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { FormField, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
+import { SortableTh } from './_table-controls';
 
 interface Payable {
   id: number; billNo: string; vendor: string; vendorCode: string | null;
   description: string | null; totalAmount: number; dueDate: string; status: string;
-  siteId?: number | null; jobCode?: string | null; poId?: number | null;
+  siteId?: number | null; jobCode?: string | null; poId?: number | null; costCenter?: string | null; department?: string | null; projectManager?: string | null;
   site?: { name: string; siteCode: string } | null;
 }
 interface BankAccount { id: number; accountName: string; bankName: string; accountNo: string; type: string; balance: number; status: string; }
 interface Payment {
   id: number; date: string; amount: number; party: string | null; reference: string | null;
   description: string | null; balance: number; bankAccount?: { accountName: string; bankName: string };
+  siteCode: string | null; jobCode: string | null; poNo: string | null; costCenter: string | null; department: string | null; projectManager: string | null;
 }
 interface Summary { totalOutstanding: number; totalBankBalance: number; paidThisMonth: number; payableCount: number; }
+interface SiteRef { id: number; name: string; siteCode: string; }
+interface PaymentForm {
+  siteId: string; jobCode: string; poNo: string; costCenter: string; department: string; projectManager: string;
+}
 
 const PAYMENT_COLUMNS: ExportColumn<Payment>[] = [
   { header: 'Payment Date', accessor: (r) => r.date?.split('T')[0] ?? '' },
   { header: 'Party', accessor: 'party' },
+  { header: 'Site Code', accessor: (r) => r.siteCode ?? '' },
+  { header: 'Job Code', accessor: (r) => r.jobCode ?? '' },
+  { header: 'PO No', accessor: (r) => r.poNo ?? '' },
+  { header: 'Cost Center', accessor: (r) => r.costCenter ?? '' },
+  { header: 'Department', accessor: (r) => r.department ?? '' },
+  { header: 'Project Manager', accessor: (r) => r.projectManager ?? '' },
   { header: 'Amount', accessor: 'amount' },
   { header: 'Reference', accessor: 'reference' },
   { header: 'Description', accessor: 'description' },
@@ -36,13 +49,21 @@ const METHODS = ['NEFT', 'RTGS', 'IMPS', 'UPI', 'Cheque', 'Cash', 'Bank Transfer
 
 const PAYMENT_IMPORT_FIELDS: ImportField[] = [
   { key: 'date', label: 'Payment Date', type: 'date', required: true },
+  { key: 'bankAccountId', label: 'Bank Account ID', type: 'number', required: true },
   { key: 'party', label: 'Party' },
+  { key: 'siteCode', label: 'Site Code', required: true },
+  { key: 'jobCode', label: 'Job Code', required: true },
+  { key: 'poNo', label: 'PO Number', required: true },
+  { key: 'costCenter', label: 'Cost Center', required: true },
+  { key: 'department', label: 'Department', required: true },
+  { key: 'projectManager', label: 'Project Manager', required: true },
   { key: 'amount', label: 'Amount', type: 'number', required: true },
   { key: 'reference', label: 'Reference' },
   { key: 'description', label: 'Description' },
   { key: 'balance', label: 'Balance', type: 'number' },
 ];
-const PAYMENT_SAMPLE_ROW = { date: '2026-01-20', party: 'Siemens India Ltd', amount: 150000, reference: 'UTR123456', description: 'Invoice payment', balance: 5000000 };
+const PAYMENT_SAMPLE_ROW = { date: '2026-01-20', bankAccountId: 1, party: 'Siemens India Ltd', siteCode: 'SIT-001', jobCode: 'JOB-2026-001', poNo: 'PO-1001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', amount: 150000, reference: 'UTR123456', description: 'Invoice payment', balance: 5000000 };
+const EMPTY_PAYMENT_FORM: PaymentForm = { siteId: '', jobCode: '', poNo: '', costCenter: '', department: '', projectManager: '' };
 function fmt(n: number) { return '₹' + (n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 }); }
 function fmtCr(n: number) {
   if (n >= 10000000) return '₹' + (n / 10000000).toFixed(2) + ' Cr';
@@ -64,9 +85,9 @@ function generateMockPaymentData() {
     { id: 3, accountName: 'Fixed Deposit', bankName: 'Punjab National Bank', accountNo: 'FD-2024-78901', type: 'FD', balance: 5000000, status: 'Active' },
   ];
   const recentPayments: Payment[] = [
-    { id: 1, date: '2025-05-28T00:00:00', amount: 1200000, party: 'Tata Projects Ltd', reference: 'UTR/NEFT/250528/001', description: 'Payment for May billing', balance: 11300000, bankAccount: { accountName: 'Operating Account', bankName: 'State Bank of India' } },
-    { id: 2, date: '2025-05-15T00:00:00', amount: 800000, party: 'Bharat Heavy Electricals Ltd', reference: 'UTR/RTGS/250515/002', description: 'Partial payment — BHEL invoice', balance: 12500000, bankAccount: { accountName: 'Project Account — NTPC', bankName: 'HDFC Bank' } },
-    { id: 3, date: '2025-04-30T00:00:00', amount: 2500000, party: 'Larsen & Toubro Ltd', reference: 'CHQ/009876', description: 'April progress payment', balance: 13300000, bankAccount: { accountName: 'Operating Account', bankName: 'State Bank of India' } },
+    { id: 1, date: '2025-05-28T00:00:00', amount: 1200000, party: 'Tata Projects Ltd', reference: 'UTR/NEFT/250528/001', description: 'Payment for May billing', balance: 11300000, bankAccount: { accountName: 'Operating Account', bankName: 'State Bank of India' }, siteCode: 'SIT-001', jobCode: 'JOB-2026-001', poNo: 'PO-1001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma' },
+    { id: 2, date: '2025-05-15T00:00:00', amount: 800000, party: 'Bharat Heavy Electricals Ltd', reference: 'UTR/RTGS/250515/002', description: 'Partial payment — BHEL invoice', balance: 12500000, bankAccount: { accountName: 'Project Account — NTPC', bankName: 'HDFC Bank' }, siteCode: 'SIT-001', jobCode: 'JOB-2026-002', poNo: 'PO-1002', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'A. Verma' },
+    { id: 3, date: '2025-04-30T00:00:00', amount: 2500000, party: 'Larsen & Toubro Ltd', reference: 'CHQ/009876', description: 'April progress payment', balance: 13300000, bankAccount: { accountName: 'Operating Account', bankName: 'State Bank of India' }, siteCode: 'SIT-002', jobCode: 'JOB-2026-003', poNo: 'PO-1003', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'S. Rao' },
   ];
   return {
     payables,
@@ -91,6 +112,8 @@ export default function FinPayments() {
   const [target, setTarget] = useState<Payable | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [sites, setSites] = useState<SiteRef[]>([]);
+  const [form, setForm] = useState<PaymentForm>(EMPTY_PAYMENT_FORM);
 
   // payment form
   const [bankAccountId, setBankAccountId] = useState<number>(0);
@@ -100,6 +123,16 @@ export default function FinPayments() {
   const [party, setParty] = useState('');
   const [description, setDescription] = useState('');
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<PaymentForm>({
+    siteId: required('Site Code'),
+    jobCode: required('Job Code'),
+    poNo: required('PO Number'),
+    costCenter: required('Cost Center'),
+    department: required('Department'),
+    projectManager: required('Project Manager'),
+  });
+  const setField = <K extends keyof PaymentForm>(key: K, value: PaymentForm[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
   const tc = useTableControls(payables, (r) => `${r.billNo} ${r.vendor} ${r.vendorCode ?? ''} ${r.description ?? ''} ${r.status}`);
 
@@ -131,10 +164,19 @@ export default function FinPayments() {
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { fetch_(); }, [fetch_]);
+  useEffect(() => {
+    const onDataChanged = () => fetch_();
+    window.addEventListener('finance:data-changed', onDataChanged);
+    return () => window.removeEventListener('finance:data-changed', onDataChanged);
+  }, [fetch_]);
+  useEffect(() => {
+    fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success) setSites(j.data); }).catch(() => {});
+  }, []);
 
   const resetForm = () => {
     setBankAccountId(accounts[0]?.id || 0);
     setMethod('NEFT'); setReference(''); setDescription(''); setPayDate(new Date().toISOString().split('T')[0]);
+    setForm(EMPTY_PAYMENT_FORM); setFormErrors({});
   };
 
   const openPayBill = (b: Payable) => {
@@ -144,6 +186,8 @@ export default function FinPayments() {
     setDescription(`Payment for bill ${b.billNo}`);
     setBankAccountId(accounts[0]?.id || 0);
     setMethod('NEFT'); setReference(''); setPayDate(new Date().toISOString().split('T')[0]);
+    setForm({ siteId: b.siteId ? String(b.siteId) : '', jobCode: b.jobCode || '', poNo: '', costCenter: b.costCenter || '', department: b.department || '', projectManager: b.projectManager || '' });
+    setFormErrors({});
     setPayOpen(true);
   };
   const openNewPayment = () => {
@@ -157,6 +201,7 @@ export default function FinPayments() {
   const insufficient = selectedAccount ? amount > selectedAccount.balance : false;
 
   const handlePay = async () => {
+    if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
     if (!bankAccountId) { toast.error('Select a bank account'); return; }
     if (!amount || amount <= 0) { toast.error('Enter a valid amount'); return; }
     if (insufficient) { toast.error('Insufficient balance in selected account'); return; }
@@ -167,6 +212,12 @@ export default function FinPayments() {
         body: JSON.stringify({
           billId: target?.id, bankAccountId, amount, paymentMethod: method,
           reference: reference || null, party: party || null, description: description || null, date: payDate,
+          siteId: form.siteId ? Number(form.siteId) : null,
+          jobCode: form.jobCode || null,
+          poNo: form.poNo || null,
+          costCenter: form.costCenter || null,
+          department: form.department || null,
+          projectManager: form.projectManager || null,
         }),
       });
       const j = await res.json();
@@ -217,7 +268,15 @@ export default function FinPayments() {
         <div className="vc-panel">
           <div className="vc-panel-header"><Wallet size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Bills Awaiting Payment</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{payables.length}</span><div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search bills..." /></div></div>
           <div className="overflow-x-auto"><div className="max-h-[460px] overflow-y-auto"><table className="w-full text-[11px]">
-            <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">{['Bill No', 'Vendor', 'Amount', 'Due Date', 'Status', ''].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+            <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
+              <SortableTh label="Bill No" sortKey="billNo" accessor={(r: Payable) => r.billNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Vendor" sortKey="vendor" accessor={(r: Payable) => r.vendor} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Amount" sortKey="totalAmount" accessor={(r: Payable) => r.totalAmount} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+              <SortableTh label="Due Date" sortKey="dueDate" accessor={(r: Payable) => r.dueDate} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: Payable) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Status" sortKey="status" accessor={(r: Payable) => r.status} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <th className="py-2 px-3"></th>
+            </tr></thead>
             <tbody className="divide-y divide-[#1a2028]">
               {tc.pageItems.map(b => (
                 <tr key={b.id} className="hover:bg-[#141920]">
@@ -225,11 +284,12 @@ export default function FinPayments() {
                   <td className="py-2.5 px-3 text-[#e2e8f0] max-w-[160px] truncate">{b.vendor}</td>
                   <td className="py-2.5 px-3 text-[#e2e8f0] font-mono font-medium">{fmt(b.totalAmount)}</td>
                   <td className={`py-2.5 px-3 font-mono ${dueClass(b.dueDate)}`}>{b.dueDate?.split('T')[0]}</td>
+                  <td className="py-2.5 px-3 text-[#8899aa] font-mono">{b.jobCode || '—'}</td>
                   <td className="py-2.5 px-3"><span className={`vc-badge ${b.status === 'Overdue' ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : b.status === 'Partially Paid' ? 'bg-[#00d4ff]/15 text-[#00d4ff]' : 'bg-[#ffab40]/15 text-[#ffab40]'}`}>{b.status}</span></td>
                   <td className="py-2.5 px-3"><button onClick={() => openPayBill(b)} className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#00e676]/10 border border-[#00e676]/30 text-[#00e676] text-[10px] font-semibold hover:bg-[#00e676]/20"><Send size={11} /> Pay</button></td>
                 </tr>
               ))}
-              {tc.pageItems.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-[#5a6878]">No outstanding bills 🎉</td></tr>}
+              {tc.pageItems.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-[#5a6878]">No outstanding bills 🎉</td></tr>}
             </tbody>
           </table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div>
         </div>
@@ -273,9 +333,9 @@ export default function FinPayments() {
 
       {/* Payment dialog */}
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader><DialogTitle className="text-[#f5a623] flex items-center gap-2"><Send size={16} />{target ? `Pay Bill ${target.billNo}` : 'Make Payment'}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-y-auto pr-1 -mr-1 min-h-0">
             {target && (
               <div className="p-3 rounded-lg bg-[#0a0d12] border border-[#252e3a]">
                 <div className="flex items-center justify-between">
@@ -290,23 +350,43 @@ export default function FinPayments() {
                 )}
               </div>
             )}
-            <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Pay From Account *</label>
-              <select value={bankAccountId} onChange={e => setBankAccountId(Number(e.target.value))} className="vc-input appearance-none">
-                <option value={0}>Select account...</option>
-                {accounts.map(a => <option key={a.id} value={a.id}>{a.bankName} ({a.type}) — {fmtCr(a.balance)}</option>)}
-              </select>
-              {selectedAccount && <div className="text-[10px] text-[#5a6878] mt-1">Available: <span className="text-[#00e676] font-mono">{fmt(selectedAccount.balance)}</span></div>}
+            <div className={`grid gap-3 ${target ? 'grid-cols-1' : 'grid-cols-2'}`}>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Pay From Account *</label>
+                <select value={bankAccountId} onChange={e => setBankAccountId(Number(e.target.value))} className="vc-input appearance-none">
+                  <option value={0}>Select account...</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.bankName} ({a.type}) — {fmtCr(a.balance)}</option>)}
+                </select>
+                {selectedAccount && <div className="text-[10px] text-[#5a6878] mt-1">Available: <span className="text-[#00e676] font-mono">{fmt(selectedAccount.balance)}</span></div>}
+              </div>
+              {!target && <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Payee</label><input value={party} onChange={e => setParty(e.target.value)} className="vc-input" placeholder="Vendor / party name" /></div>}
             </div>
-            {!target && <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Payee</label><input value={party} onChange={e => setParty(e.target.value)} className="vc-input" placeholder="Vendor / party name" /></div>}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Amount (₹) *</label><input type="number" value={amount ?? ''} onChange={e => setAmount(Number(e.target.value))} className={`vc-input ${insufficient ? '!border-[#ff3d3d]' : ''}`} /></div>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Date</label><input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} className="vc-input" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Method</label><select value={method} onChange={e => setMethod(e.target.value)} className="vc-input appearance-none">{METHODS.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Reference / UTR</label><input value={reference} onChange={e => setReference(e.target.value)} className="vc-input" placeholder="UTR / cheque no" /></div>
             </div>
             <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Note</label><input value={description} onChange={e => setDescription(e.target.value)} className="vc-input" /></div>
+            <div className="p-3 rounded-lg bg-[#0a0d12] border border-[#252e3a] space-y-3">
+              <div className="text-[9px] uppercase tracking-[1.5px] text-[#f5a623] font-bold">Costing Details</div>
+              <FormField label="Site Code" required error={formErrors.siteId}>
+                <SearchableSelect
+                  value={form.siteId}
+                  onChange={v => setField('siteId', v)}
+                  options={sites.map(s => ({ value: String(s.id), label: s.name, sublabel: s.siteCode }))}
+                  placeholder="— Select site —"
+                />
+              </FormField>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Job Code" required error={formErrors.jobCode}>
+                  <DatalistField id="pmt-job-code" value={form.jobCode} onChange={v => setField('jobCode', v)} options={[...new Set(recent.map(r => r.jobCode).filter(Boolean) as string[])]} placeholder="JOB-2026-001" />
+                </FormField>
+                <FormField label="PO Number" required error={formErrors.poNo}>
+                  <DatalistField id="pmt-po-no" value={form.poNo} onChange={v => setField('poNo', v)} options={[...new Set(recent.map(r => r.poNo).filter(Boolean) as string[])]} placeholder="PO-1001" />
+                </FormField>
+              </div>
+              <CostingFields prefix="pmt" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
+            </div>
             {insufficient && <div className="flex items-center gap-2 text-[11px] text-[#ff3d3d]"><AlertCircle size={13} /> Amount exceeds available balance.</div>}
           </div>
           <DialogFooter>

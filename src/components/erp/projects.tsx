@@ -335,7 +335,7 @@ export default function ProjectsModule() {
                           <div className="flex-1 h-[6px] bg-[#141920] rounded-full overflow-hidden min-w-[50px]">
                             <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(0, Math.min(100, proj.progress))}%`, background: `linear-gradient(90deg, ${pColor}80, ${pColor})` }} />
                           </div>
-                          <span className="text-[10px] font-bold w-8 text-right" style={{ fontFamily: "'Share Tech Mono', monospace", color: pColor }}>{proj.progress}%</span>
+                          <span className="text-[10px] font-bold w-8 text-right" style={{ fontFamily: "'Share Tech Mono', monospace", color: pColor }}>{(Number.isFinite(proj.progress) ? proj.progress : 0)}%</span>
                         </div>
                       </td>
                       <td className="px-3 py-[10px] text-[#8899aa] whitespace-nowrap">

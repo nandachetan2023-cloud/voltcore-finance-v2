@@ -1,6 +1,6 @@
 ﻿'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Wallet, Plus, Pencil, Trash2, Loader2, Upload, Link2, Unlink, FileText, Receipt, CalendarDays, MapPin, Users, ListChecks, Send, CheckCircle2, XCircle, History } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Wallet, Plus, Pencil, Trash2, Loader2, Upload, FileText, Receipt, CalendarDays, MapPin, Users, ListChecks, Send, CheckCircle2, XCircle, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
@@ -8,15 +8,17 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { getCurrentUserEmail } from '@/lib/current-user';
 
 interface PartyRef { id: number; name: string; code: string; }
-interface SiteRef { id: number; name: string; code: string; }
+interface SiteRef { id: number; name: string; code: string; siteCode?: string; responsiblePerson?: string | null; }
 interface PoRef { id: number; poNo: string; totalAmount: number; }
 interface ExpenseRef { id: number; claimNo: string; totalAmount: number; }
 interface PettyCash {
   id: number; voucherNo: string; date: string; description: string; amount: number;
   type: string; category: string | null; partyId: number | null; siteId: number | null;
   poId: number | null; expenseClaimId: number | null; linkedType: string; jobCode: string | null;
+  costCenter: string | null; department: string | null; projectManager: string | null;
   authorizedBy: string | null; paymentMode: string | null; balance: number;
   referenceNo: string | null; remarks: string | null; billAttachmentPath: string | null;
   approvalStatus: string; submittedBy: string | null; submittedAt: string | null;
@@ -27,15 +29,20 @@ interface ApprovalLog { id: number; status: string; action: string; makerId: str
 interface FormData {
   voucherNo: string; date: string; description: string; amount: number; type: string;
   category: string; partyId: string; siteId: string; poId: string; expenseClaimId: string; jobCode: string;
+  costCenter: string; department: string; projectManager: string;
   linkedType: string; authorizedBy: string; paymentMode: string; referenceNo: string; remarks: string;
   billAttachmentPath: string;
 }
 interface PoOption { id: number; poNo: string; vendorName: string; totalAmount: number; }
 interface ExpenseOption { id: number; claimNo: string; expenseType: string; totalAmount: number; siteName: string; }
+interface JobOption { id: number; jobCode: string; description: string | null; siteId: number | null; siteName: string; }
+
+const EXPENSE_HEADS = ['Travel', 'Maintenance', 'Site Material', 'Food & Refreshment', 'Office Supplies', 'Fuel', 'Miscellaneous', 'Replenishment'];
 
 const EMPTY: FormData = {
   voucherNo: '', date: new Date().toISOString().split('T')[0], description: '', amount: 0, type: 'Debit',
-  category: '', partyId: '', siteId: '', poId: '', expenseClaimId: '', jobCode: '', linkedType: 'Direct',
+  category: '', partyId: '', siteId: '', poId: '', expenseClaimId: '', jobCode: '',
+  costCenter: '', department: '', projectManager: '', linkedType: 'Direct',
   authorizedBy: '', paymentMode: 'Cash', referenceNo: '', remarks: '', billAttachmentPath: '',
 };
 
@@ -70,13 +77,13 @@ const PETTY_CASH_IMPORT_FIELDS: ImportField[] = [
 
 function generateMockPettyCash(): PettyCash[] {
   return [
-    { id: 1, voucherNo: 'PV/2024-25/001', date: '2024-11-10T00:00:00', description: 'Office stationery purchase', amount: 12500, type: 'Debit', category: 'Office Supplies', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, authorizedBy: 'Rajesh Kumar', paymentMode: 'Cash', balance: 487500, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
-    { id: 2, voucherNo: 'PV/2024-25/002', date: '2024-12-05T00:00:00', description: 'Site visit travel - Delhi to Rihand', amount: 8500, type: 'Debit', category: 'Travel', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, authorizedBy: 'Ankit Verma', paymentMode: 'Cash', balance: 479000, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
-    { id: 3, voucherNo: 'PV/2024-25/003', date: '2025-01-15T00:00:00', description: 'Petty cash replenishment', amount: 50000, type: 'Credit', category: 'Replenishment', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, authorizedBy: 'Suresh Mahto', paymentMode: 'Bank Transfer', balance: 529000, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
-    { id: 4, voucherNo: 'PV/2024-25/004', date: '2025-02-20T00:00:00', description: 'Team lunch - client meeting', amount: 4200, type: 'Debit', category: 'Food', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, authorizedBy: 'Prakash Sahu', paymentMode: 'Cash', balance: 524800, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
-    { id: 5, voucherNo: 'PV/2024-25/005', date: '2025-03-10T00:00:00', description: 'Courier & postal charges', amount: 1800, type: 'Debit', category: 'Office Supplies', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, authorizedBy: 'Deepak Mishra', paymentMode: 'Cash', balance: 523000, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Pending', submittedBy: 'Deepak Mishra', submittedAt: '2025-03-10T09:00:00', approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
-    { id: 6, voucherNo: 'PV/2024-25/006', date: '2025-04-01T00:00:00', description: 'Payment against PO: PO/2024-25/001 - Site material', amount: 150000, type: 'Debit', category: 'Purchase Order', partyId: null, siteId: null, poId: 1, expenseClaimId: null, linkedType: 'PO', jobCode: null, authorizedBy: 'Amit Singh', paymentMode: 'Bank Transfer', balance: 522350, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Draft', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: { id: 1, poNo: 'PO/2024-25/001', totalAmount: 150000 }, expenseClaim: null },
-    { id: 7, voucherNo: 'PV/2024-25/007', date: '2025-04-15T00:00:00', description: 'Expense claim: EC/001 - Travel reimbursement', amount: 12300, type: 'Debit', category: 'Expense Claim', partyId: null, siteId: null, poId: null, expenseClaimId: 1, linkedType: 'ExpenseClaim', jobCode: null, authorizedBy: 'Manoj Rao', paymentMode: 'Cash', balance: 510050, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Rejected', submittedBy: 'Manoj Rao', submittedAt: '2025-04-15T10:00:00', approvedBy: null, approvedAt: null, rejectionReason: 'Missing bill attachment — please re-upload the receipt.', party: null, site: null, po: null, expenseClaim: { id: 1, claimNo: 'EC/001', totalAmount: 12300 } },
+    { id: 1, voucherNo: 'PV/2024-25/001', date: '2024-11-10T00:00:00', description: 'Office stationery purchase', amount: 12500, type: 'Debit', category: 'Office Supplies', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Rajesh Kumar', paymentMode: 'Cash', balance: 487500, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
+    { id: 2, voucherNo: 'PV/2024-25/002', date: '2024-12-05T00:00:00', description: 'Site visit travel - Delhi to Rihand', amount: 8500, type: 'Debit', category: 'Travel', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Ankit Verma', paymentMode: 'Cash', balance: 479000, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
+    { id: 3, voucherNo: 'PV/2024-25/003', date: '2025-01-15T00:00:00', description: 'Petty cash replenishment', amount: 50000, type: 'Credit', category: 'Replenishment', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Suresh Mahto', paymentMode: 'Bank Transfer', balance: 529000, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
+    { id: 4, voucherNo: 'PV/2024-25/004', date: '2025-02-20T00:00:00', description: 'Team lunch - client meeting', amount: 4200, type: 'Debit', category: 'Food', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Prakash Sahu', paymentMode: 'Cash', balance: 524800, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
+    { id: 5, voucherNo: 'PV/2024-25/005', date: '2025-03-10T00:00:00', description: 'Courier & postal charges', amount: 1800, type: 'Debit', category: 'Office Supplies', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Deepak Mishra', paymentMode: 'Cash', balance: 523000, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Pending', submittedBy: 'Deepak Mishra', submittedAt: '2025-03-10T09:00:00', approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
+    { id: 6, voucherNo: 'PV/2024-25/006', date: '2025-04-01T00:00:00', description: 'Payment against PO: PO/2024-25/001 - Site material', amount: 150000, type: 'Debit', category: 'Purchase Order', partyId: null, siteId: null, poId: 1, expenseClaimId: null, linkedType: 'PO', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Amit Singh', paymentMode: 'Bank Transfer', balance: 522350, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Draft', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: { id: 1, poNo: 'PO/2024-25/001', totalAmount: 150000 }, expenseClaim: null },
+    { id: 7, voucherNo: 'PV/2024-25/007', date: '2025-04-15T00:00:00', description: 'Expense claim: EC/001 - Travel reimbursement', amount: 12300, type: 'Debit', category: 'Expense Claim', partyId: null, siteId: null, poId: null, expenseClaimId: 1, linkedType: 'ExpenseClaim', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Manoj Rao', paymentMode: 'Cash', balance: 510050, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Rejected', submittedBy: 'Manoj Rao', submittedAt: '2025-04-15T10:00:00', approvedBy: null, approvedAt: null, rejectionReason: 'Missing bill attachment — please re-upload the receipt.', party: null, site: null, po: null, expenseClaim: { id: 1, claimNo: 'EC/001', totalAmount: 12300 } },
   ];
 }
 
@@ -118,8 +125,8 @@ function DailyCashReport({ records }: { records: PettyCash[] }) {
         <table className="w-full text-[11px]">
           <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">{['Date', 'Opening', 'Cash In', 'Expense', 'Closing Balance'].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
-            {rows.map(r => (
-              <tr key={r.date} className="hover:bg-[#141920]">
+            {rows.map((r, ri) => (
+              <tr key={`${r.date}-${ri}`} className="hover:bg-[#141920]">
                 <td className="py-2.5 px-3 text-[#e2e8f0] font-mono">{r.date}</td>
                 <td className="py-2.5 px-3 text-[#8899aa] font-mono">₹{r.opening.toLocaleString('en-IN')}</td>
                 <td className="py-2.5 px-3 text-[#00e676] font-mono">{r.cashIn > 0 ? `₹${r.cashIn.toLocaleString('en-IN')}` : '—'}</td>
@@ -230,6 +237,16 @@ export default function FinPettyCash() {
   const [form, setForm] = useState<FormData>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const billFileInputRef = useRef<HTMLInputElement>(null);
+  const handleBillFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast.error('Bill photo must be under 2 MB'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setForm(p => ({ ...p, billAttachmentPath: reader.result as string }));
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
   const [typeFilter, setTypeFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [modeFilter, setModeFilter] = useState('all');
@@ -248,11 +265,13 @@ export default function FinPettyCash() {
   const [sites, setSites] = useState<SiteRef[]>([]);
   const [poOptions, setPoOptions] = useState<PoOption[]>([]);
   const [expenseOptions, setExpenseOptions] = useState<ExpenseOption[]>([]);
+  const [jobOptions, setJobOptions] = useState<JobOption[]>([]);
   const [syncTarget, setSyncTarget] = useState<string | null>(null);
   const [syncSubmitting, setSyncSubmitting] = useState(false);
 
   const categories = useMemo(() => [...new Set(records.map(r => r.category).filter((c): c is string => !!c))].sort(), [records]);
   const paymentModes = useMemo(() => [...new Set(records.map(r => r.paymentMode).filter((m): m is string => !!m))].sort(), [records]);
+  const jobByCode = useMemo(() => new Map(jobOptions.map(j => [j.jobCode, j])), [jobOptions]);
 
   const filtered = useMemo(() => records.filter(r =>
     (typeFilter === 'all' || r.type === typeFilter) &&
@@ -278,17 +297,19 @@ export default function FinPettyCash() {
 
   const fetchLookups = useCallback(async () => {
     try {
-      const [pRes, sRes, poRes, exRes] = await Promise.all([
+      const [pRes, sRes, poRes, exRes, jobRes] = await Promise.all([
         fetch('/api/fin/parties'),
         fetch('/api/fin/sites'),
         fetch('/api/fin/purchase-orders'),
         fetch('/api/fin/expense-claims'),
+        fetch('/api/fin/jobs'),
       ]);
-      const [pData, sData, poData, exData] = await Promise.all([pRes.json(), sRes.json(), poRes.json(), exRes.json()]);
+      const [pData, sData, poData, exData, jobData] = await Promise.all([pRes.json(), sRes.json(), poRes.json(), exRes.json(), jobRes.json()]);
       if (pData.success) setParties(pData.data ?? []);
       if (sData.success) setSites(sData.data ?? []);
       if (poData.success) setPoOptions(poData.data?.map((p: any) => ({ id: p.id, poNo: p.poNo, vendorName: p.vendorName, totalAmount: p.totalAmount })) ?? []);
       if (exData.success) setExpenseOptions(exData.data?.map((e: any) => ({ id: e.id, claimNo: e.claimNo, expenseType: e.expenseType, totalAmount: e.totalAmount, siteName: e.site?.name ?? '' })) ?? []);
+      if (jobData.success) setJobOptions(jobData.data?.map((j: any) => ({ id: j.id, jobCode: j.jobCode, description: j.description ?? null, siteId: j.siteId ?? null, siteName: j.site?.name ?? '' })) ?? []);
     } catch { /* non-critical */ }
   }, []);
 
@@ -304,6 +325,15 @@ export default function FinPettyCash() {
   }, []);
   useEffect(() => { fetch_(); fetchLookups(); }, [fetch_, fetchLookups]);
 
+  const pickJob = (code: string) => {
+    const job = jobOptions.find(j => j.jobCode === code);
+    setForm(p => ({
+      ...p,
+      jobCode: code,
+      siteId: job?.siteId ? String(job.siteId) : p.siteId,
+    }));
+  };
+
   const openEdit = (r: PettyCash) => {
     setEditTarget(r);
     setForm({
@@ -311,7 +341,8 @@ export default function FinPettyCash() {
       amount: r.amount, type: r.type, category: r.category || '',
       partyId: r.partyId?.toString() || '', siteId: r.siteId?.toString() || '',
       poId: r.poId?.toString() || '', expenseClaimId: r.expenseClaimId?.toString() || '',
-      jobCode: r.jobCode || '', linkedType: r.linkedType || 'Direct',
+      jobCode: r.jobCode || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '',
+      linkedType: r.linkedType || 'Direct',
       authorizedBy: r.authorizedBy || '', paymentMode: r.paymentMode || 'Cash',
       referenceNo: r.referenceNo || '', remarks: r.remarks || '', billAttachmentPath: r.billAttachmentPath || '',
     });
@@ -319,7 +350,7 @@ export default function FinPettyCash() {
   };
 
   const handleSubmit = async () => {
-    if (!form.voucherNo || !form.description || !form.amount) { toast.error('Voucher No, description and amount required'); return; }
+    if (!form.description || !form.amount || !form.jobCode) { toast.error('Description, amount and job code are required'); return; }
     setSubmitting(true);
     try {
       const method = editTarget ? 'PUT' : 'POST';
@@ -329,6 +360,10 @@ export default function FinPettyCash() {
       body.siteId = body.siteId ? Number(body.siteId) : null;
       body.poId = body.poId ? Number(body.poId) : null;
       body.expenseClaimId = body.expenseClaimId ? Number(body.expenseClaimId) : null;
+      body.type = body.type || 'Debit';
+      body.paymentMode = body.paymentMode || 'Cash';
+      body.authorizedBy = body.authorizedBy || getCurrentUserEmail() || '';
+      body.actor = getCurrentUserEmail();
       delete body.party; delete body.site; delete body.po; delete body.expenseClaim;
       const r = await fetch('/api/fin/petty-cash', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json();
@@ -341,7 +376,7 @@ export default function FinPettyCash() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const r = await fetch(`/api/fin/petty-cash?id=${deleteTarget.id}`, { method: 'DELETE' });
+      const r = await fetch(`/api/fin/petty-cash?id=${deleteTarget.id}`, { method: 'DELETE', headers: { 'x-actor-email': getCurrentUserEmail() || '' } });
       const j = await r.json();
       if (j.success) { toast.success('Deleted'); setDeleteOpen(false); await fetch_(); }
       else toast.error(j.error);
@@ -351,7 +386,7 @@ export default function FinPettyCash() {
   const handleBulkDelete = async () => {
     setBulkDeleting(true);
     try {
-      const r = await fetch(`/api/fin/petty-cash?ids=${[...selected].join(',')}`, { method: 'DELETE' });
+      const r = await fetch(`/api/fin/petty-cash?ids=${[...selected].join(',')}`, { method: 'DELETE', headers: { 'x-actor-email': getCurrentUserEmail() || '' } });
       const j = await r.json();
       if (j.success) { toast.success(`Deleted ${j.deleted ?? selected.size} voucher${selected.size === 1 ? '' : 's'}`); setSelected(new Set()); setBulkDeleteOpen(false); await fetch_(); }
       else toast.error(j.error || 'Bulk delete failed');
@@ -396,7 +431,7 @@ export default function FinPettyCash() {
     try {
       const r = await fetch('/api/fin/petty-cash/approve', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action, comments }),
+        body: JSON.stringify({ id, action, comments, actor: getCurrentUserEmail() }),
       });
       const j = await r.json();
       if (j.success) {
@@ -499,43 +534,39 @@ export default function FinPettyCash() {
             </div>
           )}
         </div>
-        <div className="overflow-x-auto"><div className="max-h-[440px] overflow-y-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]"><th className="py-2 px-3 w-8"><Checkbox checked={allPageSelected} onCheckedChange={toggleAllOnPage} /></th>{['Voucher','Date','Description','Type','Source','Party','Site','Amount','Authorized By','Payment Mode','Approval',''].map(h=><th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r=><tr key={r.id} className="hover:bg-[#141920]"><td className="py-2.5 px-3"><Checkbox checked={selected.has(r.id)} onCheckedChange={()=>toggleRow(r.id)} /></td><td className="py-2.5 px-3 text-[#f5a623] font-mono">{r.voucherNo}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.date?.split('T')[0]}</td><td className="py-2.5 px-3 text-[#e2e8f0] max-w-[180px] truncate" title={r.description}>{r.description}</td><td className="py-2.5 px-3"><span className={`vc-badge ${r.type==='Credit'?'bg-[#00e676]/15 text-[#00e676]':'bg-[#ff3d3d]/15 text-[#ff3d3d]'}`}>{r.type}</span></td><td className="py-2.5 px-3">{r.linkedType==='PO'?<span className="vc-badge bg-[#00d4ff]/15 text-[#00d4ff] flex items-center gap-1"><FileText size={11}/>{r.po?.poNo||'PO'}</span>:r.linkedType==='ExpenseClaim'?<span className="vc-badge bg-[#a855f7]/15 text-[#a855f7] flex items-center gap-1"><Receipt size={11}/>{r.expenseClaim?.claimNo||'Exp'}</span>:<span className="text-[#5a6878]">—</span>}</td><td className="py-2.5 px-3 text-[#8899aa] max-w-[100px] truncate" title={r.party?.name??''}>{r.party?.name||'—'}</td><td className="py-2.5 px-3 text-[#8899aa] max-w-[100px] truncate" title={r.site?.name??''}>{r.site?.name||'—'}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-mono font-medium">₹{(r.amount ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.authorizedBy||'—'}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.paymentMode||'—'}</td><td className="py-2.5 px-3"><button onClick={()=>openHistory(r)} className={`vc-badge ${approvalBadge(r.approvalStatus)} cursor-pointer`} title="View approval history"><History size={10} className="mr-1"/>{r.approvalStatus}</button></td><td className="py-2.5 px-3"><div className="flex gap-1">{(r.approvalStatus==='Draft'||r.approvalStatus==='Rejected')&&<button onClick={()=>runApprovalAction(r.id,'submit')} disabled={approvalSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10 disabled:opacity-50" title="Submit for approval"><Send size={13}/></button>}{r.approvalStatus==='Pending'&&<><button onClick={()=>runApprovalAction(r.id,'approve')} disabled={approvalSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#00e676] hover:bg-[#00e676]/10 disabled:opacity-50" title="Approve"><CheckCircle2 size={13}/></button><button onClick={()=>{setRejectTarget(r);setRejectReason('');}} disabled={approvalSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 disabled:opacity-50" title="Reject"><XCircle size={13}/></button></>}<button onClick={()=>openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13}/></button><button onClick={()=>{setDeleteTarget(r);setDeleteOpen(true);}} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13}/></button></div></td></tr>)}{tc.pageItems.length===0&&<tr><td colSpan={13} className="py-8 text-center text-[#5a6878]">No matching vouchers</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
+        <div className="overflow-x-auto"><div className="max-h-[440px] overflow-y-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]"><th className="py-2 px-3 w-8"><Checkbox checked={allPageSelected} onCheckedChange={toggleAllOnPage} /></th>{['Voucher','Date','Description','Type','Source','Party','Site','Job','Amount','Authorized By','Payment Mode','Approval',''].map(h=><th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r=><tr key={r.id} className="hover:bg-[#141920]"><td className="py-2.5 px-3"><Checkbox checked={selected.has(r.id)} onCheckedChange={()=>toggleRow(r.id)} /></td><td className="py-2.5 px-3 text-[#f5a623] font-mono">{r.voucherNo}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.date?.split('T')[0]}</td><td className="py-2.5 px-3 text-[#e2e8f0] max-w-[180px] truncate" title={r.description}>{r.description}</td><td className="py-2.5 px-3"><span className={`vc-badge ${r.type==='Credit'?'bg-[#00e676]/15 text-[#00e676]':'bg-[#ff3d3d]/15 text-[#ff3d3d]'}`}>{r.type}</span></td><td className="py-2.5 px-3">{r.linkedType==='PO'?<span className="vc-badge bg-[#00d4ff]/15 text-[#00d4ff] flex items-center gap-1"><FileText size={11}/>{r.po?.poNo||'PO'}</span>:r.linkedType==='ExpenseClaim'?<span className="vc-badge bg-[#a855f7]/15 text-[#a855f7] flex items-center gap-1"><Receipt size={11}/>{r.expenseClaim?.claimNo||'Exp'}</span>:<span className="text-[#5a6878]">—</span>}</td><td className="py-2.5 px-3 text-[#8899aa] max-w-[100px] truncate" title={r.party?.name??''}>{r.party?.name||'—'}</td><td className="py-2.5 px-3 text-[#8899aa] max-w-[100px] truncate" title={r.site?.name??''}>{r.site?.name||'—'}</td><td className="py-2.5 px-3 max-w-[140px]">{r.jobCode?<><span className="block font-mono text-[#e2e8f0] truncate">{r.jobCode}</span>{jobByCode.get(r.jobCode)?.description?<span className="block text-[10px] text-[#5a6878] truncate">{jobByCode.get(r.jobCode)?.description}</span>:null}</>:<span className="text-[#5a6878]">—</span>}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-mono font-medium">₹{(r.amount ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.authorizedBy||'—'}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.paymentMode||'—'}</td><td className="py-2.5 px-3"><button onClick={()=>openHistory(r)} className={`vc-badge ${approvalBadge(r.approvalStatus)} cursor-pointer`} title="View approval history"><History size={10} className="mr-1"/>{r.approvalStatus}</button></td><td className="py-2.5 px-3"><div className="flex gap-1">{(r.approvalStatus==='Draft'||r.approvalStatus==='Rejected')&&<button onClick={()=>runApprovalAction(r.id,'submit')} disabled={approvalSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10 disabled:opacity-50" title="Submit for approval"><Send size={13}/></button>}{r.approvalStatus==='Pending'&&<><button onClick={()=>runApprovalAction(r.id,'approve')} disabled={approvalSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#00e676] hover:bg-[#00e676]/10 disabled:opacity-50" title="Approve"><CheckCircle2 size={13}/></button><button onClick={()=>{setRejectTarget(r);setRejectReason('');}} disabled={approvalSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 disabled:opacity-50" title="Reject"><XCircle size={13}/></button></>}<button onClick={()=>openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13}/></button><button onClick={()=>{setDeleteTarget(r);setDeleteOpen(true);}} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13}/></button></div></td></tr>)}{tc.pageItems.length===0&&<tr><td colSpan={14} className="py-8 text-center text-[#5a6878]">No matching vouchers</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
 
-      <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-lg"><DialogHeader><DialogTitle className="text-[#f5a623]">{editTarget?'Edit Voucher':'New Petty Cash Voucher'}</DialogTitle></DialogHeader><div className="space-y-3 max-h-[70vh] overflow-y-auto px-1">
+      <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md"><DialogHeader><DialogTitle className="text-[#f5a623]">{editTarget?'Edit Voucher':'Request Petty Cash'}</DialogTitle></DialogHeader><div className="space-y-3 max-h-[70vh] overflow-y-auto px-1">
+        <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">What was this for? *</label><input value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} className="vc-input" placeholder="e.g. Site fuel purchase"/></div>
         <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Voucher No *</label><input value={form.voucherNo} onChange={e=>setForm(p=>({...p,voucherNo:e.target.value}))} className="vc-input"/></div>
-          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Date *</label><input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} className="vc-input"/></div>
-        </div>
-        <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Description *</label><input value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} className="vc-input"/></div>
-        <div className="grid grid-cols-3 gap-3">
           <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Amount (₹) *</label><input type="number" value={form.amount||''} onChange={e=>setForm(p=>({...p,amount:Number(e.target.value)}))} className="vc-input"/></div>
-          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Type</label><select value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))} className="vc-input appearance-none"><option value="Debit">Debit (Out)</option><option value="Credit">Credit (In)</option></select></div>
-          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Category</label><input value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))} className="vc-input" placeholder="Travel, Office..."/></div>
+          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Expense Head</label><select value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))} className="vc-input appearance-none"><option value="">— Select —</option>{EXPENSE_HEADS.map(h=><option key={h} value={h}>{h}</option>)}</select></div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Party</label><select value={form.partyId} onChange={e=>setForm(p=>({...p,partyId:e.target.value}))} className="vc-input appearance-none"><option value="">— Select Party —</option>{parties.map(p=><option key={p.id} value={p.id}>{p.name} ({p.code})</option>)}</select></div>
-          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site</label><select value={form.siteId} onChange={e=>setForm(p=>({...p,siteId:e.target.value}))} className="vc-input appearance-none"><option value="">— Select Site —</option>{sites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+        <div>
+          <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Job Code *</label>
+          <select value={form.jobCode} onChange={e=>pickJob(e.target.value)} className="vc-input appearance-none"><option value="">— Select Job —</option>{jobOptions.map(job=><option key={job.id} value={job.jobCode}>{job.jobCode} - {job.description || 'Untitled'}</option>)}</select>
+          {form.siteId && <p className="text-[10px] text-[#5a6878] mt-1">Site, cost center &amp; approver auto-set from this job — {sites.find(s=>String(s.id)===form.siteId)?.name || ''}</p>}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Job Code</label><input value={form.jobCode} onChange={e=>setForm(p=>({...p,jobCode:e.target.value}))} className="vc-input" placeholder="JOB-2026-001"/></div>
+        <div>
+          <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Remarks</label>
+          <input value={form.remarks} onChange={e=>setForm(p=>({...p,remarks:e.target.value}))} className="vc-input" placeholder="Optional"/>
         </div>
-        <div className="border border-[#252e3a] rounded-lg p-3 bg-[#0f1318]/50">
-          <div className="flex items-center gap-2 mb-2"><Link2 size={13} className="text-[#5a6878]"/><span className="text-[10px] uppercase tracking-[1px] text-[#5a6878] font-bold">Link to PO / Expense</span></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Purchase Order</label><select value={form.poId} onChange={e=>setForm(p=>({...p,poId:e.target.value,linkedType:e.target.value?'PO':'Direct',expenseClaimId:''}))} className="vc-input appearance-none"><option value="">— None —</option>{poOptions.map(po=><option key={po.id} value={po.id}>{po.poNo} - {po.vendorName} (₹{po.totalAmount.toLocaleString('en-IN')})</option>)}</select></div>
-            <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Expense Claim</label><select value={form.expenseClaimId} onChange={e=>setForm(p=>({...p,expenseClaimId:e.target.value,linkedType:e.target.value?'ExpenseClaim':'Direct',poId:''}))} className="vc-input appearance-none"><option value="">— None —</option>{expenseOptions.map(ex=><option key={ex.id} value={ex.id}>{ex.claimNo} - {ex.expenseType} (₹{ex.totalAmount.toLocaleString('en-IN')})</option>)}</select></div>
-          </div>
+        <div>
+          <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Bill Photo</label>
+          {form.billAttachmentPath ? (
+            <div className="flex items-center gap-3">
+              <img src={form.billAttachmentPath} alt="Bill" className="h-16 w-16 object-cover rounded-lg border border-[#252e3a]" />
+              <div className="flex flex-col gap-1">
+                <button type="button" onClick={()=>billFileInputRef.current?.click()} className="text-[11px] text-[#00d4ff] hover:underline text-left">Replace</button>
+                <button type="button" onClick={()=>setForm(p=>({...p,billAttachmentPath:''}))} className="text-[11px] text-[#ff3d3d] hover:underline text-left">Remove</button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" onClick={()=>billFileInputRef.current?.click()} className="vc-btn-ghost text-[11px] flex items-center gap-1.5"><Upload size={12}/> Upload bill photo</button>
+          )}
+          <input ref={billFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleBillFile} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Authorized By / Received From</label><input value={form.authorizedBy} onChange={e=>setForm(p=>({...p,authorizedBy:e.target.value}))} className="vc-input"/></div>
-          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Payment Mode</label><select value={form.paymentMode} onChange={e=>setForm(p=>({...p,paymentMode:e.target.value}))} className="vc-input appearance-none"><option value="Cash">Cash</option><option value="Bank Transfer">Bank Transfer</option><option value="Online">Online</option><option value="Cheque">Cheque</option></select></div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Reference No</label><input value={form.referenceNo} onChange={e=>setForm(p=>({...p,referenceNo:e.target.value}))} className="vc-input"/></div>
-          <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Remarks</label><input value={form.remarks} onChange={e=>setForm(p=>({...p,remarks:e.target.value}))} className="vc-input"/></div>
-        </div>
-        <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Bill Attachment</label><input type="file" accept="image/*,.pdf" onChange={async e=>{ const f=e.target.files?.[0]; if(!f) return; const r=await fetch('/api/upload'); const j=await r.json(); if(j.success){ const up=await fetch(j.data.url,{method:'PUT',body:f}); if(up.ok){ setForm(p=>({...p,billAttachmentPath:j.data.path})); toast.success('Bill uploaded'); } } }} className="vc-input"/>{form.billAttachmentPath && <a href={form.billAttachmentPath} target="_blank" rel="noreferrer" className="text-[11px] text-[#f5a623] hover:underline mt-1 block">View uploaded bill</a>}</div>
-      </div><DialogFooter><button onClick={()=>setFormOpen(false)} className="vc-btn-ghost text-[11px]">Cancel</button><button onClick={handleSubmit} disabled={submitting} className="vc-btn-primary text-[11px] disabled:opacity-50">{submitting?'Saving...':'Save'}</button></DialogFooter></DialogContent></Dialog>
+      </div><DialogFooter><button onClick={()=>setFormOpen(false)} className="vc-btn-ghost text-[11px]">Cancel</button><button onClick={handleSubmit} disabled={submitting} className="vc-btn-primary text-[11px] disabled:opacity-50">{submitting?'Saving...':editTarget?'Save':'Submit Request'}</button></DialogFooter></DialogContent></Dialog>
 
       <Dialog open={syncPoOpen} onOpenChange={setSyncPoOpen}><DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md"><DialogHeader><DialogTitle className="text-[#f5a623] flex items-center gap-2"><FileText size={16}/> Sync from Purchase Order</DialogTitle></DialogHeader><div className="space-y-3">
         <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Select Purchase Order</label><select value={syncTarget||''} onChange={e=>setSyncTarget(e.target.value||null)} className="vc-input appearance-none"><option value="">— Select PO —</option>{poOptions.map(po=><option key={po.id} value={po.id}>{po.poNo} - {po.vendorName} (₹{po.totalAmount.toLocaleString('en-IN')})</option>)}</select></div>

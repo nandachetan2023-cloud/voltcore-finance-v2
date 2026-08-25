@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { assertPermission } from '@/lib/fin-rbac'
+import { postJournalEntry, GL_ACCOUNTS } from '@/lib/gl-posting'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,13 +70,30 @@ export async function POST(request: NextRequest) {
       party,             // payee name
       description,
       date,
+      siteId,
+      jobCode,
+      poNo,
+      costCenter,
+      department,
+      projectManager,
     } = body
+
+    const pdb = getDbForRequest(request)
+
+    const missing = ['siteId', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager']
+      .filter(k => body[k] === undefined || body[k] === null || body[k] === '')
+    if (missing.length) {
+      return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
+    }
+
+    // RBAC: making an outgoing payment requires AP_CREATE authority.
+    const actorEmail = body.actor || request.headers.get('x-actor-email') || ''
+    const denied = await assertPermission(pdb, (actorEmail || '').trim(), 'AP_CREATE', { request, module: 'AP', siteCode: null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
 
     if (!bankAccountId) return NextResponse.json({ success: false, error: 'Bank account is required' }, { status: 400 })
     const payAmount = Number(amount)
     if (!payAmount || payAmount <= 0) return NextResponse.json({ success: false, error: 'A positive amount is required' }, { status: 400 })
-
-    const pdb = getDbForRequest(request)
 
     const account = await pdb.bankAccount.findUnique({ where: { id: Number(bankAccountId) } })
     if (!account) return NextResponse.json({ success: false, error: 'Bank account not found' }, { status: 404 })
@@ -91,6 +110,7 @@ export async function POST(request: NextRequest) {
     const paymentDate = date ? new Date(date) : new Date()
     const newBalance = account.balance - payAmount
     const payee = party || bill?.vendor || 'Payment'
+    const site = siteId ? await pdb.finSite.findUnique({ where: { id: Number(siteId) } }) : null
 
     const result = await pdb.$transaction(async (tx) => {
       // 1. Bank withdrawal transaction (records running balance)
@@ -106,6 +126,12 @@ export async function POST(request: NextRequest) {
           description: description || (bill ? `Payment for bill ${bill.billNo}` : 'Outgoing payment'),
           category: 'Payment',
           status: 'Completed',
+          siteCode: site?.siteCode || null,
+          jobCode: jobCode || null,
+          poNo: poNo || null,
+          costCenter: costCenter || null,
+          department: department || null,
+          projectManager: projectManager || null,
         },
       })
 
@@ -128,6 +154,27 @@ export async function POST(request: NextRequest) {
       }
 
       return { txn, updatedBill, newBalance }
+    })
+
+    // Auto-post the GL entry for this payment: Dr Vendor Payable / Cr Bank
+    // (or Cash, if paid in cash). A posting failure must never block the
+    // payment itself, so this runs after the transaction commits.
+    await postJournalEntry(pdb, {
+      prefix: 'JE-PAY',
+      voucherType: 'Payment',
+      entryDate: paymentDate,
+      description: `Payment to ${payee}${bill ? ` for bill ${bill.billNo}` : ''}`,
+      reference: reference || null,
+      siteId: siteId ? Number(siteId) : null,
+      jobCode: jobCode || null,
+      poNo: poNo || null,
+      costCenter: costCenter || null,
+      department: department || null,
+      projectManager: projectManager || null,
+      lines: [
+        { accountCode: GL_ACCOUNTS.VENDOR_PAYABLE, debit: payAmount, credit: 0 },
+        { accountCode: paymentMethod === 'Cash' ? GL_ACCOUNTS.CASH : GL_ACCOUNTS.BANK, debit: 0, credit: payAmount },
+      ],
     })
 
     return NextResponse.json({ success: true, data: result }, { status: 201 })

@@ -31,11 +31,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const pdb = getDbForRequest(request)
     const { items, ...data } = body
+    if (!data.quotationNo) {
+      const year = new Date().getFullYear()
+      const count = (await pdb.quotation.count()) + 1
+      data.quotationNo = `QT/${year}/${String(count).padStart(3, '0')}`
+    }
     const record = await pdb.quotation.create({
       data: {
         ...data,
         quotationDate: new Date(data.quotationDate),
         validUntil: data.validUntil ? new Date(data.validUntil) : null,
+        updatedAt: new Date(),
         QuotationItem: items?.length ? { create: items } : undefined,
       },
       include: { Customer: true, QuotationItem: { include: { Item: true } } },
@@ -64,6 +70,7 @@ export async function PUT(request: NextRequest) {
         ...data,
         quotationDate: data.quotationDate ? new Date(data.quotationDate) : undefined,
         validUntil: data.validUntil ? new Date(data.validUntil) : null,
+        updatedAt: new Date(),
         QuotationItem: items?.length ? { create: items } : undefined,
       },
       include: { Customer: true, QuotationItem: { include: { Item: true } } },

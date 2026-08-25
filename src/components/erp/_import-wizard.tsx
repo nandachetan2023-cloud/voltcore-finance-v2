@@ -14,6 +14,9 @@ export interface ImportField {
   label: string;
   required?: boolean;
   type?: 'number' | 'date';
+  /** Alternate header spellings (as shown in the export/table) that should
+   *  auto-map to this field, e.g. aliases: ['Total'] for key 'totalAmount'. */
+  aliases?: string[];
 }
 
 export interface CommitSummary { totalRows: number; created: number; updated: number; skipped: number; errors: number }
@@ -50,6 +53,8 @@ function autoDetect(fields: ImportField[], header: string): { key: string; quali
   const norm = normalize(header);
   const exact = fields.find(f => normalize(f.label) === norm || normalize(f.key) === norm);
   if (exact) return { key: exact.key, quality: 'auto' };
+  const alias = fields.find(f => f.aliases?.some(a => normalize(a) === norm));
+  if (alias) return { key: alias.key, quality: 'auto' };
   const fuzzy = fields.find(f => normalize(f.key).length >= 4 && norm.includes(normalize(f.key)));
   if (fuzzy) return { key: fuzzy.key, quality: 'fuzzy' };
   return null;
@@ -105,7 +110,7 @@ function MiniStat({ label, value, color }: { label: string; value: string | numb
   );
 }
 
-export default function ImportWizard({ title, fields, keyField, existingKeys, commitEndpoint, onClose, onImported, sampleRow, referenceColumns }: {
+export default function ImportWizard({ title, fields, keyField, existingKeys, commitEndpoint, onClose, onImported, sampleRow, referenceColumns, keyFn }: {
   title: string;
   fields: ImportField[];
   keyField: string;
@@ -115,6 +120,9 @@ export default function ImportWizard({ title, fields, keyField, existingKeys, co
   onImported: () => void;
   sampleRow?: Row;
   referenceColumns?: ReferenceColumn[];
+  /** Override how the dedup/update key is computed per row (for composite keys
+   *  like taxType + period). Defaults to the value of `keyField`. */
+  keyFn?: (record: Row) => string;
 }) {
   const [step, setStep] = useState<Step>('upload');
   const [maxStep, setMaxStep] = useState(0);
@@ -215,7 +223,7 @@ export default function ImportWizard({ title, fields, keyField, existingKeys, co
         else record[key] = String(raw ?? '').trim();
       }
       const valid = requiredFields.every(f => String(record[f.key] ?? '').trim() !== '');
-      const keyVal = String(record[keyField] ?? '').trim();
+      const keyVal = (keyFn ? keyFn(record) : String(record[keyField] ?? '')).trim();
       const duplicateInFile = valid && keyVal !== '' && seenKeys.has(keyVal);
       if (valid && keyVal) seenKeys.add(keyVal);
       return { index, record, valid, willUpdate: valid && keyVal !== '' && existingKeys.has(keyVal), duplicateInFile };

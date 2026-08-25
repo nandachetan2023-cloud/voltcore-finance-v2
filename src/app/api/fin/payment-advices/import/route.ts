@@ -74,12 +74,27 @@ function buildLine(src: Record<string, unknown>) {
   }
 }
 
-function buildAdviceData(first: Record<string, unknown>) {
+async function buildAdviceData(pdb: ReturnType<typeof getDbForRequest>, first: Record<string, unknown>) {
   const get = (...keys: string[]) => {
     const direct = keys.find(k => k in first && first[k] !== '' && first[k] != null)
     if (direct) return first[direct]
     return pick(first, ...keys)
   }
+
+  let siteId: number | null = get('siteId') ? Number(get('siteId')) : null
+  const siteCode = str(get('siteCode', 'Site Code', 'SITE CODE'))
+  if (!siteId && siteCode) {
+    const site = await pdb.finSite.findUnique({ where: { siteCode } })
+    siteId = site?.id ?? null
+  }
+
+  let poId: number | null = get('poId') ? Number(get('poId')) : null
+  const poNo = str(get('poNo', 'PO No', 'PO NO', 'PO Number'))
+  if (!poId && poNo) {
+    const po = await pdb.finPurchaseOrder.findUnique({ where: { poNo } })
+    poId = po?.id ?? null
+  }
+
   return {
     paymentDate: excelDateToJS(get('paymentDate', 'PAYMENT DATE', 'DATE', 'Advice Date', 'Date')) || new Date(),
     paymentMode: str(get('paymentMode', 'PAYMENT MODE', 'Mode', 'MODE')) || 'Bank Transfer',
@@ -87,11 +102,22 @@ function buildAdviceData(first: Record<string, unknown>) {
     notes: str(get('notes', 'NOTES', 'Notes')) || null,
     supplierName: str(get('supplierName', 'Supplier Name', 'SUPPLIER NAME', 'Supplier', 'Party Name', 'PARTY NAME')) || null,
     vendorCode: str(get('vendorCode', 'Vendor Code', 'VENDOR CODE')) || null,
+    siteId,
+    poId,
+    jobCode: str(get('jobCode', 'JOB CODE', 'Job Code', 'JOB')) || null,
+    costCenter: str(get('costCenter', 'Cost Center', 'COST CENTER', 'Cost Centre', 'COST CENTRE')) || null,
+    department: str(get('department', 'Department', 'DEPARTMENT', 'Dept', 'DEPT')) || null,
+    projectManager: str(get('projectManager', 'Project Manager', 'PROJECT MANAGER', 'PM')) || null,
     panNo: str(get('panNo', 'PAN No', 'PAN NO', 'PAN')) || null,
     bankName: str(get('bankName', 'Bank Name', 'BANK NAME')) || null,
     accountNo: str(get('accountNo', 'Bank Account Number', 'BANK ACCOUNT NUMBER', 'Account No', 'ACCOUNT NO')) || null,
     ifscCode: str(get('ifscCode', 'IFSC Code', 'IFSC CODE', 'IFSC')) || null,
   }
+}
+
+const REQUIRED_KEYS = ['siteId', 'jobCode', 'poId', 'costCenter', 'department', 'projectManager'] as const
+function missingRequired(data: Record<string, unknown>): string[] {
+  return REQUIRED_KEYS.filter(k => data[k] === undefined || data[k] === null || data[k] === '')
 }
 
 export async function POST(request: NextRequest) {
@@ -119,7 +145,9 @@ export async function POST(request: NextRequest) {
           const first = adviceRows[0]
           const lines = adviceRows.map(buildLine)
           const totalAmount = lines.reduce((s, l) => s + l.amount, 0) || num(first.amount)
-          const data = { adviceNo, totalAmount, updatedAt: new Date(), ...buildAdviceData(first) }
+          const data = { adviceNo, totalAmount, updatedAt: new Date(), ...await buildAdviceData(pdb, first) }
+          const missing = missingRequired(data)
+          if (missing.length) { errors++; errorRows.push({ adviceNo, message: `Missing required fields: ${missing.join(', ')}` }); continue }
           const existing = await pdb.finPaymentAdvice.findFirst({ where: { adviceNo } })
           if (existing) {
             await pdb.finPaymentAdviceLine.deleteMany({ where: { adviceId: existing.id } })
@@ -168,8 +196,10 @@ export async function POST(request: NextRequest) {
         const lines = adviceRows.map(buildLine)
         const totalAmount = lines.reduce((s, l) => s + l.amount, 0) || num(pick(first, 'Amount', 'AMOUNT'))
 
+        const data = { adviceNo, totalAmount, updatedAt: new Date(), ...await buildAdviceData(pdb, first) }
+        const missing = missingRequired(data)
+        if (missing.length) { errors++; errorRows.push({ adviceNo, message: `Missing required fields: ${missing.join(', ')}` }); continue }
         const existing = await pdb.finPaymentAdvice.findFirst({ where: { adviceNo } })
-        const data = { adviceNo, totalAmount, updatedAt: new Date(), ...buildAdviceData(first) }
 
         if (existing) {
           await pdb.finPaymentAdviceLine.deleteMany({ where: { adviceId: existing.id } })

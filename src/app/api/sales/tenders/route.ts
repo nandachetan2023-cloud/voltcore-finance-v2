@@ -25,6 +25,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const pdb = getDbForRequest(request)
     const { documents, bidTeam, evaluation, ...data } = body
+    if (!data.tenderNo) {
+      const year = new Date().getFullYear()
+      const count = (await pdb.finTender.count()) + 1
+      data.tenderNo = `TDR/${year}/${String(count).padStart(3, '0')}`
+    }
     const record = await pdb.finTender.create({
       data: {
         ...data,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { assertPermission } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,30 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const pdb = getDbForRequest(request)
 
+    const isReplenishment = body.type === 'Credit' && (body.category === 'Replenishment' || /replenish/i.test(body.description || ''))
+    const requiredKeys = isReplenishment ? ['siteId'] : ['siteId', 'jobCode']
+    const missing = requiredKeys.filter(k => body[k] === undefined || body[k] === null || body[k] === '')
+    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
+
+    const site = body.siteId ? await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } }) : null
+    const denied = await assertPermission(pdb, body.actor || '', 'PETTYCASH_CREATE', { request, module: 'PettyCash', siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create petty cash vouchers' }, { status: 403 })
+
+    // Requester supplies description/amount/category/jobCode; everything costing-related is derived automatically.
+    if (!body.costCenter) body.costCenter = site?.siteCode ? `CC-${site.siteCode}` : null
+    if (!body.department) body.department = 'Site Operations'
+    if (!body.projectManager) body.projectManager = site?.responsiblePerson || null
+    if (!body.authorizedBy) body.authorizedBy = body.actor || null
+    if (!body.type) body.type = 'Debit'
+    if (!body.paymentMode) body.paymentMode = 'Cash'
+    if (!body.linkedType) body.linkedType = body.poId ? 'PO' : body.expenseClaimId ? 'ExpenseClaim' : 'Direct'
+
+    if (!body.voucherNo) {
+      const yr = new Date().getFullYear()
+      const count = (await pdb.finPettyCash.count()) + 1
+      body.voucherNo = `PV/${yr}/${String(count).padStart(4, '0')}`
+    }
+
     const last = await pdb.finPettyCash.findFirst({ orderBy: { id: 'desc' } })
     const lastBalance = last?.balance ?? 0
     const delta = body.type === 'Credit' ? Number(body.amount) || 0 : -(Number(body.amount) || 0)
@@ -50,6 +75,12 @@ export async function POST(request: NextRequest) {
         referenceNo: body.referenceNo || null,
         remarks: body.remarks || null,
         billAttachmentPath: body.billAttachmentPath || null,
+        jobCode: body.jobCode || null,
+        costCenter: body.costCenter || null,
+        department: body.department || null,
+        projectManager: body.projectManager || null,
+        custodian: body.custodian || null,
+        limitAmount: body.limitAmount ? Number(body.limitAmount) : null,
       },
       include: {
         party: { select: { id: true, name: true, code: true } },
@@ -72,6 +103,17 @@ export async function PUT(request: NextRequest) {
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
 
+    const missing = ['siteId', 'jobCode'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
+    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
+
+    const site = body.siteId ? await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } }) : null
+    const denied = await assertPermission(pdb, body.actor || '', 'PETTYCASH_EDIT', { request, module: 'PettyCash', entityId: String(id), siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit petty cash vouchers' }, { status: 403 })
+
+    if (!data.costCenter) data.costCenter = site?.siteCode ? `CC-${site.siteCode}` : data.costCenter
+    if (!data.department) data.department = data.department || 'Site Operations'
+    if (!data.projectManager) data.projectManager = site?.responsiblePerson || data.projectManager
+
     const updateData: any = {}
     if (data.voucherNo !== undefined) updateData.voucherNo = data.voucherNo
     if (data.date !== undefined) updateData.date = new Date(data.date)
@@ -89,6 +131,12 @@ export async function PUT(request: NextRequest) {
     if (data.referenceNo !== undefined) updateData.referenceNo = data.referenceNo
     if (data.remarks !== undefined) updateData.remarks = data.remarks
     if (data.billAttachmentPath !== undefined) updateData.billAttachmentPath = data.billAttachmentPath
+    if (data.jobCode !== undefined) updateData.jobCode = data.jobCode
+    if (data.costCenter !== undefined) updateData.costCenter = data.costCenter
+    if (data.department !== undefined) updateData.department = data.department
+    if (data.projectManager !== undefined) updateData.projectManager = data.projectManager
+    if (data.custodian !== undefined) updateData.custodian = data.custodian
+    if (data.limitAmount !== undefined) updateData.limitAmount = data.limitAmount ? Number(data.limitAmount) : null
 
     const record = await pdb.finPettyCash.update({
       where: { id: Number(id) },
@@ -111,6 +159,10 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const pdb = getDbForRequest(request)
+
+    const actor = request.headers.get('x-actor-email') || ''
+    const denied = await assertPermission(pdb, actor, 'PETTYCASH_DELETE', { request, module: 'PettyCash' })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to delete petty cash vouchers' }, { status: 403 })
 
     const idsParam = searchParams.get('ids')
     if (idsParam) {

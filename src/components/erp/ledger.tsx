@@ -13,6 +13,7 @@ import ImportWizard, { type ImportField } from './_import-wizard';
 
 interface LedgerAccount {
   id: number;
+  source?: string;
   accountCode: string;
   name: string;
   group: string | null;
@@ -99,7 +100,7 @@ export default function Ledger() {
       setLoading(true);
       const res = await fetch('/api/ledger');
       const json = await res.json();
-      if (json.success && json.data?.length) { setRecords(json.data); }
+      if (json.success && json.data?.length) { setRecords(json.data.map((r: any) => ({ ...r, group: r.group === 'Expenses' ? 'Expense' : r.group }))); }
       else { setRecords(generateMockLedger()); toast.info('Sample data — no server records found'); }
     } catch { setRecords(generateMockLedger()); toast.info('Sample data — API unavailable'); }
     finally { setLoading(false); }
@@ -117,7 +118,7 @@ export default function Ledger() {
   const handleSubmit = async () => {
     if (!form.accountCode.trim() || !form.name.trim()) { toast.error('Account code and name are required'); return; }
     // Guard against duplicate codes (client-side; API enforces uniqueness too)
-    const dup = records.find(r => r.accountCode.toLowerCase() === form.accountCode.trim().toLowerCase() && r.id !== editTarget?.id);
+    const dup = records.find(r => r.source !== 'fin' && r.accountCode.toLowerCase() === form.accountCode.trim().toLowerCase() && r.id !== editTarget?.id);
     if (dup) { toast.error(`Account code "${form.accountCode}" already exists`); return; }
     setSubmitting(true);
     try {
@@ -138,7 +139,7 @@ export default function Ledger() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const res = await fetch(`/api/ledger?id=${deleteTarget.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/ledger?id=${deleteTarget.id}&source=${deleteTarget.source || ''}`, { method: 'DELETE' });
       const json = await res.json();
       if (json.success) { toast.success('Account deleted'); setDeleteOpen(false); await fetchData(); }
       else { toast.error(json.error || 'Delete failed'); }
@@ -156,7 +157,13 @@ export default function Ledger() {
 
   // Existing account codes/names available as parent options (exclude self when editing)
   const parentOptions = useMemo(
-    () => records.filter(r => r.id !== editTarget?.id).map(r => ({ code: r.accountCode, name: r.name })),
+    () => {
+      const seen = new Set<string>();
+      return records
+        .filter(r => r.id !== editTarget?.id)
+        .filter(r => (seen.has(r.accountCode) ? false : (seen.add(r.accountCode), true)))
+        .map(r => ({ code: r.accountCode, name: r.name }));
+    },
     [records, editTarget],
   );
 
@@ -183,7 +190,7 @@ export default function Ledger() {
         title="Ledger Accounts"
         fields={LEDGER_IMPORT_FIELDS}
         keyField="accountCode"
-        existingKeys={new Set(records.map(r => r.accountCode))}
+        existingKeys={new Set(records.filter(r => r.source !== 'fin').map(r => r.accountCode))}
         commitEndpoint="/api/ledger/import"
         sampleRow={LEDGER_SAMPLE_ROW}
         onClose={() => setImportOpen(false)}
@@ -229,7 +236,7 @@ export default function Ledger() {
 
         {/* Search + group filter */}
         <div className="px-4 py-3 border-b border-[#252e3a] flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[220px]">
+          <div className="relative w-1/2 min-w-[110px]">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5a6878]" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search code, account name, parent..."
@@ -259,7 +266,7 @@ export default function Ledger() {
               </thead>
               <tbody className="divide-y divide-[#1a2028]">
                 {filtered.map(r => (
-                  <tr key={r.id} className="hover:bg-[#141920] transition-colors">
+                  <tr key={`${r.source ?? 'ledger'}-${r.id}`} className="hover:bg-[#141920] transition-colors">
                     <td className="py-2.5 px-3 text-[#f5a623] font-mono font-medium whitespace-nowrap">{r.accountCode}</td>
                     <td className="py-2.5 px-3 text-[#e2e8f0] font-medium">{r.name}</td>
                     <td className="py-2.5 px-3 text-[#5a6878] font-mono whitespace-nowrap">{r.parentAccount || '—'}</td>
@@ -271,8 +278,14 @@ export default function Ledger() {
                     </td>
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-1">
-                        <button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button>
-                        <button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button>
+                        {r.source === 'fin' ? (
+                          <span className="text-[9px] text-[#5a6878]" title="Read-only — synced from Chart of Accounts">RO</span>
+                        ) : (
+                          <>
+                            <button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button>
+                            <button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

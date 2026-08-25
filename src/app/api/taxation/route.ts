@@ -17,6 +17,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    const missing = ['siteCode', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
+    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
     const record = await pdb.taxRecord.create({ data: body })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
@@ -31,6 +33,8 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { id, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    const missing = ['siteCode', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => data[k] === undefined || data[k] === null || data[k] === '')
+    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
     const record = await pdb.taxRecord.update({ where: { id }, data })
     return NextResponse.json({ success: true, data: record })

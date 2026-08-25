@@ -3,9 +3,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { FileText, Plus, Pencil, Trash2, Loader2, Search, CheckCircle2, Upload } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
-import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
+import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { FormField, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
 
 interface Site { id: number; name: string; siteCode: string; }
 
@@ -14,6 +15,10 @@ const EC_COLUMNS: ExportColumn<ExpenseClaim>[] = [
   { header: 'Date', accessor: (r) => r.date?.split('T')[0] ?? '' },
   { header: 'Site', accessor: (r: any) => r.site?.name || '' },
   { header: 'Type', accessor: (r: any) => r.siteType || 'Site' },
+  { header: 'Job Code', accessor: 'jobCode' },
+  { header: 'Cost Center', accessor: 'costCenter' },
+  { header: 'Department', accessor: 'department' },
+  { header: 'Project Manager', accessor: 'projectManager' },
   { header: 'Submitted By', accessor: 'submittedBy' },
   { header: 'Bill No', accessor: (r: any) => r.billNo || '' },
   { header: 'Total', accessor: 'totalAmount' },
@@ -28,14 +33,18 @@ const EC_COLUMNS: ExportColumn<ExpenseClaim>[] = [
 const EC_IMPORT_FIELDS: ImportField[] = [
   { key: 'claimNo', label: 'Claim No' },
   { key: 'date', label: 'Date', type: 'date' },
-  { key: 'expenseType', label: 'Expense Type' },
+  { key: 'expenseType', label: 'Expense Type', aliases: ['Type'] },
   { key: 'submittedBy', label: 'Submitted By' },
+  { key: 'jobCode', label: 'Job Code' },
+  { key: 'costCenter', label: 'Cost Center', required: true },
+  { key: 'department', label: 'Department' },
+  { key: 'projectManager', label: 'Project Manager' },
   { key: 'billNo', label: 'Bill No' },
-  { key: 'totalAmount', label: 'Total Amount', type: 'number' },
+  { key: 'totalAmount', label: 'Total Amount', type: 'number', aliases: ['Total'] },
   { key: 'receivedAmount', label: 'Received Amount', type: 'number' },
-  { key: 'gstAmount', label: 'GST Amount', type: 'number' },
-  { key: 'tdsAmount', label: 'TDS Amount', type: 'number' },
-  { key: 'approvalStatus', label: 'Approval Status' },
+  { key: 'gstAmount', label: 'GST Amount', type: 'number', aliases: ['GST'] },
+  { key: 'tdsAmount', label: 'TDS Amount', type: 'number', aliases: ['TDS'] },
+  { key: 'approvalStatus', label: 'Approval Status', aliases: ['Appr.'] },
   { key: 'status', label: 'Status' },
   { key: 'remarks', label: 'Remarks' },
   { key: 'category', label: 'Category (Item)' },
@@ -49,6 +58,10 @@ const EC_SAMPLE_ROW = {
   date: '2024-11-20',
   expenseType: 'Travel',
   submittedBy: 'Rajesh Kumar',
+  jobCode: 'JOB-2026-001',
+  costCenter: 'CC-SIT-001',
+  department: 'Projects',
+  projectManager: 'R. Sharma',
   billNo: 'BILL-001',
   totalAmount: 47500,
   receivedAmount: 0,
@@ -64,8 +77,11 @@ const EC_SAMPLE_ROW = {
 };
 
 interface ExpenseItem { id: number; category: string; description: string; amount: number; receiptUrl: string; }
+interface PoOption { id: number; poNo: string; vendorName: string; }
 interface ExpenseClaim {
   id: number; claimNo: string; siteId: number; siteType: string; jobCode?: string | null;
+  poId?: number | null;
+  costCenter?: string | null; department?: string | null; projectManager?: string | null;
   submittedBy: string; date: string; totalAmount: number;
   gstAmount: number; tdsAmount: number; billNo: string | null;
   status: string; approvalStatus: string; remarks: string;
@@ -74,13 +90,15 @@ interface ExpenseClaim {
 }
 interface FormData {
   claimNo: string; date: string; siteId: number; siteType: string; jobCode: string;
+  poId: number | null; costCenter: string; department: string; projectManager: string;
   submittedBy: string; status: string; approvalStatus: string;
   billNo: string; gstAmount: number; tdsAmount: number; remarks: string;
 }
 
 const EMPTY_FORM: FormData = {
   claimNo: '', date: new Date().toISOString().split('T')[0], siteId: 0,
-  siteType: 'Site', jobCode: '', submittedBy: '', status: 'Draft', approvalStatus: 'Draft',
+  siteType: 'Site', jobCode: '', poId: null, costCenter: '', department: '', projectManager: '',
+  submittedBy: '', status: 'Draft', approvalStatus: 'Draft',
   billNo: '', gstAmount: 0, tdsAmount: 0, remarks: '',
 };
 
@@ -89,15 +107,15 @@ const CATEGORIES = ['Material', 'Travel', 'Food', 'Accommodation', 'Transport', 
 
 function generateMockExpenseClaims(): ExpenseClaim[] {
   return [
-    { id: 1, claimNo: 'EC/2024-25/001', siteId: 1, submittedBy: 'Rajesh Kumar', date: '2024-11-20T00:00:00', totalAmount: 47500, status: 'Approved', remarks: 'Site visit expenses — November', site: { name: 'NTPC Rihand Dam Project' }, items: [{ id: 1, category: 'Travel', description: 'Delhi to Rihand train fare', amount: 2800, receiptUrl: '' }, { id: 2, category: 'Accommodation', description: 'Hotel stay — 3 nights', amount: 9000, receiptUrl: '' }, { id: 3, category: 'Food', description: 'Meals during site visit', amount: 3500, receiptUrl: '' }, { id: 4, category: 'Transport', description: 'Local cab hire', amount: 4200, receiptUrl: '' }] },
-    { id: 2, claimNo: 'EC/2024-25/002', siteId: 2, submittedBy: 'Ankit Verma', date: '2024-12-15T00:00:00', totalAmount: 23000, status: 'Paid', remarks: 'Project material procurement', site: { name: 'BALCO Aluminium Smelter' }, items: [{ id: 3, category: 'Material', description: 'PVC pipes and fittings', amount: 12000, receiptUrl: '' }, { id: 4, category: 'Office Supplies', description: 'Print cartridges and paper', amount: 3500, receiptUrl: '' }, { id: 5, category: 'Transport', description: 'Auto fare — material pickup', amount: 1500, receiptUrl: '' }] },
-    { id: 3, claimNo: 'EC/2024-25/003', siteId: 3, submittedBy: 'Suresh Mahto', date: '2025-01-10T00:00:00', totalAmount: 15800, status: 'Submitted', remarks: 'Client meeting travel', site: { name: 'Coal India Eastern Coalfield' }, items: [{ id: 6, category: 'Travel', description: 'Ranchi to Dhanbad bus', amount: 1200, receiptUrl: '' }, { id: 7, category: 'Food', description: 'Client lunch meeting', amount: 4500, receiptUrl: '' }, { id: 8, category: 'Accommodation', description: 'Overnight stay', amount: 3500, receiptUrl: '' }] },
-    { id: 4, claimNo: 'EC/2024-25/004', siteId: 4, submittedBy: 'Prakash Sahu', date: '2025-02-25T00:00:00', totalAmount: 68000, status: 'Approved', remarks: 'Emergency equipment repair', site: { name: 'Vedanta Jharsuguda Smelter' }, items: [{ id: 9, category: 'Material', description: 'Hydraulic hose and clamps', amount: 18000, receiptUrl: '' }, { id: 10, category: 'Transport', description: 'Crane rental — half day', amount: 25000, receiptUrl: '' }, { id: 11, category: 'Other', description: 'Overtime allowance — crew of 4', amount: 12000, receiptUrl: '' }] },
-    { id: 5, claimNo: 'EC/2024-25/005', siteId: 5, submittedBy: 'Deepak Mishra', date: '2025-03-18T00:00:00', totalAmount: 31500, status: 'Rejected', remarks: 'Office renovation expenses', site: { name: 'Hindalco Mahan Aluminium' }, items: [{ id: 12, category: 'Office Supplies', description: 'Whiteboard and markers', amount: 5500, receiptUrl: '' }, { id: 13, category: 'Utilities', description: 'Electricity bill — March', amount: 12000, receiptUrl: '' }, { id: 14, category: 'Other', description: 'Carpenter charges', amount: 8000, receiptUrl: '' }] },
+    { id: 1, claimNo: 'EC/2024-25/001', siteId: 1, siteType: 'Site', submittedBy: 'Rajesh Kumar', date: '2024-11-20T00:00:00', totalAmount: 47500, gstAmount: 0, tdsAmount: 0, billNo: null, status: 'Approved', approvalStatus: 'Approved', remarks: 'Site visit expenses — November', site: { name: 'NTPC Rihand Dam Project' }, items: [{ id: 1, category: 'Travel', description: 'Delhi to Rihand train fare', amount: 2800, receiptUrl: '' }, { id: 2, category: 'Accommodation', description: 'Hotel stay — 3 nights', amount: 9000, receiptUrl: '' }, { id: 3, category: 'Food', description: 'Meals during site visit', amount: 3500, receiptUrl: '' }, { id: 4, category: 'Transport', description: 'Local cab hire', amount: 4200, receiptUrl: '' }] },
+    { id: 2, claimNo: 'EC/2024-25/002', siteId: 2, siteType: 'Site', submittedBy: 'Ankit Verma', date: '2024-12-15T00:00:00', totalAmount: 23000, gstAmount: 0, tdsAmount: 0, billNo: null, status: 'Paid', approvalStatus: 'Approved', remarks: 'Project material procurement', site: { name: 'BALCO Aluminium Smelter' }, items: [{ id: 3, category: 'Material', description: 'PVC pipes and fittings', amount: 12000, receiptUrl: '' }, { id: 4, category: 'Office Supplies', description: 'Print cartridges and paper', amount: 3500, receiptUrl: '' }, { id: 5, category: 'Transport', description: 'Auto fare — material pickup', amount: 1500, receiptUrl: '' }] },
+    { id: 3, claimNo: 'EC/2024-25/003', siteId: 3, siteType: 'Site', submittedBy: 'Suresh Mahto', date: '2025-01-10T00:00:00', totalAmount: 15800, gstAmount: 0, tdsAmount: 0, billNo: null, status: 'Submitted', approvalStatus: 'Pending', remarks: 'Client meeting travel', site: { name: 'Coal India Eastern Coalfield' }, items: [{ id: 6, category: 'Travel', description: 'Ranchi to Dhanbad bus', amount: 1200, receiptUrl: '' }, { id: 7, category: 'Food', description: 'Client lunch meeting', amount: 4500, receiptUrl: '' }, { id: 8, category: 'Accommodation', description: 'Overnight stay', amount: 3500, receiptUrl: '' }] },
+    { id: 4, claimNo: 'EC/2024-25/004', siteId: 4, siteType: 'Site', submittedBy: 'Prakash Sahu', date: '2025-02-25T00:00:00', totalAmount: 68000, gstAmount: 0, tdsAmount: 0, billNo: null, status: 'Approved', approvalStatus: 'Approved', remarks: 'Emergency equipment repair', site: { name: 'Vedanta Jharsuguda Smelter' }, items: [{ id: 9, category: 'Material', description: 'Hydraulic hose and clamps', amount: 18000, receiptUrl: '' }, { id: 10, category: 'Transport', description: 'Crane rental — half day', amount: 25000, receiptUrl: '' }, { id: 11, category: 'Other', description: 'Overtime allowance — crew of 4', amount: 12000, receiptUrl: '' }] },
+    { id: 5, claimNo: 'EC/2024-25/005', siteId: 5, siteType: 'Site', submittedBy: 'Deepak Mishra', date: '2025-03-18T00:00:00', totalAmount: 31500, gstAmount: 0, tdsAmount: 0, billNo: null, status: 'Rejected', approvalStatus: 'Rejected', remarks: 'Office renovation expenses', site: { name: 'Hindalco Mahan Aluminium' }, items: [{ id: 12, category: 'Office Supplies', description: 'Whiteboard and markers', amount: 5500, receiptUrl: '' }, { id: 13, category: 'Utilities', description: 'Electricity bill — March', amount: 12000, receiptUrl: '' }, { id: 14, category: 'Other', description: 'Carpenter charges', amount: 8000, receiptUrl: '' }] },
   ];
 }
 
-const ic = "w-full bg-[#1a2332] border-[1.5px] border-[#2e3a48] rounded-lg px-3.5 py-2.5 text-[13px] text-[#e2e8f0] outline-none transition-all duration-200 placeholder:text-[#5a6878] hover:border-[#3a4858] hover:bg-[#1e2838] focus:border-[#f5a623] focus:bg-[#1e2838] focus:shadow-[0_0_0_3px_rgba(245,166,35,0.15)]";
+const ic = "w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none";
 const sc = ic + " appearance-none cursor-pointer";
 
 function fmt(n: number) { return '₹' + (n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 }); }
@@ -106,21 +124,10 @@ function genClaimNo() {
   return 'EC/' + d.getFullYear().toString().slice(-2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0');
 }
 
-function FormField({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
-  return (
-    <div>
-      <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">
-        {label}
-        {required && <span className="text-[#ff3d3d] ml-1">*</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
 export default function FinExpenseClaims() {
   const [records, setRecords] = useState<ExpenseClaim[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PoOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ExpenseClaim | null>(null);
@@ -155,15 +162,34 @@ export default function FinExpenseClaims() {
       if (rj.success && rj.data?.length) setSites(rj.data);
       else setSites([{ id: 1, name: 'TPP Adani Godda', siteCode: 'SITE-001' }, { id: 2, name: 'TPP NTPC Barh', siteCode: 'SITE-002' }, { id: 3, name: 'HO Mumbai', siteCode: 'SITE-003' }]);
     } catch { setSites([{ id: 1, name: 'TPP Adani Godda', siteCode: 'SITE-001' }, { id: 2, name: 'TPP NTPC Barh', siteCode: 'SITE-002' }, { id: 3, name: 'HO Mumbai', siteCode: 'SITE-003' }]); }
+    fetch('/api/fin/purchase-orders').then(r => r.json()).then(j => { if (j.success && j.data?.length) setPurchaseOrders(j.data); }).catch(() => {});
     setLoading(false);
   }, [monthFilter]);
   useEffect(() => { fetch_(); }, [fetch_]);
+  useEffect(() => {
+    const onDataChanged = () => fetch_();
+    window.addEventListener('finance:data-changed', onDataChanged);
+    return () => window.removeEventListener('finance:data-changed', onDataChanged);
+  }, [fetch_]);
+
+  const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<FormData>({
+    claimNo: required('Claim No'),
+    submittedBy: required('Submitted By'),
+    siteId: (v) => (!v) ? 'Site Code is required' : undefined,
+    jobCode: required('Job Code'),
+    poId: (v) => (!v) ? 'PO Number is required' : undefined,
+    costCenter: required('Cost Center'),
+    department: required('Department'),
+    projectManager: required('Project Manager'),
+  });
+  const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
   const openCreate = () => {
     setEditTarget(null);
     setForm({ ...EMPTY_FORM, claimNo: genClaimNo() });
     setLines([{ id: 1, category: 'Material', description: '', amount: 0, receiptUrl: '' }]);
     setFormErr('');
+    setFormErrors({});
     setFormOpen(true);
   };
 
@@ -172,12 +198,15 @@ export default function FinExpenseClaims() {
     setForm({
       claimNo: r.claimNo, date: r.date?.split('T')[0] || '', siteId: r.siteId,
       siteType: r.siteType || 'Site', jobCode: r.jobCode || '',
+      poId: r.poId ?? null,
+      costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '',
       submittedBy: r.submittedBy || '', status: r.status, approvalStatus: r.approvalStatus || 'Draft',
       billNo: r.billNo || '', gstAmount: r.gstAmount || 0, tdsAmount: r.tdsAmount || 0,
       remarks: r.remarks || '',
     });
     setLines(r.items?.length ? r.items.map(item => ({ ...item })) : [{ id: 1, category: 'Material', description: '', amount: 0, receiptUrl: '' }]);
     setFormErr('');
+    setFormErrors({});
     setFormOpen(true);
   };
 
@@ -192,9 +221,7 @@ export default function FinExpenseClaims() {
   const computedTotal = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
 
   const handleSubmit = async () => {
-    if (!form.claimNo) { setFormErr('Claim No is required'); return; }
-    if (!form.siteId) { setFormErr('Site is required'); return; }
-    if (!form.submittedBy) { setFormErr('Submitted By is required'); return; }
+    if (!validateForm(form)) { setFormErr('Please fix the highlighted fields'); return; }
     setFormErr('');
     setSubmitting(true);
     try {
@@ -204,6 +231,10 @@ export default function FinExpenseClaims() {
         siteId: form.siteId,
         siteType: form.siteType,
         jobCode: form.jobCode || null,
+        poId: form.poId ? Number(form.poId) : null,
+        costCenter: form.costCenter || null,
+        department: form.department || null,
+        projectManager: form.projectManager || null,
         submittedBy: form.submittedBy || null,
         billNo: form.billNo || null,
         gstAmount: form.gstAmount,
@@ -301,7 +332,7 @@ export default function FinExpenseClaims() {
           <FileText size={15} className="text-[#f5a623]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Expense Claims</span>
           <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{records.length}</span>
-          <input type="month" value={monthFilter} onChange={e => { setMonthFilter(e.target.value); setSelectedIds(new Set()); }} className="vc-input py-1.5 text-[12px] w-36 ml-2" />
+          <input type="month" value={monthFilter} onChange={e => { setMonthFilter(e.target.value); setSelectedIds(new Set()); }} className="vc-input py-1.5 text-[12px] w-28 ml-2" />
           <div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search claims..." /></div>
           <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button>
           <ExportButton records={records} columns={EC_COLUMNS} filename="fin-expense-claims" />
@@ -318,9 +349,21 @@ export default function FinExpenseClaims() {
                   <th className="py-2 px-3 w-8">
                     <input type="checkbox" checked={tc.pageItems.length > 0 && selectedIds.size === tc.pageItems.length} onChange={toggleSelectAll} className="accent-[#f5a623]" />
                   </th>
-                  {['Claim No', 'Date', 'Site', 'Type', 'Submitted By', 'Bill No', 'Total', 'GST', 'TDS', 'Items', 'Status', 'Appr.', ''].map(h => (
-                    <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">{h}</th>
-                  ))}
+                  <SortableTh label="Claim No" sortKey="claimNo" accessor={(r: ExpenseClaim) => r.claimNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+                  <SortableTh label="Date" sortKey="date" accessor={(r: ExpenseClaim) => r.date} sort={tc.sort} toggleSort={tc.toggleSort} />
+                  <SortableTh label="Site" sortKey="site" accessor={(r: any) => r.site?.name} sort={tc.sort} toggleSort={tc.toggleSort} />
+                  <SortableTh label="Type" sortKey="siteType" accessor={(r: ExpenseClaim) => r.siteType} sort={tc.sort} toggleSort={tc.toggleSort} />
+                  <SortableTh label="Submitted By" sortKey="submittedBy" accessor={(r: ExpenseClaim) => r.submittedBy} sort={tc.sort} toggleSort={tc.toggleSort} />
+                  <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: ExpenseClaim) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
+                  <SortableTh label="Cost Center" sortKey="costCenter" accessor={(r: ExpenseClaim) => r.costCenter} sort={tc.sort} toggleSort={tc.toggleSort} />
+                  <SortableTh label="Bill No" sortKey="billNo" accessor={(r: ExpenseClaim) => r.billNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+                  <SortableTh label="Total" sortKey="totalAmount" accessor={(r: ExpenseClaim) => r.totalAmount} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+                  <SortableTh label="GST" sortKey="gstAmount" accessor={(r: ExpenseClaim) => r.gstAmount} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+                  <SortableTh label="TDS" sortKey="tdsAmount" accessor={(r: ExpenseClaim) => r.tdsAmount} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+                  <SortableTh label="Items" sortKey="items" accessor={(r: any) => r.items?.length ?? 0} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+                  <SortableTh label="Status" sortKey="status" accessor={(r: ExpenseClaim) => r.status} sort={tc.sort} toggleSort={tc.toggleSort} />
+                  <SortableTh label="Appr." sortKey="approvalStatus" accessor={(r: ExpenseClaim) => r.approvalStatus} sort={tc.sort} toggleSort={tc.toggleSort} />
+                  <th className="py-2 px-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1a2028]">
@@ -334,6 +377,8 @@ export default function FinExpenseClaims() {
                     <td className="py-2.5 px-3 text-[#e2e8f0] max-w-[160px] truncate">{r.site?.name || '—'}</td>
                     <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.siteType || 'Site'}</td>
                     <td className="py-2.5 px-3 text-[#e2e8f0] max-w-[140px] truncate">{r.submittedBy || '—'}</td>
+                    <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || '—'}</td>
+                    <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.costCenter || '—'}</td>
                     <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.billNo || '—'}</td>
                     <td className="py-2.5 px-3 text-[#00e676] font-mono font-medium whitespace-nowrap">{fmt(r.totalAmount)}</td>
                     <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.gstAmount ? fmt(r.gstAmount) : '—'}</td>
@@ -353,8 +398,8 @@ export default function FinExpenseClaims() {
                     </td>
                   </tr>
                 ))}
-                {records.length === 0 && <tr><td colSpan={14} className="py-10 text-center text-[#5a6878]">No expense claims yet</td></tr>}
-                {records.length > 0 && tc.pageItems.length === 0 && <tr><td colSpan={14} className="py-10 text-center text-[#5a6878]">No matching claims</td></tr>}
+                {records.length === 0 && <tr><td colSpan={16} className="py-10 text-center text-[#5a6878]">No expense claims yet</td></tr>}
+                {records.length > 0 && tc.pageItems.length === 0 && <tr><td colSpan={16} className="py-10 text-center text-[#5a6878]">No matching claims</td></tr>}
               </tbody>
             </table>
           </div>
@@ -412,46 +457,46 @@ export default function FinExpenseClaims() {
 
               {/* Form Fields */}
               <div className="grid grid-cols-2 gap-3">
-                <FormField label="Claim No">
-                  <input value={form.claimNo ?? ''} onChange={e => setForm({...form, claimNo: e.target.value})} placeholder="Auto-generated" className={ic} />
+                <FormField label="Claim No" required error={formErrors.claimNo}>
+                  <input value={form.claimNo ?? ''} onChange={e => setField('claimNo', e.target.value)} placeholder="Auto-generated" className={ic} />
                 </FormField>
                 <FormField label="Date">
-                  <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className={ic} />
+                  <input type="date" value={form.date} onChange={e => setField('date', e.target.value)} className={ic} />
                 </FormField>
-                <FormField label="Site" required>
-                  <select value={form.siteId} onChange={e => setForm({...form, siteId: Number(e.target.value)})} className={sc}>
-                    <option value={0}>Select site</option>
-                    {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                <FormField label="Site Code" required error={formErrors.siteId}>
+                  <SearchableSelect value={form.siteId ? String(form.siteId) : ''} onChange={v => setField('siteId', v ? Number(v) : 0)} options={sites.map(s => ({ value: String(s.id), label: s.name, sublabel: s.siteCode }))} placeholder="Select site"/>
                 </FormField>
-                <FormField label="Submitted By" required>
-                  <input value={form.submittedBy} onChange={e => setForm({...form, submittedBy: e.target.value})} placeholder="Name" className={ic} />
+                <FormField label="Submitted By" required error={formErrors.submittedBy}>
+                  <input value={form.submittedBy} onChange={e => setField('submittedBy', e.target.value)} placeholder="Name" className={ic} />
                 </FormField>
                 <FormField label="Site Type">
-                  <select value={form.siteType} onChange={e => setForm({...form, siteType: e.target.value})} className={sc}>
+                  <select value={form.siteType} onChange={e => setField('siteType', e.target.value)} className={sc}>
                     <option value="Site">Site</option>
                     <option value="HO">HO</option>
                   </select>
                 </FormField>
-                <FormField label="Job Code">
-                  <input value={form.jobCode} onChange={e => setForm({...form, jobCode: e.target.value})} placeholder="JOB-2026-001" className={ic} />
+                <FormField label="Job Code" required error={formErrors.jobCode}>
+                  <DatalistField id="claim-job" value={form.jobCode} onChange={v => setField('jobCode', v)} options={[...new Set(records.map(r => r.jobCode).filter(Boolean) as string[])]} placeholder="e.g. JOB-001" />
+                </FormField>
+                <FormField label="PO Number" required error={formErrors.poId}>
+                  <SearchableSelect value={form.poId ? String(form.poId) : ''} onChange={v => setField('poId', v ? Number(v) : null)} options={purchaseOrders.map(po => ({ value: String(po.id), label: po.poNo, sublabel: po.vendorName }))} placeholder="Select PO..." />
                 </FormField>
                 <FormField label="Bill/Voucher No">
-                  <input value={form.billNo} onChange={e => setForm({...form, billNo: e.target.value})} placeholder="Bill ref" className={ic} />
+                  <input value={form.billNo} onChange={e => setField('billNo', e.target.value)} placeholder="Bill ref" className={ic} />
                 </FormField>
                 <FormField label="GST Amount">
-                  <input type="number" value={form.gstAmount ?? ''} onChange={e => setForm({...form, gstAmount: Number(e.target.value) || 0})} placeholder="0" className={ic} />
+                  <input type="number" value={form.gstAmount ?? ''} onChange={e => setField('gstAmount', Number(e.target.value) || 0)} placeholder="0" className={ic} />
                 </FormField>
                 <FormField label="TDS Amount">
-                  <input type="number" value={form.tdsAmount ?? ''} onChange={e => setForm({...form, tdsAmount: Number(e.target.value) || 0})} placeholder="0" className={ic} />
+                  <input type="number" value={form.tdsAmount ?? ''} onChange={e => setField('tdsAmount', Number(e.target.value) || 0)} placeholder="0" className={ic} />
                 </FormField>
                 <FormField label="Status">
-                  <select value={form.status ?? 'Draft'} onChange={e => setForm({...form, status: e.target.value})} className={sc}>
+                  <select value={form.status ?? 'Draft'} onChange={e => setField('status', e.target.value)} className={sc}>
                     {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </FormField>
                 <FormField label="Approval Status">
-                  <select value={form.approvalStatus ?? 'Draft'} onChange={e => setForm({...form, approvalStatus: e.target.value})} className={sc}>
+                  <select value={form.approvalStatus ?? 'Draft'} onChange={e => setField('approvalStatus', e.target.value)} className={sc}>
                     <option value="Draft">Draft</option>
                     <option value="Pending">Pending</option>
                     <option value="Approved">Approved</option>
@@ -461,8 +506,10 @@ export default function FinExpenseClaims() {
                 </FormField>
               </div>
 
+              <CostingFields prefix="claim" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
+
               <FormField label="Remarks">
-                <input value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})} placeholder="Optional notes" className={ic} />
+                <input value={form.remarks} onChange={e => setField('remarks', e.target.value)} placeholder="Optional notes" className={ic} />
               </FormField>
             </div>
           </div>

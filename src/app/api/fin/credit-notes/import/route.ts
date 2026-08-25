@@ -15,12 +15,14 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < records.length; i++) {
       const r = records[i]
-      if (!r.creditNoteNo) { skipped++; continue }
+      if (!r.creditNoteNo || !r.siteId || !r.jobCode || !r.poNo || !r.department || !r.projectManager) { skipped++; continue }
       try {
         const data = {
           creditNoteNo: r.creditNoteNo, trackingNo: r.trackingNo || null,
-          poNo: r.poNo || null, invoiceId: Number(r.invoiceId) || null,
-          siteId: Number(r.siteId) || null, creditNoteAgainstInvoiceNo: r.creditNoteAgainstInvoiceNo || null,
+          poNo: r.poNo || null, invoiceId: Number(r.invoiceId) || 0,
+          siteId: Number(r.siteId) || 0, jobCode: r.jobCode || null,
+          costCenter: r.costCenter || null, department: r.department || null, projectManager: r.projectManager || null,
+          creditNoteAgainstInvoiceNo: r.creditNoteAgainstInvoiceNo || null,
           client: r.client || null, area: r.area || null, monthWork: r.monthWork || null,
           date: r.date ? new Date(r.date) : new Date(),
           invoiceValue: Number(r.invoiceValue) || 0, gstValue: Number(r.gstValue) || 0,

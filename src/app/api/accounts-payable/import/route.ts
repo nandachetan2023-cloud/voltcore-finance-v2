@@ -14,6 +14,13 @@ interface ImportRecord {
   totalAmount?: number
   dueDate: string
   status?: string
+  siteId?: number
+  siteCode?: string
+  poId?: number
+  jobCode?: string
+  costCenter?: string
+  department?: string
+  projectManager?: string
 }
 
 // Commits rows already mapped and reviewed client-side (see the Upload → Map →
@@ -39,6 +46,11 @@ export async function POST(request: NextRequest) {
       try {
         const amount = Number(r.amount) || 0
         const tax = Number(r.tax) || 0
+        let siteId: number | null = r.siteId ? Number(r.siteId) : null
+        if (!siteId && r.siteCode) {
+          const site = await pdb.finSite.findUnique({ where: { siteCode: r.siteCode } })
+          siteId = site?.id ?? null
+        }
         const data = {
           billNo: r.billNo,
           vendor: r.vendor,
@@ -48,6 +60,12 @@ export async function POST(request: NextRequest) {
           amount,
           tax,
           totalAmount: Number(r.totalAmount) || amount + tax,
+          siteId,
+          poId: r.poId ? Number(r.poId) : null,
+          jobCode: r.jobCode || null,
+          costCenter: r.costCenter || null,
+          department: r.department || null,
+          projectManager: r.projectManager || null,
           dueDate,
           status: r.status || 'Pending',
         }

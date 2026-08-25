@@ -98,7 +98,6 @@ export async function POST(req: Request) {
 
     const batch = await db.finImportBatch.create({
       data: {
-        templateId: null,
         fileName: file.name,
         fileHash,
         importedBy,

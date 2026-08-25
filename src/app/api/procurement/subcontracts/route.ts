@@ -21,6 +21,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const pdb = getDbForRequest(request)
     const { milestones, retentionReleases, progressClaims, ...data } = body
+    if (!data.subcontractNo) {
+      const year = new Date().getFullYear()
+      const count = (await pdb.finSubcontract.count()) + 1
+      data.subcontractNo = `SC-${year}-${String(count).padStart(3, '0')}`
+    }
     const record = await pdb.finSubcontract.create({
       data: {
         ...data,

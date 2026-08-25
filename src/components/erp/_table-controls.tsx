@@ -1,13 +1,31 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
-import { Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 
 export const PAGE_SIZES = [10, 25, 50, 100];
 
+export interface SortState<T> {
+  key: string | null;
+  dir: 'asc' | 'desc';
+  accessor?: (r: T) => unknown;
+}
+
+function compareValues(a: unknown, b: unknown): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1; // nulls last regardless of direction
+  if (b == null) return -1;
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  const as = typeof a === 'string' ? a.toLowerCase() : String(a);
+  const bs = typeof b === 'string' ? b.toLowerCase() : String(b);
+  return as < bs ? -1 : as > bs ? 1 : 0;
+}
+
 /**
- * Shared client-side search + pagination for the finance CRUD tables.
+ * Shared client-side search + sort + pagination for the finance CRUD tables.
  * Pass the full records array and a function that turns a record into a
- * searchable string. Returns the current page slice plus paging state.
+ * searchable string. Returns the current page slice plus paging/sort state.
+ * Click any column via `toggleSort(key, accessor)` (see `SortableTh` below)
+ * to sort by it — click again to reverse, a third click clears the sort.
  */
 export function useTableControls<T>(
   records: T[],
@@ -17,6 +35,7 @@ export function useTableControls<T>(
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialPageSize);
+  const [sort, setSort] = useState<SortState<T>>({ key: null, dir: 'asc' });
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -24,7 +43,22 @@ export function useTableControls<T>(
     return records.filter((r) => toSearchText(r).toLowerCase().includes(q));
   }, [records, search, toSearchText]);
 
-  const total = filtered.length;
+  const sorted = useMemo(() => {
+    if (!sort.key || !sort.accessor) return filtered;
+    const acc = sort.accessor;
+    const copy = [...filtered].sort((a, b) => compareValues(acc(a), acc(b)));
+    return sort.dir === 'desc' ? copy.reverse() : copy;
+  }, [filtered, sort]);
+
+  const toggleSort = useCallback((key: string, accessor: (r: T) => unknown) => {
+    setSort((prev) => {
+      if (prev.key !== key) return { key, dir: 'asc', accessor };
+      if (prev.dir === 'asc') return { key, dir: 'desc', accessor };
+      return { key: null, dir: 'asc' }; // third click clears
+    });
+  }, []);
+
+  const total = sorted.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   // Keep current page valid when filters/data change
@@ -32,11 +66,39 @@ export function useTableControls<T>(
   useEffect(() => { setPage(1); }, [search, pageSize]);
 
   const start = (page - 1) * pageSize;
-  const pageItems = filtered.slice(start, start + pageSize);
+  const pageItems = sorted.slice(start, start + pageSize);
   const from = total === 0 ? 0 : start + 1;
   const to = Math.min(start + pageSize, total);
 
-  return { search, setSearch, page, setPage, pageSize, setPageSize, filtered, pageItems, total, totalPages, from, to };
+  return { search, setSearch, page, setPage, pageSize, setPageSize, filtered, pageItems, total, totalPages, from, to, sort, toggleSort };
+}
+
+/**
+ * Drop-in replacement for a plain `<th>` — click to sort by `accessor`,
+ * click again to reverse, a third click clears. Pass the `sort`/`toggleSort`
+ * pair returned by `useTableControls`.
+ */
+export function SortableTh<T>({ label, sortKey, accessor, sort, toggleSort, className = '', align = 'left' }: {
+  label: string;
+  sortKey: string;
+  accessor: (r: T) => unknown;
+  sort: SortState<T>;
+  toggleSort: (key: string, accessor: (r: T) => unknown) => void;
+  className?: string;
+  align?: 'left' | 'right';
+}) {
+  const active = sort.key === sortKey;
+  return (
+    <th
+      onClick={() => toggleSort(sortKey, accessor)}
+      className={`py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap cursor-pointer select-none hover:text-[#f5a623] transition-colors ${align === 'right' ? 'text-right' : 'text-left'} ${className}`}
+    >
+      <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
+        {label}
+        {active ? (sort.dir === 'asc' ? <ChevronUp size={10} /> : <ChevronDown size={10} />) : <ChevronsUpDown size={10} className="opacity-30" />}
+      </span>
+    </th>
+  );
 }
 
 export function SearchInput({ value, onChange, placeholder = 'Search...' }: {

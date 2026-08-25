@@ -17,10 +17,14 @@ export async function POST(request: NextRequest) {
       const r = records[i]
       if (!r.category || !r.description) { skipped++; continue }
       try {
+        const planned = Number(r.planned) || 0, actual = Number(r.actual) || 0
+        const variance = Number.isFinite(Number(r.variance)) ? Number(r.variance) : planned - actual
         const data = {
           category: r.category, description: r.description,
-          planned: Number(r.planned) || 0, actual: Number(r.actual) || 0,
-          variance: Number(r.variance) ?? (Number(r.planned) || 0) - (Number(r.actual) || 0),
+          planned, actual, variance,
+          jobCode: r.jobCode || null, poNo: r.poNo || null,
+          costCenter: r.costCenter || null, department: r.department || null,
+          projectManager: r.projectManager || null,
           period: r.period || 'FY 2024-25', month: r.month || null,
           status: r.status || 'On Track',
         }

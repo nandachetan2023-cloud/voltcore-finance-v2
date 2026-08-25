@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { postJournalEntry, GL_ACCOUNTS } from '@/lib/gl-posting'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const pdb = getDbForRequest(request)
+    const missing = ['siteId', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager']
+      .filter(k => body[k] === undefined || body[k] === null || body[k] === '')
+    if (missing.length) {
+      return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
+    }
+    if (!body.invoiceNo) {
+      const year = new Date().getFullYear()
+      const count = (await pdb.accountsReceivable.count()) + 1
+      body.invoiceNo = `AR-${year}-${String(count).padStart(3, '0')}`
+    }
     const record = await pdb.accountsReceivable.create({ data: body })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
@@ -32,7 +43,44 @@ export async function PUT(request: NextRequest) {
     const { id, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
+    const missing = ['siteId', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager']
+      .filter(k => data[k] === undefined || data[k] === null || data[k] === '')
+    if (missing.length) {
+      return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
+    }
+
+    // Capture the pre-update state so we can post the GL entry for only the
+    // *delta* in receivedAmount — this route also handles unrelated field
+    // edits (remarks, status, etc.), and receivedAmount can be resent
+    // unchanged on those, so we must diff against the stored value rather
+    // than just checking whether the field is present in the payload.
+    const before = await pdb.accountsReceivable.findUnique({ where: { id } })
+
     const record = await pdb.accountsReceivable.update({ where: { id }, data })
+
+    if (before && data.receivedAmount !== undefined) {
+      const delta = Number(record.receivedAmount) - Number(before.receivedAmount)
+      if (delta > 0) {
+        await postJournalEntry(pdb, {
+          prefix: 'JE-AR-RCPT',
+          voucherType: 'Receipt',
+          entryDate: record.receivedDate || new Date(),
+          description: `Receipt against invoice ${record.invoiceNo} - ${record.client}`,
+          reference: record.paymentRef,
+          siteId: record.siteId,
+          jobCode: record.jobCode,
+          poNo: record.poNo,
+          costCenter: record.costCenter,
+          department: record.department,
+          projectManager: record.projectManager,
+          lines: [
+            { accountCode: GL_ACCOUNTS.BANK, debit: delta, credit: 0 },
+            { accountCode: GL_ACCOUNTS.ACCOUNTS_RECEIVABLE, debit: 0, credit: delta },
+          ],
+        })
+      }
+    }
+
     return NextResponse.json({ success: true, data: record })
   } catch (error) {
     console.error('Error updating AR record:', error)
@@ -43,9 +91,16 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
+    const idsParam = searchParams.get('ids')
+    const pdb = getDbForRequest(request)
+    if (idsParam) {
+      const ids = idsParam.split(',').map((s) => Number(s.trim())).filter((n) => !isNaN(n))
+      if (ids.length === 0) return NextResponse.json({ success: false, error: 'No valid ids provided' }, { status: 400 })
+      const result = await pdb.accountsReceivable.deleteMany({ where: { id: { in: ids } } })
+      return NextResponse.json({ success: true, deleted: result.count })
+    }
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
-    const pdb = getDbForRequest(request)
     await pdb.accountsReceivable.delete({ where: { id: Number(id) } })
     return NextResponse.json({ success: true })
   } catch (error) {

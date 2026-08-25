@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { assertPermission } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,13 +23,21 @@ export async function POST(request: NextRequest) {
     if (!action) return NextResponse.json({ success: false, error: 'action is required' }, { status: 400 })
 
     const pdb = getDbForRequest(request)
-    const voucher = await pdb.finPettyCash.findUnique({ where: { id: Number(id) } })
+    const voucher = await pdb.finPettyCash.findUnique({
+      where: { id: Number(id) },
+      include: { site: { select: { siteCode: true } } },
+    })
     if (!voucher) return NextResponse.json({ success: false, error: 'Voucher not found' }, { status: 404 })
+
+    const siteCode = voucher.site?.siteCode ?? null
+    const actorEmail = (actor || '').trim()
 
     if (action === 'submit') {
       if (!['Draft', 'Rejected'].includes(voucher.approvalStatus)) {
         return NextResponse.json({ success: false, error: `Cannot submit a voucher that is ${voucher.approvalStatus}` }, { status: 400 })
       }
+      const denied = await assertPermission(pdb, actorEmail, 'PETTYCASH_CREATE', { request, module: 'PettyCash', entityId: String(voucher.id), siteCode })
+      if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
       const [record] = await pdb.$transaction([
         pdb.finPettyCash.update({
           where: { id: voucher.id },
@@ -46,6 +55,14 @@ export async function POST(request: NextRequest) {
       if (voucher.approvalStatus !== 'Pending') {
         return NextResponse.json({ success: false, error: `Cannot approve a voucher that is ${voucher.approvalStatus}` }, { status: 400 })
       }
+      const denied = await assertPermission(pdb, actorEmail, 'PETTYCASH_APPROVE', { request, module: 'PettyCash', entityId: String(voucher.id), siteCode })
+      if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
+      // Segregation of Duties: the person who submitted (or holds the float) cannot approve their own request
+      const submitter = (voucher.submittedBy || voucher.custodian || voucher.authorizedBy || '').trim().toLowerCase()
+      const actingUser = (actor || '').trim().toLowerCase()
+      if (actingUser && submitter && actingUser === submitter) {
+        return NextResponse.json({ success: false, error: 'Self-approval is not allowed (Segregation of Duties). A supervisor or finance user must approve this request.' }, { status: 403 })
+      }
       const [record] = await pdb.$transaction([
         pdb.finPettyCash.update({
           where: { id: voucher.id },
@@ -59,11 +76,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, data: record })
     }
 
+    if (action === 'allocate') {
+      // Finance Head pushing cash to a site directly — skips the Pending/approval
+      // queue entirely, since this is a unilateral allocation, not an approval of
+      // someone else's request. Only holders of PETTYCASH_APPROVE may do this.
+      if (voucher.approvalStatus !== 'Draft') {
+        return NextResponse.json({ success: false, error: `Cannot allocate a voucher that is ${voucher.approvalStatus}` }, { status: 400 })
+      }
+      const denied = await assertPermission(pdb, actorEmail, 'PETTYCASH_APPROVE', { request, module: 'PettyCash', entityId: String(voucher.id), siteCode })
+      if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
+      const [record] = await pdb.$transaction([
+        pdb.finPettyCash.update({
+          where: { id: voucher.id },
+          data: { approvalStatus: 'Approved', submittedBy: actor || null, submittedAt: new Date(), approvedBy: actor || null, approvedAt: new Date() },
+          include: INCLUDE,
+        }),
+        pdb.finApprovalLog.create({
+          data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Approved', action: 'Allocate', makerId: actor || null, checkerId: actor || null, comments: comments || null, finPettyCashId: voucher.id },
+        }),
+      ])
+      return NextResponse.json({ success: true, data: record })
+    }
+
     if (action === 'reject') {
       if (voucher.approvalStatus !== 'Pending') {
         return NextResponse.json({ success: false, error: `Cannot reject a voucher that is ${voucher.approvalStatus}` }, { status: 400 })
       }
       if (!comments) return NextResponse.json({ success: false, error: 'A reason is required to reject' }, { status: 400 })
+      const denied = await assertPermission(pdb, actorEmail, 'PETTYCASH_APPROVE', { request, module: 'PettyCash', entityId: String(voucher.id), siteCode })
+      if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
       const [record] = await pdb.$transaction([
         pdb.finPettyCash.update({
           where: { id: voucher.id },

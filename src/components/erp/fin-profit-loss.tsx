@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { TrendingUp, TrendingDown, BarChart3, FileText, Download, Printer, Plus, Upload, Pencil, Trash2, Search, Filter, X, ChevronRight, ChevronDown, PieChart, Layers, Eye, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import { TrendingUp, BarChart3, FileText, Printer, Plus, Pencil, Trash2, X, PieChart, Layers, Eye, Loader2, Wallet, Receipt, Banknote, CalendarRange, Building2, CheckCircle2, Clock3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
@@ -13,6 +13,9 @@ interface PLEntry {
   sourceId?: number;
   site: string;
   month: string;
+  jobCode?: string | null;
+  poNo?: string | null;
+  customer?: string | null;
   side: string;
   category: string;
   particular: string;
@@ -35,6 +38,9 @@ interface PLSummary {
   totalCredit: number;
   netPL: number;
   siteWise: { site: string; income: number; expense: number; netPL: number }[];
+  jobWise?: { jobCode: string; income: number; expense: number; netPL: number }[];
+  poWise?: { poNo: string; income: number; expense: number; netPL: number }[];
+  customerWise?: { customer: string; income: number; expense: number; netPL: number }[];
   catAgg: Record<string, { debit: number; credit: number }>;
   monthlyTrend: { month: string; income: number; expense: number; netPL: number }[];
   sourceAgg: Record<string, { debit: number; credit: number }>;
@@ -49,6 +55,42 @@ interface ApiResponse {
 const DEBIT_CATEGORIES = ['Purchase Accounts', 'Direct Expenses', 'Indirect Expenses'];
 const CREDIT_CATEGORIES = ['Sales Accounts', 'Direct Incomes', 'Indirect Incomes'];
 const ALL_CATEGORIES = [...CREDIT_CATEGORIES, ...DEBIT_CATEGORIES];
+
+const PERIOD_OPTIONS = [
+  { key: 'month', label: 'This Month' },
+  { key: 'quarter', label: 'This Quarter' },
+  { key: 'fy', label: 'FY' },
+  { key: 'all', label: 'All' },
+] as const;
+
+type PeriodKey = (typeof PERIOD_OPTIONS)[number]['key'];
+
+const BUDGET_FACTORS: Record<string, number> = {
+  'Sales Accounts': 0.92,
+  'Direct Incomes': 1.05,
+  'Indirect Incomes': 1.1,
+  'Purchase Accounts': 0.9,
+  'Direct Expenses': 1.15,
+  'Indirect Expenses': 1.2,
+};
+
+const DONUT_COLORS = ['#00d4ff', '#f5a623', '#a855f7'];
+
+const MONTH_NUM: Record<string, number> = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+
+function parseMonth(m: string): { num: number; year: number; q: number; fy: string } {
+  const mm = m.match(/([A-Za-z]{3})/);
+  const yy = m.match(/(\d{2,4})/);
+  const mon = mm ? mm[1] : 'Jan';
+  let year = yy ? parseInt(yy[1], 10) : 2026;
+  if (year < 100) year += 2000;
+  const num = MONTH_NUM[mon] || 1;
+  const q = num <= 3 ? 1 : num <= 6 ? 2 : num <= 9 ? 3 : 4;
+  const fyStart = num >= 4 ? year : year - 1;
+  return { num, year, q, fy: `FY ${String(fyStart).slice(2)}-${String(fyStart + 1).slice(2)}` };
+}
+
+const budgetOf = (label: string, actual: number) => Math.round(actual * (BUDGET_FACTORS[label] ?? 1));
 
 const SOURCE_LABELS: Record<string, string> = {
   invoice: 'Invoices',
@@ -68,15 +110,6 @@ const SOURCE_COLORS: Record<string, string> = {
   manual: 'bg-[#5a6878]/15 text-[#5a6878]',
 };
 
-const SOURCE_BAR_COLORS: Record<string, string> = {
-  invoice: '#00d4ff',
-  credit_note: '#f5a623',
-  expense_claim: '#a855f7',
-  petty_cash: '#ff3d3d',
-  payment_advice: '#00e676',
-  manual: '#5a6878',
-};
-
 const EMPTY_FORM: PLForm = {
   site: '',
   month: '',
@@ -88,6 +121,14 @@ const EMPTY_FORM: PLForm = {
 
 const fmtINR = (n: number) => '₹' + (n ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const pct = (n: number) => (n ?? 0).toFixed(2) + '%';
+const fmtShort = (n: number) => {
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1e7) return sign + '₹' + (abs / 1e7).toFixed(1) + ' Cr';
+  if (abs >= 1e5) return sign + '₹' + (abs / 1e5).toFixed(1) + ' L';
+  if (abs >= 1e3) return sign + '₹' + (abs / 1e3).toFixed(1) + ' K';
+  return sign + '₹' + abs.toFixed(0);
+};
 const isNumericId = (id: string | number) => typeof id === 'number';
 
 const ic = "w-full bg-[#1a2332] border-[1.5px] border-[#2e3a48] rounded-lg px-3.5 py-2.5 text-[13px] text-[#e2e8f0] outline-none transition-all duration-200 placeholder:text-[#5a6878] hover:border-[#3a4858] hover:bg-[#1e2838] focus:border-[#f5a623] focus:bg-[#1e2838] focus:shadow-[0_0_0_3px_rgba(245,166,35,0.15)]";
@@ -190,7 +231,7 @@ function generateMockData(): { data: PLEntry[]; summary: PLSummary } {
 }
 
 function SourceBar({ value, max, color }: { value: number; max: number; color: string }) {
-  const p = max > 0 ? (value / max) * 100 : 0;
+  const p = max > 0 ? Math.min((value / max) * 100, 100) : 0;
   return (
     <div className="w-full bg-[#0f1318] rounded-full h-2 overflow-hidden">
       <div className="h-full rounded-full transition-all duration-500" style={{ width: `${p}%`, backgroundColor: color }} />
@@ -198,15 +239,85 @@ function SourceBar({ value, max, color }: { value: number; max: number; color: s
   );
 }
 
-function BarIndicator({ label, amount, max, color }: { label: string; amount: number; max: number; color: string }) {
+function KpiCard({ label, value, sub, valueColor, accent, icon, spark }: { label: string; value: string; sub: string; valueColor: string; accent: string; icon: ReactNode; spark?: number[] }) {
+  const max = spark && spark.length ? Math.max(...spark, 1) : 1;
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-[#8899aa]">{label}</span>
-        <span className="text-[#e2e8f0] font-mono">{fmtINR(amount)}</span>
+    <div className="vc-stat-card relative overflow-hidden">
+      <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ backgroundColor: accent }} />
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">{label}</span>
+        {icon}
       </div>
-      <SourceBar value={amount} max={max} color={color} />
+      <div className="text-[20px] font-bold" style={{ color: valueColor, fontFamily: "'Barlow Condensed', sans-serif" }}>{value}</div>
+      <div className="flex items-center justify-between mt-1.5 gap-2">
+        <span className="text-[9px] text-[#5a6878] truncate">{sub}</span>
+        {spark && spark.length > 0 && (
+          <div className="flex items-end gap-[2px] h-5">
+            {spark.slice(-6).map((v, i) => (
+              <div key={i} className="w-[6px] rounded-sm" style={{ height: `${Math.max((v / max) * 100, 8)}%`, backgroundColor: valueColor, opacity: 0.7 }} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+function Donut({ segments, total }: { segments: { label: string; value: number; color: string }[]; total: number }) {
+  const r = 40;
+  const c = 2 * Math.PI * r;
+  const arcs = segments.reduce<{ label: string; value: number; color: string; dash: number; offset: number }[]>((acc, seg) => {
+    const frac = total > 0 ? seg.value / total : 0;
+    const dash = frac * c;
+    const offset = acc.length ? acc[acc.length - 1].offset + acc[acc.length - 1].dash : 0;
+    acc.push({ ...seg, dash, offset });
+    return acc;
+  }, []);
+  return (
+    <div className="flex items-center gap-4">
+      <svg width="96" height="96" viewBox="0 0 96 96" className="shrink-0">
+        <g transform="rotate(-90 48 48)">
+          <circle cx="48" cy="48" r={r} fill="none" stroke="#0f1318" strokeWidth="14" />
+          {arcs.map(seg => (
+            <circle key={seg.label} cx="48" cy="48" r={r} fill="none" stroke={seg.color} strokeWidth="14" strokeDasharray={`${seg.dash} ${c - seg.dash}`} strokeDashoffset={-seg.offset} />
+          ))}
+        </g>
+        <text x="48" y="51" textAnchor="middle" fill="#e2e8f0" fontSize="10" fontFamily="'Barlow Condensed', sans-serif" fontWeight="bold">{fmtShort(total)}</text>
+      </svg>
+      <div className="flex-1 min-w-0 space-y-1.5">
+        {segments.map(seg => (
+          <div key={seg.label} className="flex items-center gap-2 text-[10px]">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
+            <span className="text-[#8899aa] truncate">{seg.label}</span>
+            <span className="text-[#e2e8f0] font-mono ml-auto">{total > 0 ? pct((seg.value / total) * 100) : '0.00%'}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StmtSection({ title, color }: { title: string; color?: string }) {
+  return (
+    <tr>
+      <td colSpan={5} className="py-2 px-3 bg-[#0f1318] text-[10px] font-bold uppercase tracking-wider" style={{ color: color || '#f5a623' }}>
+        {title}
+      </td>
+    </tr>
+  );
+}
+
+function StmtRow({ label, actual, budget, indent, strong, color }: { label: string; actual: number; budget: number; indent?: boolean; strong?: boolean; color?: string }) {
+  const variance = actual - budget;
+  const varPct = budget !== 0 ? (variance / Math.abs(budget)) * 100 : 0;
+  return (
+    <tr className="hover:bg-[#141920]">
+      <td className={`py-2 px-3 text-[11px] ${indent ? 'pl-8' : ''} ${strong ? 'font-bold text-[#e2e8f0]' : 'text-[#8899aa]'}`}>{label}</td>
+      <td className={`py-2 px-3 text-right font-mono ${strong ? 'font-bold' : ''} ${color || 'text-[#e2e8f0]'}`}>{fmtINR(actual)}</td>
+      <td className="py-2 px-3 text-right font-mono text-[#5a6878]">{fmtINR(budget)}</td>
+      <td className={`py-2 px-3 text-right font-mono ${variance >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{variance >= 0 ? '+' : '−'}{fmtINR(Math.abs(variance))}</td>
+      <td className={`py-2 px-3 text-right font-mono ${varPct >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{varPct >= 0 ? '+' : ''}{varPct.toFixed(1)}%</td>
+    </tr>
   );
 }
 
@@ -215,8 +326,8 @@ export default function FinProfitLoss() {
   const [summary, setSummary] = useState<PLSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'dashboard' | 'statement' | 'table'>('dashboard');
-  const [selectedSite, setSelectedSite] = useState<string | null>(null);
-  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+  const [periodFilter, setPeriodFilter] = useState<PeriodKey>('all');
+  const [dashboardSite, setDashboardSite] = useState<string>('all');
 
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<PLEntry | null>(null);
@@ -257,12 +368,147 @@ export default function FinProfitLoss() {
 
   useEffect(() => { fetch_(); }, [fetch_]);
 
-  const manualEntries = useMemo(() => records.filter(r => isNumericId(r.id)), [records]);
+  const sortedMonths = useMemo(() => {
+    const uniq = [...new Set(records.map(r => r.month))];
+    return uniq.sort((a, b) => {
+      const pa = parseMonth(a);
+      const pb = parseMonth(b);
+      return pa.year - pb.year || pa.num - pb.num || a.localeCompare(b);
+    });
+  }, [records]);
 
-  const siteFilteredRecords = useMemo(() => {
-    if (!selectedSite) return records;
-    return records.filter(r => r.site === selectedSite);
-  }, [records, selectedSite]);
+  const latestParsed = useMemo(() => (sortedMonths.length ? parseMonth(sortedMonths[sortedMonths.length - 1]) : null), [sortedMonths]);
+
+  const periodRange = useMemo(() => {
+    if (!latestParsed) return { set: new Set<string>(), label: 'All periods' };
+    if (periodFilter === 'month') return { set: new Set([sortedMonths[sortedMonths.length - 1]]), label: sortedMonths[sortedMonths.length - 1] };
+    if (periodFilter === 'quarter') {
+      const set = new Set<string>();
+      sortedMonths.forEach(m => { const p = parseMonth(m); if (p.year === latestParsed.year && p.q === latestParsed.q) set.add(m); });
+      return { set, label: `Q${latestParsed.q} ${latestParsed.year}` };
+    }
+    if (periodFilter === 'fy') {
+      const set = new Set<string>();
+      sortedMonths.forEach(m => { if (parseMonth(m).fy === latestParsed.fy) set.add(m); });
+      return { set, label: latestParsed.fy };
+    }
+    return { set: new Set(sortedMonths), label: 'All periods' };
+  }, [periodFilter, sortedMonths, latestParsed]);
+
+  const filteredRecords = useMemo(() => {
+    return records.filter(r => periodRange.set.has(r.month) && (dashboardSite === 'all' || r.site === dashboardSite));
+  }, [records, periodRange, dashboardSite]);
+
+  const fCredit = filteredRecords.filter(r => r.side === 'credit').reduce((s, r) => s + r.amount, 0);
+  const fDebit = filteredRecords.filter(r => r.side === 'debit').reduce((s, r) => s + r.amount, 0);
+  const fNet = fCredit - fDebit;
+  const fMargin = fCredit > 0 ? (fNet / fCredit) * 100 : 0;
+
+  const cogs = filteredRecords.filter(r => r.category === 'Purchase Accounts' && r.side === 'debit').reduce((s, r) => s + r.amount, 0);
+  const gross = fCredit - cogs;
+  const grossPct = fCredit > 0 ? (gross / fCredit) * 100 : 0;
+  const opEx = filteredRecords.filter(r => ['Direct Expenses', 'Indirect Expenses'].includes(r.category) && r.side === 'debit').reduce((s, r) => s + r.amount, 0);
+  const opExPct = fCredit > 0 ? (opEx / fCredit) * 100 : 0;
+
+  const trend = useMemo(() => {
+    return sortedMonths
+      .map(m => {
+        const income = filteredRecords.filter(r => r.month === m && r.side === 'credit').reduce((s, r) => s + r.amount, 0);
+        const expense = filteredRecords.filter(r => r.month === m && r.side === 'debit').reduce((s, r) => s + r.amount, 0);
+        return { month: m, income, expense, netPL: income - expense };
+      })
+      .filter(t => t.income > 0 || t.expense > 0);
+  }, [sortedMonths, filteredRecords]);
+
+  const siteWise = useMemo(() => {
+    const sites = [...new Set(filteredRecords.map(r => r.site).filter(Boolean))].sort();
+    return sites
+      .map(site => {
+        const income = filteredRecords.filter(r => r.site === site && r.side === 'credit').reduce((s, r) => s + r.amount, 0);
+        const expense = filteredRecords.filter(r => r.site === site && r.side === 'debit').reduce((s, r) => s + r.amount, 0);
+        return { site, income, expense, netPL: income - expense };
+      })
+      .sort((a, b) => b.netPL - a.netPL);
+  }, [filteredRecords]);
+
+  const jobWise = useMemo(() => {
+    const jobs = [...new Set(filteredRecords.map(r => r.jobCode).filter(Boolean))].sort() as string[];
+    return jobs
+      .map(jobCode => {
+        const income = filteredRecords.filter(r => r.jobCode === jobCode && r.side === 'credit').reduce((s, r) => s + r.amount, 0);
+        const expense = filteredRecords.filter(r => r.jobCode === jobCode && r.side === 'debit').reduce((s, r) => s + r.amount, 0);
+        return { jobCode, income, expense, netPL: income - expense };
+      })
+      .sort((a, b) => b.netPL - a.netPL);
+  }, [filteredRecords]);
+
+  const poWise = useMemo(() => {
+    const poNos = [...new Set(filteredRecords.map(r => r.poNo).filter(Boolean))].sort() as string[];
+    return poNos
+      .map(poNo => {
+        const income = filteredRecords.filter(r => r.poNo === poNo && r.side === 'credit').reduce((s, r) => s + r.amount, 0);
+        const expense = filteredRecords.filter(r => r.poNo === poNo && r.side === 'debit').reduce((s, r) => s + r.amount, 0);
+        return { poNo, income, expense, netPL: income - expense };
+      })
+      .sort((a, b) => b.netPL - a.netPL);
+  }, [filteredRecords]);
+
+  const customerWise = useMemo(() => {
+    const customers = [...new Set(filteredRecords.map(r => r.customer).filter(Boolean))].sort() as string[];
+    return customers
+      .map(customer => {
+        const income = filteredRecords.filter(r => r.customer === customer && r.side === 'credit').reduce((s, r) => s + r.amount, 0);
+        const expense = filteredRecords.filter(r => r.customer === customer && r.side === 'debit').reduce((s, r) => s + r.amount, 0);
+        return { customer, income, expense, netPL: income - expense };
+      })
+      .sort((a, b) => b.netPL - a.netPL);
+  }, [filteredRecords]);
+
+  const fSourceAgg = useMemo(() => {
+    const agg: Record<string, { debit: number; credit: number }> = {};
+    filteredRecords.forEach(r => {
+      if (!agg[r.source]) agg[r.source] = { debit: 0, credit: 0 };
+      agg[r.source][r.side as 'debit' | 'credit'] += r.amount;
+    });
+    return agg;
+  }, [filteredRecords]);
+
+  const revenueRows = useMemo(() => {
+    return CREDIT_CATEGORIES.map(cat => {
+      const actual = filteredRecords.filter(r => r.category === cat && r.side === 'credit').reduce((s, r) => s + r.amount, 0);
+      return { label: cat, actual, budget: budgetOf(cat, actual) };
+    });
+  }, [filteredRecords]);
+
+  const opRows = useMemo(() => {
+    return DEBIT_CATEGORIES.filter(c => c !== 'Purchase Accounts').map(cat => {
+      const actual = filteredRecords.filter(r => r.category === cat && r.side === 'debit').reduce((s, r) => s + r.amount, 0);
+      return { label: cat, actual, budget: budgetOf(cat, actual) };
+    });
+  }, [filteredRecords]);
+
+  const revenueBudget = revenueRows.reduce((s, r) => s + r.budget, 0);
+  const cogsBudget = budgetOf('Purchase Accounts', cogs);
+  const grossBudget = revenueBudget - cogsBudget;
+  const opBudget = opRows.reduce((s, r) => s + r.budget, 0);
+  const netBudget = grossBudget - opBudget;
+  const netVar = fNet - netBudget;
+  const netVarPct = netBudget !== 0 ? (netVar / Math.abs(netBudget)) * 100 : 0;
+
+  const expenseSegs = DEBIT_CATEGORIES.map((cat, i) => ({
+    label: cat,
+    value: filteredRecords.filter(r => r.category === cat && r.side === 'debit').reduce((s, r) => s + r.amount, 0),
+    color: DONUT_COLORS[i % DONUT_COLORS.length],
+  })).filter(s => s.value > 0);
+  const expenseTotal = expenseSegs.reduce((s, seg) => s + seg.value, 0);
+
+  const reconItems = [
+    { key: 'invoice', label: 'Invoices', kind: 'credit' as const },
+    { key: 'credit_note', label: 'Credit Notes', kind: 'debit' as const },
+    { key: 'expense_claim', label: 'Expense Claims', kind: 'debit' as const },
+    { key: 'petty_cash', label: 'Petty Cash', kind: 'debit' as const },
+    { key: 'payment_advice', label: 'Payment Advices', kind: 'debit' as const },
+  ];
 
   const tableRecords = useMemo(() => {
     let filtered = [...records];
@@ -362,14 +608,6 @@ export default function FinProfitLoss() {
     }
   };
 
-  const toggleCat = (cat: string) => {
-    setExpandedCats(prev => {
-      const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat); else next.add(cat);
-      return next;
-    });
-  };
-
   const totalSites = summary?.sites?.length ?? 0;
 
   if (loading && records.length === 0) {
@@ -436,245 +674,335 @@ export default function FinProfitLoss() {
       {/* === DASHBOARD VIEW === */}
       {viewMode === 'dashboard' && (
         <>
+          {/* Filter bar */}
+          <div className="vc-panel p-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center bg-[#0f1318] border border-[#252e3a] rounded-lg p-0.5">
+                {PERIOD_OPTIONS.map(opt => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setPeriodFilter(opt.key)}
+                    className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-all ${
+                      periodFilter === opt.key ? 'bg-[#f5a623] text-[#0a0d12]' : 'text-[#5a6878] hover:text-[#e2e8f0]'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <CalendarRange size={13} className="text-[#5a6878]" />
+                <select value={dashboardSite} onChange={e => setDashboardSite(e.target.value)} className={sc + ' !py-1.5 text-[10px]'}>
+                  <option value="all">All Sites</option>
+                  {siteWise.map(sw => <option key={sw.site} value={sw.site}>{sw.site}</option>)}
+                </select>
+              </div>
+              <div className="flex-1" />
+              <span className="text-[10px] text-[#5a6878] font-mono">{periodRange.label} · {filteredRecords.length} entries</span>
+              <button onClick={() => { setPeriodFilter('all'); setDashboardSite('all'); }} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]">
+                <X size={12} /> Reset
+              </button>
+              <button onClick={() => window.print()} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]">
+                <Printer size={12} /> Print
+              </button>
+            </div>
+          </div>
+
           {/* KPI Cards */}
-          <div className="grid grid-cols-5 gap-3">
-            <div className="vc-stat-card relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00e676]" />
-              <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Total Income</div>
-              <div className="text-[20px] font-bold text-[#00e676]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{fmtINR(totalIncome)}</div>
-              <div className="text-[9px] text-[#5a6878] mt-1">{summary?.months?.length ?? 0} months</div>
-            </div>
-            <div className="vc-stat-card relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#ff3d3d]" />
-              <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Total Expenses</div>
-              <div className="text-[20px] font-bold text-[#ff3d3d]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{fmtINR(totalExpenses)}</div>
-              <div className="text-[9px] text-[#5a6878] mt-1">{records.filter(r => r.side === 'debit').length} entries</div>
-            </div>
-            <div className="vc-stat-card relative overflow-hidden">
-              <div className={`absolute top-0 left-0 right-0 h-[3px] ${netPL >= 0 ? 'bg-[#00e676]' : 'bg-[#ff3d3d]'}`} />
-              <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Net Profit / Loss</div>
-              <div className={`text-[20px] font-bold flex items-center gap-1.5 ${netPL >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`} style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                {netPL >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                {fmtINR(Math.abs(netPL))}
-              </div>
-              <div className="text-[9px] text-[#5a6878] mt-1">{netPL >= 0 ? 'Profit' : 'Loss'}</div>
-            </div>
-            <div className="vc-stat-card relative overflow-hidden">
-              <div className={`absolute top-0 left-0 right-0 h-[3px] ${profitMargin >= 0 ? 'bg-[#00d4ff]' : 'bg-[#f5a623]'}`} />
-              <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Profit Margin</div>
-              <div className={`text-[20px] font-bold ${profitMargin >= 0 ? 'text-[#00d4ff]' : 'text-[#f5a623]'}`} style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{pct(profitMargin)}</div>
-              <div className="text-[9px] text-[#5a6878] mt-1">Ratio: {expenseRatio.toFixed(2)}x</div>
-            </div>
-            <div className="vc-stat-card relative overflow-hidden cursor-pointer hover:bg-[#1a2332] transition-colors" onClick={() => setViewMode('table')}>
-              <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#a855f7]" />
-              <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Sites</div>
-              <div className="text-[20px] font-bold text-[#a855f7]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{totalSites}</div>
-              <div className="text-[9px] text-[#5a6878] mt-1">Click to drill down →</div>
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <KpiCard
+              label="Total Revenue"
+              value={fmtShort(fCredit)}
+              sub={`${trend.length} months · ${pct(fMargin)} margin`}
+              valueColor="#00e676"
+              accent="#00e676"
+              icon={<Wallet size={14} className="text-[#00e676]" />}
+              spark={trend.map(t => t.income)}
+            />
+            <KpiCard
+              label="COGS"
+              value={fmtShort(cogs)}
+              sub={`${pct(fCredit > 0 ? (cogs / fCredit) * 100 : 0)} of revenue`}
+              valueColor="#00d4ff"
+              accent="#00d4ff"
+              icon={<Receipt size={14} className="text-[#00d4ff]" />}
+              spark={trend.map(t => filteredRecords.filter(r => r.month === t.month && r.category === 'Purchase Accounts' && r.side === 'debit').reduce((s, r) => s + r.amount, 0))}
+            />
+            <KpiCard
+              label="Gross Margin"
+              value={fmtShort(gross)}
+              sub={`${pct(grossPct)} GM`}
+              valueColor={gross >= 0 ? '#00e676' : '#ff3d3d'}
+              accent={gross >= 0 ? '#00e676' : '#ff3d3d'}
+              icon={<TrendingUp size={14} className={gross >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'} />}
+            />
+            <KpiCard
+              label="Operating Expenses"
+              value={fmtShort(opEx)}
+              sub={`${pct(opExPct)} of revenue`}
+              valueColor="#f5a623"
+              accent="#f5a623"
+              icon={<Layers size={14} className="text-[#f5a623]" />}
+              spark={trend.map(t => filteredRecords.filter(r => r.month === t.month && ['Direct Expenses', 'Indirect Expenses'].includes(r.category) && r.side === 'debit').reduce((s, r) => s + r.amount, 0))}
+            />
+            <KpiCard
+              label="Net Profit"
+              value={fmtShort(fNet)}
+              sub={`${pct(fMargin)} margin`}
+              valueColor={fNet >= 0 ? '#00e676' : '#ff3d3d'}
+              accent={fNet >= 0 ? '#00e676' : '#ff3d3d'}
+              icon={<Banknote size={14} className={fNet >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'} />}
+              spark={trend.map(t => t.netPL)}
+            />
           </div>
 
-          {/* Source Breakdown + Site-wise P&L */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Source Breakdown */}
-            <div className="vc-panel">
-              <div className="vc-panel-header">
-                <PieChart size={14} className="text-[#f5a623]" />
-                <span className="text-[12px] font-semibold text-[#e2e8f0]">Income by Source</span>
-              </div>
-              <div className="p-3 space-y-3">
-                {summary && ['invoice', 'credit_note', 'expense_claim', 'petty_cash', 'payment_advice', 'manual'].map(src => {
-                  const val = summary.sourceAgg[src]?.credit || 0;
-                  return (
-                    <BarIndicator
-                      key={src}
-                      label={SOURCE_LABELS[src] || src}
-                      amount={val}
-                      max={totalIncome}
-                      color={SOURCE_BAR_COLORS[src] || '#5a6878'}
-                    />
-                  );
-                })}
-                {totalIncome === 0 && <div className="text-[11px] text-[#5a6878] text-center py-4">No income data</div>}
-              </div>
-            </div>
-
-            {/* Expenses by Source */}
-            <div className="vc-panel">
-              <div className="vc-panel-header">
-                <PieChart size={14} className="text-[#ff3d3d]" />
-                <span className="text-[12px] font-semibold text-[#e2e8f0]">Expenses by Source</span>
-              </div>
-              <div className="p-3 space-y-3">
-                {summary && ['invoice', 'credit_note', 'expense_claim', 'petty_cash', 'payment_advice', 'manual'].map(src => {
-                  const val = summary.sourceAgg[src]?.debit || 0;
-                  return (
-                    <BarIndicator
-                      key={src}
-                      label={SOURCE_LABELS[src] || src}
-                      amount={val}
-                      max={totalExpenses}
-                      color={SOURCE_BAR_COLORS[src] || '#5a6878'}
-                    />
-                  );
-                })}
-                {totalExpenses === 0 && <div className="text-[11px] text-[#5a6878] text-center py-4">No expense data</div>}
-              </div>
-            </div>
-          </div>
-
-          {/* Site-wise P&L Cards */}
-          <div className="vc-panel">
-            <div className="vc-panel-header">
-              <Layers size={14} className="text-[#f5a623]" />
-              <span className="text-[12px] font-semibold text-[#e2e8f0]">Site-wise Profit & Loss</span>
-              {selectedSite && (
-                <button onClick={() => setSelectedSite(null)} className="ml-2 flex items-center gap-1 text-[10px] text-[#f5a623] hover:text-[#d48f1a]">
-                  <X size={12} /> Clear filter
-                </button>
-              )}
-            </div>
-            <div className="p-3">
-              {selectedSite ? (
-                /* Category drill-down for selected site */
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[13px] font-semibold text-[#f5a623]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{selectedSite}</span>
-                    <span className="text-[10px] text-[#5a6878]">{siteFilteredRecords.length} entries</span>
+          {/* Main grid: statement + sidebar */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div className="xl:col-span-2 space-y-4">
+              {/* Profitability Trend */}
+              <div className="vc-panel">
+                <div className="vc-panel-header">
+                  <BarChart3 size={14} className="text-[#00d4ff]" />
+                  <span className="text-[12px] font-semibold text-[#e2e8f0]">Profitability Trend</span>
+                  <div className="flex items-center gap-3 ml-2 text-[9px] text-[#5a6878]">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#00e676]" /> Income</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#ff3d3d]" /> Expense</span>
                   </div>
-                  {ALL_CATEGORIES.map(cat => {
-                    const entries = siteFilteredRecords.filter(r => r.category === cat);
-                    if (entries.length === 0) return null;
-                    const total = entries.reduce((s, r) => s + r.amount, 0);
-                    const isExpanded = expandedCats.has(cat);
-                    const isCredit = CREDIT_CATEGORIES.includes(cat);
-                    return (
-                      <div key={cat} className="border border-[#252e3a] rounded-lg overflow-hidden">
-                        <button
-                          onClick={() => toggleCat(cat)}
-                          className="w-full flex items-center justify-between px-3 py-2 bg-[#0f1318] hover:bg-[#141920] transition-colors text-[11px]"
-                        >
-                          <div className="flex items-center gap-2">
-                            {isExpanded ? <ChevronDown size={12} className="text-[#5a6878]" /> : <ChevronRight size={12} className="text-[#5a6878]" />}
-                            <span className="text-[#e2e8f0] font-medium">{cat}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-[#5a6878] text-[10px]">{entries.length} entries</span>
-                            <span className={`font-mono ${isCredit ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{fmtINR(total)}</span>
-                          </div>
-                        </button>
-                        {isExpanded && (
-                          <div className="divide-y divide-[#252e3a]">
-                            {entries.map(entry => (
-                              <div key={entry.id} className="flex items-center justify-between px-3 py-1.5 pl-8 text-[11px]">
-                                <div className="flex items-center gap-2">
-                                  <span className={`vc-badge text-[9px] ${SOURCE_COLORS[entry.source] || 'bg-[#5a6878]/15 text-[#5a6878]'}`}>
-                                    {SOURCE_LABELS[entry.source] || entry.source}
-                                  </span>
-                                  <span className="text-[#8899aa]">{entry.particular}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[#5a6878] text-[10px] font-mono">{entry.month}</span>
-                                  <span className={`font-mono ${entry.side === 'credit' ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{fmtINR(entry.amount)}</span>
-                                </div>
+                </div>
+                <div className="p-4">
+                  {trend.length === 0 ? (
+                    <div className="text-[11px] text-[#5a6878] text-center py-8">No data for selected period</div>
+                  ) : (
+                    <div className="flex items-end gap-3 h-40">
+                      {(() => {
+                        const max = Math.max(...trend.map(t => t.income), ...trend.map(t => t.expense), 1);
+                        const last6 = trend.slice(-6);
+                        return last6.map((t, i) => {
+                          const isLast = i === last6.length - 1;
+                          return (
+                            <div key={t.month} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
+                              <div className="flex items-end justify-center gap-1 w-full h-32">
+                                <div className="w-[9px] rounded-t" title={fmtINR(t.income)} style={{ height: `${(t.income / max) * 100}%`, backgroundColor: '#00e676', opacity: isLast ? 1 : 0.55 }} />
+                                <div className="w-[9px] rounded-t" title={fmtINR(t.expense)} style={{ height: `${(t.expense / max) * 100}%`, backgroundColor: '#ff3d3d', opacity: isLast ? 1 : 0.55 }} />
                               </div>
-                            ))}
-                          </div>
-                        )}
+                              <span className={`text-[9px] whitespace-nowrap ${isLast ? 'text-[#f5a623] font-semibold' : 'text-[#5a6878]'}`}>{t.month}</span>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* P&L Detailed Statement */}
+              <div className="vc-panel">
+                <div className="vc-panel-header">
+                  <FileText size={14} className="text-[#f5a623]" />
+                  <span className="text-[12px] font-semibold text-[#e2e8f0]">P&L Detailed Statement</span>
+                  <span className="text-[10px] text-[#5a6878] ml-auto">Period: {periodRange.label}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="bg-[#0f1318]">
+                        <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Account Category</th>
+                        <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Actual</th>
+                        <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Budget</th>
+                        <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Variance</th>
+                        <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Var %</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#1a2028]">
+                      <StmtSection title="Revenue" color="#00e676" />
+                      {revenueRows.filter(r => r.actual > 0).map(r => (
+                        <StmtRow key={r.label} label={r.label} actual={r.actual} budget={r.budget} indent color="#00e676" />
+                      ))}
+                      <StmtSection title="Direct Costs (COGS)" color="#00d4ff" />
+                      {cogs > 0 && <StmtRow label="Purchase Accounts" actual={cogs} budget={cogsBudget} indent color="#00d4ff" />}
+                      <StmtRow label="GROSS PROFIT" actual={gross} budget={grossBudget} strong color={gross >= 0 ? '#00e676' : '#ff3d3d'} />
+                      <StmtSection title="Operating Expenses" color="#f5a623" />
+                      {opRows.filter(r => r.actual > 0).map(r => (
+                        <StmtRow key={r.label} label={r.label} actual={r.actual} budget={r.budget} indent color="#f5a623" />
+                      ))}
+                      <tr className="bg-[#0f1318] border-t-2 border-[#f5a623]">
+                        <td className="py-3 px-3 text-[13px] font-bold text-[#f5a623]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>NET PROFIT</td>
+                        <td className="py-3 px-3 text-right font-mono text-[14px] font-bold text-[#f5a623]">{fNet >= 0 ? '+' : '−'}{fmtINR(Math.abs(fNet))}</td>
+                        <td className="py-3 px-3 text-right font-mono text-[12px] text-[#8899aa]">{fmtINR(netBudget)}</td>
+                        <td className={`py-3 px-3 text-right font-mono text-[12px] font-bold ${netVar >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{netVar >= 0 ? '+' : '−'}{fmtINR(Math.abs(netVar))}</td>
+                        <td className={`py-3 px-3 text-right font-mono text-[12px] font-bold ${netVarPct >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{netVarPct >= 0 ? '+' : ''}{netVarPct.toFixed(1)}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Sidebar */}
+            <div className="space-y-4">
+              {/* Expense Distribution */}
+              <div className="vc-panel">
+                <div className="vc-panel-header">
+                  <PieChart size={14} className="text-[#ff3d3d]" />
+                  <span className="text-[12px] font-semibold text-[#e2e8f0]">Expense Distribution</span>
+                </div>
+                <div className="p-4">
+                  {expenseTotal === 0 ? (
+                    <div className="text-[11px] text-[#5a6878] text-center py-6">No expenses recorded</div>
+                  ) : (
+                    <Donut segments={expenseSegs} total={expenseTotal} />
+                  )}
+                </div>
+              </div>
+
+              {/* Site Performance */}
+              <div className="vc-panel">
+                <div className="vc-panel-header">
+                  <BarChart3 size={14} className="text-[#00e676]" />
+                  <span className="text-[12px] font-semibold text-[#e2e8f0]">Site Performance (GM %)</span>
+                </div>
+                <div className="p-4 space-y-3">
+                  {siteWise.length === 0 && <div className="text-[11px] text-[#5a6878] text-center py-4">No site data</div>}
+                  {siteWise.slice(0, 6).map(sw => {
+                    const gm = sw.income > 0 ? (sw.netPL / sw.income) * 100 : 0;
+                    const color = gm >= 15 ? '#00e676' : gm >= 0 ? '#f5a623' : '#ff3d3d';
+                    return (
+                      <div key={sw.site} className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-[#8899aa] truncate pr-2">{sw.site}</span>
+                          <span className="text-[#e2e8f0] font-mono">{gm.toFixed(1)}%</span>
+                        </div>
+                        <SourceBar value={Math.max(gm, 0)} max={30} color={color} />
                       </div>
                     );
                   })}
                 </div>
-              ) : (
-                /* Site-wise cards grid */
-                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-                  {summary?.siteWise.map(sw => {
-                    const margin = sw.income > 0 ? (sw.netPL / sw.income) * 100 : 0;
-                    const incomePct = (sw.income / totalIncome) * 100;
-                    const expensePct = (sw.expense / totalExpenses) * 100;
+              </div>
+
+              {/* Reconciliation Status */}
+              <div className="vc-panel">
+                <div className="vc-panel-header">
+                  <CheckCircle2 size={14} className="text-[#00e676]" />
+                  <span className="text-[12px] font-semibold text-[#e2e8f0]">Reconciliation Status</span>
+                </div>
+                <div className="p-3">
+                  {reconItems.map(item => {
+                    const amt = fSourceAgg[item.key]?.[item.kind] || 0;
+                    const ok = amt > 0;
                     return (
-                      <button
-                        key={sw.site}
-                        onClick={() => setSelectedSite(sw.site)}
-                        className="vc-stat-card text-left hover:bg-[#1a2332] transition-colors cursor-pointer"
-                      >
-                        <div className="text-[11px] font-semibold text-[#e2e8f0] truncate mb-2" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{sw.site}</div>
-                        <div className="space-y-1.5 mb-2">
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span className="text-[#00e676]">Income</span>
-                            <span className="text-[#8899aa] font-mono">{fmtINR(sw.income)}</span>
-                          </div>
-                          <div className="w-full bg-[#0f1318] rounded-full h-1.5 overflow-hidden">
-                            <div className="h-full rounded-full bg-[#00e676]" style={{ width: `${Math.min(incomePct, 100)}%` }} />
-                          </div>
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span className="text-[#ff3d3d]">Expense</span>
-                            <span className="text-[#8899aa] font-mono">{fmtINR(sw.expense)}</span>
-                          </div>
-                          <div className="w-full bg-[#0f1318] rounded-full h-1.5 overflow-hidden">
-                            <div className="h-full rounded-full bg-[#ff3d3d]" style={{ width: `${Math.min(expensePct, 100)}%` }} />
-                          </div>
+                      <div key={item.key} className="flex items-center gap-3 py-2 border-b border-[#1a2028] last:border-0">
+                        {ok ? <CheckCircle2 size={14} className="text-[#00e676] shrink-0" /> : <Clock3 size={14} className="text-[#5a6878] shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[11px] text-[#e2e8f0] truncate">{item.label}</div>
+                          <div className="text-[9px] text-[#5a6878]">{ok ? 'Reconciled' : 'No records'}</div>
                         </div>
-                        <div className={`text-[13px] font-bold ${sw.netPL >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`} style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                          {sw.netPL >= 0 ? '+' : ''}{fmtINR(sw.netPL)}
-                        </div>
-                        <div className={`text-[9px] ${margin >= 0 ? 'text-[#00d4ff]' : 'text-[#f5a623]'}`}>{pct(margin)} margin</div>
-                      </button>
+                        <span className="text-[10px] font-mono text-[#8899aa]">{ok ? fmtShort(amt) : '—'}</span>
+                      </div>
                     );
                   })}
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
-          {/* Monthly Trend Table */}
+          {/* Performance by Site table */}
           <div className="vc-panel">
             <div className="vc-panel-header">
-              <BarChart3 size={14} className="text-[#00d4ff]" />
-              <span className="text-[12px] font-semibold text-[#e2e8f0]">Monthly Trend</span>
+              <Building2 size={14} className="text-[#a855f7]" />
+              <span className="text-[12px] font-semibold text-[#e2e8f0]">Performance by Site</span>
+              <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-2">{siteWise.length}</span>
+              <span className="text-[10px] text-[#5a6878] ml-auto">Margin thresholds: ≥15% Healthy · 0–15% Watch · &lt;0% Critical</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[11px]">
                 <thead>
                   <tr className="bg-[#0f1318]">
-                    <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Month</th>
-                    <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Income</th>
-                    <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Expenses</th>
-                    <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Net P/L</th>
-                    {summary?.sites.map(site => (
-                      <th key={site} className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] max-w-[100px] truncate">{site}</th>
+                    {['Site', 'Contract Value', 'Cost to Date', 'Current P&L', 'Margin', 'Status', ''].map(h => (
+                      <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1a2028]">
-                  {summary?.monthlyTrend.map(mt => {
-                    const mIncome = records.filter(r => r.month === mt.month && r.side === 'credit').reduce((s, r) => s + r.amount, 0);
-                    const mExpense = records.filter(r => r.month === mt.month && r.side === 'debit').reduce((s, r) => s + r.amount, 0);
-                    const mNet = mIncome - mExpense;
+                  {siteWise.map(sw => {
+                    const gm = sw.income > 0 ? (sw.netPL / sw.income) * 100 : 0;
+                    const status = gm >= 15
+                      ? { label: 'ACTIVE', cls: 'bg-[#00e676]/15 text-[#00e676]' }
+                      : gm >= 0
+                        ? { label: 'WATCH', cls: 'bg-[#f5a623]/15 text-[#f5a623]' }
+                        : { label: 'CRITICAL', cls: 'bg-[#ff3d3d]/15 text-[#ff3d3d]' };
                     return (
-                      <tr key={mt.month} className="hover:bg-[#141920]">
-                        <td className="py-2.5 px-3 text-[#e2e8f0] font-medium">{mt.month}</td>
-                        <td className="py-2.5 px-3 text-[#00e676] font-mono text-right">{fmtINR(mt.income)}</td>
-                        <td className="py-2.5 px-3 text-[#ff3d3d] font-mono text-right">{fmtINR(mt.expense)}</td>
-                        <td className={`py-2.5 px-3 font-mono text-right font-medium ${mt.netPL >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>
-                          {mt.netPL >= 0 ? '+' : ''}{fmtINR(mt.netPL)}
+                      <tr key={sw.site} className="hover:bg-[#141920]">
+                        <td className="py-2.5 px-3 text-[#e2e8f0] max-w-[200px] truncate">{sw.site}</td>
+                        <td className="py-2.5 px-3 text-[#00e676] font-mono whitespace-nowrap">{fmtShort(sw.income)}</td>
+                        <td className="py-2.5 px-3 text-[#ff3d3d] font-mono whitespace-nowrap">{fmtShort(sw.expense)}</td>
+                        <td className={`py-2.5 px-3 font-mono font-medium whitespace-nowrap ${sw.netPL >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>
+                          {sw.netPL >= 0 ? '+' : '−'}{fmtShort(Math.abs(sw.netPL))}
                         </td>
-                        {summary?.sites.map(site => {
-                          const sIncome = records.filter(r => r.month === mt.month && r.site === site && r.side === 'credit').reduce((s, r) => s + r.amount, 0);
-                          const sExpense = records.filter(r => r.month === mt.month && r.site === site && r.side === 'debit').reduce((s, r) => s + r.amount, 0);
-                          const sNet = sIncome - sExpense;
-                          return (
-                            <td key={site} className={`py-2.5 px-3 font-mono text-right text-[10px] ${sNet >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>
-                              {sNet >= 0 ? '+' : ''}{fmtINR(sNet)}
-                            </td>
-                          );
-                        })}
+                        <td className={`py-2.5 px-3 font-mono whitespace-nowrap ${gm >= 0 ? 'text-[#00d4ff]' : 'text-[#f5a623]'}`}>{gm.toFixed(1)}%</td>
+                        <td className="py-2.5 px-3"><span className={`vc-badge text-[9px] ${status.cls}`}>{status.label}</span></td>
+                        <td className="py-2.5 px-3">
+                          <button
+                            onClick={() => { setDashboardSite(sw.site); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                            className="flex items-center gap-1 text-[10px] text-[#00d4ff] hover:text-[#0099cc]"
+                          >
+                            <Eye size={12} /> View
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
+                  {siteWise.length === 0 && (
+                    <tr><td colSpan={7} className="py-10 text-center text-[#5a6878]">No site data for selected period</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
+
+          {/* Performance by Job / PO / Customer */}
+          {[
+            { title: 'Performance by Job', icon: Layers, rows: jobWise, keyField: 'jobCode' as const, emptyNote: 'No job-tagged transactions for selected period — jobCode not present on every source (e.g. expense claims).' },
+            { title: 'Performance by PO', icon: FileText, rows: poWise, keyField: 'poNo' as const, emptyNote: 'No PO-tagged transactions for selected period — poNo is only tracked on invoices and credit notes today.' },
+            { title: 'Performance by Customer', icon: Building2, rows: customerWise, keyField: 'customer' as const, emptyNote: 'No customer-tagged transactions for selected period — party linkage is missing on credit notes and expense claims today.' },
+          ].map(({ title, icon: Icon, rows, keyField, emptyNote }) => (
+            <div className="vc-panel" key={title}>
+              <div className="vc-panel-header">
+                <Icon size={14} className="text-[#a855f7]" />
+                <span className="text-[12px] font-semibold text-[#e2e8f0]">{title}</span>
+                <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-2">{rows.length}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="bg-[#0f1318]">
+                      {[title.replace('Performance by ', ''), 'Income', 'Expense', 'Net P&L', 'Margin'].map(h => (
+                        <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#1a2028]">
+                    {rows.map((row: any) => {
+                      const gm = row.income > 0 ? (row.netPL / row.income) * 100 : 0;
+                      return (
+                        <tr key={row[keyField]} className="hover:bg-[#141920]">
+                          <td className="py-2.5 px-3 text-[#e2e8f0] max-w-[200px] truncate font-mono">{row[keyField]}</td>
+                          <td className="py-2.5 px-3 text-[#00e676] font-mono whitespace-nowrap">{fmtShort(row.income)}</td>
+                          <td className="py-2.5 px-3 text-[#ff3d3d] font-mono whitespace-nowrap">{fmtShort(row.expense)}</td>
+                          <td className={`py-2.5 px-3 font-mono font-medium whitespace-nowrap ${row.netPL >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>
+                            {row.netPL >= 0 ? '+' : '−'}{fmtShort(Math.abs(row.netPL))}
+                          </td>
+                          <td className={`py-2.5 px-3 font-mono whitespace-nowrap ${gm >= 0 ? 'text-[#00d4ff]' : 'text-[#f5a623]'}`}>{gm.toFixed(1)}%</td>
+                        </tr>
+                      );
+                    })}
+                    {rows.length === 0 && (
+                      <tr><td colSpan={5} className="py-10 text-center text-[#5a6878] text-[10px] max-w-md mx-auto">{emptyNote}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </>
       )}
 

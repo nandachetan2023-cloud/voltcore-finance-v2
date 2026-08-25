@@ -31,40 +31,56 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     if (body.action === 'import') {
-      const records = body.records || [];
-      let created = 0;
+      const records: any[] = body.records || [];
 
-      for (const item of records) {
-        const clientName = item.clientName || item['Client Name'] || '';
-        const balanceAmount = parseFloat(item.balanceAmount ?? item['Balance Amount'] ?? 0);
-        const poId = item.poId || item['PO No'] || null;
-        const invoiceNos = item.invoiceNos || item['Invoice '] || '';
-        const contactNo = item.contactNo || item['Contact No.'] || '';
-        const contactPerson = item.contactPerson || item['Name of Contact Person'] || '';
-        const matterDiscussed = item.matterDiscussed || item['Matter Discussed'] || '';
-        const callBackDateStr = item.callBackDate || item['Call Back Date'] || null;
-        const remarks = item.remarks || item['Remarks'] || '';
+      // The sheet carries a human-readable PO number ("PO No"), but poId is
+      // an Int FK to FinPurchaseOrder — resolve it by lookup instead of
+      // trying to store the string directly (that was throwing on every row).
+      const pos = await db.finPurchaseOrder.findMany({ select: { id: true, poNo: true } });
+      const poByNo = new Map(pos.map((p) => [p.poNo.trim().toLowerCase(), p.id]));
 
-        const callBackDate = callBackDateStr ? new Date(callBackDateStr) : null;
+      let created = 0, skipped = 0, errors = 0;
+      const errorRows: { row: number; message: string }[] = [];
 
-        await db.finClientFollowUp.create({
-          data: {
-            clientName,
-            balanceAmount,
-            poId,
-            invoiceNos,
-            contactNo,
-            contactPerson,
-            matterDiscussed,
-            callBackDate,
-            remarks,
-            status: 'Pending',
-          },
-        });
-        created++;
+      for (let i = 0; i < records.length; i++) {
+        const item = records[i];
+        const clientName = String(item.clientName || item['Client Name'] || '').trim();
+        if (!clientName) { skipped++; continue }
+
+        try {
+          const rawBalance = item.balanceAmount ?? item['Balance Amount'] ?? 0;
+          const balanceAmount = Number(rawBalance);
+          const poRef = String(item.poId || item['PO No'] || '').trim();
+          const invoiceNos = item.invoiceNos || item['Invoice '] || '';
+          const contactNo = item.contactNo || item['Contact No.'] || '';
+          const contactPerson = item.contactPerson || item['Name of Contact Person'] || '';
+          const matterDiscussed = item.matterDiscussed || item['Matter Discussed'] || '';
+          const callBackDateStr = item.callBackDate || item['Call Back Date'] || null;
+          const remarks = item.remarks || item['Remarks'] || '';
+          const callBackDate = callBackDateStr ? new Date(callBackDateStr) : null;
+
+          await db.finClientFollowUp.create({
+            data: {
+              clientName,
+              balanceAmount: Number.isFinite(balanceAmount) ? balanceAmount : 0,
+              poId: poRef ? poByNo.get(poRef.toLowerCase()) ?? null : null,
+              invoiceNos,
+              contactNo,
+              contactPerson,
+              matterDiscussed,
+              callBackDate: callBackDate && !isNaN(callBackDate.getTime()) ? callBackDate : null,
+              remarks,
+              status: 'Pending',
+            },
+          });
+          created++;
+        } catch (e) {
+          errors++;
+          errorRows.push({ row: i + 1, message: (e as Error).message });
+        }
       }
 
-      return NextResponse.json({ success: true, created });
+      return NextResponse.json({ success: true, created, summary: { totalRows: records.length, created, skipped, errors }, errorRows: errorRows.slice(0, 20) });
     }
 
     const { clientName, balanceAmount, poId, invoiceNos, contactNo, contactPerson, matterDiscussed, callBackDate: callBackDateStr, remarks } = body;
@@ -161,12 +177,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 });
     }
 
-    const record = await db.finClientFollowUp.findUnique({ where: { id } });
+    const record = await db.finClientFollowUp.findUnique({ where: { id: Number(id) } });
     if (!record) {
       return NextResponse.json({ success: false, error: 'Record not found' }, { status: 404 });
     }
 
-    await db.finClientFollowUp.delete({ where: { id } });
+    await db.finClientFollowUp.delete({ where: { id: Number(id) } });
 
     await db.finAlert.deleteMany({
       where: { title: { contains: `Follow-up due: ${record.clientName}` } },

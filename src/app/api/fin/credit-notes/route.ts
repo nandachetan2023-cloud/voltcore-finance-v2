@@ -20,7 +20,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    const missing = ['siteId', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
+    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
+    if (!body.creditNoteNo) {
+      const year = new Date().getFullYear()
+      const count = (await pdb.finCreditNote.count()) + 1
+      body.creditNoteNo = `CN/${year}/${String(count).padStart(4, '0')}`
+    }
     const record = await pdb.finCreditNote.create({ data: body })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
@@ -34,6 +41,8 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { id, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    const missing = ['siteId', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
+    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
     const record = await pdb.finCreditNote.update({ where: { id }, data })
     return NextResponse.json({ success: true, data: record })
@@ -46,9 +55,16 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
+    const pdb = getDbForRequest(request)
+    const ids = searchParams.get('ids')
+    if (ids) {
+      const idList = ids.split(',').map(Number).filter(Boolean)
+      if (idList.length === 0) return NextResponse.json({ success: false, error: 'No valid ids' }, { status: 400 })
+      const result = await pdb.finCreditNote.deleteMany({ where: { id: { in: idList } } })
+      return NextResponse.json({ success: true, deleted: result.count })
+    }
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
-    const pdb = getDbForRequest(request)
     await pdb.finCreditNote.delete({ where: { id: Number(id) } })
     return NextResponse.json({ success: true })
   } catch (error) {

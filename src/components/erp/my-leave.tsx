@@ -346,7 +346,7 @@ export default function MyLeave() {
           </div>
           <div className="vc-panel-body">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-              {balances.map(b => <BalanceCard key={b.type} label={b.type} allocated={b.allocated} used={b.used} color={b.color} />)}
+              {balances.map((b, bi) => <BalanceCard key={`${b.type}-${bi}`} label={b.type} allocated={b.allocated} used={b.used} color={b.color} />)}
             </div>
           </div>
         </div>

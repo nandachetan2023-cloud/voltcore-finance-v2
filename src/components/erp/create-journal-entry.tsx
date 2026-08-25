@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Trash2, FileText, Loader2, Send, CircleDot, Pencil, Search,
-  Landmark, IndianRupee, BadgeCheck, AlertTriangle, ChevronDown,
+  Landmark, IndianRupee, BadgeCheck, AlertTriangle, ChevronDown, CheckCircle2, XCircle, History, Upload,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { getCurrentUserEmail } from '@/lib/current-user';
 
 interface JournalLine {
   id: number;
@@ -17,6 +19,7 @@ interface JournalLine {
 
 interface LedgerAccount {
   id: number;
+  source?: string;
   accountCode: string;
   name: string;
   group: string;
@@ -38,6 +41,7 @@ interface Party {
 
 interface JEntry {
   id: number;
+  entryId?: number;
   entryNo: string;
   date: string;
   account: string;
@@ -45,6 +49,7 @@ interface JEntry {
   siteId: number | null;
   partyId: number | null;
   jobCode: string | null;
+  poNo: string | null;
   costCenter: string | null;
   department: string | null;
   projectManager: string | null;
@@ -54,6 +59,12 @@ interface JEntry {
   reference: string | null;
   voucherType: string | null;
   status: string;
+  attachmentPath?: string | null;
+  submittedBy?: string | null;
+  submittedAt?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  rejectionReason?: string | null;
 }
 
 const inputCls = 'w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none transition-colors';
@@ -89,9 +100,21 @@ export default function CreateJournalEntry() {
   const [description, setDescription] = useState('');
   const [reference, setReference] = useState('');
   const [jobCode, setJobCode] = useState('');
+  const [poNo, setPoNo] = useState('');
   const [costCenter, setCostCenter] = useState('');
   const [department, setDepartment] = useState('');
   const [projectManager, setProjectManager] = useState('');
+  const [attachmentPath, setAttachmentPath] = useState('');
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const handleAttachmentFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast.error('Supporting document must be under 2 MB'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setAttachmentPath(reader.result as string);
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
   const [lines, setLines] = useState<JournalLine[]>([
     { id: 1, account: '', accountName: '', description: '', debitAmount: 0, creditAmount: 0 },
     { id: 2, account: '', accountName: '', description: '', debitAmount: 0, creditAmount: 0 },
@@ -124,7 +147,14 @@ export default function CreateJournalEntry() {
     try {
       const res = await fetch('/api/ledger');
       const json = await res.json();
-      if (json.success) setAccounts(json.data);
+      if (json.success) {
+        // Journal lines post into FinJournalLine.accountId, a hard FK to
+        // FinAccount — the legacy LedgerAccount rows /api/ledger also
+        // returns can't be resolved there, and the "x000" codes are group
+        // headers (Assets/Liabilities/...), not postable leaf accounts.
+        const postable = (json.data as LedgerAccount[]).filter(a => a.source === 'fin' && !a.accountCode.endsWith('000'));
+        setAccounts(postable);
+      }
     } catch { /* silent */ } finally { setAccountsLoading(false); }
   }, []);
 
@@ -163,14 +193,22 @@ export default function CreateJournalEntry() {
 
   useEffect(() => { fetchAccounts(); fetchParties(); fetchSites(); fetchEntries(); }, [fetchAccounts, fetchParties, fetchSites, fetchEntries]);
 
-  useEffect(() => {
-    const now = new Date();
-    setEntryNo(`JE-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Date.now()).slice(-4)}`);
-  }, []);
+  // Matches the server-side fallback format in src/app/api/journal-entries/route.ts
+  // (JE/{year}/{seq}) so the number shown here is the number that actually gets saved.
+  const generateEntryNo = useCallback(() => {
+    const year = new Date().getFullYear();
+    const existing = new Set(entries.map(e => e.entryNo));
+    let seq = entries.length + 1;
+    let candidate = `JE/${year}/${String(seq).padStart(4, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `JE/${year}/${String(seq).padStart(4, '0')}`; }
+    return candidate;
+  }, [entries]);
+
+  useEffect(() => { if (!editMode) setEntryNo(generateEntryNo()); }, [entries, editMode, generateEntryNo]);
 
   const resetForm = () => {
     const now = new Date();
-    setEntryNo(`JE-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Date.now()).slice(-4)}`);
+    setEntryNo(generateEntryNo());
     setDate(now.toISOString().split('T')[0]);
     setSiteId(0);
     setPartyId(0);
@@ -178,9 +216,11 @@ export default function CreateJournalEntry() {
     setDescription('');
     setReference('');
     setJobCode('');
+    setPoNo('');
     setCostCenter('');
     setDepartment('');
     setProjectManager('');
+    setAttachmentPath('');
     setLines([
       { id: Date.now(), account: '', accountName: '', description: '', debitAmount: 0, creditAmount: 0 },
       { id: Date.now() + 1, account: '', accountName: '', description: '', debitAmount: 0, creditAmount: 0 },
@@ -198,9 +238,11 @@ export default function CreateJournalEntry() {
     setDescription(e.description || '');
     setReference(e.reference || '');
     setJobCode(e.jobCode || '');
+    setPoNo(e.poNo || '');
     setCostCenter(e.costCenter || '');
     setDepartment(e.department || '');
     setProjectManager(e.projectManager || '');
+    setAttachmentPath(e.attachmentPath || '');
     setLines([
       { id: 1, account: e.account, accountName: e.accountName || '', description: e.description || '', debitAmount: e.debit, creditAmount: 0 },
       { id: 2, account: '', accountName: '', description: '', debitAmount: 0, creditAmount: e.credit },
@@ -231,6 +273,7 @@ export default function CreateJournalEntry() {
   const validate = (): string | null => {
     if (!date) return 'Date is required';
     if (!entryNo.trim()) return 'Reference number is required';
+    if (!siteId) return 'Site is required';
     const active = lines.filter(l => l.debitAmount > 0 || l.creditAmount > 0);
     if (active.length === 0) return 'At least one line must have an amount';
     if (active.some(l => !l.account)) return 'Every line with an amount must have an account selected';
@@ -238,7 +281,12 @@ export default function CreateJournalEntry() {
     return null;
   };
 
-  const handleSubmit = async (status: 'Draft' | 'Posted') => {
+  // A journal entry always saves as Draft (see /api/journal-entries POST) —
+  // there's no way to post directly, by design: Posted only happens via the
+  // approval workflow (Draft -> Pending -> Posted), enforced server-side
+  // with a Segregation-of-Duties check so the submitter can't also approve.
+  // `submitForApproval` additionally calls that endpoint right after saving.
+  const handleSubmit = async (submitForApproval: boolean) => {
     const err = validate();
     if (err) { setFormError(err); return; }
     setFormError('');
@@ -251,13 +299,14 @@ export default function CreateJournalEntry() {
         siteId: siteId || null,
         partyId: partyId || null,
         jobCode: jobCode || null,
+        poNo: poNo || null,
         costCenter: costCenter || null,
         department: department || null,
         projectManager: projectManager || null,
         voucherType,
         description,
         reference,
-        status,
+        attachmentPath: attachmentPath || null,
         lines: active.map(l => ({
           account: l.account,
           accountName: l.accountName,
@@ -266,14 +315,18 @@ export default function CreateJournalEntry() {
           description: l.description || description,
         })),
       };
+      let entryId: number | null = null;
       if (editMode) {
         // Delete old lines for this entryNo, then insert new
-        await fetch(`/api/journal-entries/batch`, {
+        const res = await fetch(`/api/journal-entries/batch`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...payload, entryNo }),
         });
-        alert(`Journal Entry ${entryNo} updated as ${status}`);
+        const json = await res.json();
+        if (!json.success) { setFormError(json.error || 'Save failed'); setSaving(false); return; }
+        entryId = json.data?.[0]?.entryId ?? null;
+        toast.success(`Journal Entry ${entryNo} updated`);
       } else {
         const res = await fetch('/api/journal-entries', {
           method: 'POST',
@@ -282,11 +335,49 @@ export default function CreateJournalEntry() {
         });
         const json = await res.json();
         if (!json.success) { setFormError(json.error || 'Save failed'); setSaving(false); return; }
-        alert(`Journal Entry ${entryNo} ${status === 'Draft' ? 'saved as draft' : 'posted'}`);
+        entryId = json.data?.[0]?.entryId ?? null;
+        toast.success(`Journal Entry ${entryNo} saved as draft`);
+      }
+      if (submitForApproval && entryId) {
+        const subRes = await fetch('/api/journal-entries/approve', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: entryId, action: 'submit', actor: getCurrentUserEmail() }),
+        });
+        const subJson = await subRes.json();
+        if (subJson.success) toast.success('Submitted for approval');
+        else toast.error(subJson.error || 'Could not submit for approval');
       }
       resetForm();
       fetchEntries();
     } catch { setFormError('Network error'); } finally { setSaving(false); }
+  };
+
+  const [approvalSubmitting, setApprovalSubmitting] = useState(false);
+  const runApprovalAction = async (entryId: number | undefined, action: 'submit' | 'approve' | 'reject', comments?: string) => {
+    if (!entryId) return;
+    setApprovalSubmitting(true);
+    try {
+      const r = await fetch('/api/journal-entries/approve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: entryId, action, comments, actor: getCurrentUserEmail() }),
+      });
+      const j = await r.json();
+      if (j.success) {
+        toast.success(action === 'submit' ? 'Submitted for approval' : action === 'approve' ? 'Entry posted' : 'Entry rejected');
+        fetchEntries();
+      } else toast.error(j.error || 'Action failed');
+    } catch { toast.error('Network error'); }
+    finally { setApprovalSubmitting(false); }
+  };
+  const handleReject = (r: JEntry) => {
+    const reason = window.prompt(`Reason for rejecting ${r.entryNo}:`);
+    if (reason) runApprovalAction(r.entryId, 'reject', reason);
+  };
+  const jeStatusBadge = (s: string) => {
+    if (s === 'Posted') return 'bg-[#00e676]/15 text-[#00e676]';
+    if (s === 'Pending') return 'bg-[#f5a623]/15 text-[#f5a623]';
+    if (s === 'Rejected') return 'bg-[#ff3d3d]/15 text-[#ff3d3d]';
+    return 'bg-[#5a6878]/15 text-[#5a6878]';
   };
 
   const handleDelete = async () => {
@@ -388,8 +479,8 @@ export default function CreateJournalEntry() {
                 <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputCls} />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Reference #</label>
-                <input type="text" value={entryNo} onChange={e => setEntryNo(e.target.value)} placeholder="JE-XXXX" className={inputCls} />
+                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Entry No</label>
+                <input type="text" value={entryNo} readOnly placeholder="Auto-generated" className={inputCls + ' opacity-60'} />
               </div>
               <div>
                 <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Site</label>
@@ -431,13 +522,32 @@ export default function CreateJournalEntry() {
                 <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">External Ref</label>
                 <input type="text" value={reference} onChange={e => setReference(e.target.value)} placeholder="Optional" className={inputCls} />
               </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Supporting Document</label>
+                {attachmentPath ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-[#00d4ff] flex items-center gap-1"><FileText size={12} /> Attached</span>
+                    <button type="button" onClick={() => attachmentInputRef.current?.click()} className="text-[11px] text-[#5a6878] hover:text-[#e2e8f0] underline">Replace</button>
+                    <button type="button" onClick={() => setAttachmentPath('')} className="text-[11px] text-[#ff3d3d] hover:underline">Remove</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => attachmentInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#252e3a] text-[#8899aa] text-[11px] hover:border-[#f5a623]/50 hover:text-[#e2e8f0] transition-colors">
+                    <Upload size={12} /> Upload document
+                  </button>
+                )}
+                <input ref={attachmentInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleAttachmentFile} />
+              </div>
             </div>
 
             {/* Costing tags — Job/Site/PO/Cost Center/Department/PM */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mt-4">
               <div>
                 <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Job Code</label>
                 <input type="text" value={jobCode} onChange={e => setJobCode(e.target.value)} placeholder="JOB-2026-001" className={inputCls} />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">PO No</label>
+                <input type="text" value={poNo} onChange={e => setPoNo(e.target.value)} placeholder="PO-125" className={inputCls} />
               </div>
               <div>
                 <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Cost Center</label>
@@ -490,7 +600,7 @@ export default function CreateJournalEntry() {
                             className="w-full bg-transparent border-b border-[#252e3a] pb-1 pr-5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none">
                             <option value="" className="bg-[#161c24]">Select account...</option>
                             {accounts.map(a => (
-                              <option key={a.id} value={a.accountCode} className="bg-[#161c24]">{a.accountCode} - {a.name}</option>
+                              <option key={`${a.source}-${a.id}`} value={a.accountCode} className="bg-[#161c24]">{a.accountCode} - {a.name}</option>
                             ))}
                           </select>
                           <ChevronDown size={12} className="absolute right-1 top-1/2 -translate-y-1/2 text-[#5a6878] pointer-events-none" />
@@ -555,15 +665,15 @@ export default function CreateJournalEntry() {
                   Cancel
                 </button>
               )}
-              <button onClick={() => handleSubmit('Draft')} disabled={saving}
+              <button onClick={() => handleSubmit(false)} disabled={saving}
                 className="px-4 py-2 rounded-lg border border-[#f5a623] text-[#f5a623] text-[11px] font-semibold hover:bg-[#f5a623]/10 disabled:opacity-50 transition-colors">
                 {saving ? <Loader2 size={13} className="animate-spin inline mr-1" /> : null}
                 Save Draft
               </button>
-              <button onClick={() => handleSubmit('Posted')} disabled={saving || !isBalanced}
+              <button onClick={() => handleSubmit(true)} disabled={saving || !isBalanced}
                 className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-[#f5a623] text-[#0a0d12] text-[11px] font-semibold hover:bg-[#e8991a] disabled:opacity-50 transition-colors">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                Post Entry
+                Save &amp; Submit for Approval
               </button>
             </div>
           </div>
@@ -607,7 +717,7 @@ export default function CreateJournalEntry() {
               <table className="w-full text-[10px]">
                 <thead className="sticky top-0 z-10 bg-[#0f1318]">
                   <tr>
-                    {['Entry', 'Account', 'Dr', 'Cr', ''].map(h => (
+                    {['Entry', 'Account', 'Dr', 'Cr', 'Status', ''].map(h => (
                       <th key={h} className="text-left py-2 px-2.5 text-[#5a6878] font-semibold uppercase tracking-wider text-[8px] whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -619,7 +729,23 @@ export default function CreateJournalEntry() {
                       <td className="py-1.5 px-2.5 text-[#e2e8f0] truncate max-w-[120px]">{r.accountName || r.account}</td>
                       <td className="py-1.5 px-2.5 text-right font-mono text-[#00e676]">{r.debit > 0 ? fmt(r.debit) : '—'}</td>
                       <td className="py-1.5 px-2.5 text-right font-mono text-[#ff3d3d]">{r.credit > 0 ? fmt(r.credit) : '—'}</td>
+                      <td className="py-1.5 px-2.5"><span className={`vc-badge ${jeStatusBadge(r.status)} text-[8px]`}>{r.status}</span></td>
                       <td className="py-1.5 px-2.5 flex gap-0.5">
+                        {(r.status === 'Draft' || r.status === 'Rejected') && (
+                          <button onClick={() => runApprovalAction(r.entryId, 'submit')} disabled={approvalSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10 disabled:opacity-50" title="Submit for approval">
+                            <Send size={11} />
+                          </button>
+                        )}
+                        {r.status === 'Pending' && (
+                          <>
+                            <button onClick={() => runApprovalAction(r.entryId, 'approve')} disabled={approvalSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#00e676] hover:bg-[#00e676]/10 disabled:opacity-50" title="Approve &amp; Post">
+                              <CheckCircle2 size={11} />
+                            </button>
+                            <button onClick={() => handleReject(r)} disabled={approvalSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 disabled:opacity-50" title="Reject">
+                              <XCircle size={11} />
+                            </button>
+                          </>
+                        )}
                         <button onClick={() => loadEntry(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10" title="Edit">
                           <Pencil size={11} />
                         </button>

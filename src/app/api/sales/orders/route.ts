@@ -39,11 +39,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { items, ...data } = body
     const pdb = getDbForRequest(request)
+    if (!data.soNo) {
+      const year = new Date().getFullYear()
+      const count = (await pdb.salesOrder.count()) + 1
+      data.soNo = `SO/${year}/${String(count).padStart(4, '0')}`
+    }
     const record = await pdb.salesOrder.create({
       data: {
         ...data,
         soDate: new Date(data.soDate),
         quotationId: data.quotationId || null,
+        updatedAt: new Date(),
         SalesOrderItem: items?.length ? { create: items } : undefined,
       },
       include: {
@@ -76,6 +82,7 @@ export async function PUT(request: NextRequest) {
         ...data,
         soDate: data.soDate ? new Date(data.soDate) : undefined,
         quotationId: data.quotationId || null,
+        updatedAt: new Date(),
         SalesOrderItem: items?.length ? { create: items } : undefined,
       },
       include: {

@@ -55,9 +55,10 @@ export async function POST(request: NextRequest) {
     }
 
     for (const r of records) {
+      let claimNo = ''
       try {
         const claimDate = toDate(r.date) || new Date()
-        const claimNo = str(r.claimNo ?? '') || genClaimNo(claimDate)
+        claimNo = str(r.claimNo ?? '') || genClaimNo(claimDate)
 
         const itemDate = toDate(r.itemDate || r.date)
         const category = str(r.category || r.expenseType || '')
@@ -85,6 +86,10 @@ export async function POST(request: NextRequest) {
           siteId: defaultSiteId,
           siteType: str(r.siteType) || 'HO',
           expenseType: category,
+          jobCode: str(r.jobCode) || null,
+          costCenter: str(r.costCenter) || null,
+          department: str(r.department) || null,
+          projectManager: str(r.projectManager) || null,
           submittedBy: str(r.submittedBy) || 'Finance Import System',
           totalAmount,
           receivedAmount: num(r.receivedAmount),

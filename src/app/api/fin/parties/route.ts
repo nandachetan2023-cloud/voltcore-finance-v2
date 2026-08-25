@@ -53,9 +53,16 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
+    const pdb = getDbForRequest(request)
+    const ids = searchParams.get('ids')
+    if (ids) {
+      const idList = ids.split(',').map(Number).filter(Boolean)
+      if (idList.length === 0) return NextResponse.json({ success: false, error: 'No valid ids' }, { status: 400 })
+      const result = await pdb.finParty.deleteMany({ where: { id: { in: idList } } })
+      return NextResponse.json({ success: true, deleted: result.count })
+    }
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
-    const pdb = getDbForRequest(request)
     await pdb.finParty.delete({ where: { id: Number(id) } })
     return NextResponse.json({ success: true })
   } catch (error) {

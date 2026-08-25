@@ -1,6 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 
+const INCLUDE = { lines: { include: { account: true } } }
+
+function flatten(entry: any) {
+  return entry.lines.map((line: any) => ({
+    id: line.id,
+    entryId: entry.id,
+    entryNo: entry.entryNo,
+    date: entry.entryDate,
+    siteId: entry.siteId,
+    jobCode: entry.jobCode,
+    poNo: entry.poNo,
+    costCenter: entry.costCenter,
+    department: entry.department,
+    projectManager: entry.projectManager,
+    voucherType: entry.voucherType,
+    status: entry.status,
+    account: line.account?.accountCode ?? '',
+    accountName: line.account?.name ?? null,
+    debit: line.debit,
+    credit: line.credit,
+    description: line.description ?? entry.description,
+    reference: entry.reference,
+  }))
+}
+
+// Edit-mode save for a multi-line entry: delete-and-recreate its lines
+// (same approach the legacy model used), now against the real
+// FinJournalEntry/FinJournalLine pair with account-code resolution.
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
@@ -9,37 +37,57 @@ export async function PUT(request: NextRequest) {
     if (!lines?.length) return NextResponse.json({ success: false, error: 'lines array is required' }, { status: 400 })
 
     const pdb = getDbForRequest(request)
+    const existing = await pdb.finJournalEntry.findFirst({ where: { entryNo } })
+    if (!existing) return NextResponse.json({ success: false, error: 'Entry not found' }, { status: 404 })
 
-    const records = await pdb.$transaction(async (tx) => {
-      await tx.journalEntry.deleteMany({ where: { entryNo } })
-      const created = await Promise.all(
-        lines.map((line: any) =>
-          tx.journalEntry.create({
-            data: {
-              entryNo,
-              date: base.date,
-              siteId: base.siteId || null,
-              partyId: base.partyId || null,
-              jobCode: base.jobCode || null,
-              costCenter: base.costCenter || null,
-              department: base.department || null,
-              projectManager: base.projectManager || null,
-              voucherType: base.voucherType,
-              status: base.status,
-              account: line.account,
-              accountName: line.accountName || null,
-              debit: line.debit || 0,
-              credit: line.credit || 0,
-              description: line.description || base.description || null,
-              reference: line.reference || base.reference || null,
-            },
-          })
-        )
-      )
-      return created
+    const resolvedLines: { accountId: number; description: string | null; debit: number; credit: number; costCenter: string | null; jobCode: string | null; siteCode: string | null; department: string | null; projectManager: string | null }[] = []
+    for (const line of lines) {
+      if (!line.account) continue
+      const account = await pdb.finAccount.findUnique({ where: { accountCode: line.account } })
+      if (!account) return NextResponse.json({ success: false, error: `Unknown account code: ${line.account}` }, { status: 400 })
+      resolvedLines.push({
+        accountId: account.id,
+        description: line.description || base.description || null,
+        debit: Number(line.debit) || 0,
+        credit: Number(line.credit) || 0,
+        costCenter: base.costCenter || null,
+        jobCode: base.jobCode || null,
+        siteCode: null,
+        department: base.department || null,
+        projectManager: base.projectManager || null,
+      })
+    }
+    if (resolvedLines.length === 0) {
+      return NextResponse.json({ success: false, error: 'At least one line with an account is required' }, { status: 400 })
+    }
+    const totalDebit = resolvedLines.reduce((s, l) => s + l.debit, 0)
+    const totalCredit = resolvedLines.reduce((s, l) => s + l.credit, 0)
+
+    const entry = await pdb.$transaction(async (tx) => {
+      await tx.finJournalLine.deleteMany({ where: { entryId: existing.id } })
+      return tx.finJournalEntry.update({
+        where: { id: existing.id },
+        data: {
+          entryDate: base.date ? new Date(base.date) : undefined,
+          reference: base.reference ?? undefined,
+          description: base.description ?? undefined,
+          siteId: base.siteId ? Number(base.siteId) : undefined,
+          jobCode: base.jobCode ?? undefined,
+          poNo: base.poNo ?? undefined,
+          costCenter: base.costCenter ?? undefined,
+          department: base.department ?? undefined,
+          projectManager: base.projectManager ?? undefined,
+          voucherType: base.voucherType ?? undefined,
+          attachmentPath: base.attachmentPath !== undefined ? (base.attachmentPath || null) : undefined,
+          totalDebit,
+          totalCredit,
+          lines: { create: resolvedLines },
+        },
+        include: INCLUDE,
+      })
     })
 
-    return NextResponse.json({ success: true, data: records })
+    return NextResponse.json({ success: true, data: flatten(entry) })
   } catch (error) {
     console.error('Error batch updating journal entries:', error)
     return NextResponse.json({ success: false, error: 'Failed to update entries' }, { status: 500 })

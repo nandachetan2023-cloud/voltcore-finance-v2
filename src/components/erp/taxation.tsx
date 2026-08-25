@@ -10,16 +10,24 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { FormField, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
+import { SortableTh } from './_table-controls';
 
-interface TaxRecord { id: number; taxType: string; period: string; amount: number; dueDate: string; paidDate: string | null; paymentRef: string | null; status: string; remarks: string | null; }
-interface FormData { taxType: string; period: string; amount: number; dueDate: string; status: string; remarks: string; }
+interface TaxRecord { id: number; taxType: string; period: string; amount: number; dueDate: string; paidDate: string | null; paymentRef: string | null; status: string; remarks: string | null; siteCode: string | null; jobCode: string | null; poNo: string | null; costCenter: string | null; department: string | null; projectManager: string | null; }
+interface FormData { taxType: string; period: string; amount: number; dueDate: string; status: string; remarks: string; siteCode: string; jobCode: string; poNo: string; costCenter: string; department: string; projectManager: string; }
 
-const EMPTY_FORM: FormData = { taxType: 'GST', period: '', amount: 0, dueDate: '', status: 'Pending', remarks: '' };
+const EMPTY_FORM: FormData = { taxType: 'GST', period: '', amount: 0, dueDate: '', status: 'Pending', remarks: '', siteCode: '', jobCode: '', poNo: '', costCenter: '', department: '', projectManager: '' };
 const TAX_TYPES = ['GST', 'TDS', 'PF', 'ESI', 'Professional Tax', 'Advance Tax'];
 
 const TAX_COLUMNS: ExportColumn<TaxRecord>[] = [
   { header: 'Tax Type', accessor: 'taxType' },
   { header: 'Period', accessor: 'period' },
+  { header: 'Site Code', accessor: 'siteCode' },
+  { header: 'Job Code', accessor: 'jobCode' },
+  { header: 'PO No', accessor: 'poNo' },
+  { header: 'Cost Center', accessor: 'costCenter' },
+  { header: 'Department', accessor: 'department' },
+  { header: 'Project Manager', accessor: 'projectManager' },
   { header: 'Amount', accessor: 'amount' },
   { header: 'Due Date', accessor: (r) => r.dueDate?.split('T')[0] ?? '' },
   { header: 'Paid Date', accessor: (r) => r.paidDate?.split('T')[0] ?? '' },
@@ -31,6 +39,12 @@ const TAX_COLUMNS: ExportColumn<TaxRecord>[] = [
 const TAX_IMPORT_FIELDS: ImportField[] = [
   { key: 'taxType', label: 'Tax Type', required: true },
   { key: 'period', label: 'Period', required: true },
+  { key: 'siteCode', label: 'Site Code', required: true },
+  { key: 'jobCode', label: 'Job Code', required: true },
+  { key: 'poNo', label: 'PO No', required: true },
+  { key: 'costCenter', label: 'Cost Center', required: true },
+  { key: 'department', label: 'Department', required: true },
+  { key: 'projectManager', label: 'Project Manager', required: true },
   { key: 'amount', label: 'Amount', type: 'number' },
   { key: 'dueDate', label: 'Due Date', type: 'date' },
   { key: 'paidDate', label: 'Paid Date', type: 'date' },
@@ -38,17 +52,17 @@ const TAX_IMPORT_FIELDS: ImportField[] = [
   { key: 'status', label: 'Status' },
   { key: 'remarks', label: 'Remarks' },
 ];
-const TAX_SAMPLE_ROW = { taxType: 'GST', period: '2026-01', amount: 774000, dueDate: '2026-02-20', paidDate: '', paymentRef: 'PMT-001', status: 'Pending', remarks: 'Monthly GST payment' };
+const TAX_SAMPLE_ROW = { taxType: 'GST', period: '2026-01', siteCode: 'SITE-001', jobCode: 'JOB-2026-001', poNo: 'PO-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', amount: 774000, dueDate: '2026-02-20', paidDate: '', paymentRef: 'PMT-001', status: 'Pending', remarks: 'Monthly GST payment' };
 
 function generateMockTaxation(): TaxRecord[] {
   return [
-    { id: 1, taxType: 'GST', period: 'Nov 2024', amount: 1850000, dueDate: '2024-12-20T00:00:00', paidDate: '2024-12-18T00:00:00', paymentRef: 'GST-CHQ-001', status: 'Paid', remarks: 'Monthly GST return filed' },
-    { id: 2, taxType: 'GST', period: 'Dec 2024', amount: 2100000, dueDate: '2025-01-20T00:00:00', paidDate: null, paymentRef: null, status: 'Pending', remarks: '' },
-    { id: 3, taxType: 'TDS', period: 'Q3 FY24-25', amount: 950000, dueDate: '2025-01-15T00:00:00', paidDate: '2025-01-14T00:00:00', paymentRef: 'TDS-NEFT-003', status: 'Paid', remarks: 'TDS on contractor payments' },
-    { id: 4, taxType: 'PF', period: 'Dec 2024', amount: 420000, dueDate: '2025-01-15T00:00:00', paidDate: '2025-01-12T00:00:00', paymentRef: 'PF-004', status: 'Paid', remarks: 'Employee PF contribution' },
-    { id: 5, taxType: 'ESI', period: 'Dec 2024', amount: 180000, dueDate: '2025-01-15T00:00:00', paidDate: null, paymentRef: null, status: 'Overdue', remarks: 'ESI contribution pending' },
-    { id: 6, taxType: 'Professional Tax', period: 'FY 2024-25', amount: 250000, dueDate: '2025-03-31T00:00:00', paidDate: null, paymentRef: null, status: 'Filed', remarks: 'Annual professional tax' },
-    { id: 7, taxType: 'Advance Tax', period: 'Q3 FY24-25', amount: 3500000, dueDate: '2024-12-15T00:00:00', paidDate: '2024-12-14T00:00:00', paymentRef: 'ADV-TAX-007', status: 'Paid', remarks: 'Advance tax installment' },
+    { id: 1, taxType: 'GST', period: 'Nov 2024', amount: 1850000, dueDate: '2024-12-20T00:00:00', paidDate: '2024-12-18T00:00:00', paymentRef: 'GST-CHQ-001', status: 'Paid', remarks: 'Monthly GST return filed', siteCode: 'SITE-001', jobCode: 'JOB-2026-001', poNo: 'PO-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma' },
+    { id: 2, taxType: 'GST', period: 'Dec 2024', amount: 2100000, dueDate: '2025-01-20T00:00:00', paidDate: null, paymentRef: null, status: 'Pending', remarks: '', siteCode: 'SITE-002', jobCode: 'JOB-2026-002', poNo: 'PO-2026-002', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'A. Verma' },
+    { id: 3, taxType: 'TDS', period: 'Q3 FY24-25', amount: 950000, dueDate: '2025-01-15T00:00:00', paidDate: '2025-01-14T00:00:00', paymentRef: 'TDS-NEFT-003', status: 'Paid', remarks: 'TDS on contractor payments', siteCode: 'SITE-003', jobCode: 'JOB-2026-003', poNo: 'PO-2026-003', costCenter: 'CC-PROJ-001', department: 'Operations', projectManager: 'P. Iyer' },
+    { id: 4, taxType: 'PF', period: 'Dec 2024', amount: 420000, dueDate: '2025-01-15T00:00:00', paidDate: '2025-01-12T00:00:00', paymentRef: 'PF-004', status: 'Paid', remarks: 'Employee PF contribution', siteCode: 'SITE-003', jobCode: 'JOB-2026-003', poNo: 'PO-2026-003', costCenter: 'CC-HO-001', department: 'Finance', projectManager: 'P. Iyer' },
+    { id: 5, taxType: 'ESI', period: 'Dec 2024', amount: 180000, dueDate: '2025-01-15T00:00:00', paidDate: null, paymentRef: null, status: 'Overdue', remarks: 'ESI contribution pending', siteCode: 'SITE-004', jobCode: 'JOB-2026-004', poNo: 'PO-2026-004', costCenter: 'CC-PROJ-002', department: 'Projects', projectManager: 'S. Rao' },
+    { id: 6, taxType: 'Professional Tax', period: 'FY 2024-25', amount: 250000, dueDate: '2025-03-31T00:00:00', paidDate: null, paymentRef: null, status: 'Filed', remarks: 'Annual professional tax', siteCode: 'SITE-003', jobCode: 'JOB-2026-003', poNo: 'PO-2026-003', costCenter: 'CC-HO-001', department: 'Finance', projectManager: 'P. Iyer' },
+    { id: 7, taxType: 'Advance Tax', period: 'Q3 FY24-25', amount: 3500000, dueDate: '2024-12-15T00:00:00', paidDate: '2024-12-14T00:00:00', paymentRef: 'ADV-TAX-007', status: 'Paid', remarks: 'Advance tax installment', siteCode: 'SITE-005', jobCode: 'JOB-2026-005', poNo: 'PO-2026-005', costCenter: 'CC-PROJ-001', department: 'Site Execution', projectManager: 'M. Khan' },
   ];
 }
 
@@ -67,7 +81,11 @@ const REGISTER_TABS: { id: 'payments' | RegisterType; label: string; icon: typeo
 
 // ── GST & TDS Registers (read-only reports over live Fin data) ──────────
 function GstTdsRegister({ type }: { type: RegisterType }) {
-  const [data, setData] = useState<any>(null);
+  // Tag the payload with the type it was fetched for — otherwise switching
+  // tabs quickly renders the previous tab's data shape against the new
+  // tab's rendering branch for one frame (React applies the new `type`
+  // prop before the effect below has a chance to clear stale state).
+  const [loaded, setLoaded] = useState<{ type: RegisterType; payload: any } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -75,13 +93,14 @@ function GstTdsRegister({ type }: { type: RegisterType }) {
     setLoading(true);
     fetch(`/api/fin/gst-tds-register?type=${type}`)
       .then(r => r.json())
-      .then(j => { if (!cancelled) setData(j.success ? j.data : null); })
-      .catch(() => { if (!cancelled) setData(null); })
+      .then(j => { if (!cancelled) setLoaded({ type, payload: j.success ? j.data : null }); })
+      .catch(() => { if (!cancelled) setLoaded({ type, payload: null }); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [type]);
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
+  if (loading || !loaded || loaded.type !== type) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
+  const data = loaded.payload;
   if (!data) return <div className="p-8 text-center text-[#5a6878] text-[12px]">No data available for this report.</div>;
 
   if (type === 'gst-sales' || type === 'gst-purchase') {
@@ -288,14 +307,28 @@ export default function Taxation() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<FormData>({
+    taxType: required('Tax Type'),
+    period: required('Period'),
+    dueDate: required('Due Date'),
+    siteCode: required('Site Code'),
+    jobCode: required('Job Code'),
+    poNo: required('PO Number'),
+    costCenter: required('Cost Center'),
+    department: required('Department'),
+    projectManager: required('Project Manager'),
+  });
+  const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
+
   const openEdit = (r: TaxRecord) => {
     setEditTarget(r);
-    setForm({ taxType: r.taxType, period: r.period, amount: r.amount, dueDate: r.dueDate?.split('T')[0] || '', status: r.status, remarks: r.remarks || '' });
+    setForm({ taxType: r.taxType, period: r.period, amount: r.amount, dueDate: r.dueDate?.split('T')[0] || '', status: r.status, remarks: r.remarks || '', siteCode: r.siteCode || '', jobCode: r.jobCode || '', poNo: r.poNo || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' });
+    setFormErrors({});
     setFormOpen(true);
   };
 
   const handleSubmit = async () => {
-    if (!form.taxType || !form.period || !form.dueDate) { toast.error('Tax type, period, and due date are required'); return; }
+    if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
     setSubmitting(true);
     try {
       const method = editTarget ? 'PUT' : 'POST';
@@ -317,6 +350,19 @@ export default function Taxation() {
       else { toast.error(json.error || 'Delete failed'); }
     } catch { toast.error('Network error'); }
   };
+
+  const [taxSort, setTaxSort] = useState<{ key: string | null; dir: 'asc' | 'desc'; accessor?: (r: TaxRecord) => unknown }>({ key: null, dir: 'asc' });
+  const toggleTaxSort = (key: string, accessor: (r: TaxRecord) => unknown) => {
+    setTaxSort(prev => prev.key !== key ? { key, dir: 'asc', accessor } : prev.dir === 'asc' ? { key, dir: 'desc', accessor } : { key: null, dir: 'asc' });
+  };
+  const sortedRecords = taxSort.key && taxSort.accessor ? [...records].sort((a, b) => {
+    const av = taxSort.accessor!(a); const bv = taxSort.accessor!(b);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).toLowerCase() < String(bv).toLowerCase() ? -1 : String(av).toLowerCase() > String(bv).toLowerCase() ? 1 : 0;
+    return taxSort.dir === 'desc' ? -cmp : cmp;
+  }) : records;
 
   const totalPending = records.filter(r => r.status === 'Pending').reduce((s, r) => s + r.amount, 0);
   const totalFiled = records.filter(r => r.status === 'Filed').reduce((s, r) => s + r.amount, 0);
@@ -360,6 +406,7 @@ export default function Taxation() {
         fields={TAX_IMPORT_FIELDS}
         keyField="taxType"
         existingKeys={new Set(records.map(r => r.taxType + '-' + r.period))}
+        keyFn={(r) => `${r.taxType ?? ''}-${r.period ?? ''}`}
         commitEndpoint="/api/taxation/import"
         sampleRow={TAX_SAMPLE_ROW}
         onClose={() => setImportOpen(false)}
@@ -382,20 +429,28 @@ export default function Taxation() {
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Tax Records</span>
           <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{records.length} Records</span>
           <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={TAX_COLUMNS} filename="taxation" />
-          <button onClick={() => { setEditTarget(null); setForm(EMPTY_FORM); setFormOpen(true); }} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Record</button>
+          <button onClick={() => { setEditTarget(null); setForm(EMPTY_FORM); setFormErrors({}); setFormOpen(true); }} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Record</button>
         </div>
         <div className="overflow-x-auto"><div className="max-h-[480px] overflow-y-auto">
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
-              {['Tax Type', 'Period', 'Amount', 'Due Date', 'Paid Date', 'Status', 'Actions'].map(h => (
-                <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>
-              ))}
+              <SortableTh label="Tax Type" sortKey="taxType" accessor={(r: TaxRecord) => r.taxType} sort={taxSort} toggleSort={toggleTaxSort} />
+              <SortableTh label="Period" sortKey="period" accessor={(r: TaxRecord) => r.period} sort={taxSort} toggleSort={toggleTaxSort} />
+              <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: TaxRecord) => r.jobCode} sort={taxSort} toggleSort={toggleTaxSort} />
+              <SortableTh label="Cost Center" sortKey="costCenter" accessor={(r: TaxRecord) => r.costCenter} sort={taxSort} toggleSort={toggleTaxSort} />
+              <SortableTh label="Amount" sortKey="amount" accessor={(r: TaxRecord) => r.amount} sort={taxSort} toggleSort={toggleTaxSort} align="right" />
+              <SortableTh label="Due Date" sortKey="dueDate" accessor={(r: TaxRecord) => r.dueDate} sort={taxSort} toggleSort={toggleTaxSort} />
+              <SortableTh label="Paid Date" sortKey="paidDate" accessor={(r: TaxRecord) => r.paidDate} sort={taxSort} toggleSort={toggleTaxSort} />
+              <SortableTh label="Status" sortKey="status" accessor={(r: TaxRecord) => r.status} sort={taxSort} toggleSort={toggleTaxSort} />
+              <th className="py-2 px-3">Actions</th>
             </tr></thead>
             <tbody className="divide-y divide-[#1a2028]">
-              {records.map(r => (
+              {sortedRecords.map(r => (
                 <tr key={r.id} className="hover:bg-[#141920] transition-colors">
                   <td className="py-2.5 px-3 text-[#f5a623] font-medium">{r.taxType}</td>
                   <td className="py-2.5 px-3 text-[#e2e8f0]">{r.period}</td>
+                  <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || '—'}</td>
+                  <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.costCenter || '—'}</td>
                   <td className="py-2.5 px-3 text-[#e2e8f0] font-mono">₹{(r.amount ?? 0).toLocaleString('en-IN')}</td>
                   <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.dueDate?.split('T')[0]}</td>
                   <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.paidDate?.split('T')[0] || '—'}</td>
@@ -423,6 +478,18 @@ export default function Taxation() {
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Amount (₹) *</label><input type="number" value={form.amount || ''} onChange={e => setForm(p => ({ ...p, amount: Number(e.target.value) }))} className="vc-input" /></div>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Due Date *</label><input type="date" value={form.dueDate} onChange={e => setForm(p => ({ ...p, dueDate: e.target.value }))} className="vc-input" /></div>
             </div>
+            <div className="grid grid-cols-3 gap-3">
+              <FormField label="Site Code" required error={formErrors.siteCode}>
+                <DatalistField id="tax-site-code" value={form.siteCode} onChange={v => setField('siteCode', v)} options={[...new Set(records.map(r => r.siteCode).filter(Boolean) as string[])]} placeholder="SITE-001" />
+              </FormField>
+              <FormField label="Job Code" required error={formErrors.jobCode}>
+                <DatalistField id="tax-job-code" value={form.jobCode} onChange={v => setField('jobCode', v)} options={[...new Set(records.map(r => r.jobCode).filter(Boolean) as string[])]} placeholder="JOB-2026-001" />
+              </FormField>
+              <FormField label="PO Number" required error={formErrors.poNo}>
+                <DatalistField id="tax-po-no" value={form.poNo} onChange={v => setField('poNo', v)} options={[...new Set(records.map(r => r.poNo).filter(Boolean) as string[])]} placeholder="PO-2026-001" />
+              </FormField>
+            </div>
+            <CostingFields prefix="tax" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
             <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label><select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className="vc-input appearance-none"><option value="Pending">Pending</option><option value="Filed">Filed</option><option value="Paid">Paid</option><option value="Overdue">Overdue</option></select></div>
             <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Remarks</label><input value={form.remarks} onChange={e => setForm(p => ({ ...p, remarks: e.target.value }))} className="vc-input" /></div>
           </div>

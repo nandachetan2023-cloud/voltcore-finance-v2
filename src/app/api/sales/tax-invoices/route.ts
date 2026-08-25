@@ -31,6 +31,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const pdb = getDbForRequest(request)
     const { items, ...data } = body
+    if (!data.invoiceNo) {
+      const year = new Date().getFullYear()
+      const count = (await pdb.salesTaxInvoice.count()) + 1
+      data.invoiceNo = `SINV/${year}/${String(count).padStart(3, '0')}`
+    }
     const record = await pdb.salesTaxInvoice.create({
       data: {
         ...data,

@@ -22,6 +22,9 @@ interface ImportResult {
     createdAdvices?: number;
     createdLines?: number;
     rowErrors?: number;
+    createdClaims?: number;
+    createdItems?: number;
+    errors?: number;
   };
   error?: string;
 }
@@ -105,9 +108,7 @@ export default function Finance() {
         importEndpoint = '/api/fin/payment-advices/import';
         importType = 'payment-advices';
       } else if (activeTab === 'expenses') {
-        importEndpoint = activeTab === 'preview' || activeTab === 'expenses-preview'
-          ? '/api/finance/import/expenses/preview'
-          : '/api/finance/import/expenses/commit';
+        importEndpoint = '/api/finance/import/expenses/commit';
         importType = 'expenses';
       }
 
@@ -310,7 +311,7 @@ export default function Finance() {
                           <div className="mt-2 text-[10px] text-[#8899aa]">
                             {result.summary.createdClaims ? `Created ${result.summary.createdClaims} claims` : ''}
                             {result.summary.createdItems && ` & ${result.summary.createdItems} items`}
-                            {result.summary.errors > 0 && ` • ${result.summary.errors} errors`}
+                            {(result.summary.errors ?? 0) > 0 && ` • ${result.summary.errors} errors`}
                           </div>
                         )}
                       </div>

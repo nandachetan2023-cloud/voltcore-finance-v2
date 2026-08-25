@@ -36,6 +36,10 @@ interface ExpenseClaim {
   remarks: string | null;
   postedAt: string | null;
   approvedBy: string | null;
+  billNo?: string | null;
+  gstAmount?: number;
+  tdsAmount?: number;
+  jobCode?: string | null;
   site?: Site | null;
   items?: ExpenseItem[];
   approvals?: any[];
@@ -563,14 +567,32 @@ export default function FinSiteExpenses() {
 
   const exportExcel = async () => {
     const XLSX = await import('xlsx');
+    const template: Record<string, any> = {
+      'Claim No': '', 'Expense Type': '', 'Site': '', 'Received Date': '', 'Received By': '',
+      'Received Amount': 0, 'Status': '', 'Bill No': '', 'GST Amount': 0, 'TDS Amount': 0,
+      'Date': '', 'Area': '', 'Name': '', 'Description': '', 'Advance': 0, 'Remark': '',
+      'Job Code': '', 'Approval Status': '', 'Approved By': '', 'Remarks': '',
+    };
     const rows: any[] = [];
     for (const r of records) {
-      const base = { 'Claim No':r.claimNo, 'Expense Type':r.expenseType??'', 'Site':r.site?.name??'',
-        'Received Date':r.date?.split('T')[0]??'', 'Received By':r.submittedBy,
-        'Received Amount':r.receivedAmount, 'Status':r.status };
-      if (!r.items?.length) { rows.push({ ...base, Date:'', Area:'', Name:'', Description:'', Advance:r.totalAmount, Remark:'' }); }
-      else { for (const it of r.items) rows.push({ ...base, Date:(it as any).itemDate?.split?.('T')[0]??'', Area:it.category, Name:(it as any).name??'', Description:it.description, Advance:it.amount, Remark:(it as any).remark??'' }); }
+      const base = {
+        ...template,
+        'Claim No': r.claimNo, 'Expense Type': r.expenseType ?? '', 'Site': r.site?.name ?? '',
+        'Received Date': r.date?.split('T')[0] ?? '', 'Received By': r.submittedBy,
+        'Received Amount': r.receivedAmount, 'Status': r.status,
+        'Bill No': r.billNo ?? '', 'GST Amount': r.gstAmount ?? 0, 'TDS Amount': r.tdsAmount ?? 0,
+        'Job Code': r.jobCode ?? '', 'Approval Status': r.approvalStatus ?? '',
+        'Approved By': r.approvedBy ?? '', 'Remarks': r.remarks ?? '',
+      };
+      if (!r.items?.length) rows.push({ ...base, 'Advance': r.totalAmount });
+      else for (const it of r.items) rows.push({
+        ...base,
+        'Date': (it as any).itemDate?.split?.('T')[0] ?? '',
+        'Area': it.category, 'Name': (it as any).name ?? '',
+        'Description': it.description, 'Advance': it.amount, 'Remark': (it as any).remark ?? '',
+      });
     }
+    if (!rows.length) rows.push({ ...template });
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Site Expenses');
     XLSX.writeFile(wb, `site-expenses-${monthFilter}.xlsx`); toast.success('Exported');
@@ -957,7 +979,7 @@ export default function FinSiteExpenses() {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <Lbl>Claim No</Lbl>
-                  <input value={form.claimNo} onChange={e => setForm(f => ({...f, claimNo: e.target.value}))} placeholder="Auto-generated" className="vc-input text-[12px] py-1.5 w-full" />
+                  <input value={form.claimNo} readOnly placeholder="Auto-generated" className="vc-input text-[12px] py-1.5 w-full opacity-60" />
                 </div>
                 <div>
                   <Lbl req>Site</Lbl>

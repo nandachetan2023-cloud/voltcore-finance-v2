@@ -14,6 +14,11 @@ interface ImportRecord {
   usefulLife?: number
   depreciationMethod?: string
   custodian?: string
+  jobCode?: string
+  poNo?: string
+  costCenter?: string
+  department?: string
+  projectManager?: string
   status?: string
 }
 
@@ -35,7 +40,7 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < records.length; i++) {
       const r = records[i]
       const acquisitionDate = new Date(r.acquisitionDate)
-      if (!r.assetCode || !r.name || isNaN(acquisitionDate.getTime())) { skipped++; continue }
+      if (!r.assetCode || !r.name || isNaN(acquisitionDate.getTime()) || !r.jobCode || !r.poNo || !r.department || !r.projectManager) { skipped++; continue }
 
       try {
         const data = {
@@ -49,6 +54,11 @@ export async function POST(request: NextRequest) {
           usefulLife: Number(r.usefulLife) || 5,
           depreciationMethod: r.depreciationMethod || 'Straight Line',
           custodian: r.custodian || null,
+          jobCode: r.jobCode,
+          poNo: r.poNo,
+          costCenter: r.costCenter,
+          department: r.department,
+          projectManager: r.projectManager,
           status: r.status || 'Active',
         }
 

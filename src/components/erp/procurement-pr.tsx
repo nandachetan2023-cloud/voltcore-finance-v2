@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   FileText, Plus, Upload, Pencil, Trash2, Search, Loader2, X, ChevronRight,
   CheckCircle2, XCircle, Clock, IndianRupee, Download, FileSpreadsheet, Printer,
@@ -288,8 +288,8 @@ export default function ProcurementPR() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PurchaseRequisition | null>(null);
 
-  // Fetch data on mount
-  useEffect(() => {
+  // Fetch data
+  const fetchPRs = useCallback(() => {
     setLoading(true);
     setPageError(null);
     fetch('/api/procurement/requisitions')
@@ -305,6 +305,12 @@ export default function ProcurementPR() {
       .catch(() => { setRecords(generateMockPRs()); toast.info('Sample purchase requisitions loaded — server unavailable'); })
       .finally(() => setLoading(false));
   }, []);
+  useEffect(() => { fetchPRs(); }, [fetchPRs]);
+  useEffect(() => {
+    const onDataChanged = () => fetchPRs();
+    window.addEventListener('finance:data-changed', onDataChanged);
+    return () => window.removeEventListener('finance:data-changed', onDataChanged);
+  }, [fetchPRs]);
 
   // Upload dialog
   const [uploadOpen, setUploadOpen] = useState(false);

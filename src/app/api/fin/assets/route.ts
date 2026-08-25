@@ -17,6 +17,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    const missing = ['jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
+    if (!body.siteId && !body.finSiteId) missing.unshift('siteId')
+    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
     const record = await pdb.finAsset.create({ data: body })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
@@ -31,6 +34,9 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { id, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    const missing = ['jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => data[k] === undefined || data[k] === null || data[k] === '')
+    if (!data.siteId && !data.finSiteId) missing.unshift('siteId')
+    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
     const record = await pdb.finAsset.update({ where: { id }, data })
     return NextResponse.json({ success: true, data: record })
@@ -43,9 +49,16 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
+    const pdb = getDbForRequest(request)
+    const ids = searchParams.get('ids')
+    if (ids) {
+      const idList = ids.split(',').map(Number).filter(Boolean)
+      if (idList.length === 0) return NextResponse.json({ success: false, error: 'No valid ids' }, { status: 400 })
+      const result = await pdb.finAsset.deleteMany({ where: { id: { in: idList } } })
+      return NextResponse.json({ success: true, deleted: result.count })
+    }
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
-    const pdb = getDbForRequest(request)
     await pdb.finAsset.delete({ where: { id: Number(id) } })
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -4,9 +4,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Trash2, Loader2, Send, Save, FileText, CircleDot, Pencil, Search, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
-import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
+import { useTableControls, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { FormField, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
+import { FilterBar, type ListFilters } from './_list-filter-bar';
+import { StatusBadge } from './_status-badge';
 
 interface APRecord {
   id: number; billNo: string; vendor: string; vendorCode: string | null;
@@ -14,19 +17,23 @@ interface APRecord {
   tax: number; totalAmount: number; dueDate: string; paidDate: string | null;
   paymentMethod: string | null; paymentRef: string | null; status: string; remarks: string | null;
   siteId: number | null; partyId: number | null; poId: number | null; jobCode: string | null;
+  costCenter: string | null; department: string | null; projectManager: string | null;
   site?: { name: string; siteCode: string } | null;
+  po?: { id: number; poNo: string } | null;
 }
 
 interface LineItem { id: number; description: string; glAccount: string; costCenter: string; quantity: number; unitPrice: number; }
 interface SiteRef { id: number; name: string; siteCode: string; }
 interface PartyRef { id: number; name: string; }
 interface PoRef { id: number; poNo: string; vendorName: string; }
+interface JobRef { id: number; jobCode: string; description: string | null; siteId: number | null; siteName: string; }
 
 interface FormData {
   billNo: string; vendor: string; vendorCode: string; invoiceRef: string;
   invoiceDate: string; dueDate: string; totalAmount: number; status: string;
   description: string; poReference: string;
   siteId: string; partyId: string; poId: string; jobCode: string;
+  costCenter: string; department: string; projectManager: string;
 }
 
 const AP_COLUMNS: ExportColumn<APRecord>[] = [
@@ -42,11 +49,16 @@ const AP_COLUMNS: ExportColumn<APRecord>[] = [
   { header: 'Paid Date', accessor: (r) => r.paidDate?.split('T')[0] ?? '' },
   { header: 'Payment Method', accessor: 'paymentMethod' },
   { header: 'Payment Ref', accessor: 'paymentRef' },
+  { header: 'Site Code', accessor: (r) => r.site?.siteCode ?? '' },
+  { header: 'Job Code', accessor: 'jobCode' },
+  { header: 'Cost Center', accessor: 'costCenter' },
+  { header: 'Department', accessor: 'department' },
+  { header: 'Project Manager', accessor: 'projectManager' },
   { header: 'Status', accessor: 'status' },
   { header: 'Remarks', accessor: 'remarks' },
 ];
 
-const EMPTY_FORM: FormData = { billNo: '', vendor: '', vendorCode: '', invoiceRef: '', invoiceDate: '', dueDate: '', totalAmount: 0, status: 'Pending', description: '', poReference: '', siteId: '', partyId: '', poId: '', jobCode: '' };
+const EMPTY_FORM: FormData = { billNo: '', vendor: '', vendorCode: '', invoiceRef: '', invoiceDate: '', dueDate: '', totalAmount: 0, status: 'Pending', description: '', poReference: '', siteId: '', partyId: '', poId: '', jobCode: '', costCenter: '', department: '', projectManager: '' };
 
 const AP_IMPORT_FIELDS: ImportField[] = [
   { key: 'billNo', label: 'Bill No', required: true },
@@ -54,21 +66,26 @@ const AP_IMPORT_FIELDS: ImportField[] = [
   { key: 'vendorCode', label: 'Vendor Code' },
   { key: 'invoiceRef', label: 'Invoice Ref' },
   { key: 'description', label: 'Description' },
+  { key: 'siteCode', label: 'Site Code' },
+  { key: 'jobCode', label: 'Job Code' },
+  { key: 'costCenter', label: 'Cost Center' },
+  { key: 'department', label: 'Department' },
+  { key: 'projectManager', label: 'Project Manager' },
   { key: 'amount', label: 'Amount', type: 'number' },
   { key: 'tax', label: 'Tax', type: 'number' },
   { key: 'totalAmount', label: 'Total Amount', type: 'number' },
   { key: 'dueDate', label: 'Due Date', required: true, type: 'date' },
   { key: 'status', label: 'Status' },
 ];
-const AP_SAMPLE_ROW = { billNo: 'AP/2024-25/001', vendor: 'ABB India Ltd', vendorCode: 'ABB-001', invoiceRef: 'INV-ABB-001', description: 'HT panel supply', amount: 3200000, tax: 576000, totalAmount: 3776000, dueDate: '2025-02-20', status: 'Pending' };
+const AP_SAMPLE_ROW = { billNo: 'AP/2024-25/001', vendor: 'ABB India Ltd', vendorCode: 'ABB-001', invoiceRef: 'INV-ABB-001', description: 'HT panel supply', siteCode: 'SIT-001', jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', amount: 3200000, tax: 576000, totalAmount: 3776000, dueDate: '2025-02-20', status: 'Pending' };
 
 function generateMockAP(): APRecord[] {
   return [
-    { id: 1, billNo: 'AP/2024-25/001', vendor: 'ABB India Ltd', vendorCode: 'ABB-001', invoiceRef: 'INV-ABB-001', description: 'HT panel supply', amount: 3200000, tax: 576000, totalAmount: 3776000, dueDate: '2025-02-20T00:00:00', paidDate: '2025-02-15T00:00:00', paymentMethod: 'NEFT', paymentRef: 'NEFT-78452', status: 'Paid', siteId: null, partyId: null, poId: null, jobCode: null, remarks: '' },
-    { id: 2, billNo: 'AP/2024-25/002', vendor: 'Siemens India', vendorCode: 'SIE-002', invoiceRef: 'INV-SIE-002', description: 'Transformer supply', amount: 5800000, tax: 1044000, totalAmount: 6844000, dueDate: '2025-03-15T00:00:00', paidDate: null, paymentMethod: null, paymentRef: null, status: 'Pending', siteId: null, partyId: null, poId: null, jobCode: null, remarks: '' },
-    { id: 3, billNo: 'AP/2024-25/003', vendor: 'L&T Construction', vendorCode: 'LNT-003', invoiceRef: 'INV-LNT-003', description: 'Civil works — Phase 2', amount: 1250000, tax: 225000, totalAmount: 1475000, dueDate: '2025-01-05T00:00:00', paidDate: null, paymentMethod: null, paymentRef: null, status: 'Overdue', siteId: null, partyId: null, poId: null, jobCode: null, remarks: 'Payment delayed — vendor follow-up' },
-    { id: 4, billNo: 'AP/2024-25/004', vendor: 'Havells India', vendorCode: 'HAV-004', invoiceRef: 'INV-HAV-004', description: 'Cable and wire supply', amount: 980000, tax: 176400, totalAmount: 1156400, dueDate: '2025-04-10T00:00:00', paidDate: '2025-04-05T00:00:00', paymentMethod: 'RTGS', paymentRef: 'RTGS-33219', status: 'Paid', siteId: null, partyId: null, poId: null, jobCode: null, remarks: '' },
-    { id: 5, billNo: 'AP/2024-25/005', vendor: 'BHEL', vendorCode: 'BHEL-005', invoiceRef: 'INV-BHEL-005', description: 'DG set spares', amount: 2100000, tax: 378000, totalAmount: 2478000, dueDate: '2025-05-20T00:00:00', paidDate: null, paymentMethod: null, paymentRef: null, status: 'Pending', siteId: null, partyId: null, poId: null, jobCode: null, remarks: '' },
+    { id: 1, billNo: 'AP/2024-25/001', vendor: 'ABB India Ltd', vendorCode: 'ABB-001', invoiceRef: 'INV-ABB-001', description: 'HT panel supply', amount: 3200000, tax: 576000, totalAmount: 3776000, dueDate: '2025-02-20T00:00:00', paidDate: '2025-02-15T00:00:00', paymentMethod: 'NEFT', paymentRef: 'NEFT-78452', status: 'Paid', siteId: null, partyId: null, poId: null, jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', remarks: '' },
+    { id: 2, billNo: 'AP/2024-25/002', vendor: 'Siemens India', vendorCode: 'SIE-002', invoiceRef: 'INV-SIE-002', description: 'Transformer supply', amount: 5800000, tax: 1044000, totalAmount: 6844000, dueDate: '2025-03-15T00:00:00', paidDate: null, paymentMethod: null, paymentRef: null, status: 'Pending', siteId: null, partyId: null, poId: null, jobCode: 'JOB-2026-002', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'A. Verma', remarks: '' },
+    { id: 3, billNo: 'AP/2024-25/003', vendor: 'L&T Construction', vendorCode: 'LNT-003', invoiceRef: 'INV-LNT-003', description: 'Civil works — Phase 2', amount: 1250000, tax: 225000, totalAmount: 1475000, dueDate: '2025-01-05T00:00:00', paidDate: null, paymentMethod: null, paymentRef: null, status: 'Overdue', siteId: null, partyId: null, poId: null, jobCode: 'JOB-2026-003', costCenter: 'CC-PROJ-001', department: 'Site Execution', projectManager: 'P. Iyer', remarks: 'Payment delayed — vendor follow-up' },
+    { id: 4, billNo: 'AP/2024-25/004', vendor: 'Havells India', vendorCode: 'HAV-004', invoiceRef: 'INV-HAV-004', description: 'Cable and wire supply', amount: 980000, tax: 176400, totalAmount: 1156400, dueDate: '2025-04-10T00:00:00', paidDate: '2025-04-05T00:00:00', paymentMethod: 'RTGS', paymentRef: 'RTGS-33219', status: 'Paid', siteId: null, partyId: null, poId: null, jobCode: 'JOB-2026-004', costCenter: 'CC-HO-001', department: 'Procurement', projectManager: 'S. Rao', remarks: '' },
+    { id: 5, billNo: 'AP/2024-25/005', vendor: 'BHEL', vendorCode: 'BHEL-005', invoiceRef: 'INV-BHEL-005', description: 'DG set spares', amount: 2100000, tax: 378000, totalAmount: 2478000, dueDate: '2025-05-20T00:00:00', paidDate: null, paymentMethod: null, paymentRef: null, status: 'Pending', siteId: null, partyId: null, poId: null, jobCode: 'JOB-2026-005', costCenter: 'CC-PROJ-002', department: 'Operations', projectManager: 'M. Khan', remarks: '' },
   ];
 }
 
@@ -81,21 +98,33 @@ export default function AccountsPayable() {
   const [lines, setLines] = useState<LineItem[]>([{ id: 1, description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]);
   const [submitting, setSubmitting] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [filters, setFilters] = useState<ListFilters>({});
+  const setFilter = (key: keyof ListFilters, value: string) => setFilters((p) => ({ ...p, [key]: value }));
   const [importOpen, setImportOpen] = useState(false);
   const [sites, setSites] = useState<SiteRef[]>([]);
   const [parties, setParties] = useState<PartyRef[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PoRef[]>([]);
+  const [jobs, setJobs] = useState<JobRef[]>([]);
   const { triggerCreate } = useERPStore();
 
   useEffect(() => {
     fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success) setSites(j.data); }).catch(() => {});
     fetch('/api/fin/parties').then(r => r.json()).then(j => { if (j.success) setParties(j.data); }).catch(() => {});
     fetch('/api/fin/purchase-orders').then(r => r.json()).then(j => { if (j.success) setPurchaseOrders(j.data); }).catch(() => {});
+    fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success) setJobs(j.data.map((x: any) => ({ id: x.id, jobCode: x.jobCode, description: x.description ?? null, siteId: x.siteId ?? null, siteName: x.site?.name ?? '' }))); }).catch(() => {});
   }, []);
 
   const statusFiltered = useMemo(
-    () => statusFilter === 'all' ? records : records.filter(r => r.status === statusFilter),
-    [records, statusFilter]
+    () => {
+      let rows = statusFilter === 'all' ? records : records.filter(r => r.status === statusFilter);
+      if (filters.site) rows = rows.filter(r => `${r.site?.siteCode ?? ''} ${r.site?.name ?? ''}`.toLowerCase().includes(filters.site!.toLowerCase()));
+      if (filters.jobCode) rows = rows.filter(r => (r.jobCode || '').toLowerCase().includes(filters.jobCode!.toLowerCase()));
+      if (filters.poNo) rows = rows.filter(r => (r.po?.poNo || '').toLowerCase().includes(filters.poNo!.toLowerCase()));
+      if (filters.costCenter) rows = rows.filter(r => (r.costCenter || '').toLowerCase().includes(filters.costCenter!.toLowerCase()));
+      if (filters.department) rows = rows.filter(r => (r.department || '').toLowerCase().includes(filters.department!.toLowerCase()));
+      return rows;
+    },
+    [records, statusFilter, filters]
   );
   const tc = useTableControls(statusFiltered, (r) => `${r.billNo} ${r.vendor} ${r.vendorCode ?? ''} ${r.description ?? ''} ${r.status}`);
 
@@ -113,10 +142,38 @@ export default function AccountsPayable() {
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openCreate = () => { setEditTarget(null); setForm(EMPTY_FORM); setLines([{ id: 1, description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]); setView('form'); };
+  const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<FormData>({
+    billNo: required('Invoice #'),
+    vendor: required('Vendor Name'),
+    dueDate: required('Due Date'),
+    siteId: required('Site Code'),
+    poId: required('PO Number'),
+    jobCode: required('Job Code'),
+    costCenter: required('Cost Center'),
+    department: required('Department'),
+    projectManager: required('Project Manager'),
+  });
+  const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
+
+  const pickJob = (code: string) => {
+    const job = jobs.find(j => j.jobCode === code);
+    setForm(p => ({ ...p, jobCode: code, siteId: job?.siteId ? String(job.siteId) : p.siteId }));
+    if (code) clearError('jobCode');
+  };
+
+  const generateBillNo = () => {
+    const year = new Date().getFullYear();
+    const existing = new Set(records.map(r => r.billNo));
+    let seq = records.length + 1;
+    let candidate = `AP-${year}-${String(seq).padStart(3, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `AP-${year}-${String(seq).padStart(3, '0')}`; }
+    return candidate;
+  };
+  const openCreate = () => { setEditTarget(null); setForm({ ...EMPTY_FORM, billNo: generateBillNo() }); setFormErrors({}); setLines([{ id: 1, description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]); setView('form'); };
   const openEdit = (r: APRecord) => {
     setEditTarget(r);
-    setForm({ billNo: r.billNo, vendor: r.vendor, vendorCode: r.vendorCode || '', invoiceRef: r.invoiceRef || '', invoiceDate: '', dueDate: r.dueDate?.split('T')[0] || '', totalAmount: r.totalAmount, status: r.status, description: r.description || '', poReference: '', siteId: r.siteId ? String(r.siteId) : '', partyId: r.partyId ? String(r.partyId) : '', poId: r.poId ? String(r.poId) : '', jobCode: r.jobCode || '' });
+    setForm({ billNo: r.billNo, vendor: r.vendor, vendorCode: r.vendorCode || '', invoiceRef: r.invoiceRef || '', invoiceDate: '', dueDate: r.dueDate?.split('T')[0] || '', totalAmount: r.totalAmount, status: r.status, description: r.description || '', poReference: '', siteId: r.siteId ? String(r.siteId) : '', partyId: r.partyId ? String(r.partyId) : '', poId: r.poId ? String(r.poId) : '', jobCode: r.jobCode || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' });
+    setFormErrors({});
     setLines([{ id: 1, description: r.description || '', glAccount: '', costCenter: '', quantity: 1, unitPrice: r.amount }]);
     setView('form');
   };
@@ -127,7 +184,7 @@ export default function AccountsPayable() {
   const lineTotal = lines.reduce((s, l) => s + (l.quantity * l.unitPrice), 0);
 
   const handleSubmit = async (status: string) => {
-    if (!form.billNo || !form.vendor || !form.dueDate) { toast.error('Bill No, Vendor, and Due Date required'); return; }
+    if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
     setSubmitting(true);
     const amount = lineTotal || form.totalAmount;
     const tax = amount * 0.18;
@@ -140,6 +197,9 @@ export default function AccountsPayable() {
         partyId: form.partyId ? Number(form.partyId) : null,
         poId: form.poId ? Number(form.poId) : null,
         jobCode: form.jobCode || null,
+        costCenter: form.costCenter || null,
+        department: form.department || null,
+        projectManager: form.projectManager || null,
       };
       const body = editTarget ? { id: editTarget.id, ...common } : common;
       const res = await fetch('/api/accounts-payable', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -203,38 +263,59 @@ export default function AccountsPayable() {
             {/* Vendor + fields */}
             <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-5 space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Vendor (Linked)</label>
-                  <select value={form.partyId} onChange={e => { const id = e.target.value; const party = parties.find(p => String(p.id) === id); setForm(p => ({ ...p, partyId: id, vendor: party?.name || p.vendor })); }} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none">
-                    <option value="">{form.vendor || 'Select vendor...'}</option>
-                    {parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
-                <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Vendor Name (if not in master)</label><input value={form.vendor} onChange={e => setForm(p => ({ ...p, vendor: e.target.value }))} placeholder="Free-text vendor name" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
+                <FormField label="Vendor (Linked)">
+                  <SearchableSelect
+                    value={form.partyId}
+                    onChange={v => { const party = parties.find(p => String(p.id) === v); setForm(p => ({ ...p, partyId: v, vendor: party?.name || p.vendor })); }}
+                    options={parties.map(p => ({ value: String(p.id), label: p.name }))}
+                    placeholder={form.vendor || 'Select vendor...'}
+                  />
+                </FormField>
+                <FormField label="Vendor Name" required error={formErrors.vendor} hint="Free-text fallback if not in the party master">
+                  <input value={form.vendor} onChange={e => setField('vendor', e.target.value)} placeholder="Vendor name" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
+                </FormField>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Invoice #</label><input value={form.billNo} onChange={e => setForm(p => ({ ...p, billNo: e.target.value }))} placeholder="INV-0000" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
-                <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Invoice Date</label><input type="date" value={form.invoiceDate} onChange={e => setForm(p => ({ ...p, invoiceDate: e.target.value }))} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" /></div>
-                <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Due Date</label><input type="date" value={form.dueDate} onChange={e => setForm(p => ({ ...p, dueDate: e.target.value }))} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" /></div>
-                <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Total (₹)</label><input type="number" value={lineTotal || form.totalAmount || ''} readOnly className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] opacity-70 font-mono" /></div>
+                <FormField label="Invoice #" required error={formErrors.billNo}>
+                  <input value={form.billNo} readOnly placeholder="Auto-generated" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] opacity-60 placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
+                </FormField>
+                <FormField label="Invoice Date">
+                  <input type="date" value={form.invoiceDate} onChange={e => setField('invoiceDate', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" />
+                </FormField>
+                <FormField label="Due Date" required error={formErrors.dueDate}>
+                  <input type="date" value={form.dueDate} onChange={e => setField('dueDate', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" />
+                </FormField>
+                <FormField label="Total (₹)">
+                  <input type="number" value={lineTotal || form.totalAmount || ''} readOnly className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] opacity-70 font-mono" />
+                </FormField>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Site</label>
-                  <select value={form.siteId} onChange={e => setForm(p => ({ ...p, siteId: e.target.value }))} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none">
-                    <option value="">— Unassigned —</option>
-                    {sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Purchase Order</label>
-                  <select value={form.poId} onChange={e => setForm(p => ({ ...p, poId: e.target.value }))} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none">
-                    <option value="">— None —</option>
-                    {purchaseOrders.map(po => <option key={po.id} value={po.id}>{po.poNo} — {po.vendorName}</option>)}
-                  </select>
-                </div>
-                <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Job Code</label><input value={form.jobCode} onChange={e => setForm(p => ({ ...p, jobCode: e.target.value }))} placeholder="JOB-2026-001" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
+                <FormField label="Site Code" required error={formErrors.siteId}>
+                  <SearchableSelect
+                    value={form.siteId}
+                    onChange={v => setField('siteId', v)}
+                    options={sites.map(s => ({ value: String(s.id), label: s.name, sublabel: s.siteCode }))}
+                    placeholder="— Select site —"
+                  />
+                </FormField>
+                <FormField label="PO Number" required error={formErrors.poId}>
+                  <SearchableSelect
+                    value={form.poId}
+                    onChange={v => setField('poId', v)}
+                    options={purchaseOrders.map(po => ({ value: String(po.id), label: po.poNo, sublabel: po.vendorName }))}
+                    placeholder="— Select PO —"
+                  />
+                </FormField>
+                <FormField label="Job Code" required error={formErrors.jobCode} hint="Auto-fills the site">
+                  <SearchableSelect
+                    value={form.jobCode}
+                    onChange={pickJob}
+                    options={jobs.map(job => ({ value: job.jobCode, label: job.jobCode, sublabel: job.description || job.siteName || '' }))}
+                    placeholder="— Select job —"
+                  />
+                </FormField>
               </div>
+              <CostingFields prefix="ap" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
             </div>
 
             {/* Line Items */}
@@ -314,11 +395,24 @@ export default function AccountsPayable() {
   const totalPending = statusFiltered.filter(r => r.status === 'Pending' || r.status === 'Partially Paid').reduce((s, r) => s + r.totalAmount, 0);
   const totalPaid = statusFiltered.filter(r => r.status === 'Paid').reduce((s, r) => s + r.totalAmount, 0);
   const totalOverdue = statusFiltered.filter(r => r.status === 'Overdue').reduce((s, r) => s + r.totalAmount, 0);
-  const statuses = [...new Set(records.map(r => r.status))];
-  const statusBadge = (s: string) => { if (s === 'Paid') return 'bg-[#00e676]/15 text-[#00e676]'; if (s === 'Pending') return 'bg-[#ffab40]/15 text-[#ffab40]'; if (s === 'Overdue') return 'bg-[#ff3d3d]/15 text-[#ff3d3d]'; return 'bg-[#00d4ff]/15 text-[#00d4ff]'; };
+  const statuses = [...new Set(records.map(r => r.status).filter(Boolean))];
 
   return (
     <div className="space-y-4 p-6">
+      <FilterBar
+        filters={filters}
+        setFilter={setFilter}
+        options={{
+          sites: sites.map(s => ({ value: s.siteCode, label: s.siteCode, sublabel: s.name })),
+          jobs: jobs.map(j => ({ value: j.jobCode, label: j.jobCode, sublabel: j.siteName || j.description || '' })),
+          poNos: [...new Map(records.filter(r => r.po?.poNo).map(r => [r.po!.poNo, r.po!])).values()].map(po => ({ value: po.poNo, label: po.poNo })),
+          costCenters: [...new Set(records.map(r => r.costCenter).filter(Boolean))] as string[],
+          departments: [...new Set(records.map(r => r.department).filter(Boolean))] as string[],
+        }}
+        search={tc.search}
+        setSearch={tc.setSearch}
+        searchPlaceholder="Search bill no, vendor..."
+      />
       <div className="grid grid-cols-3 gap-3">
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#ffab40]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Pending</div><div className="text-[20px] font-bold text-[#ffab40]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>&#8377;{(totalPending / 100000).toFixed(2)} L</div></div>
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00e676]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Paid</div><div className="text-[20px] font-bold text-[#00e676]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>&#8377;{(totalPaid / 100000).toFixed(2)} L</div></div>
@@ -328,26 +422,42 @@ export default function AccountsPayable() {
       <div className="vc-panel">
         <div className="vc-panel-header"><FileText size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">AP Invoices</span><div className="flex items-center gap-2 ml-auto"><button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={AP_COLUMNS} filename="accounts-payable" /></div><button onClick={openCreate} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Entry</button></div>
         <div className="px-4 py-3 border-b border-[#252e3a] flex items-center gap-3 flex-wrap">
-          <SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search bill no, vendor..." />
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-[#0f1318] border border-[#252e3a] rounded-lg px-3 py-1.5 text-[11px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none min-w-[130px]"><option value="all">All Status</option>{statuses.map(s => <option key={s} value={s}>{s}</option>)}</select>
           {(tc.search || statusFilter !== 'all') && <button onClick={() => { tc.setSearch(''); setStatusFilter('all'); }} className="text-[11px] text-[#f5a623] hover:underline">Clear</button>}
         </div>
 
-        <div className="overflow-x-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">{['Bill No', 'Vendor', 'Site', 'Job Code', 'Amount', 'Tax', 'Total', 'Due Date', 'Status', ''].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+        <div className="overflow-x-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
+          <SortableTh label="Bill No" sortKey="billNo" accessor={(r: APRecord) => r.billNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Vendor" sortKey="vendor" accessor={(r: APRecord) => r.vendor} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Site" sortKey="site" accessor={(r: APRecord) => r.site?.name} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: APRecord) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Cost Center" sortKey="costCenter" accessor={(r: APRecord) => r.costCenter} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Dept" sortKey="department" accessor={(r: APRecord) => r.department} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="PM" sortKey="projectManager" accessor={(r: APRecord) => r.projectManager} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Amount" sortKey="amount" accessor={(r: APRecord) => r.amount} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+          <SortableTh label="Tax" sortKey="tax" accessor={(r: APRecord) => r.tax} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+          <SortableTh label="Total" sortKey="totalAmount" accessor={(r: APRecord) => r.totalAmount} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+          <SortableTh label="Due Date" sortKey="dueDate" accessor={(r: APRecord) => r.dueDate} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Status" sortKey="status" accessor={(r: APRecord) => r.status} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <th className="py-2 px-3"></th>
+        </tr></thead>
           <tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => (
             <tr key={r.id} className="hover:bg-[#141920]">
               <td className="py-2.5 px-3 text-[#f5a623] font-mono font-medium">{r.billNo}</td>
               <td className="py-2.5 px-3 text-[#e2e8f0]">{r.vendor}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.site?.siteCode || '—'}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || '—'}</td>
+              <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.costCenter || '—'}</td>
+              <td className="py-2.5 px-3 text-[#8899aa]">{r.department || '—'}</td>
+              <td className="py-2.5 px-3 text-[#8899aa]">{r.projectManager || '—'}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">&#8377;{(r.amount ?? 0).toLocaleString('en-IN')}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">&#8377;{(r.tax ?? 0).toLocaleString('en-IN')}</td>
               <td className="py-2.5 px-3 text-[#e2e8f0] font-mono font-medium">&#8377;{(r.totalAmount ?? 0).toLocaleString('en-IN')}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.dueDate?.split('T')[0]}</td>
-              <td className="py-2.5 px-3"><span className={`vc-badge ${statusBadge(r.status)}`}>{r.status}</span></td>
+              <td className="py-2.5 px-3"><StatusBadge status={r.status} /></td>
               <td className="py-2.5 px-3"><div className="flex gap-1"><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button><button onClick={() => handleDelete(r.id)} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button></div></td>
             </tr>
-          ))}{tc.pageItems.length === 0 && <tr><td colSpan={10} className="py-10 text-center text-[#5a6878]">No records found.</td></tr>}</tbody>
+          ))}{tc.pageItems.length === 0 && <tr><td colSpan={13} className="py-10 text-center text-[#5a6878]">No records found.</td></tr>}</tbody>
         </table></div>
 
         <PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} />

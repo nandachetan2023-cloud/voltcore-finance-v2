@@ -1,6 +1,7 @@
 'use client';
 
 import { Printer, X } from 'lucide-react';
+import { useCompanyProfile } from '@/hooks/use-company-profile';
 
 interface InvoiceItem {
   id?: number;
@@ -44,7 +45,7 @@ interface SalesInvoiceData {
   items?: InvoiceItem[];
 }
 
-const SUPPLIER = {
+const DEFAULT_SUPPLIER = {
   name: 'M/S. UPASANA ASSOCIATE',
   address: 'AT- UPASANA VILLA, IN FRONT OF MAMTA MARBLE, BEHERAMAL, DIST- JHARSUGUDA - 768203 (ODISHA)',
   email: 'upasanassociate@gmail.com',
@@ -86,6 +87,20 @@ function fmtDate(d: string | null | undefined): string {
 
 export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: SalesInvoiceData; onClose: () => void }) {
   const handlePrint = () => window.print();
+  const profile = useCompanyProfile();
+  const SUPPLIER = {
+    name: profile.name || DEFAULT_SUPPLIER.name,
+    address: profile.address || DEFAULT_SUPPLIER.address,
+    email: profile.email || DEFAULT_SUPPLIER.email,
+    phone: profile.phone || DEFAULT_SUPPLIER.phone,
+    pan: profile.pan || DEFAULT_SUPPLIER.pan,
+    stateCode: profile.stateCode || DEFAULT_SUPPLIER.stateCode,
+    gstin: profile.gstin || DEFAULT_SUPPLIER.gstin,
+    bankName: profile.bankName || DEFAULT_SUPPLIER.bankName,
+    accountNo: profile.bankAccount || DEFAULT_SUPPLIER.accountNo,
+    ifsc: profile.bankIfsc || DEFAULT_SUPPLIER.ifsc,
+    logoUrl: profile.logoUrl,
+  };
 
   const items: InvoiceItem[] = invoice.items && invoice.items.length > 0 ? invoice.items : [{
     description: 'Maintenance services rendered',
@@ -138,7 +153,7 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
       </div>
 
       {/* ══════════ TAX INVOICE ══════════ */}
-      <div id="sales-invoice-printable" className="bg-white text-[#1a1a1a] max-w-full shadow-2xl" style={{ fontFamily: "Arial, sans-serif", fontSize: '10px', width: '7.7in' }}>
+      <div id="sales-invoice-printable" className="bg-white text-[#1a1a1a] max-w-full shadow-2xl" style={{ fontFamily: "Arial, sans-serif", fontSize: '10px', width: 'calc(7.7in + 400px)' }}>
         <div className="border-2 border-[#1a1a1a]">
 
           <div className="text-center border-b-2 border-[#1a1a1a] py-1.5 bg-[#f5a623]/15">
@@ -150,6 +165,7 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
           <div className="grid grid-cols-2 border-b border-[#1a1a1a]">
             <div className="p-2 border-r border-[#1a1a1a]">
               <div className="text-[8px] font-bold uppercase text-[#777] mb-0.5">Name &amp; Address of Supplier</div>
+              {SUPPLIER.logoUrl && <img src={SUPPLIER.logoUrl} alt="Logo" className="h-8 max-w-[100px] object-contain mb-1" />}
               <div className="text-[11px] font-bold">{SUPPLIER.name}</div>
               <div className="text-[9px] leading-snug mt-0.5">{SUPPLIER.address}</div>
               <div className="text-[9px] mt-0.5">Email: {SUPPLIER.email} &nbsp; Phone: {SUPPLIER.phone}</div>
@@ -209,15 +225,14 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
                 <tr key={idx} className="text-[9px]">
                   <td className="border border-[#1a1a1a] p-1.5 align-top">{it.description}</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{it.hsnSac || '—'}</td>
-                  <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{Number(it.quantity)}</td>
-                  <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{it.uom}</td>
+<td className="border border-[#1a1a1a] p-1.5 text-center align-top">{(Number(it.quantity) || 0)}</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(it.rate)}</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(it.taxableValue)}</td>
-                  <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{Number(it.cgstPercent)}%</td>
+                  <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{(Number(it.cgstPercent) || 0)}%</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(it.cgstAmount)}</td>
-                  <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{Number(it.sgstPercent)}%</td>
+                  <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{(Number(it.sgstPercent) || 0)}%</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(it.sgstAmount)}</td>
-                  <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{Number(it.igstPercent)}%</td>
+                  <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{(Number(it.igstPercent) || 0)}%</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(it.igstAmount)}</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(it.total)}</td>
                 </tr>

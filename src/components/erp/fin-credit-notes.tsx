@@ -4,9 +4,11 @@ import { FileText, Plus, Pencil, Trash2, Loader2, Search, Upload } from 'lucide-
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
-import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
+import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { Checkbox } from '@/components/ui/checkbox';
+import { FormField, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
 
 interface Invoice { id: number; invoiceNo: string; }
 interface Site { id: number; name: string; siteCode: string; }
@@ -14,8 +16,12 @@ interface Site { id: number; name: string; siteCode: string; }
 const CN_COLUMNS: ExportColumn<CreditNote>[] = [
   { header: 'Credit Note No', accessor: 'creditNoteNo' },
   { header: 'Date', accessor: (r) => r.date?.split('T')[0] ?? '' },
-  { header: 'Invoice', accessor: (r: any) => r.invoice?.invoiceNo || r.creditNoteAgainstInvoiceNo || '' },
+  { header: 'Invoice ID', accessor: (r) => r.invoiceId ?? '' },
   { header: 'Client', accessor: 'client' },
+  { header: 'Job Code', accessor: 'jobCode' },
+  { header: 'Cost Center', accessor: 'costCenter' },
+  { header: 'Department', accessor: 'department' },
+  { header: 'Project Manager', accessor: 'projectManager' },
   { header: 'Invoice Value', accessor: 'invoiceValue' },
   { header: 'GST Value', accessor: 'gstValue' },
   { header: 'Total Invoice Value', accessor: 'totalInvoiceValue' },
@@ -32,16 +38,23 @@ const CN_IMPORT_FIELDS: ImportField[] = [
   { key: 'date', label: 'Date', type: 'date' },
   { key: 'client', label: 'Client' },
   { key: 'invoiceId', label: 'Invoice ID', type: 'number' },
-  { key: 'siteId', label: 'Site ID', type: 'number' },
+  { key: 'siteId', label: 'Site ID', type: 'number', required: true },
+  { key: 'jobCode', label: 'Job Code', required: true },
+  { key: 'poNo', label: 'PO No', required: true },
+  { key: 'costCenter', label: 'Cost Center', required: true },
+  { key: 'department', label: 'Department', required: true },
+  { key: 'projectManager', label: 'Project Manager', required: true },
   { key: 'invoiceValue', label: 'Invoice Value', type: 'number' },
   { key: 'gstValue', label: 'GST Value', type: 'number' },
   { key: 'totalInvoiceValue', label: 'Total Invoice Value', type: 'number' },
   { key: 'amount', label: 'Amount', type: 'number' },
   { key: 'afterTdsBalance', label: 'After TDS Balance', type: 'number' },
   { key: 'receivedAmount', label: 'Received Amount', type: 'number' },
+  { key: 'receivedDate', label: 'Received Date', type: 'date' },
+  { key: 'reason', label: 'Reason' },
   { key: 'status', label: 'Status' },
 ];
-const CN_SAMPLE_ROW = { creditNoteNo: 'CN-2026-001', date: '2026-01-25', client: 'L&T Construction', invoiceId: 1, siteId: 1, invoiceValue: 2500000, gstValue: 450000, totalInvoiceValue: 2950000, amount: 50000, afterTdsBalance: 2800000, receivedAmount: 0, status: 'Issued' };
+const CN_SAMPLE_ROW = { creditNoteNo: 'CN-2026-001', date: '2026-01-25', client: 'L&T Construction', invoiceId: 1, siteId: 1, jobCode: 'JOB-2026-001', poNo: 'PO-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', invoiceValue: 2500000, gstValue: 450000, totalInvoiceValue: 2950000, amount: 50000, afterTdsBalance: 2800000, receivedAmount: 0, status: 'Issued' };
 
 interface CreditNote {
   id: number; creditNoteNo: string; trackingNo?: string | null; poNo?: string | null;
@@ -54,6 +67,7 @@ interface CreditNote {
   debitAmount: number; holdAmount: number;
   reason?: string | null; remarks?: string | null;
   paymentDueDate?: string | null; status: string;
+  costCenter?: string | null; department?: string | null; projectManager?: string | null;
   invoice?: { invoiceNo: string } | null;
   site?: { name: string } | null;
 }
@@ -68,6 +82,7 @@ interface FormData {
   debitAmount: number; holdAmount: number;
   creditNoteAgainstInvoiceNo: string; trackingNo: string; poNo: string;
   paymentDueDate: string;
+  costCenter: string; department: string; projectManager: string;
 }
 
 const EMPTY_FORM: FormData = {
@@ -79,7 +94,7 @@ const EMPTY_FORM: FormData = {
   voucherNo: '', receivedDate: '', receivedAmount: 0, afterTdsBalance: 0,
   debitAmount: 0, holdAmount: 0,
   creditNoteAgainstInvoiceNo: '', trackingNo: '', poNo: '',
-  paymentDueDate: '',
+  paymentDueDate: '', costCenter: '', department: '', projectManager: '',
 };
 
 const STATUSES = ['Issued', 'Received', 'Cancelled'];
@@ -99,18 +114,6 @@ function generateMockCreditNotes(): CreditNote[] {
   ];
 }
 
-function FormField({ label, children, span = false, required = false }: { label: string; children: React.ReactNode; span?: boolean; required?: boolean }) {
-  return (
-    <div className={span ? 'md:col-span-2' : ''}>
-      <label className="block text-[11px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">
-        {label}
-        {required && <span className="text-[#ff3d3d] ml-1">*</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
 export default function FinCreditNotes() {
   const [records, setRecords] = useState<CreditNote[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -123,11 +126,30 @@ export default function FinCreditNotes() {
   const [importOpen, setImportOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CreditNote | null>(null);
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
+  const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<FormData>({
+    siteId: required('Site Code'),
+    jobCode: required('Job Code'),
+    poNo: required('PO Number'),
+    costCenter: required('Cost Center'),
+    department: required('Department'),
+    projectManager: required('Project Manager'),
+  });
+  const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
+
+  const filtered = records.filter(r => statusFilter === 'All' || r.status === statusFilter);
   const tc = useTableControls(
-    records,
-    (r) => `${r.creditNoteNo} ${r.invoice?.invoiceNo ?? ''} ${r.client ?? ''} ${r.area ?? ''} ${r.status} ${r.creditNoteAgainstInvoiceNo ?? ''}`,
+    filtered,
+    (r) => `${r.creditNoteNo} ${r.invoice?.invoiceNo ?? ''} ${r.client ?? ''} ${r.area ?? ''} ${r.status} ${r.creditNoteAgainstInvoiceNo ?? ''} ${r.jobCode ?? ''} ${r.department ?? ''} ${r.projectManager ?? ''}`,
   );
+  const pageIds = tc.pageItems.map(r => r.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id));
+  const toggleRow = (id: number) => setSelected(s => { const next = new Set(s); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const toggleAllOnPage = () => setSelected(s => { const next = new Set(s); pageIds.forEach(id => allPageSelected ? next.delete(id) : next.add(id)); return next; });
+  const CN_STATUSES = ['All', ...new Set(records.map(r => r.status).filter(Boolean))];
 
   const fetch_ = useCallback(async () => {
     setLoading(true);
@@ -152,8 +174,21 @@ export default function FinCreditNotes() {
     setLoading(false);
   }, []);
   useEffect(() => { fetch_(); }, [fetch_]);
+  useEffect(() => {
+    const onDataChanged = () => fetch_();
+    window.addEventListener('finance:data-changed', onDataChanged);
+    return () => window.removeEventListener('finance:data-changed', onDataChanged);
+  }, [fetch_]);
 
-  const openCreate = () => { setEditTarget(null); setForm(EMPTY_FORM); setFormOpen(true); };
+  const generateCreditNoteNo = () => {
+    const year = new Date().getFullYear();
+    const existing = new Set(records.map(r => r.creditNoteNo));
+    let seq = records.length + 1;
+    let candidate = `CN/${year}/${String(seq).padStart(4, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `CN/${year}/${String(seq).padStart(4, '0')}`; }
+    return candidate;
+  };
+  const openCreate = () => { setEditTarget(null); setForm({ ...EMPTY_FORM, creditNoteNo: generateCreditNoteNo() }); setFormOpen(true); };
   const openEdit = (r: CreditNote) => {
     setEditTarget(r);
     setForm({
@@ -182,14 +217,17 @@ export default function FinCreditNotes() {
       trackingNo: r.trackingNo || '',
       poNo: r.poNo || '',
       paymentDueDate: r.paymentDueDate?.split('T')[0] || '',
+      costCenter: r.costCenter || '',
+      department: r.department || '',
+      projectManager: r.projectManager || '',
     });
     setFormOpen(true);
   };
 
   const handleSubmit = async () => {
+    if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
     if (!form.creditNoteNo) { toast.error('Credit Note No is required'); return; }
     if (!form.invoiceId) { toast.error('Invoice is required'); return; }
-    if (!form.siteId) { toast.error('Site is required'); return; }
     setSubmitting(true);
     try {
       const payload = {
@@ -218,6 +256,9 @@ export default function FinCreditNotes() {
         trackingNo: form.trackingNo || null,
         poNo: form.poNo || null,
         paymentDueDate: form.paymentDueDate ? new Date(form.paymentDueDate) : null,
+        costCenter: form.costCenter || null,
+        department: form.department || null,
+        projectManager: form.projectManager || null,
       };
       const method = editTarget ? 'PUT' : 'POST';
       const body = editTarget ? { id: editTarget.id, ...payload } : payload;
@@ -234,6 +275,17 @@ export default function FinCreditNotes() {
       const res = await fetch(`/api/fin/credit-notes?id=${deleteTarget.id}`, { method: 'DELETE' });
       const json = await res.json();
       if (json.success) { toast.success('Deleted'); setDeleteOpen(false); await fetch_(); }
+      else toast.error(json.error || 'Failed');
+    } catch { toast.error('Network error'); }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return;
+    try {
+      const ids = [...selected].join(',');
+      const res = await fetch(`/api/fin/credit-notes?ids=${ids}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) { toast.success(`Deleted ${json.deleted ?? selected.size} credit note${selected.size === 1 ? '' : 's'}`); setSelected(new Set()); setBulkDeleteOpen(false); await fetch_(); }
       else toast.error(json.error || 'Failed');
     } catch { toast.error('Network error'); }
   };
@@ -269,23 +321,57 @@ export default function FinCreditNotes() {
       </div>
 
       <div className="vc-panel">
-        <div className="vc-panel-header"><FileText size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Credit Notes</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{records.length}</span><div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search credit notes..." /></div><button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button>
-<ExportButton records={records} columns={CN_COLUMNS} filename="fin-credit-notes" /><button onClick={openCreate} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Credit Note</button></div>
+        <div className="vc-panel-header">
+          <FileText size={15} className="text-[#f5a623] shrink-0" />
+          <span className="text-[12px] font-semibold text-[#e2e8f0] whitespace-nowrap shrink-0">Credit Notes</span>
+          <span className="vc-badge bg-[#252e3a] text-[#8899aa] shrink-0">{filtered.length}</span>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ width: '400px' }} className="vc-input h-[40px] text-[11px] shrink-0">
+            <option value="All">All Statuses</option>
+            {CN_STATUSES.filter(s => s !== 'All').map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <div className="ml-auto flex items-center gap-2 shrink-0">
+            <div className="shrink-0">
+              <SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search credit notes..." />
+            </div>
+            {selected.size > 0 && (
+              <button onClick={() => setBulkDeleteOpen(true)} className="flex items-center gap-1.5 h-[40px] px-3 rounded-lg bg-[#ff3d3d]/10 border border-[#ff3d3d]/30 text-[#ff3d3d] text-[11px] font-semibold hover:bg-[#ff3d3d]/20 shrink-0">
+                <Trash2 size={13} /> Delete ({selected.size})
+              </button>
+            )}
+            <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px] shrink-0"><Upload size={13} /> Import</button>
+            <ExportButton records={records} columns={CN_COLUMNS} filename="fin-credit-notes" />
+            <button onClick={openCreate} style={{ width: '182px' }} className="vc-btn-primary flex items-center gap-1.5 shrink-0"><Plus size={13} /> New Credit Note</button>
+          </div>
+        </div>
         <div className="overflow-x-auto"><div className="max-h-[440px] overflow-y-auto"><table className="w-full text-[11px]">
-          <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">{['Credit Note No', 'Date', 'Invoice', 'Client', 'Amount', 'Status', ''].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">{h}</th>)}</tr></thead>
+          <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
+            <th className="w-8 px-2"><Checkbox checked={allPageSelected} onCheckedChange={toggleAllOnPage} className="border-[#2a3542] data-[state=checked]:bg-[#f5a623] data-[state=checked]:border-[#f5a623]" /></th>
+            <SortableTh label="Credit Note No" sortKey="creditNoteNo" accessor={(r: CreditNote) => r.creditNoteNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Date" sortKey="date" accessor={(r: CreditNote) => r.date} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Invoice" sortKey="invoice" accessor={(r: any) => r.invoice?.invoiceNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Client" sortKey="client" accessor={(r: CreditNote) => r.client} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: CreditNote) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Cost Center" sortKey="costCenter" accessor={(r: CreditNote) => r.costCenter} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Amount" sortKey="amount" accessor={(r: CreditNote) => r.amount} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+            <SortableTh label="Status" sortKey="status" accessor={(r: CreditNote) => r.status} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <th className="py-2 px-3"></th>
+          </tr></thead>
           <tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => (
-            <tr key={r.id} className="hover:bg-[#141920]">
+            <tr key={r.id} className={`hover:bg-[#141920] ${selected.has(r.id)?'bg-[#f5a623]/5':''}`}>
+              <td className="py-2.5 px-3"><Checkbox checked={selected.has(r.id)} onCheckedChange={()=>toggleRow(r.id)} className="border-[#2a3542] data-[state=checked]:bg-[#f5a623] data-[state=checked]:border-[#f5a623]" /></td>
               <td className="py-2.5 px-3 text-[#f5a623] font-mono font-medium whitespace-nowrap">{r.creditNoteNo}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.date?.split('T')[0]}</td>
               <td className="py-2.5 px-3 text-[#e2e8f0] font-mono">{r.invoice?.invoiceNo || '—'}</td>
               <td className="py-2.5 px-3 text-[#e2e8f0] max-w-[160px] truncate">{r.client || '—'}</td>
+              <td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.jobCode || '—'}</td>
+              <td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.costCenter || '—'}</td>
               <td className="py-2.5 px-3 text-[#00e676] font-mono font-medium whitespace-nowrap">{fmt(r.amount)}</td>
               <td className="py-2.5 px-3"><span className={`vc-badge ${r.status === 'Received' ? 'bg-[#00e676]/15 text-[#00e676]' : r.status === 'Cancelled' ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : 'bg-[#ffab40]/15 text-[#ffab40]'}`}>{r.status}</span></td>
               <td className="py-2.5 px-3"><div className="flex gap-1"><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button><button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button></div></td>
             </tr>
           ))}
-          {records.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-[#5a6878]">No credit notes yet</td></tr>}
-          {records.length > 0 && tc.pageItems.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-[#5a6878]">No matching credit notes</td></tr>}
+          {records.length === 0 && <tr><td colSpan={10} className="py-10 text-center text-[#5a6878]">No credit notes yet</td></tr>}
+          {records.length > 0 && tc.pageItems.length === 0 && <tr><td colSpan={10} className="py-10 text-center text-[#5a6878]">No matching credit notes</td></tr>}
           </tbody>
         </table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div>
       </div>
@@ -296,7 +382,7 @@ export default function FinCreditNotes() {
           <DialogHeader><DialogTitle className="text-[#f5a623]">{editTarget ? 'Edit Credit Note' : 'New Credit Note'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-3">
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Credit Note No *</label><input value={form.creditNoteNo} onChange={e => setForm(p => ({ ...p, creditNoteNo: e.target.value }))} className="vc-input" placeholder="CN/..." /></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Credit Note No</label><input value={form.creditNoteNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated" /></div>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Date *</label><input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} className="vc-input" /></div>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label><select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className="vc-input appearance-none">{STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
             </div>
@@ -311,20 +397,23 @@ export default function FinCreditNotes() {
                   {invoices.map(i => <option key={i.id} value={i.id}>{i.invoiceNo}</option>)}
                 </select>
               </div>
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
-                <select value={form.siteId} onChange={e => setForm(p => ({ ...p, siteId: Number(e.target.value) }))} className="vc-input appearance-none">
-                  <option value={0}>Select site...</option>
-                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
+              <FormField label="Site Code" required error={formErrors.siteId}>
+                <SearchableSelect value={form.siteId ? String(form.siteId) : ''} onChange={v => setField('siteId', v ? Number(v) : 0)} options={sites.map(s => ({ value: String(s.id), label: s.name, sublabel: s.siteCode }))} placeholder="— Select site —" />
+              </FormField>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Client</label><input value={form.client} onChange={e => setForm(p => ({ ...p, client: e.target.value }))} className="vc-input" /></div>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Area</label><input value={form.area} onChange={e => setForm(p => ({ ...p, area: e.target.value }))} className="vc-input" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Job Code</label><input value={form.jobCode} onChange={e => setForm(p => ({ ...p, jobCode: e.target.value }))} placeholder="JOB-2026-001" className="vc-input" /></div>
+              <FormField label="Job Code" required error={formErrors.jobCode}>
+                <DatalistField id="cn-job-code" value={form.jobCode} onChange={v => setField('jobCode', v)} options={[...new Set(records.map(r => r.jobCode).filter(Boolean) as string[])]} placeholder="JOB-2026-001" />
+              </FormField>
+              <FormField label="PO Number" required error={formErrors.poNo}>
+                <DatalistField id="cn-po-no" value={form.poNo} onChange={v => setField('poNo', v)} options={[...new Set(records.map(r => r.poNo).filter(Boolean) as string[])]} placeholder="PO-1001" />
+              </FormField>
             </div>
+            <CostingFields prefix="cn" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={setField} errors={formErrors} />
             <div className="grid grid-cols-3 gap-3">
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Invoice Value</label><input type="number" value={form.invoiceValue ?? ''} onChange={e => setForm(p => ({ ...p, invoiceValue: Number(e.target.value) }))} className="vc-input" /></div>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">GST</label><input type="number" value={form.gstValue ?? ''} onChange={e => setForm(p => ({ ...p, gstValue: Number(e.target.value) }))} className="vc-input" /></div>
@@ -345,6 +434,14 @@ export default function FinCreditNotes() {
         <AlertDialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0]">
           <AlertDialogHeader><AlertDialogTitle className="text-[#ff3d3d]">Delete Credit Note</AlertDialogTitle><AlertDialogDescription className="text-[#8899aa]">Delete <strong className="text-[#f5a623]">{deleteTarget?.creditNoteNo}</strong>? This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel className="vc-btn-ghost">Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDelete} className="bg-[#ff3d3d] hover:bg-[#cc2020] text-white rounded-lg">Delete</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk delete confirmation */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0]">
+          <AlertDialogHeader><AlertDialogTitle className="text-[#ff3d3d]">Delete {selected.size} credit note{selected.size===1?'':'s'}</AlertDialogTitle><AlertDialogDescription className="text-[#8899aa]">This will permanently delete the selected credit note{selected.size===1?'':'s'}. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel className="vc-btn-ghost" onClick={()=>setSelected(new Set())}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleBulkDelete} className="bg-[#ff3d3d] hover:bg-[#cc2020] text-white rounded-lg">Delete {selected.size}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

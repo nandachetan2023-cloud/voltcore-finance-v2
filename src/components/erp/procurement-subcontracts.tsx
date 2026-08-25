@@ -220,10 +220,17 @@ export default function ProcurementSubcontracts() {
     else { setSortKey(key); setSortDir('asc'); }
   };
 
+  const generateSubcontractNo = () => {
+    const year = new Date().getFullYear();
+    const existing = new Set(records.map(r => r.subcontractNo));
+    let seq = records.length + 1;
+    let candidate = `SC-${year}-${String(seq).padStart(3, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `SC-${year}-${String(seq).padStart(3, '0')}`; }
+    return candidate;
+  };
   const openNew = () => {
-    const nextNo = 'SC-2026-' + String(Date.now()).slice(-3);
     setEditTarget(null);
-    setForm({ ...JSON.parse(JSON.stringify(EMPTY_FORM)), subcontractNo: nextNo });
+    setForm({ ...JSON.parse(JSON.stringify(EMPTY_FORM)), subcontractNo: generateSubcontractNo() });
     setFormOpen(true);
   };
 
@@ -449,7 +456,7 @@ export default function ProcurementSubcontracts() {
                     <td className="py-2.5 px-3 text-[#8899aa] font-mono">{formatInr(retHeld)}</td>
                     <td className="py-2.5 px-3">
                       <div className="flex gap-1">
-                        <button onClick={() => { setEditTarget(r); setForm(JSON.parse(JSON.stringify(r))); setFormOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10" title="Edit"><Pencil size={13} /></button>
+                        <button onClick={() => { setEditTarget(r); setForm({ ...JSON.parse(JSON.stringify(r)), scopeSummary: r.scopeSummary || '', notes: r.notes || '' }); setFormOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10" title="Edit"><Pencil size={13} /></button>
                         <button onClick={() => { openDetail(r); }} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10" title="View"><FileText size={13} /></button>
                         <button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10" title="Delete"><Trash2 size={13} /></button>
                       </div>
@@ -475,7 +482,7 @@ export default function ProcurementSubcontracts() {
           <div className="grid grid-cols-2 gap-4 py-4">
             <div>
               <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Subcontract No</label>
-              <input value={form.subcontractNo} onChange={e => setForm({...form, subcontractNo: e.target.value})} className="vc-input" />
+              <input value={form.subcontractNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated" />
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Vendor</label>

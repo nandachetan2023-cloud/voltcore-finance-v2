@@ -200,8 +200,12 @@ export default function FinClientFollowUp() {
           body: JSON.stringify({ action: 'import', records }),
         });
         const j = await res.json();
-        if (j.success) { toast.success(`Imported ${j.created} records from ${file.name}`); fetchRecords(statusFilter, search); }
-        else toast.error(j.error || 'Import failed');
+        if (j.success) {
+          const s = j.summary;
+          const extra = s && (s.skipped > 0 || s.errors > 0) ? ` (${s.skipped} skipped, ${s.errors} failed)` : '';
+          toast.success(`Imported ${j.created} of ${s?.totalRows ?? j.created} records from ${file.name}${extra}`);
+          fetchRecords(statusFilter, search);
+        } else toast.error(j.error || 'Import failed');
       } catch (err) { toast.error('Import failed: ' + ((err as Error).message || 'Parse error')); }
     };
     input.click();

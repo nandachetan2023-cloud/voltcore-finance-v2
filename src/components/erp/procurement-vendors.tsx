@@ -1,5 +1,5 @@
-'use client';
-import { useState } from 'react';
+﻿'use client';
+import { useState, useEffect } from 'react';
 import { Building2, Plus, Pencil, Trash2, Search, LayoutGrid, List, Star, X, ChevronDown, ChevronUp, Shield, Award, TrendingUp, Clock, FileText, User, Phone, Mail, MapPin, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -60,131 +60,6 @@ const CERT_NAMES: CertName[] = ['BBBEE Certificate', 'ISO 9001', 'ISO 14001', 'O
 function addDays(d: Date, n: number) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
 function fmtDate(d: Date) { return d.toISOString().split('T')[0]; }
 
-const VENDORS: Vendor[] = [
-  {
-    id: 1, name: 'ElectroMech Solutions', categories: ['Electrical'], region: 'Maharashtra', status: 'preferred', rating: 4.2,
-    contactPerson: 'Sandeep Joshi', phone: '+91-9876543001', email: 'sjoshi@electromech.in', address: 'Pune, Maharashtra', notes: 'Reliable electrical contractor for mining sites.',
-    certificates: [
-      { name: 'BBBEE Certificate', certNo: 'BBBEE-2024-001', issueDate: '2024-01-10', expiryDate: '2025-01-09' },
-      { name: 'ISO 9001', certNo: 'ISO-9001-EM-2023', issueDate: '2023-06-15', expiryDate: '2026-06-14' },
-      { name: 'ISO 14001', certNo: 'ISO-14001-EM-2023', issueDate: '2023-06-15', expiryDate: '2026-06-14' },
-      { name: 'Tax Clearance', certNo: 'TAX-EM-2024', issueDate: '2024-03-01', expiryDate: '2025-03-01' },
-    ],
-    metrics: { onTimeDelivery: 94, qualityRating: 4.3, priceCompetitiveness: 4.0 },
-    blacklistLog: [],
-  },
-  {
-    id: 2, name: 'PowerTech Industries', categories: ['Electrical', 'Mechanical'], region: 'Gujarat', status: 'standard', rating: 3.8,
-    contactPerson: 'Amit Shah', phone: '+91-9876543002', email: 'amit@powertech.in', address: 'Vadodara, Gujarat', notes: '',
-    certificates: [
-      { name: 'ISO 9001', certNo: 'ISO-9001-PT-2022', issueDate: '2022-04-01', expiryDate: '2025-03-31' },
-      { name: 'ISO 14001', certNo: 'ISO-14001-PT-2022', issueDate: '2022-04-01', expiryDate: '2025-03-31' },
-      { name: 'GST Registration', certNo: 'GST-PT-2021', issueDate: '2021-07-01', expiryDate: '2026-06-30' },
-    ],
-    metrics: { onTimeDelivery: 82, qualityRating: 3.8, priceCompetitiveness: 3.5 },
-    blacklistLog: [],
-  },
-  {
-    id: 3, name: 'Bharat Heavy Electricals Ltd', categories: ['Electrical', 'Mechanical'], region: 'Multiple', status: 'preferred', rating: 4.5,
-    contactPerson: 'Rajiv Mehta', phone: '+91-9876543003', email: 'rajiv@bhel.in', address: 'Bhopal, Madhya Pradesh', notes: 'Government PSU. Preferred partner for high-value electrical contracts.',
-    certificates: [
-      { name: 'BBBEE Certificate', certNo: 'BBBEE-BHEL-2024', issueDate: '2024-02-01', expiryDate: '2025-01-31' },
-      { name: 'ISO 9001', certNo: 'ISO-9001-BHEL-2023', issueDate: '2023-01-01', expiryDate: '2026-12-31' },
-      { name: 'ISO 14001', certNo: 'ISO-14001-BHEL-2023', issueDate: '2023-01-01', expiryDate: '2026-12-31' },
-      { name: 'OHSAS 18001', certNo: 'OHSAS-BHEL-2023', issueDate: '2023-03-15', expiryDate: '2025-03-14' },
-      { name: 'Tax Clearance', certNo: 'TAX-BHEL-2024', issueDate: '2024-04-01', expiryDate: '2025-03-31' },
-      { name: 'GST Registration', certNo: 'GST-BHEL-2021', issueDate: '2021-07-01', expiryDate: '2026-06-30' },
-    ],
-    metrics: { onTimeDelivery: 97, qualityRating: 4.7, priceCompetitiveness: 4.2 },
-    blacklistLog: [],
-  },
-  {
-    id: 4, name: 'MinMet Engineering', categories: ['Mechanical', 'Civil'], region: 'Odisha', status: 'standard', rating: 3.2,
-    contactPerson: 'Prakash Nayak', phone: '+91-9876543004', email: 'prakash@minmet.in', address: 'Bhubaneswar, Odisha', notes: '',
-    certificates: [
-      { name: 'ISO 9001', certNo: 'ISO-9001-MM-2021', issueDate: '2021-11-01', expiryDate: '2024-10-31' },
-      { name: 'OHSAS 18001', certNo: 'OHSAS-MM-2022', issueDate: '2022-05-01', expiryDate: '2024-04-30' },
-      { name: 'Tax Clearance', certNo: 'TAX-MM-2024', issueDate: '2024-01-15', expiryDate: '2025-01-14' },
-    ],
-    metrics: { onTimeDelivery: 68, qualityRating: 3.0, priceCompetitiveness: 3.8 },
-    blacklistLog: [],
-  },
-  {
-    id: 5, name: 'Industrial Supplies Co', categories: ['Mechanical', 'Services'], region: 'Jharkhand', status: 'standard', rating: 3.5,
-    contactPerson: 'Vikram Singh', phone: '+91-9876543005', email: 'vikram@indsupplies.in', address: 'Jamshedpur, Jharkhand', notes: '',
-    certificates: [
-      { name: 'ISO 9001', certNo: 'ISO-9001-ISC-2022', issueDate: '2022-08-01', expiryDate: '2025-07-31' },
-      { name: 'GST Registration', certNo: 'GST-ISC-2020', issueDate: '2020-06-01', expiryDate: '2025-05-31' },
-      { name: 'Tax Clearance', certNo: 'TAX-ISC-2024', issueDate: '2024-02-01', expiryDate: fmtDate(addDays(new Date(), 20)) },
-    ],
-    metrics: { onTimeDelivery: 76, qualityRating: 3.5, priceCompetitiveness: 3.3 },
-    blacklistLog: [],
-  },
-  {
-    id: 6, name: 'GreenTech Electricals', categories: ['Electrical'], region: 'Karnataka', status: 'blacklisted', rating: 2.8,
-    contactPerson: 'Mahesh Rao', phone: '+91-9876543006', email: 'mahesh@greentech.in', address: 'Bengaluru, Karnataka', notes: 'Quality issues and repeated delivery failures.',
-    certificates: [
-      { name: 'ISO 9001', certNo: 'ISO-9001-GT-2021', issueDate: '2021-03-01', expiryDate: '2024-02-29' },
-      { name: 'BBBEE Certificate', certNo: 'BBBEE-GT-2022', issueDate: '2022-06-01', expiryDate: '2023-05-31' },
-      { name: 'Tax Clearance', certNo: 'TAX-GT-2023', issueDate: '2023-01-01', expiryDate: '2024-01-01' },
-    ],
-    metrics: { onTimeDelivery: 45, qualityRating: 2.5, priceCompetitiveness: 3.0 },
-    blacklistLog: [
-      { date: '2024-11-15', reason: 'Supplied substandard cable drums - failed QC inspection', setBy: 'Ramesh Kumar (QA)' },
-      { date: '2024-08-22', reason: 'Repeated late deliveries on 3 consecutive POs', setBy: 'Suresh Patel (Procurement)' },
-    ],
-  },
-  {
-    id: 7, name: 'Singh Civil Contractors', categories: ['Civil', 'Labour'], region: 'Madhya Pradesh', status: 'preferred', rating: 4.0,
-    contactPerson: 'Gurpreet Singh', phone: '+91-9876543007', email: 'gurpreet@scc.in', address: 'Indore, Madhya Pradesh', notes: 'Excellent civil works team. Preferred for site development.',
-    certificates: [
-      { name: 'ISO 9001', certNo: 'ISO-9001-SCC-2023', issueDate: '2023-05-01', expiryDate: '2026-04-30' },
-      { name: 'OHSAS 18001', certNo: 'OHSAS-SCC-2023', issueDate: '2023-05-01', expiryDate: '2025-04-30' },
-      { name: 'Tax Clearance', certNo: 'TAX-SCC-2024', issueDate: '2024-03-15', expiryDate: '2025-03-14' },
-      { name: 'GST Registration', certNo: 'GST-SCC-2020', issueDate: '2020-08-01', expiryDate: '2025-07-31' },
-    ],
-    metrics: { onTimeDelivery: 91, qualityRating: 4.2, priceCompetitiveness: 3.8 },
-    blacklistLog: [],
-  },
-  {
-    id: 8, name: 'Rapid Logistics', categories: ['Services'], region: 'West Bengal', status: 'blacklisted', rating: 2.5,
-    contactPerson: 'Subrata Dey', phone: '+91-9876543008', email: 'subrata@rapidlogistics.in', address: 'Kolkata, West Bengal', notes: 'Frequent loss of materials in transit.',
-    certificates: [
-      { name: 'GST Registration', certNo: 'GST-RL-2021', issueDate: '2021-04-01', expiryDate: '2026-03-31' },
-      { name: 'Tax Clearance', certNo: 'TAX-RL-2023', issueDate: '2023-06-01', expiryDate: '2024-05-31' },
-    ],
-    metrics: { onTimeDelivery: 52, qualityRating: 2.0, priceCompetitiveness: 3.5 },
-    blacklistLog: [
-      { date: '2024-10-05', reason: 'Lost shipment worth ₹4.2L - insurance claim pending', setBy: 'Anita Verma (Logistics)' },
-      { date: '2024-07-12', reason: 'Damaged goods on delivery - 3 incidents', setBy: 'Rohit Sharma (Warehouse)' },
-      { date: '2024-03-28', reason: 'Unauthorized subcontracting of delivery route', setBy: 'Management' },
-    ],
-  },
-  {
-    id: 9, name: 'Pioneer Fabricators', categories: ['Mechanical', 'Civil'], region: 'Chhattisgarh', status: 'standard', rating: 3.0,
-    contactPerson: 'Dilip Verma', phone: '+91-9876543009', email: 'dilip@pioneerfab.in', address: 'Raipur, Chhattisgarh', notes: '',
-    certificates: [
-      { name: 'ISO 9001', certNo: 'ISO-9001-PF-2022', issueDate: '2022-09-01', expiryDate: '2025-08-31' },
-      { name: 'OHSAS 18001', certNo: 'OHSAS-PF-2020', issueDate: '2020-12-01', expiryDate: '2023-11-30' },
-      { name: 'Tax Clearance', certNo: 'TAX-PF-2024', issueDate: '2024-01-01', expiryDate: fmtDate(addDays(new Date(), 10)) },
-    ],
-    metrics: { onTimeDelivery: 65, qualityRating: 3.2, priceCompetitiveness: 3.0 },
-    blacklistLog: [],
-  },
-  {
-    id: 10, name: 'Hitech Cables Ltd', categories: ['Electrical'], region: 'Maharashtra', status: 'preferred', rating: 4.3,
-    contactPerson: 'Neha Kulkarni', phone: '+91-9876543010', email: 'neha@hitechcables.in', address: 'Mumbai, Maharashtra', notes: 'Premium cable supplier for all mining electrification projects.',
-    certificates: [
-      { name: 'BBBEE Certificate', certNo: 'BBBEE-HCL-2024', issueDate: '2024-03-01', expiryDate: '2025-02-28' },
-      { name: 'ISO 9001', certNo: 'ISO-9001-HCL-2023', issueDate: '2023-04-01', expiryDate: '2026-03-31' },
-      { name: 'ISO 14001', certNo: 'ISO-14001-HCL-2023', issueDate: '2023-04-01', expiryDate: '2026-03-31' },
-      { name: 'OHSAS 18001', certNo: 'OHSAS-HCL-2024', issueDate: '2024-01-15', expiryDate: '2026-01-14' },
-      { name: 'GST Registration', certNo: 'GST-HCL-2019', issueDate: '2019-06-01', expiryDate: '2024-05-31' },
-    ],
-    metrics: { onTimeDelivery: 96, qualityRating: 4.5, priceCompetitiveness: 3.8 },
-    blacklistLog: [],
-  },
-];
 
 function daysUntil(dateStr: string) {
   const now = new Date();
@@ -251,7 +126,21 @@ export default function ProcurementVendors() {
   const [editForm, setEditForm] = useState(EMPTY_VENDOR);
   const [blacklistInput, setBlacklistInput] = useState({ reason: '', setBy: '' });
   const [showAddBlacklist, setShowAddBlacklist] = useState(false);
-  const [vendors, setVendors] = useState(VENDORS);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+
+  const loadVendors = async () => {
+    try {
+      const r = await fetch('/api/fin/vendors');
+      const j = await r.json();
+      if (j.success) setVendors(j.data);
+    } catch { toast.error('Failed to load vendors'); }
+  };
+  useEffect(() => { loadVendors(); }, []);
+
+  const mutateVendors = (updated: Vendor) => {
+    setVendors(prev => prev.map(x => x.id === updated.id ? updated : x));
+    setSelectedVendor(updated);
+  };
 
   const filtered = vendors.filter(v => {
     if (categoryFilter !== 'All' && !v.categories.includes(categoryFilter)) return false;
@@ -272,16 +161,18 @@ export default function ProcurementVendors() {
   }
 
   function handleStatusChange(v: Vendor, status: VendorStatus) {
-    setVendors(prev => prev.map(x => x.id === v.id ? { ...x, status } : x));
-    setSelectedVendor(prev => prev && prev.id === v.id ? { ...prev, status } : prev);
+    const updated = { ...v, status };
+    mutateVendors(updated);
+    fetch('/api/fin/vendors', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: updated.id, status }) }).then(r => r.json()).then(j => { if (!j.success) toast.error(j.error || 'Failed'); }).catch(() => toast.error('Network error'));
     toast.success(status === 'preferred' ? 'Marked as Preferred' : status === 'blacklisted' ? 'Blacklisted' : 'Reverted to Standard');
   }
 
   function handleAddBlacklist() {
     if (!blacklistInput.reason || !blacklistInput.setBy || !selectedVendor) return;
     const entry: BlacklistEntry = { date: fmtDate(new Date()), reason: blacklistInput.reason, setBy: blacklistInput.setBy };
-    setVendors(prev => prev.map(x => x.id === selectedVendor.id ? { ...x, status: 'blacklisted', blacklistLog: [entry, ...x.blacklistLog] } : x));
-    setSelectedVendor(prev => prev && prev.id === selectedVendor.id ? { ...prev, status: 'blacklisted', blacklistLog: [entry, ...prev.blacklistLog] } : prev);
+    const updated = { ...selectedVendor, status: 'blacklisted' as VendorStatus, blacklistLog: [entry, ...selectedVendor.blacklistLog] };
+    mutateVendors(updated);
+    fetch('/api/fin/vendors', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: updated.id, status: 'blacklisted', blacklistLog: updated.blacklistLog }) }).then(r => r.json()).then(j => { if (!j.success) toast.error(j.error || 'Failed'); }).catch(() => toast.error('Network error'));
     setBlacklistInput({ reason: '', setBy: '' });
     setShowAddBlacklist(false);
     toast.success('Blacklist entry added');
@@ -290,9 +181,9 @@ export default function ProcurementVendors() {
   function handleSaveEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedVendor) return;
-    setVendors(prev => prev.map(x => x.id === selectedVendor.id ? { ...x, ...editForm } : x));
-    const updated = vendors.find(v => v.id === selectedVendor.id);
-    if (updated) setSelectedVendor({ ...updated, ...editForm });
+    const updated = { ...selectedVendor, ...editForm };
+    mutateVendors(updated);
+    fetch('/api/fin/vendors', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: updated.id, ...editForm }) }).then(r => r.json()).then(j => { if (!j.success) toast.error(j.error || 'Failed'); }).catch(() => toast.error('Network error'));
     toast.success('Vendor updated');
     setEditMode(false);
   }
@@ -300,8 +191,7 @@ export default function ProcurementVendors() {
   function handleCreateVendor(e: React.FormEvent) {
     e.preventDefault();
     if (!editForm.name || editForm.categories.length === 0 || !editForm.region) { toast.error('Name, categories, and region are required'); return; }
-    const newVendor: Vendor = {
-      id: Math.max(...vendors.map(v => v.id)) + 1,
+    const payload = {
       name: editForm.name,
       categories: editForm.categories,
       region: editForm.region,
@@ -321,7 +211,10 @@ export default function ProcurementVendors() {
       metrics: { onTimeDelivery: 85, qualityRating: 3.5, priceCompetitiveness: 3.5 },
       blacklistLog: [],
     };
-    setVendors(prev => [...prev, newVendor]);
+    fetch('/api/fin/vendors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(r => r.json())
+      .then(j => { if (j.success) { loadVendors(); } else toast.error(j.error || 'Failed'); })
+      .catch(() => toast.error('Network error'));
     setNewOpen(false);
     setEditForm(EMPTY_VENDOR);
     toast.success('Vendor created');
@@ -330,6 +223,7 @@ export default function ProcurementVendors() {
   function handleDelete() {
     if (!deleteTarget) return;
     setVendors(prev => prev.filter(v => v.id !== deleteTarget.id));
+    fetch(`/api/fin/vendors?id=${deleteTarget.id}`, { method: 'DELETE' }).then(r => r.json()).then(j => { if (!j.success) toast.error(j.error || 'Failed'); }).catch(() => toast.error('Network error'));
     setDeleteOpen(false);
     setDetailOpen(false);
     setDeleteTarget(null);
@@ -348,11 +242,11 @@ export default function ProcurementVendors() {
       name: selectedVendor.name,
       categories: [...selectedVendor.categories],
       region: selectedVendor.region,
-      contactPerson: selectedVendor.contactPerson,
-      phone: selectedVendor.phone,
-      email: selectedVendor.email,
-      address: selectedVendor.address,
-      notes: selectedVendor.notes,
+      contactPerson: selectedVendor.contactPerson || '',
+      phone: selectedVendor.phone || '',
+      email: selectedVendor.email || '',
+      address: selectedVendor.address || '',
+      notes: selectedVendor.notes || '',
     });
     setEditMode(true);
   }
@@ -543,7 +437,7 @@ export default function ProcurementVendors() {
                 </div>
                 <div className="col-span-2">
                   <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Notes</label>
-                  <div className="text-[#e2e8f0]">{selectedVendor.notes || '—'}</div>
+                  <div className="text-[#e2e8f0]">{selectedVendor.notes || 'â€”'}</div>
                 </div>
               </div>
             )}
@@ -588,7 +482,7 @@ export default function ProcurementVendors() {
               </div>
               <div className="col-span-2">
                 <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Notes</label>
-                <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} className="vc-input" rows={2} />
+                <textarea value={editForm.notes ?? ''} onChange={e => setEditForm({...editForm, notes: e.target.value})} className="vc-input" rows={2} />
               </div>
             </div>
             <DialogFooter>

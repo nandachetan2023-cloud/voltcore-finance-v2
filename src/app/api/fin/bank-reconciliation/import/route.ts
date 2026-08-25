@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 interface ImportRecord {
   date: string
   type?: string
+  transactionType?: string
   party?: string
   description?: string
   category?: string
@@ -53,6 +54,7 @@ export async function POST(request: NextRequest) {
             bankAccountId,
             date: new Date(r.date),
             type: r.type || (isDebit ? 'Debit' : 'Credit'),
+            transactionType: r.transactionType || null,
             amount: isDebit ? -magnitude : magnitude,
             balance: r.balance !== undefined && r.balance !== '' ? Number(r.balance) : 0,
             reference: r.reference || null,

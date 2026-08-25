@@ -14,6 +14,17 @@ interface ImportRecord {
   totalAmount?: number
   dueDate: string
   status?: string
+  receivedAmount?: number
+  tdsAmount?: number
+  deductionType?: string
+  otherDeduction?: number
+  siteId?: number
+  siteCode?: string
+  jobCode?: string
+  poNo?: string
+  costCenter?: string
+  department?: string
+  projectManager?: string
 }
 
 // Commits rows already mapped and reviewed client-side (see the Upload → Map →
@@ -39,6 +50,14 @@ export async function POST(request: NextRequest) {
       try {
         const amount = Number(r.amount) || 0
         const tax = Number(r.tax) || 0
+        const receivedAmount = Number(r.receivedAmount) || 0
+        const tdsAmount = Number(r.tdsAmount) || 0
+        const otherDeduction = Number(r.otherDeduction) || 0
+        let siteId: number | null = r.siteId ? Number(r.siteId) : null
+        if (!siteId && r.siteCode) {
+          const site = await pdb.finSite.findUnique({ where: { siteCode: r.siteCode } })
+          siteId = site?.id ?? null
+        }
         const data = {
           invoiceNo: r.invoiceNo,
           client: r.client,
@@ -48,6 +67,16 @@ export async function POST(request: NextRequest) {
           amount,
           tax,
           totalAmount: Number(r.totalAmount) || amount + tax,
+          receivedAmount,
+          tdsAmount,
+          deductionType: r.deductionType || null,
+          otherDeduction,
+          siteId,
+          jobCode: r.jobCode || null,
+          poNo: r.poNo || null,
+          costCenter: r.costCenter || null,
+          department: r.department || null,
+          projectManager: r.projectManager || null,
           dueDate,
           status: r.status || 'Pending',
         }

@@ -24,7 +24,9 @@ export async function POST(request: NextRequest) {
       const record = await pdb.bankAccount.create({ data: { ...data, type: accountType } })
       return NextResponse.json({ success: true, data: record }, { status: 201 })
     } else {
-      const record = await pdb.bankTransaction.create({ data: { ...data, type: transactionType } })
+      const missing = ['siteCode', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
+      if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
+      const record = await pdb.bankTransaction.create({ data: { ...data, type: transactionType, transactionType: body.transactionType || null, siteCode: body.siteCode || null, jobCode: body.jobCode || null, poNo: body.poNo || null, costCenter: body.costCenter || null, department: body.department || null, projectManager: body.projectManager || null } })
       return NextResponse.json({ success: true, data: record }, { status: 201 })
     }
   } catch (error) {
@@ -43,7 +45,9 @@ export async function PUT(request: NextRequest) {
       const record = await pdb.bankAccount.update({ where: { id }, data: { ...data, type: accountType } })
       return NextResponse.json({ success: true, data: record })
     } else {
-      const record = await pdb.bankTransaction.update({ where: { id }, data: { ...data, type: transactionType } })
+      const missing = ['siteCode', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
+      if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
+      const record = await pdb.bankTransaction.update({ where: { id }, data: { ...data, type: transactionType, transactionType: body.transactionType || null, siteCode: body.siteCode || null, jobCode: body.jobCode || null, poNo: body.poNo || null, costCenter: body.costCenter || null, department: body.department || null, projectManager: body.projectManager || null } })
       return NextResponse.json({ success: true, data: record })
     }
   } catch (error) {
@@ -56,9 +60,18 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
+    const pdb = getDbForRequest(request)
+    if (type !== 'account') {
+      const idsParam = searchParams.get('ids')
+      if (idsParam) {
+        const ids = idsParam.split(',').map(Number).filter((n) => !isNaN(n))
+        if (ids.length === 0) return NextResponse.json({ success: false, error: 'No valid ids provided' }, { status: 400 })
+        const result = await pdb.bankTransaction.deleteMany({ where: { id: { in: ids } } })
+        return NextResponse.json({ success: true, deleted: result.count })
+      }
+    }
     const id = Number(searchParams.get('id'))
     if (!type || !id) return NextResponse.json({ success: false, error: 'type and id are required' }, { status: 400 })
-    const pdb = getDbForRequest(request)
     if (type === 'account') {
       await pdb.bankAccount.delete({ where: { id } })
     } else {

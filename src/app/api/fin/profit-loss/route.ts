@@ -27,12 +27,12 @@ export async function GET(request: NextRequest) {
 
     // 1. Income from FinInvoice
     const invoices = await pdb.finInvoice.findMany({
-      include: { site: { select: { name: true } } },
+      include: { site: { select: { name: true } }, party: { select: { name: true } } },
     })
     for (const inv of invoices) {
       const site = extractSiteName(inv.site)
       if (siteFilter && siteFilter !== 'all' && site !== siteFilter) continue
-      const month = toMonthKey(new Date(inv.date || inv.createdAt))
+      const month = toMonthKey(new Date(inv.invoiceDate || inv.createdAt))
       if (monthFilter && monthFilter !== 'all' && month !== monthFilter) continue
       profitLossEntries.push({
         id: `inv-${inv.id}`,
@@ -40,6 +40,9 @@ export async function GET(request: NextRequest) {
         sourceId: inv.id,
         site,
         month,
+        jobCode: inv.jobCode || null,
+        poNo: inv.poNo || null,
+        customer: inv.party?.name || null,
         side: 'credit',
         category: 'Sales Accounts',
         particular: `Invoice ${inv.invoiceNo || ''} - ${inv.party?.name || ''}`,
@@ -62,10 +65,13 @@ export async function GET(request: NextRequest) {
         sourceId: cn.id,
         site,
         month,
+        jobCode: cn.jobCode || null,
+        poNo: cn.poNo || null,
+        customer: null, // FinCreditNote has no partyId — only linked via invoiceId
         side: 'debit',
         category: 'Sales Accounts',
         particular: `Credit Note ${cn.creditNoteNo || ''}`,
-        amount: cn.totalAmount || 0,
+        amount: cn.amount || 0,
       })
     }
 
@@ -85,6 +91,9 @@ export async function GET(request: NextRequest) {
         sourceId: claim.id,
         site,
         month,
+        jobCode: claim.jobCode || null,
+        poNo: null, // FinExpenseClaim only has poId, no poNo string
+        customer: null, // FinExpenseClaim has no partyId
         side: 'debit',
         category: cat,
         particular: `Expense Claim ${claim.claimNo} - ${claim.expenseType || ''}`,
@@ -110,6 +119,9 @@ export async function GET(request: NextRequest) {
         sourceId: pr.id,
         site,
         month,
+        jobCode: pr.jobCode || null,
+        poNo: null, // FinPettyCash only has poId, no poNo string
+        customer: partyName || null,
         side: 'debit',
         category: cat,
         particular: `Petty Cash ${pr.voucherNo} - ${pr.description}${partyName ? ` (${partyName})` : ''}`,
@@ -132,6 +144,9 @@ export async function GET(request: NextRequest) {
         sourceId: ad.id,
         site,
         month,
+        jobCode: ad.jobCode || null,
+        poNo: null, // FinPaymentAdvice only has poId, no poNo string
+        customer: ad.supplierName || ad.party?.name || null,
         side: 'debit',
         category: 'Purchase Accounts',
         particular: `Payment Advice ${ad.adviceNo} - ${ad.supplierName || ad.party?.name || ''}`,
@@ -146,11 +161,12 @@ export async function GET(request: NextRequest) {
     const manualRecords = await (pdb as any).profitLossEntry.findMany({ where: manualWhere })
     for (const mr of manualRecords) {
       profitLossEntries.push({
-        id: `manual-${mr.id}`,
+        id: mr.id,
         source: 'manual',
         sourceId: mr.id,
         site: mr.site,
         month: mr.month,
+        jobCode: null, poNo: null, customer: null,
         side: mr.side,
         category: mr.category,
         particular: mr.particular,
@@ -171,6 +187,35 @@ export async function GET(request: NextRequest) {
       const income = siteEntries.filter(r => r.side === 'credit').reduce((s, r) => s + r.amount, 0)
       const expense = siteEntries.filter(r => r.side === 'debit').reduce((s, r) => s + r.amount, 0)
       return { site, income, expense, netPL: income - expense }
+    })
+
+    // Job-wise / PO-wise / Customer-wise summaries — same filter/reduce
+    // pattern as siteWise. Coverage note: FinExpenseClaim has no poNo/party
+    // and FinCreditNote has no party, so those sources simply don't
+    // contribute to the buckets they lack tags for (not hidden — the
+    // underlying entries are still counted in totals/site/category views).
+    const jobCodes = [...new Set(profitLossEntries.map(r => r.jobCode).filter(Boolean))].sort()
+    const jobWise = jobCodes.map(jobCode => {
+      const entries = profitLossEntries.filter(r => r.jobCode === jobCode)
+      const income = entries.filter(r => r.side === 'credit').reduce((s, r) => s + r.amount, 0)
+      const expense = entries.filter(r => r.side === 'debit').reduce((s, r) => s + r.amount, 0)
+      return { jobCode, income, expense, netPL: income - expense }
+    })
+
+    const poNos = [...new Set(profitLossEntries.map(r => r.poNo).filter(Boolean))].sort()
+    const poWise = poNos.map(poNo => {
+      const entries = profitLossEntries.filter(r => r.poNo === poNo)
+      const income = entries.filter(r => r.side === 'credit').reduce((s, r) => s + r.amount, 0)
+      const expense = entries.filter(r => r.side === 'debit').reduce((s, r) => s + r.amount, 0)
+      return { poNo, income, expense, netPL: income - expense }
+    })
+
+    const customers = [...new Set(profitLossEntries.map(r => r.customer).filter(Boolean))].sort()
+    const customerWise = customers.map(customer => {
+      const entries = profitLossEntries.filter(r => r.customer === customer)
+      const income = entries.filter(r => r.side === 'credit').reduce((s, r) => s + r.amount, 0)
+      const expense = entries.filter(r => r.side === 'debit').reduce((s, r) => s + r.amount, 0)
+      return { customer, income, expense, netPL: income - expense }
     })
 
     // Category-wise aggregates
@@ -202,7 +247,7 @@ export async function GET(request: NextRequest) {
         sites, months,
         totalDebit, totalCredit,
         netPL: totalCredit - totalDebit,
-        siteWise, catAgg, monthlyTrend, sourceAgg,
+        siteWise, jobWise, poWise, customerWise, catAgg, monthlyTrend, sourceAgg,
       },
     })
   } catch (error) {

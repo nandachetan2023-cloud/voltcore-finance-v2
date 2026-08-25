@@ -25,6 +25,8 @@ const QUOTATION_COLUMNS: ExportColumn<Quotation>[] = [
   { header: 'Quotation No', accessor: 'quotationNo' },
   { header: 'Date', accessor: (r) => r.quotationDate?.split('T')[0] ?? '' },
   { header: 'Client', accessor: (r) => r.Customer?.name || '' },
+  { header: 'Customer ID', accessor: (r) => r.customerId ?? '' },
+  { header: 'Valid Until', accessor: (r) => r.validUntil?.split('T')[0] ?? '' },
   { header: 'Status', accessor: 'status' },
   { header: 'Amount', accessor: 'totalAmount' },
 ];
@@ -38,33 +40,6 @@ const QUOTATION_IMPORT_FIELDS: ImportField[] = [
   { key: 'totalAmount', label: 'Amount', type: 'number' },
 ];
 const QUOTATION_SAMPLE_ROW = { quotationNo: 'QTN-2026-001', quotationDate: '2026-01-05', customerId: 1, validUntil: '2026-02-28', status: 'sent', totalAmount: 885000 };
-
-const MOCK_CUSTOMERS: Customer[] = [
-  { id: 1, name: 'Acme Corp' }, { id: 2, name: 'Globex Inc' }, { id: 3, name: 'Initech' },
-  { id: 4, name: 'Umbrella Co' }, { id: 5, name: 'Hooli' },
-];
-
-const MOCK_ITEMS: Item[] = [
-  { id: 1, sku: 'SKU-001', name: 'Widget Alpha', sellingPrice: 1250 },
-  { id: 2, sku: 'SKU-002', name: 'Gadget Beta', sellingPrice: 3400 },
-  { id: 3, sku: 'SKU-003', name: 'Component Gamma', sellingPrice: 780 },
-  { id: 4, sku: 'SKU-004', name: 'Assembly Delta', sellingPrice: 5600 },
-  { id: 5, sku: 'SKU-005', name: 'Module Epsilon', sellingPrice: 2200 },
-];
-
-function generateMockQuotations() {
-  const mock: Quotation[] = [
-    { id: 1, quotationNo: 'Q-2025-001', quotationDate: '2025-01-15T00:00:00.000Z', customerId: 1, validUntil: '2025-02-15T00:00:00.000Z', status: 'accepted', subtotal: 12500, taxAmount: 2250, totalAmount: 14750, Customer: MOCK_CUSTOMERS[0], QuotationItem: [{ id: 1, itemId: 1, qty: 10, rate: 1250, amount: 12500, Item: MOCK_ITEMS[0] }] },
-    { id: 2, quotationNo: 'Q-2025-002', quotationDate: '2025-01-20T00:00:00.000Z', customerId: 2, validUntil: '2025-02-20T00:00:00.000Z', status: 'draft', subtotal: 6800, taxAmount: 1224, totalAmount: 8024, Customer: MOCK_CUSTOMERS[1], QuotationItem: [{ id: 2, itemId: 2, qty: 2, rate: 3400, amount: 6800, Item: MOCK_ITEMS[1] }] },
-    { id: 3, quotationNo: 'Q-2025-003', quotationDate: '2025-01-25T00:00:00.000Z', customerId: 3, validUntil: null, status: 'sent', subtotal: 3900, taxAmount: 702, totalAmount: 4602, Customer: MOCK_CUSTOMERS[2], QuotationItem: [{ id: 3, itemId: 3, qty: 5, rate: 780, amount: 3900, Item: MOCK_ITEMS[2] }] },
-    { id: 4, quotationNo: 'Q-2025-004', quotationDate: '2025-02-01T00:00:00.000Z', customerId: 4, validUntil: '2025-03-01T00:00:00.000Z', status: 'accepted', subtotal: 22400, taxAmount: 4032, totalAmount: 26432, Customer: MOCK_CUSTOMERS[3], QuotationItem: [{ id: 4, itemId: 4, qty: 4, rate: 5600, amount: 22400, Item: MOCK_ITEMS[3] }] },
-    { id: 5, quotationNo: 'Q-2025-005', quotationDate: '2025-02-05T00:00:00.000Z', customerId: 5, validUntil: '2025-03-05T00:00:00.000Z', status: 'rejected', subtotal: 11000, taxAmount: 1980, totalAmount: 12980, Customer: MOCK_CUSTOMERS[4], QuotationItem: [{ id: 5, itemId: 5, qty: 5, rate: 2200, amount: 11000, Item: MOCK_ITEMS[4] }] },
-    { id: 6, quotationNo: 'Q-2025-006', quotationDate: '2025-02-10T00:00:00.000Z', customerId: 1, validUntil: '2025-03-10T00:00:00.000Z', status: 'draft', subtotal: 17000, taxAmount: 3060, totalAmount: 20060, Customer: MOCK_CUSTOMERS[0], QuotationItem: [{ id: 6, itemId: 3, qty: 10, rate: 780, amount: 7800, Item: MOCK_ITEMS[2] }, { id: 7, itemId: 5, qty: 4, rate: 2300, amount: 9200, Item: MOCK_ITEMS[4] }] },
-    { id: 7, quotationNo: 'Q-2025-007', quotationDate: '2025-02-15T00:00:00.000Z', customerId: 2, validUntil: null, status: 'draft', subtotal: 3400, taxAmount: 612, totalAmount: 4012, Customer: MOCK_CUSTOMERS[1], QuotationItem: [{ id: 8, itemId: 2, qty: 1, rate: 3400, amount: 3400, Item: MOCK_ITEMS[1] }] },
-    { id: 8, quotationNo: 'Q-2025-008', quotationDate: '2025-02-20T00:00:00.000Z', customerId: 3, validUntil: '2025-03-20T00:00:00.000Z', status: 'sent', subtotal: 5000, taxAmount: 900, totalAmount: 5900, Customer: MOCK_CUSTOMERS[2], QuotationItem: [{ id: 9, itemId: 1, qty: 4, rate: 1250, amount: 5000, Item: MOCK_ITEMS[0] }] },
-  ];
-  return { quotations: mock, customers: MOCK_CUSTOMERS, items: MOCK_ITEMS };
-}
 
 export default function SalesQuotations() {
   const [records, setRecords] = useState<Quotation[]>([]);
@@ -90,19 +65,11 @@ export default function SalesQuotations() {
       setLoading(true);
       const [q, c, i] = await Promise.all([fetch('/api/sales/quotations'), fetch('/api/customers'), fetch('/api/items')]);
       const [qj, cj, ij] = await Promise.all([q.json(), c.json(), i.json()]);
-      if (qj.success && qj.data?.length) {
-        if (qj.success) setRecords(qj.data);
-        if (cj.success) setCustomers(cj.data);
-        if (ij.success) setItems(ij.data);
-      } else {
-        throw new Error('empty');
-      }
+      if (qj.success) setRecords(qj.data);
+      if (cj.success) setCustomers(cj.data);
+      if (ij.success) setItems(ij.data);
     } catch {
-      const mock = generateMockQuotations();
-      setRecords(mock.quotations);
-      setCustomers(mock.customers);
-      setItems(mock.items);
-      toast.info('Showing sample data — API unavailable');
+      toast.error('Failed to load quotations');
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { fetch_(); }, [fetch_]);
@@ -129,7 +96,15 @@ export default function SalesQuotations() {
 
   const totals = lines.reduce((acc, l) => ({ subtotal: acc.subtotal + l.amount, taxAmount: 0, totalAmount: acc.totalAmount + l.amount }), { subtotal: 0, taxAmount: 0, totalAmount: 0 });
 
-  const openCreate = () => { setEditTarget(null); setForm(EMPTY_FORM); setLines([{ ...EMPTY_LINE }]); setItemSearch({}); setFormOpen(true); };
+  const generateQuotationNo = () => {
+    const year = new Date().getFullYear();
+    const existing = new Set(records.map(r => r.quotationNo));
+    let seq = records.length + 1;
+    let candidate = `QT/${year}/${String(seq).padStart(3, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `QT/${year}/${String(seq).padStart(3, '0')}`; }
+    return candidate;
+  };
+  const openCreate = () => { setEditTarget(null); setForm({ ...EMPTY_FORM, quotationNo: generateQuotationNo() }); setLines([{ ...EMPTY_LINE }]); setItemSearch({}); setFormOpen(true); };
 
   const openEdit = (r: Quotation) => {
     setEditTarget(r);
@@ -252,7 +227,7 @@ export default function SalesQuotations() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Quotation No</label>
-                <input value={form.quotationNo} onChange={e => setForm({...form, quotationNo: e.target.value})} className="vc-input" />
+                <input value={form.quotationNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated" />
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Quotation Date</label>

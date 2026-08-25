@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
 
     const ledgerMapped = ledgerRecords.map(r => ({
       id: r.id,
+      source: 'ledger',
       accountCode: r.accountCode,
       name: r.name,
       group: r.group || '',
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
 
     const finMapped = finRecords.map(r => ({
       id: r.id,
+      source: 'fin',
       accountCode: r.accountCode,
       name: r.name,
       group: r.group || '',
@@ -55,8 +57,9 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, ...data } = body
+    const { id, source, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    if (source === 'fin') return NextResponse.json({ success: false, error: 'Chart of Accounts entries are read-only' }, { status: 400 })
     const pdb = getDbForRequest(request)
     const record = await pdb.ledgerAccount.update({ where: { id }, data })
     return NextResponse.json({ success: true, data: record })
@@ -71,6 +74,7 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    if (searchParams.get('source') === 'fin') return NextResponse.json({ success: false, error: 'Chart of Accounts entries are read-only' }, { status: 400 })
     const pdb = getDbForRequest(request)
     await pdb.ledgerAccount.delete({ where: { id: Number(id) } })
     return NextResponse.json({ success: true })

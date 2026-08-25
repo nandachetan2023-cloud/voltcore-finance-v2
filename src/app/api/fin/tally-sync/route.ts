@@ -169,14 +169,13 @@ export async function POST(request: NextRequest) {
               await pdb.finPurchaseOrder.create({
                 data: {
                   poNo: str(record.vchNo) || `TALLY-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                  partyId: party.id,
-                  description: `${str(record.vchType)} - ${partyName}`,
-                  amount,
+                  vendorId: String(party.id),
+                  vendorName: partyName,
+                  descriptionOfWork: `${str(record.vchType)} - ${partyName}`,
+                  totalAmount: amount,
                   status: 'Imported',
-                  orderDate: date,
+                  date,
                   siteId: 1,
-                  deliveryDate: date,
-                  paymentTerms: '',
                 },
               }).catch(() => { errors++ })
             } else {

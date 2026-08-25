@@ -16,12 +16,14 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { LifeBuoy, Send, Sparkles, Trash2, ArrowRight } from 'lucide-react';
+import { LifeBuoy, Send, Sparkles, Trash2, ArrowRight, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useERPStore } from '@/store/erp-store';
+import { notifyFinanceDataChanged } from '@/store/erp-store';
 import type { ModuleId } from '@/store/erp-store';
 import ReactMarkdown from 'react-markdown';
 import {
@@ -45,6 +47,7 @@ const FINANCE_MODULE_IDS = new Set<string>([
   'budget',
   'financial-reports',
   'fin-sites',
+  'fin-jobs',
   'fin-parties',
   'fin-invoices',
   'fin-payments',
@@ -56,8 +59,9 @@ const FINANCE_MODULE_IDS = new Set<string>([
   'fin-expense-claims',
   'fin-site-expenses',
   'fin-work-orders',
-  'fin-tally-sync',
-  'fin-sync-config',
+  'fin-purchase-orders',
+  'fin-credit-notes',
+  'fin-client-follow-up',
 ]);
 
 // ── Types ───────────────────────────────────────────────────────
@@ -139,12 +143,24 @@ export function FinanceHelpChat() {
 
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  /** Pending form the assistant asked us to fill in — forwarded on the next message. */
+  const [pending, setPending] = useState<{ formId: string; text: string } | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     {
       role: 'assistant',
-      text: "Hi! I'm your **Finance** helper. Ask me how to use any finance feature, or pick a question below.",
+      text: "Hi! I'm your **Finance** helper. Ask me how to use any finance feature — or tell me to create an entry, e.g. *\"create a journal entry Dr Rent 50000 Cr SBI Bank 50000\"* or *\"raise an invoice of 2 lakh to L&T at site NTPC Rihand\"*.",
     },
   ]);
+
+  const currentUserEmail = () => {
+    try {
+      const user = localStorage.getItem('erp_auth_user');
+      return user ? (JSON.parse(user).email as string) : '';
+    } catch {
+      return '';
+    }
+  };
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -162,31 +178,96 @@ export function FinanceHelpChat() {
     [],
   );
 
-  function send(text: string) {
+  async function send(text: string, fresh = false) {
     const query = text.trim();
     if (!query) return;
+    if (fresh) setPending(null);
 
-    const match = findAnswer(query);
     const userMsg: ChatMessage = { role: 'user', text: query };
-
-    if (match) {
-      setMessages((prev) => [
-        ...prev,
-        userMsg,
-        { role: 'assistant', text: match.body, entry: match },
-      ]);
-    } else {
-      setMessages((prev) => [
-        ...prev,
-        userMsg,
-        {
-          role: 'assistant',
-          text: "I couldn't find a direct match for that. Here are some popular topics — tap one:",
-        },
-        { role: 'assistant', text: '__suggestions__' },
-      ]);
-    }
+    setMessages((prev) => [...prev, userMsg]);
     setInput('');
+    setBusy(true);
+
+    try {
+      const res = await fetch('/api/finance-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: query,
+          userEmail: currentUserEmail(),
+          moduleId: activeModule,
+          context: pending ?? undefined,
+        }),
+      });
+      const j = await res.json();
+
+      if (j.success) {
+        // Entry created — alert, refresh tables/dashboard, navigate.
+        setPending(null);
+        toast.success(`${j.title || 'Entry'} created`);
+        notifyFinanceDataChanged();
+        const entry: HelpEntry = {
+          id: 'action-created',
+          title: j.title || 'Entry',
+          keywords: [],
+          summary: j.message,
+          body: `✅ **${j.title || 'Entry'} created.**\n\n${j.message}${j.reference ? `\n\nReference: \`${j.reference}\`` : ''}`,
+          ...(j.moduleId ? { relatedModule: j.moduleId } : {}),
+        };
+        setMessages((prev) => [...prev, { role: 'assistant', text: entry.body, entry }]);
+        return;
+      }
+
+      if (j.action === 'info') {
+        // Question / unclear → fall back to the local KB.
+        setPending(null);
+        const match = findAnswer(query);
+        if (match) {
+          setMessages((prev) => [...prev, { role: 'assistant', text: match.body, entry: match }]);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              text: j.message || "I couldn't find a direct match for that. Here are some popular topics — tap one:",
+            },
+            { role: 'assistant', text: '__suggestions__' },
+          ]);
+        }
+        return;
+      }
+
+      // Error / needs more info — if the assistant says to continue the same
+      // form (missing fields), keep the context so the next message fills it in.
+      if (j.context?.formId && j.context?.text) {
+        setPending({ formId: j.context.formId, text: j.context.text });
+      } else {
+        setPending(null);
+      }
+      const entry: HelpEntry = {
+        id: 'action-error',
+        title: j.title || 'Entry',
+        keywords: [],
+        summary: j.message,
+        body: `⚠️ **Could not create ${j.title || 'entry'}**\n\n${j.message}`,
+        ...(j.moduleId ? { relatedModule: j.moduleId } : {}),
+      };
+      setMessages((prev) => [...prev, { role: 'assistant', text: entry.body, entry }]);
+    } catch (e) {
+      setPending(null);
+      const match = findAnswer(query);
+      if (match) {
+        setMessages((prev) => [...prev, { role: 'assistant', text: match.body, entry: match }]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', text: "The assistant service isn't reachable right now. Here are some popular topics — tap one:" },
+          { role: 'assistant', text: '__suggestions__' },
+        ]);
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -202,6 +283,7 @@ export function FinanceHelpChat() {
   }
 
   function clearChat() {
+    setPending(null);
     setMessages([
       {
         role: 'assistant',
@@ -293,7 +375,7 @@ export function FinanceHelpChat() {
                         <button
                           key={e.id}
                           type="button"
-                          onClick={() => send(e.title)}
+                          onClick={() => send(e.title, true)}
                           className="rounded-full border border-[#252e3a] bg-[#161c24] px-3 py-1.5 text-[12px] text-[#cbd5e1] transition-colors hover:border-[#f5a623]/50 hover:text-[#f5a623]"
                         >
                           {e.title}
@@ -352,9 +434,9 @@ export function FinanceHelpChat() {
                       )}
                       {m.entry?.links && m.entry.links.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
-                          {m.entry.links.map((link) => (
+                          {m.entry.links.map((link, li) => (
                             <button
-                              key={link.moduleId + link.label}
+                              key={`${link.moduleId}-${link.label}-${li}`}
                               type="button"
                               onClick={() => openModule(link.moduleId)}
                               className="inline-flex items-center gap-1 rounded-md border border-[#252e3a] bg-[#161c24] px-2 py-1 text-[11px] text-[#cbd5e1] transition-colors hover:border-[#5a6878] hover:text-[#e2e8f0]"
@@ -380,7 +462,7 @@ export function FinanceHelpChat() {
                       <button
                         key={e.id}
                         type="button"
-                        onClick={() => send(e.title)}
+                        onClick={() => send(e.title, true)}
                         className="rounded-lg border border-[#252e3a] bg-[#161c24] px-3 py-2 text-left text-[12.5px] text-[#cbd5e1] transition-colors hover:border-[#f5a623]/50 hover:text-[#f5a623]"
                       >
                         {e.title}
@@ -392,6 +474,17 @@ export function FinanceHelpChat() {
 
               {/* Inline suggestions after a no-match (badge already rendered above). */}
               {showSuggestions && null}
+
+              {/* Busy / thinking indicator */}
+              {busy && (
+                <div className="flex justify-start">
+                  <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm border border-[#252e3a] bg-[#161c24] px-3 py-2">
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#f5a623]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#f5a623] [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#f5a623] [animation-delay:300ms]" />
+                  </div>
+                </div>
+              )}
           </div>
 
           {/* Input */}
@@ -403,7 +496,8 @@ export function FinanceHelpChat() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about invoices, payments, ledger…"
+              disabled={busy}
+              placeholder={'Ask, or create - e.g. "create a journal entry"'}
               rows={1}
               className={cn(
                 'min-h-[40px] max-h-32 flex-1 resize-none border-[#252e3a] bg-[#0a0d12] text-[13px]',
@@ -413,10 +507,10 @@ export function FinanceHelpChat() {
             <Button
               type="submit"
               size="icon"
-              disabled={!input.trim()}
+              disabled={!input.trim() || busy}
               className="h-10 w-10 shrink-0 bg-[#f5a623] text-[#0a0d12] hover:bg-[#ffb84d] disabled:opacity-40"
             >
-              <Send className="h-4 w-4" />
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </form>
         </SheetContent>

@@ -19,6 +19,7 @@ const SO_COLUMNS: ExportColumn<SO>[] = [
   { header: 'SO Number', accessor: 'soNo' },
   { header: 'SO Date', accessor: (r) => r.soDate?.split('T')[0] ?? '' },
   { header: 'Client', accessor: (r) => r.Customer?.name || '' },
+  { header: 'Customer ID', accessor: (r) => r.customerId ?? '' },
   { header: 'Items', accessor: (r) => r.SalesOrderItem?.length ?? 0 },
   { header: 'Amount', accessor: 'totalAmount' },
   { header: 'Status', accessor: 'status' },
@@ -33,31 +34,6 @@ const SO_IMPORT_FIELDS: ImportField[] = [
 ];
 const SO_SAMPLE_ROW = { soNo: 'SO-2026-001', soDate: '2026-01-10', customerId: 1, status: 'Confirmed', totalAmount: 590000 };
 
-const mockCustomers: Customer[] = [
-  { id: 1, name: 'BALCO Industries' }, { id: 2, name: 'NTPC Limited' },
-  { id: 3, name: 'Coal India Ltd' }, { id: 4, name: 'Vedanta Resources' },
-  { id: 5, name: 'Tata Steel Ltd' }, { id: 6, name: 'Reliance Industries' },
-  { id: 7, name: 'Hindustan Zinc' }, { id: 8, name: 'SAIL' },
-];
-
-const mockItems: Item_[] = [
-  { id: 1, sku: 'AL-001', name: 'Aluminium Ingot' }, { id: 2, sku: 'CP-002', name: 'Copper Cathode' },
-  { id: 3, sku: 'ZN-003', name: 'Zinc Plate' }, { id: 4, sku: 'ST-004', name: 'Steel Coil' },
-  { id: 5, sku: 'LB-005', name: 'Lead Bullion' },
-];
-
-function generateMockOrders(): SO[] {
-  const d = (ago: number) => { const dt = new Date(); dt.setDate(dt.getDate() - ago); return dt.toISOString(); };
-  return [
-    { id: 1, soNo: 'SO-2026-001', soDate: d(3), customerId: 1, quotationId: null, status: 'draft', totalAmount: 1250000, createdAt: d(3), updatedAt: d(3), Customer: { id: 1, name: 'BALCO Industries' }, SalesOrderItem: [{ id: 1, itemId: 1, qty: 500, rate: 1800, amount: 900000, Item: { id: 1, sku: 'AL-001', name: 'Aluminium Ingot' } }, { id: 2, itemId: 4, qty: 100, rate: 3500, amount: 350000, Item: { id: 4, sku: 'ST-004', name: 'Steel Coil' } }] },
-    { id: 2, soNo: 'SO-2026-002', soDate: d(7), customerId: 2, quotationId: 101, status: 'submitted', totalAmount: 4500000, createdAt: d(7), updatedAt: d(5), Customer: { id: 2, name: 'NTPC Limited' }, Quotation: { id: 101, quotationNo: 'Q-2026-101' }, SalesOrderItem: [{ id: 3, itemId: 2, qty: 1000, rate: 4500, amount: 4500000, Item: { id: 2, sku: 'CP-002', name: 'Copper Cathode' } }] },
-    { id: 3, soNo: 'SO-2026-003', soDate: d(14), customerId: 3, quotationId: 102, status: 'confirmed', totalAmount: 2875000, createdAt: d(14), updatedAt: d(10), Customer: { id: 3, name: 'Coal India Ltd' }, Quotation: { id: 102, quotationNo: 'Q-2026-102' }, SalesOrderItem: [{ id: 4, itemId: 4, qty: 500, rate: 3200, amount: 1600000, Item: { id: 4, sku: 'ST-004', name: 'Steel Coil' } }, { id: 5, itemId: 3, qty: 300, rate: 2750, amount: 825000, Item: { id: 3, sku: 'ZN-003', name: 'Zinc Plate' } }, { id: 6, itemId: 5, qty: 150, rate: 3000, amount: 450000, Item: { id: 5, sku: 'LB-005', name: 'Lead Bullion' } }] },
-    { id: 4, soNo: 'SO-2026-004', soDate: d(2), customerId: 4, quotationId: null, status: 'draft', totalAmount: 890000, createdAt: d(2), updatedAt: d(2), Customer: { id: 4, name: 'Vedanta Resources' }, SalesOrderItem: [{ id: 7, itemId: 1, qty: 300, rate: 1800, amount: 540000, Item: { id: 1, sku: 'AL-001', name: 'Aluminium Ingot' } }, { id: 8, itemId: 3, qty: 100, rate: 3500, amount: 350000, Item: { id: 3, sku: 'ZN-003', name: 'Zinc Plate' } }] },
-    { id: 5, soNo: 'SO-2026-005', soDate: d(10), customerId: 5, quotationId: 103, status: 'submitted', totalAmount: 5620000, createdAt: d(10), updatedAt: d(8), Customer: { id: 5, name: 'Tata Steel Ltd' }, Quotation: { id: 103, quotationNo: 'Q-2026-103' }, SalesOrderItem: [{ id: 9, itemId: 4, qty: 800, rate: 3400, amount: 2720000, Item: { id: 4, sku: 'ST-004', name: 'Steel Coil' } }, { id: 10, itemId: 2, qty: 600, rate: 4833.33, amount: 2900000, Item: { id: 2, sku: 'CP-002', name: 'Copper Cathode' } }] },
-    { id: 6, soNo: 'SO-2026-006', soDate: d(21), customerId: 6, quotationId: 104, status: 'confirmed', totalAmount: 9500000, createdAt: d(21), updatedAt: d(18), Customer: { id: 6, name: 'Reliance Industries' }, Quotation: { id: 104, quotationNo: 'Q-2026-104' }, SalesOrderItem: [{ id: 11, itemId: 1, qty: 2000, rate: 1750, amount: 3500000, Item: { id: 1, sku: 'AL-001', name: 'Aluminium Ingot' } }, { id: 12, itemId: 5, qty: 2000, rate: 3000, amount: 6000000, Item: { id: 5, sku: 'LB-005', name: 'Lead Bullion' } }] },
-    { id: 7, soNo: 'SO-2026-007', soDate: d(1), customerId: 7, quotationId: null, status: 'draft', totalAmount: 1530000, createdAt: d(1), updatedAt: d(1), Customer: { id: 7, name: 'Hindustan Zinc' }, SalesOrderItem: [{ id: 13, itemId: 3, qty: 400, rate: 2700, amount: 1080000, Item: { id: 3, sku: 'ZN-003', name: 'Zinc Plate' } }, { id: 14, itemId: 5, qty: 150, rate: 3000, amount: 450000, Item: { id: 5, sku: 'LB-005', name: 'Lead Bullion' } }] },
-  ];
-}
 const EMPTY_LINE: FormItem = { itemId: 0, qty: 1, rate: 0, amount: 0 };
 const recalc = (it: FormItem): FormItem => ({ ...it, amount: it.qty * it.rate });
 
@@ -85,23 +61,13 @@ export default function SalesOrders() {
   const fetch_ = useCallback(async () => {
     try {
       setLoading(true);
-      let gotSO = false, gotCust = false, gotItems = false;
       const [so, cus] = await Promise.all([fetch('/api/sales/orders'), fetch('/api/customers')]);
       const [soj, cj] = await Promise.all([so.json(), cus.json()]);
-      if (soj.success && soj.data.length > 0) { setRecords(soj.data); gotSO = true; }
-      if (cj.success && cj.data.length > 0) { setCustomers(cj.data); gotCust = true; }
-      try { const ir = await fetch('/api/items'); const ij = await ir.json(); if (ij.success && ij.data.length > 0) { setAvailableItems(ij.data); gotItems = true; } } catch {}
-      if (!gotSO || !gotCust || !gotItems) {
-        if (!gotSO) setRecords(generateMockOrders());
-        if (!gotCust) setCustomers(mockCustomers);
-        if (!gotItems) setAvailableItems(mockItems);
-        toast.info('Sample data shown — API unavailable');
-      }
+      if (soj.success) setRecords(soj.data);
+      if (cj.success) setCustomers(cj.data);
+      try { const ir = await fetch('/api/items'); const ij = await ir.json(); if (ij.success) setAvailableItems(ij.data); } catch {}
     } catch {
-      setRecords(generateMockOrders());
-      setCustomers(mockCustomers);
-      setAvailableItems(mockItems);
-      toast.info('Sample data shown — API unavailable');
+      toast.error('Failed to load orders');
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { fetch_(); }, [fetch_]);
@@ -114,6 +80,15 @@ export default function SalesOrders() {
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
   }, []);
+
+  const generateSoNo = () => {
+    const year = new Date().getFullYear();
+    const existing = new Set(records.map(r => r.soNo));
+    let seq = records.length + 1;
+    let candidate = `SO/${year}/${String(seq).padStart(4, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `SO/${year}/${String(seq).padStart(4, '0')}`; }
+    return candidate;
+  };
 
   const openEdit = (r: SO) => {
     setEditTarget(r);
@@ -175,7 +150,7 @@ export default function SalesOrders() {
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#a78bfa]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Submitted / Confirmed</div><div className="text-[20px] font-bold text-[#a78bfa]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{submittedCount}</div></div>
       </div>
 
-      <div className="vc-panel"><div className="vc-panel-header"><ShoppingCart size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Sales Orders</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{records.length}</span><div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search orders..." /></div><button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={SO_COLUMNS} filename="sales-orders" /><button onClick={() => { setEditTarget(null); setForm(EMPTY_FORM); setLineItems([{ ...EMPTY_LINE }]); setFormOpen(true); }} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Order</button></div>
+      <div className="vc-panel"><div className="vc-panel-header"><ShoppingCart size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Sales Orders</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{records.length}</span><div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search orders..." /></div><button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={SO_COLUMNS} filename="sales-orders" /><button onClick={() => { setEditTarget(null); setForm({ ...EMPTY_FORM, soNo: generateSoNo() }); setLineItems([{ ...EMPTY_LINE }]); setFormOpen(true); }} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Order</button></div>
         <div className="overflow-x-auto"><div className="max-h-[520px] overflow-y-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">{['SO No','Customer','Date','Items','Amount','Status',''].map(h=><th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r=><tr key={r.id} className="hover:bg-[#141920]"><td className="py-2.5 px-3 text-[#f5a623] font-mono">{r.soNo}</td><td className="py-2.5 px-3 text-[#e2e8f0]">{r.Customer?.name||'—'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.soDate?.split('T')[0]}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.SalesOrderItem?.length||0}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-mono">₹{(Number(r.totalAmount) || 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3"><span className={`vc-badge ${r.status==='confirmed'?'bg-[#00e676]/15 text-[#00e676]':r.status==='draft'?'bg-[#5a6878]/15 text-[#5a6878]':r.status==='submitted'?'bg-[#00d4ff]/15 text-[#00d4ff]':'bg-[#ffab40]/15 text-[#ffab40]'}`}>{r.status}</span></td><td className="py-2.5 px-3"><div className="flex gap-1"><button onClick={()=>openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13}/></button><button onClick={()=>{setDeleteTarget(r);setDeleteOpen(true);}} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13}/></button></div></td></tr>)}{tc.pageItems.length===0&&<tr><td colSpan={7} className="py-8 text-center text-[#5a6878]">No matching sales orders</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
@@ -187,7 +162,7 @@ export default function SalesOrders() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">SO No</label>
-                <input value={form.soNo} onChange={e => setForm({...form, soNo: e.target.value})} className="vc-input" />
+                <input value={form.soNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated" />
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">SO Date</label>

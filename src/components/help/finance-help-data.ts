@@ -84,34 +84,45 @@ The **Finance** module (open it from the main sidebar) groups these areas:
 **📊 Overview**
 - Finance Dashboard — KPIs, charts, cash position
 
-**🏢 Masters**
+**🏢 Master Data**
 - Sites — project/site master data
+- Jobs (PO-wise) — job master, each job ties a job code to a site + PO
 - Parties — clients, vendors, suppliers
 
-**🧾 Billing**
+**📒 Ledger & Journal**
+- Ledger Management — chart of accounts & balances
+- Journal Entries / Create Journal Entry — manual double-entry postings
+
+**🧾 Billing / Receivables**
 - Site Invoices — raise invoices against sites
+- Accounts Receivable — customer outstanding & ageing
+- Client Follow Up — track collections and call-backs
 - Work Orders — work-order records
 
-**💰 Cash**
+**💸 Payables**
+- Purchase Orders — vendor orders tagged to site/job
+- Accounts Payable — vendor outstanding & ageing
 - Payment Center — record & allocate payments
-- Petty Cash — small cash entries
 - Payment Advices — payment advice records
+- Credit Notes — reduce invoices / AR
+
+**🏦 Cash & Bank**
+- Bank & Cash — bank/cash accounts & transactions
+- Bank Reconciliation — match bank to books
+- Petty Cash — small cash entries & the three petty-cash reports
+
+**📦 Expenses & Assets**
 - Expense Claims — staff reimbursements
 - Site Expenses — expenses booked to a site
-- Bank Reconciliation — match bank to books
-
-**📦 Assets**
 - Fixed Assets — asset register & depreciation
 
-**📈 Reports**
+**📈 Compliance & Reporting**
+- Taxation & Compliance — GST registers, GSTR-3B, TDS
+- Budget & Forecasting — budget vs actual
 - Profit & Loss — P&L statement
-- Financial Reports — configurable reports
+- Financial Reports — Balance Sheet, ageing, cash flow
 
-**⚙️ Accounting (top-level)**
-- Ledger, Accounts Receivable, Accounts Payable,
-  Journal Entries, Bank & Cash, Taxation, Budget
-
-**🔗 Integrations**
+**🔗 Sync / Integration**
 - Tally Sync, Sync Config
 
 Click any module name in the sidebar (under **Finance**) to open it.`,
@@ -269,6 +280,102 @@ AP tracks **money YOU owe** to vendors/suppliers.
     ],
   },
 
+  // ── Purchase Orders ───────────────────────────────────────────
+  {
+    id: "purchase-orders",
+    title: "Purchase Orders",
+    relatedModule: "fin-purchase-orders",
+    keywords: [
+      "purchase order", "po", "order material", "vendor order", "place order",
+      "po register", "create po", "approve po", "po status", "purchase order finance",
+    ],
+    summary: "Raise purchase orders, tag them to a site/job, and track them through to payment.",
+    body: `### Purchase Orders
+
+A **Purchase Order (PO)** is your formal order to a vendor for materials or services.
+
+**Steps**
+1. Open **Finance → Payables → Purchase Orders** → **New PO**.
+2. Choose the **Vendor**, **Site**, and **Job Code**, and fill the PO costing tags
+   (Cost Center, Department, Project Manager).
+3. Add line items (description, qty, rate) and the order value.
+4. Save. The PO becomes a payable when the vendor bill is received.
+
+**Tips**
+- Tag **Site** and **Job Code** so the spend lands in the right site/job cost sheet.
+- From the PO you can drive **Payment Advice → Payment** to close the payable.`,
+    links: [
+      { label: "Purchase Orders", moduleId: "fin-purchase-orders" },
+      { label: "Accounts Payable", moduleId: "accounts-payable" },
+      { label: "Payment Center", moduleId: "fin-payments" },
+    ],
+  },
+
+  // ── Credit Notes ──────────────────────────────────────────────
+  {
+    id: "credit-notes",
+    title: "Credit Notes",
+    relatedModule: "fin-credit-notes",
+    keywords: [
+      "credit note", "credit memo", "refund", "return", "reverse invoice",
+      "invoice adjustment", "cancel invoice", "contra entry",
+    ],
+    summary: "Issue a credit note against a sales invoice to reduce what the customer owes.",
+    body: `### Credit Notes
+
+A **Credit Note (CN)** reverses or reduces a sales invoice — e.g. a return,
+short-billing, or discount. Issuing one reduces the customer's outstanding (AR).
+
+**Steps**
+1. Open **Finance → Payables → Credit Notes** → **New Credit Note**.
+2. Select the **invoice** it applies to.
+3. Enter the **amount**, a **reason**, and the date.
+4. Save. The credit note updates the customer's outstanding balance.
+
+**Tips**
+- Tag the same **Site / Job Code** as the original invoice for clean costing.
+- Issue the CN against the exact invoice so AR matches correctly.`,
+    links: [
+      { label: "Credit Notes", moduleId: "fin-credit-notes" },
+      { label: "Site Invoices", moduleId: "fin-invoices" },
+      { label: "Accounts Receivable", moduleId: "accounts-receivable" },
+    ],
+  },
+
+  // ── Client Follow Up ──────────────────────────────────────────
+  {
+    id: "client-follow-up",
+    title: "Client Follow Up",
+    relatedModule: "fin-client-follow-up",
+    keywords: [
+      "client follow up", "follow up", "followup", "collection", "reminder",
+      "call back", "outstanding follow up", "receivable follow up", "client call",
+      "follow up register",
+    ],
+    summary: "Track follow-ups with clients on outstanding amounts and schedule call-backs.",
+    body: `### Client Follow Up
+
+Track **follow-ups with clients** on overdue / outstanding amounts so collections
+don't slip through the cracks.
+
+**Steps**
+1. Open **Finance → Billing / Receivables → Client Follow Up** → **New Follow Up**.
+2. Enter the **client**, the **outstanding amount**, related **PO / invoice numbers**,
+   and a **contact person** + number.
+3. Note what was **discussed** and set a **call-back date**.
+4. Save. The system files an alert when a follow-up is due.
+
+**Tips**
+- Use the **Import** button to upload a follow-up sheet in bulk (PO numbers are
+  resolved automatically against the PO register).
+- Pair it with **Accounts Receivable** and **Collection Ageing** to prioritise
+  the biggest overdue balances.`,
+    links: [
+      { label: "Client Follow Up", moduleId: "fin-client-follow-up" },
+      { label: "Accounts Receivable", moduleId: "accounts-receivable" },
+    ],
+  },
+
   // ── Invoices ───────────────────────────────────────────────────
   {
     id: "invoices",
@@ -396,22 +503,86 @@ Catches missing payments, duplicate entries, bank charges, and timing difference
     relatedModule: "fin-petty-cash",
     keywords: [
       "petty cash", "petty", "small cash", "reimburse", "voucher",
-      "office expenses", "cash expense", "petty cash book",
+      "office expenses", "cash expense", "petty cash book", "custodian",
+      "float", "daily cash report", "site summary", "settlement",
     ],
-    summary: "Record small day-to-day cash expenses and top-ups.",
+    summary: "Record small day-to-day cash expenses, top-ups, and run the three petty cash reports.",
     body: `### Petty Cash
 
-Petty Cash tracks small, day-to-day expenses paid in cash (tea, courier, postage, etc.).
+Petty Cash tracks small, day-to-day site and office expenses paid in cash,
+wallet or UPI — tea, local conveyance, diesel, stationery, courier, labour
+welfare, emergency purchases.
 
-**Steps**
-1. Open **Finance → Petty Cash** → **New Entry**.
-2. Choose **Expense** (money out) or **Top-up** (cash added to the box).
-3. Enter date, amount, category, and a note.
-4. Save → reduces/increases the petty cash balance.
+**Creating a voucher**
+1. Open **Finance → Petty Cash** → **New Voucher**.
+2. In **Project Allocation**, pick the **Site**, **Job Code**, **PO** and the costing
+   dimensions (**Cost Center**, **Department**, **Project Manager**) — these six tags
+   are required so the spend flows into Site-wise and Job-wise costing.
+3. In **Expense Details**, tap a category tile — **FUEL / MAINT / LOCAL / FOOD /
+   STATIONARY / MISC** (mapped to Travel / Maintenance / Site Material / Food &
+   Refreshment / Office Supplies / Miscellaneous) — or type a custom category,
+   enter the **amount**, choose **Debit** (money out) or **Credit** (float / top-up),
+   and describe the expense.
+4. In **Payment & Evidence**, choose **Cash / Wallet / UPI** and drop in the receipt.
+5. **Save Draft** keeps it as a draft; **Submit for Approval** sends it to the
+   approver (Draft → Pending → Approved). The running balance updates automatically.
 
-**Tips**
-- Set a float limit; top up when the box runs low.
-- Reconcile the physical cash count periodically.`,
+**Four tabs**
+| Tab | What it shows |
+|---|---|
+| **Vouchers** | The full voucher register with filters and approval actions |
+| **Daily Cash Report** | Opening balance → cash in → expense → closing, per day |
+| **Summary by Site** | Cash given vs expense vs balance, per site |
+| **Employee-wise Settlement** | Advance vs expense vs balance, per custodian |
+
+**Custodian & limit**
+Each voucher records the **custodian** (Site Incharge / Store Incharge / Admin
+Executive) and their sanctioned **limit** — e.g. a site petty cash limit of ₹50,000.
+
+See also: **Petty cash approval workflow** for the Draft → Pending → Approved cycle.`,
+    links: [{ label: "Petty Cash", moduleId: "fin-petty-cash" }],
+  },
+
+  // ── Petty Cash approval workflow ───────────────────────────────
+  {
+    id: "petty-cash-approval",
+    title: "Petty cash approval workflow",
+    relatedModule: "fin-petty-cash",
+    keywords: [
+      "petty cash approval", "approve voucher", "reject voucher", "submit voucher",
+      "approval", "approve", "reject", "pending approval", "draft voucher",
+      "approval history", "audit trail", "who approved", "rejection reason",
+    ],
+    summary: "Draft → Pending → Approved/Rejected cycle for petty cash vouchers, with full audit trail.",
+    popular: true,
+    body: `### Petty cash approval workflow
+
+Every voucher carries an **approval status** and moves through this cycle:
+
+\`\`\`
+Draft ──submit──▶ Pending ──approve──▶ Approved
+                     │
+                     └──reject──▶ Rejected ──resubmit──▶ Pending
+\`\`\`
+
+**Statuses**
+| Status | Meaning |
+|---|---|
+| **Draft** | Just created, not yet sent for approval |
+| **Pending** | Submitted, waiting on the approver |
+| **Approved** | Signed off — counts as final |
+| **Rejected** | Sent back with a reason; fix it and resubmit |
+
+**How to use it**
+- **Submit** (paper-plane icon) on a Draft or Rejected voucher sends it for approval.
+- **Approve** (✓) or **Reject** (✗) appear on Pending vouchers. Rejecting
+  *requires* a reason, which the requester sees on the voucher.
+- Click the **status badge** in the Approval column to open the full
+  **approval history** — who submitted, who approved or rejected, when, and any comments.
+
+**Finding what needs action**
+The **Pending Approval** stat card at the top shows the outstanding count, and the
+**Approval Status** filter narrows the register to just Pending (or Draft / Rejected).`,
     links: [{ label: "Petty Cash", moduleId: "fin-petty-cash" }],
   },
 
@@ -585,18 +756,41 @@ The P&L statement shows **Revenue − Expenses = Net Profit** for a chosen perio
     relatedModule: "taxation",
     keywords: [
       "tax", "taxation", "gst", "tax liability", "output tax", "input tax",
-      "itc", "tax payable", "gst return", "tds",
+      "itc", "tax payable", "gst return", "tds", "gstr", "gstr-1", "gstr-3b",
+      "gstr1", "gstr3b", "gst register", "sales register", "purchase register",
+      "tds register", "26q", "form 26q", "194c", "194j", "194i", "192",
+      "cgst", "sgst", "igst", "tds payable", "tds deduction",
     ],
-    summary: "Review GST collected (output) vs paid (input/ITC).",
-    body: `### Taxation
+    summary: "GST sales/purchase registers, GSTR-3B summary, and the TDS register with Form 26Q export.",
+    popular: true,
+    body: `### Taxation, GST & TDS
 
-The Taxation view summarises **GST** position:
-- **Output tax** — GST collected on sales invoices
-- **Input tax (ITC)** — GST paid on purchases
-- **Net payable** = Output − Input
+The Taxation screen has **six tabs**:
 
-Use it to prepare GST returns. Make sure every invoice/bill has the correct
-**GST rate** and the party's **GSTIN** is recorded.`,
+| Tab | What it does |
+|---|---|
+| **Tax Payments** | Statutory calendar — GST/TDS/PF/ESI dues and payment status |
+| **GST Sales Register** | Every sales invoice with taxable value + CGST/SGST/IGST split |
+| **GST Purchase Register** | Every purchase order with taxable value and GST (ITC) |
+| **GSTR-3B Summary** | Outward supplies, output tax, ITC available, **net payable** |
+| **TDS Register** | All deductions with section, rate, taxable amount and status |
+| **TDS Payable** | Outstanding TDS grouped by section, with Form 26Q export |
+
+**How GST is split**
+Supply within your home state → **CGST + SGST** (9% + 9%).
+Inter-state supply → **IGST** (18%). This is driven by the party's **state code**,
+so keep GSTIN and state on every party record accurate.
+
+**TDS sections tracked**
+- **194C** — Contractor payments
+- **194J** — Professional / technical fees
+- **194I** — Rent
+- **192** — Salary
+
+**Worked example**
+> Vendor bill ₹1,00,000 · TDS 194C @1% = ₹1,000 · Net payment ₹99,000
+
+Net GST payable on GSTR-3B = **Total output tax − ITC available**.`,
     links: [{ label: "Taxation", moduleId: "taxation" }],
   },
 
@@ -629,18 +823,91 @@ Use it to control spending and track performance against plan.`,
     relatedModule: "financial-reports",
     keywords: [
       "report", "reports", "financial report", "custom report", "export",
-      "download excel", "trial balance", "balance sheet",
+      "download excel", "trial balance", "balance sheet", "ageing", "aging",
+      "vendor ageing", "customer ageing", "collection ageing", "0-30", "90+",
+      "assets liabilities equity", "net worth", "cash flow",
     ],
-    summary: "Generate configurable reports and export to Excel.",
+    summary: "Balance Sheet, Vendor & Customer Ageing, cash flow, budget performance and tax compliance.",
+    popular: true,
     body: `### Financial Reports
 
-Configurable finance reports (Trial Balance, Balance Sheet, custom summaries).
+One dashboard with the core statements and analytics:
 
-**Steps**
-1. Open **Finance → Financial Reports**.
-2. Choose the report type and period/filters.
-3. View on screen → **Export to Excel/PDF** as needed.`,
+**Balance Sheet**
+Full **Assets / Liabilities / Equity** statement built from the Chart of Accounts,
+with a *Balanced* check that confirms Assets = Liabilities + Equity.
+
+**Vendor Ageing** and **Customer / Collection Ageing**
+Two separate reports (not one combined chart), each bucketing outstanding amounts into:
+
+| Bucket | Meaning |
+|---|---|
+| **0–30 days** | Current |
+| **31–60 days** | Watch |
+| **61–90 days** | Chase |
+| **90+ days** | Escalate |
+
+Ageing is measured from each bill's **due date**, so keep due dates accurate on
+AP and AR records.
+
+**Also on this screen**
+- Income Statement — revenue vs expenses by category
+- Cash Flow Trend — monthly inflow vs outflow
+- Budget Performance — planned vs actual, with utilisation bars
+- Tax Compliance — paid vs pending, with overdue warnings`,
     links: [{ label: "Financial Reports", moduleId: "financial-reports" }],
+  },
+
+  // ── Site / Job / PO wise profitability ────────────────────────
+  {
+    id: "profitability-tagging",
+    title: "Site, Job, PO & Customer-wise profitability",
+    relatedModule: "fin-profit-loss",
+    keywords: [
+      "site wise", "job wise", "po wise", "customer wise", "profitability",
+      "job code", "site code", "cost center", "costing", "tagging", "department wise",
+      "project manager", "budget vs actual", "which fields are mandatory",
+    ],
+    summary: "The six tags that make Site/Job/PO/Customer-wise profitability possible.",
+    popular: true,
+    body: `### Site, Job, PO & Customer-wise profitability
+
+Profitability analysis only works if transactions are **tagged** as they're entered.
+Six fields do the work:
+
+| Field | Used for |
+|---|---|
+| **Site Code** | Site-wise P&L and cost control |
+| **Job Code** | Job-wise profitability |
+| **PO Number** | PO-wise costing |
+| **Cost Center** | Department/cost-centre analysis |
+| **Department** | Department-wise costing |
+| **Project Manager** | Accountability |
+
+**Where to enter them**
+- Maintain the list of valid job codes in **Finance → Master Data → Jobs (PO-wise)**
+  — each job ties a unique **Job Code** to a Site and (optionally) the PO that funds it.
+- **Invoices, Purchase Orders, Payment Advices, Petty Cash, Expense Claims,
+  Credit Notes** — each has a **Site** dropdown and a **Job Code** field, plus
+  Cost Center / Department / Project Manager.
+- **Journal Entries** — Site and Party on the header; Job Code, PO, Cost Center,
+  Department and Project Manager as costing tags.
+- **AP / AR** — Site, linked Party and Job Code (AP also links the PO).
+
+**Why it matters**
+> Example: Material purchase ₹1,00,000 tagged \`SITE-001\` / \`JOB-2026-001\` / \`PO-125\`
+> flows straight into that site's P&L, that job's cost sheet, and that PO's costing —
+> no month-end reallocation needed.
+
+**Note**
+These costing tags are now **mandatory** on finance transactions — the system
+won't save an invoice, payment, petty cash voucher, PO, expense claim or credit
+note until they're tagged. Keep the **Jobs** master and **Sites** master up to
+date so the tags are always selectable.`,
+    links: [
+      { label: "Profit & Loss", moduleId: "fin-profit-loss" },
+      { label: "Financial Reports", moduleId: "financial-reports" },
+    ],
   },
 
   // ── Sites (masters) ───────────────────────────────────────────
@@ -667,6 +934,39 @@ Configurable finance reports (Trial Balance, Balance Sheet, custom summaries).
     ],
   },
 
+  // ── Jobs (master) ─────────────────────────────────────────────
+  {
+    id: "jobs",
+    title: "Jobs (PO-wise master)",
+    relatedModule: "fin-jobs",
+    keywords: [
+      "job", "jobs", "job master", "job code", "create job", "add job",
+      "po wise job", "job register", "job status", "active job",
+      "new job", "job master data",
+    ],
+    summary: "Master list of jobs — each links a unique job code to a site and (optionally) the PO that funds it.",
+    body: `### Jobs (PO-wise master)
+
+**Jobs** are the work packages every transaction is tagged to via a **Job Code**.
+Each job has one unique code (e.g. \`JOB-2026-006\`) and belongs to a **Site**.
+
+**Steps**
+1. Open **Finance → Master Data → Jobs (PO-wise)** → **New Job**.
+2. Pick the **Site** the job runs at.
+3. Optionally link the **Purchase Order** that funds the job.
+4. Add a short **description** and set a **status** (Active / Completed / On Hold / Closed).
+5. Save. Job codes are **auto-generated** (\`JOB-YYYY-NNN\`) if you leave the field blank.
+
+**Why it matters**
+When you enter an invoice, payment, petty cash, PO or expense claim, you tag the
+**Job Code** — that's what powers Job-wise costing and profitability. Keep the
+master list tidy: one job per work package, with the correct site and PO.`,
+    links: [
+      { label: "Jobs", moduleId: "fin-jobs" },
+      { label: "Sites", moduleId: "fin-sites" },
+    ],
+  },
+
   // ── Parties (masters) ─────────────────────────────────────────
   {
     id: "parties",
@@ -690,35 +990,6 @@ Configurable finance reports (Trial Balance, Balance Sheet, custom summaries).
 - A correct **GSTIN** is required for valid GST tax invoices.
 - Keep one party record per legal entity to avoid duplicate ledgers.`,
     links: [{ label: "Parties", moduleId: "fin-parties" }],
-  },
-
-  // ── Tally Sync ────────────────────────────────────────────────
-  {
-    id: "tally-sync",
-    title: "Tally Sync",
-    relatedModule: "fin-tally-sync",
-    keywords: [
-      "tally", "sync", "tally sync", "export to tally", "integration",
-      "accounting software", "push to tally",
-    ],
-    summary: "Push finance vouchers into Tally for external accounting.",
-    body: `### Tally Sync
-
-Pushes vouchers (invoices, payments, journals) from this app into **Tally** so
-your accountant can keep Tally books in sync.
-
-**Steps**
-1. Configure the connection in **Finance → Sync Config** (Tally URL / company).
-2. Open **Finance → Tally Sync**, pick a date range, and **Sync**.
-3. Review the sync log for successes/failures.
-
-**Tips**
-- Sync in small batches when first setting up.
-- Re-run after fixing any failing vouchers.`,
-    links: [
-      { label: "Tally Sync", moduleId: "fin-tally-sync" },
-      { label: "Sync Config", moduleId: "fin-sync-config" },
-    ],
   },
 
   // ── Workflows ─────────────────────────────────────────────────
@@ -749,6 +1020,63 @@ Every step is a double-entry posting, so the books always balance.`,
       { label: "Site Invoices", moduleId: "fin-invoices" },
       { label: "Payment Center", moduleId: "fin-payments" },
       { label: "Open Ledger", moduleId: "ledger" },
+    ],
+  },
+
+  // ── Procure-to-pay workflow ───────────────────────────────────
+  {
+    id: "workflow-procure-to-pay",
+    title: "Workflow: Purchase Requisition → PO → Payment",
+    popular: true,
+    keywords: [
+      "procure to pay", "p2p", "purchase requisition", "pr", "requisition",
+      "rfq", "quotation", "grn", "purchase invoice", "purchase flow",
+      "pr approval", "approve pr", "approval chain", "procurement workflow",
+    ],
+    summary: "The full procure-to-pay chain and how the PR approval workflow gates it.",
+    body: `### Workflow: Purchase Requisition → Payment
+
+The money-out chain, end to end:
+
+\`\`\`
+Purchase Request → RFQ → Quotation → PO → GRN
+     → Purchase Invoice → Payment Advice → Payment
+\`\`\`
+
+**1. Purchase Requisition (PR)**
+Raised by site staff for material they need. Every PR moves through a
+**four-step approval chain** before it can become a PO:
+
+\`\`\`
+Draft ──submit──▶ Pending Approval ──▶ Approved
+                        │
+                        └──reject──▶ back to Draft
+\`\`\`
+
+| Step | Approver |
+|---|---|
+| 1 | Site Engineer |
+| 2 | Project Manager |
+| 3 | Procurement |
+| 4 | Finance |
+
+Open a PR and use **Submit for Approval**, then **Approve Next** / **Reject**.
+Approvals are recorded in order with who acted and when. Rejecting **requires a
+reason**, sends the PR back to Draft, and resetting the chain on resubmission —
+so a reworked PR is re-approved from step 1.
+
+**2. PO onward**
+Once approved, convert to **RFQ** (to compare vendor bids) or straight to a **PO**.
+Receive material against a **GRN**, book the **vendor bill** (AP), issue a
+**Payment Advice**, then record the **Payment** — which posts
+*Dr Vendor A/c · Cr Bank A/c* and closes the payable.
+
+Tag **Site** and **Job Code** on the PO so the spend lands in the right
+site/job cost sheet.`,
+    links: [
+      { label: "Purchase Requisitions", moduleId: "procurement-pr" },
+      { label: "Purchase Orders", moduleId: "fin-purchase-orders" },
+      { label: "Payment Advices", moduleId: "fin-payment-advices" },
     ],
   },
 

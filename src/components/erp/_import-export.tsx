@@ -42,6 +42,7 @@ export async function exportToXLSX<T>(records: T[], columns: ExportColumn<T>[], 
         return [c.header, val ?? ''];
       }))
     );
+    if (data.length === 0) data.push(Object.fromEntries(columns.map(c => [c.header, ''])));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');

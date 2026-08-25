@@ -203,9 +203,17 @@ export default function SalesTenderRegister() {
     return sortDir === 'asc' ? <ChevronUp size={10} className="inline" /> : <ChevronDown size={10} className="inline" />;
   };
 
+  const generateTenderNo = () => {
+    const year = new Date().getFullYear();
+    const existing = new Set(records.map(r => r.tenderNo));
+    let seq = records.length + 1;
+    let candidate = `TDR/${year}/${String(seq).padStart(3, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `TDR/${year}/${String(seq).padStart(3, '0')}`; }
+    return candidate;
+  };
   const openNew = () => {
     setEditTarget(null);
-    setForm({ ...JSON.parse(JSON.stringify(EMPTY_FORM)) });
+    setForm({ ...JSON.parse(JSON.stringify(EMPTY_FORM)), tenderNo: generateTenderNo() });
     setFormOpen(true);
   };
 
@@ -709,7 +717,7 @@ export default function SalesTenderRegister() {
           <div className="grid grid-cols-2 gap-4 py-4">
             <div>
               <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Tender No</label>
-              <input value={form.tenderNo} onChange={e => setForm({...form, tenderNo: e.target.value})} className="vc-input" />
+              <input value={form.tenderNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated" />
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Client</label>

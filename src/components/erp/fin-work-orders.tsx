@@ -1,17 +1,20 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ClipboardList, Plus, Pencil, Trash2, Loader2, Upload, Printer } from 'lucide-react';
+import { ClipboardList, Plus, Pencil, Trash2, Loader2, Upload, Printer, Tag, FileText, CalendarDays, IndianRupee, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
+import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { FormField, FormSection, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
+import { useCompanyProfile } from '@/hooks/use-company-profile';
 
 interface Site { id: number; name: string; }
 interface WorkOrder {
   id: number; vendorName: string; vendorId: string; siteId: number; poNo: string; descriptionOfWork: string | null;
+  jobCode: string | null; costCenter: string | null; department: string | null; projectManager: string | null;
   orderInitiationDate: string | null; orderCompletionDate: string | null; bgAmount: number | null; bgSource: string | null;
   totalAmount: number; unexecutedWorkAmount: number; amountBookedLastFY: number; amountBookedCurrentFY: number; amountToBeBookedByEndFY: number;
   billRaisedAmount: number; amountReceivedOutOfBill: number; workDoneNotBilled: number;
@@ -20,13 +23,16 @@ interface WorkOrder {
 }
 interface FormData {
   vendorName: string; vendorId: string; siteId: number; poNo: string; descriptionOfWork: string;
+  jobCode: string; costCenter: string; department: string; projectManager: string;
   orderInitiationDate: string; orderCompletionDate: string; bgAmount: number; bgSource: string;
   totalAmount: number; unexecutedWorkAmount: number; amountBookedLastFY: number; amountBookedCurrentFY: number; amountToBeBookedByEndFY: number;
   billRaisedAmount: number; amountReceivedOutOfBill: number; workDoneNotBilled: number;
   delayExtensionLetter: string; reasonOfDelay: string; subcontractedTo: string; status: string;
 }
 const EMPTY: FormData = {
-  vendorName: '', vendorId: '', siteId: 0, poNo: '', descriptionOfWork: '', orderInitiationDate: '', orderCompletionDate: '',
+  vendorName: '', vendorId: '', siteId: 0, poNo: '', descriptionOfWork: '',
+  jobCode: '', costCenter: '', department: '', projectManager: '',
+  orderInitiationDate: '', orderCompletionDate: '',
   bgAmount: 0, bgSource: '', totalAmount: 0, unexecutedWorkAmount: 0, amountBookedLastFY: 0, amountBookedCurrentFY: 0,
   amountToBeBookedByEndFY: 0, billRaisedAmount: 0, amountReceivedOutOfBill: 0, workDoneNotBilled: 0,
   delayExtensionLetter: '', reasonOfDelay: '', subcontractedTo: '', status: 'Active',
@@ -36,6 +42,10 @@ const WO_COLUMNS: ExportColumn<WorkOrder>[] = [
   { header: 'PO No', accessor: 'poNo' },
   { header: 'Vendor', accessor: 'vendorName' },
   { header: 'Site', accessor: (r) => r.site?.name || '' },
+  { header: 'Job Code', accessor: 'jobCode' },
+  { header: 'Cost Center', accessor: 'costCenter' },
+  { header: 'Department', accessor: 'department' },
+  { header: 'Project Manager', accessor: 'projectManager' },
   { header: 'Description of Work', accessor: 'descriptionOfWork' },
   { header: 'Init Date', accessor: (r) => r.orderInitiationDate?.split('T')[0] ?? '' },
   { header: 'Total Amount', accessor: 'totalAmount' },
@@ -45,10 +55,17 @@ const WO_COLUMNS: ExportColumn<WorkOrder>[] = [
   { header: 'Status', accessor: 'status' },
 ];
 const STATUSES = ['Active', 'Completed', 'On Hold', 'Cancelled'];
+const STATUS_COLORS: Record<string, string> = { Active: '#00e676', Completed: '#00d4ff', 'On Hold': '#ffab40', Cancelled: '#5a6878' };
+const statusColor = (s: string) => STATUS_COLORS[s] || '#5a6878';
+const chipCls = 'inline-flex items-center bg-[#0f1318] border border-[#252e3a] rounded px-1.5 py-0.5 text-[10px] text-[#8899aa] font-mono whitespace-nowrap';
 const WO_IMPORT_FIELDS: ImportField[] = [
   { key: 'poNo', label: 'PO No', required: true },
   { key: 'vendorName', label: 'Vendor Name', required: true },
-  { key: 'site', label: 'Site Name' },
+  { key: 'site', label: 'Site Name', required: true },
+  { key: 'jobCode', label: 'Job Code', required: true },
+  { key: 'costCenter', label: 'Cost Center', required: true },
+  { key: 'department', label: 'Department', required: true },
+  { key: 'projectManager', label: 'Project Manager', required: true },
   { key: 'descriptionOfWork', label: 'Description of Work' },
   { key: 'orderInitiationDate', label: 'Order Initiation Date', type: 'date' },
   { key: 'orderCompletionDate', label: 'Order Completion Date', type: 'date' },
@@ -69,6 +86,7 @@ const WO_IMPORT_FIELDS: ImportField[] = [
 ];
 const WO_SAMPLE_ROW = {
   poNo: 'PO/NTPC/001', vendorName: 'NTPC Ltd', site: 'NTPC Rihand Dam Project',
+  jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma',
   descriptionOfWork: 'Overhauling of 500MW turbine generator set', orderInitiationDate: '2024-06-01',
   orderCompletionDate: '', totalAmount: 42000000, unexecutedWorkAmount: 18000000, billRaisedAmount: 24000000,
   amountReceivedOutOfBill: 20000000, workDoneNotBilled: 2000000, bgAmount: 5000000,
@@ -79,11 +97,11 @@ const WO_SAMPLE_ROW = {
 
 function generateMockWorkOrders(): WorkOrder[] {
   return [
-    { id: 1, vendorName: 'NTPC Ltd', vendorId: 'V001', siteId: 1, poNo: 'PO/NTPC/001', descriptionOfWork: 'Overhauling of 500MW turbine generator set', orderInitiationDate: '2024-06-01T00:00:00', orderCompletionDate: null, bgAmount: 5000000, bgSource: 'SBI Bank Guarantee', totalAmount: 42000000, unexecutedWorkAmount: 18000000, amountBookedLastFY: 12000000, amountBookedCurrentFY: 12000000, amountToBeBookedByEndFY: 0, billRaisedAmount: 24000000, amountReceivedOutOfBill: 20000000, workDoneNotBilled: 2000000, delayExtensionLetter: null, reasonOfDelay: null, subcontractedTo: 'Bharat Heavy Electricals', status: 'Active', site: { id: 1, name: 'NTPC Rihand Dam Project' } },
-    { id: 2, vendorName: 'BALCO', vendorId: 'V002', siteId: 2, poNo: 'PO/BALCO/002', descriptionOfWork: 'Erection of 320kA potline structure', orderInitiationDate: '2024-08-15T00:00:00', orderCompletionDate: null, bgAmount: 3000000, bgSource: 'HDFC Bank Guarantee', totalAmount: 28000000, unexecutedWorkAmount: 12000000, amountBookedLastFY: 8000000, amountBookedCurrentFY: 8000000, amountToBeBookedByEndFY: 0, billRaisedAmount: 16000000, amountReceivedOutOfBill: 14000000, workDoneNotBilled: 1500000, delayExtensionLetter: null, reasonOfDelay: 'Monsoon delay — 3 weeks', subcontractedTo: 'Tata Projects Ltd', status: 'Active', site: { id: 2, name: 'BALCO Aluminium Smelter' } },
-    { id: 3, vendorName: 'Coal India Ltd', vendorId: 'V003', siteId: 3, poNo: 'PO/CIL/003', descriptionOfWork: 'Coal crusher & conveyor system installation', orderInitiationDate: '2024-04-01T00:00:00', orderCompletionDate: '2025-03-31T00:00:00', bgAmount: 2000000, bgSource: 'UCO Bank FD', totalAmount: 15000000, unexecutedWorkAmount: 0, amountBookedLastFY: 9000000, amountBookedCurrentFY: 6000000, amountToBeBookedByEndFY: 0, billRaisedAmount: 14500000, amountReceivedOutOfBill: 14500000, workDoneNotBilled: 0, delayExtensionLetter: null, reasonOfDelay: null, subcontractedTo: null, status: 'Completed', site: { id: 3, name: 'Coal India Eastern Coalfield' } },
-    { id: 4, vendorName: 'Vedanta Ltd', vendorId: 'V004', siteId: 4, poNo: 'PO/VED/004', descriptionOfWork: 'Flue gas desulphurization plant civil works', orderInitiationDate: '2025-01-10T00:00:00', orderCompletionDate: null, bgAmount: 8000000, bgSource: 'PNB Bank Guarantee', totalAmount: 55000000, unexecutedWorkAmount: 45000000, amountBookedLastFY: 0, amountBookedCurrentFY: 5000000, amountToBeBookedByEndFY: 5000000, billRaisedAmount: 5000000, amountReceivedOutOfBill: 0, workDoneNotBilled: 3000000, delayExtensionLetter: 'Extension granted up to Jun 2026', reasonOfDelay: null, subcontractedTo: 'Larsen & Toubro Ltd', status: 'Active', site: { id: 4, name: 'Vedanta Jharsuguda Smelter' } },
-    { id: 5, vendorName: 'Hindalco Industries', vendorId: 'V005', siteId: 5, poNo: 'PO/HIN/005', descriptionOfWork: 'Captive power plant grid synchronization', orderInitiationDate: '2024-09-01T00:00:00', orderCompletionDate: null, bgAmount: 1500000, bgSource: 'Axis Bank Guarantee', totalAmount: 18000000, unexecutedWorkAmount: 7000000, amountBookedLastFY: 5000000, amountBookedCurrentFY: 6000000, amountToBeBookedByEndFY: 0, billRaisedAmount: 11000000, amountReceivedOutOfBill: 9000000, workDoneNotBilled: 800000, delayExtensionLetter: null, reasonOfDelay: 'Equipment delivery delayed by vendor', subcontractedTo: null, status: 'Active', site: { id: 5, name: 'Hindalco Mahan Aluminium' } },
+    { id: 1, vendorName: 'NTPC Ltd', vendorId: 'V001', siteId: 1, poNo: 'PO/NTPC/001', jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', descriptionOfWork: 'Overhauling of 500MW turbine generator set', orderInitiationDate: '2024-06-01T00:00:00', orderCompletionDate: null, bgAmount: 5000000, bgSource: 'SBI Bank Guarantee', totalAmount: 42000000, unexecutedWorkAmount: 18000000, amountBookedLastFY: 12000000, amountBookedCurrentFY: 12000000, amountToBeBookedByEndFY: 0, billRaisedAmount: 24000000, amountReceivedOutOfBill: 20000000, workDoneNotBilled: 2000000, delayExtensionLetter: null, reasonOfDelay: null, subcontractedTo: 'Bharat Heavy Electricals', status: 'Active', site: { id: 1, name: 'NTPC Rihand Dam Project' } },
+    { id: 2, vendorName: 'BALCO', vendorId: 'V002', siteId: 2, poNo: 'PO/BALCO/002', jobCode: 'JOB-2026-002', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'A. Verma', descriptionOfWork: 'Erection of 320kA potline structure', orderInitiationDate: '2024-08-15T00:00:00', orderCompletionDate: null, bgAmount: 3000000, bgSource: 'HDFC Bank Guarantee', totalAmount: 28000000, unexecutedWorkAmount: 12000000, amountBookedLastFY: 8000000, amountBookedCurrentFY: 8000000, amountToBeBookedByEndFY: 0, billRaisedAmount: 16000000, amountReceivedOutOfBill: 14000000, workDoneNotBilled: 1500000, delayExtensionLetter: null, reasonOfDelay: 'Monsoon delay — 3 weeks', subcontractedTo: 'Tata Projects Ltd', status: 'Active', site: { id: 2, name: 'BALCO Aluminium Smelter' } },
+    { id: 3, vendorName: 'Coal India Ltd', vendorId: 'V003', siteId: 3, poNo: 'PO/CIL/003', jobCode: 'JOB-2026-003', costCenter: 'CC-SIT-003', department: 'Operations', projectManager: 'P. Iyer', descriptionOfWork: 'Coal crusher & conveyor system installation', orderInitiationDate: '2024-04-01T00:00:00', orderCompletionDate: '2025-03-31T00:00:00', bgAmount: 2000000, bgSource: 'UCO Bank FD', totalAmount: 15000000, unexecutedWorkAmount: 0, amountBookedLastFY: 9000000, amountBookedCurrentFY: 6000000, amountToBeBookedByEndFY: 0, billRaisedAmount: 14500000, amountReceivedOutOfBill: 14500000, workDoneNotBilled: 0, delayExtensionLetter: null, reasonOfDelay: null, subcontractedTo: null, status: 'Completed', site: { id: 3, name: 'Coal India Eastern Coalfield' } },
+    { id: 4, vendorName: 'Vedanta Ltd', vendorId: 'V004', siteId: 4, poNo: 'PO/VED/004', jobCode: 'JOB-2026-004', costCenter: 'CC-SIT-004', department: 'Projects', projectManager: 'S. Rao', descriptionOfWork: 'Flue gas desulphurization plant civil works', orderInitiationDate: '2025-01-10T00:00:00', orderCompletionDate: null, bgAmount: 8000000, bgSource: 'PNB Bank Guarantee', totalAmount: 55000000, unexecutedWorkAmount: 45000000, amountBookedLastFY: 0, amountBookedCurrentFY: 5000000, amountToBeBookedByEndFY: 5000000, billRaisedAmount: 5000000, amountReceivedOutOfBill: 0, workDoneNotBilled: 3000000, delayExtensionLetter: 'Extension granted up to Jun 2026', reasonOfDelay: null, subcontractedTo: 'Larsen & Toubro Ltd', status: 'Active', site: { id: 4, name: 'Vedanta Jharsuguda Smelter' } },
+    { id: 5, vendorName: 'Hindalco Industries', vendorId: 'V005', siteId: 5, poNo: 'PO/HIN/005', jobCode: 'JOB-2026-005', costCenter: 'CC-SIT-005', department: 'Projects', projectManager: 'M. Khan', descriptionOfWork: 'Captive power plant grid synchronization', orderInitiationDate: '2024-09-01T00:00:00', orderCompletionDate: null, bgAmount: 1500000, bgSource: 'Axis Bank Guarantee', totalAmount: 18000000, unexecutedWorkAmount: 7000000, amountBookedLastFY: 5000000, amountBookedCurrentFY: 6000000, amountToBeBookedByEndFY: 0, billRaisedAmount: 11000000, amountReceivedOutOfBill: 9000000, workDoneNotBilled: 800000, delayExtensionLetter: null, reasonOfDelay: 'Equipment delivery delayed by vendor', subcontractedTo: null, status: 'Active', site: { id: 5, name: 'Hindalco Mahan Aluminium' } },
   ];
 }
 
@@ -117,6 +135,7 @@ function numToWords(n: number): string {
 
 
 export default function FinWorkOrders() {
+  const companyProfile = useCompanyProfile();
   const [records, setRecords] = useState<WorkOrder[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,6 +148,16 @@ export default function FinWorkOrders() {
   const [importOpen, setImportOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [partyFilter, setPartyFilter] = useState('all');
+  const { errors: formErrors, validate, clearError } = useFormValidation<FormData>({
+    vendorName: required('Vendor Name'),
+    poNo: required('PO No'),
+    siteId: (v) => (!v) ? 'Site Code is required' : undefined,
+    jobCode: required('Job Code'),
+    costCenter: required('Cost Center'),
+    department: required('Department'),
+    projectManager: required('Project Manager'),
+  });
+  const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
   const vendorNames = useMemo(() => [...new Set(records.map(r => r.vendorName).filter(Boolean))].sort(), [records]);
 
@@ -172,11 +201,20 @@ export default function FinWorkOrders() {
   }, []);
   useEffect(() => { fetch_(); }, [fetch_]);
 
-  const openNew = () => { setEditTarget(null); setForm(EMPTY); setFormOpen(true); };
+  const generatePoNo = () => {
+    const year = new Date().getFullYear();
+    const existing = new Set(records.map(r => r.poNo));
+    let seq = records.length + 1;
+    let candidate = `PO/${year}/${String(seq).padStart(3, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `PO/${year}/${String(seq).padStart(3, '0')}`; }
+    return candidate;
+  };
+  const openNew = () => { setEditTarget(null); setForm({ ...EMPTY, poNo: generatePoNo() }); setFormOpen(true); };
   const openEdit = (r: WorkOrder) => {
     setEditTarget(r);
     setForm({
       vendorName: r.vendorName, vendorId: r.vendorId, siteId: r.siteId, poNo: r.poNo, descriptionOfWork: r.descriptionOfWork || '',
+      jobCode: r.jobCode || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '',
       orderInitiationDate: r.orderInitiationDate?.split('T')[0] || '', orderCompletionDate: r.orderCompletionDate?.split('T')[0] || '',
       bgAmount: r.bgAmount || 0, bgSource: r.bgSource || '', totalAmount: r.totalAmount, unexecutedWorkAmount: r.unexecutedWorkAmount,
       amountBookedLastFY: r.amountBookedLastFY, amountBookedCurrentFY: r.amountBookedCurrentFY, amountToBeBookedByEndFY: r.amountToBeBookedByEndFY,
@@ -188,7 +226,7 @@ export default function FinWorkOrders() {
   };
 
   const handleSubmit = async () => {
-    if (!form.vendorName || !form.poNo) { toast.error('Vendor and PO No are required'); return; }
+    if (!validate(form)) { toast.error('Please fix the highlighted fields'); return; }
     setSubmitting(true);
     try {
       const payload: Record<string, unknown> = {
@@ -236,67 +274,162 @@ export default function FinWorkOrders() {
     const win = window.open('', '_blank');
     if (!win) return;
     const fmtNum = (n: number) => '₹ ' + (n ?? 0).toLocaleString('en-IN');
-    const fmtDate = (d: string | null) => d ? d.split('T')[0] : '—';
-    const linesHtml = `
-      <tr><td class="c">1</td><td>${r.poNo}</td><td>${r.vendorName}</td><td>${r.descriptionOfWork || '—'}</td><td class="r">${fmtNum(r.totalAmount)}</td></tr>
-      <tr class="total-row"><td class="c" colspan="4">TOTAL</td><td class="r">${fmtNum(r.totalAmount)}</td></tr>`;
+    const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const siteName = r.site?.name || '—';
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>PO - ${r.poNo}</title>
+    const companyName = companyProfile.name || 'VoltCore Engineering Pvt Ltd';
+    const companyAddress = companyProfile.address || '123 Industrial Area, Korba, Chhattisgarh - 495677';
+    const companyGstin = companyProfile.gstin || '';
+    const companyPan = companyProfile.pan || '';
+    const logoHtml = companyProfile.logoUrl ? `<img src="${companyProfile.logoUrl}" alt="Logo" class="brand-logo"/>` : `<div class="brand-mark">WO</div>`;
+    const statNow = new Date();
+    const financialRows = [
+      ['Total Amount', r.totalAmount], ['Unexecuted Work Amount', r.unexecutedWorkAmount],
+      ['Bill Raised', r.billRaisedAmount], ['Amount Received Out of Bill', r.amountReceivedOutOfBill],
+      ['Work Done Not Billed', r.workDoneNotBilled],
+      ['Amount Booked Last FY', r.amountBookedLastFY], ['Amount Booked Current FY', r.amountBookedCurrentFY],
+      ['Amount To Be Booked By End FY', r.amountToBeBookedByEndFY],
+    ].map(([label, val]) => `<tr><td class="lbl-cell">${label}</td><td class="val-cell">${fmtNum(val as number)}</td></tr>`).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Work Order - ${esc(r.poNo)}</title>
     <style>
       *{margin:0;padding:0;box-sizing:border-box}
-      body{font-family:Arial,sans-serif;background:#fff;color:#111;padding:20px}
-      .po{max-width:800px;margin:0 auto;border:2px solid #000}
-      .header{display:grid;grid-template-columns:auto 1fr;padding:12px 16px;background:#f5a623;color:#0a0d12}
-      .header-text h1{font-size:18px;font-weight:bold;letter-spacing:1px}
-      .header-text h2{font-size:14px;font-weight:normal;margin-top:2px}
-      .info-grid{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #000}
-      .info-grid>div{padding:8px 12px}
-      .info-grid>div:first-child{border-right:1px solid #000}
-      .info-row{display:flex;margin:2px 0;font-size:10px}
-      .info-row .lbl{font-weight:bold;min-width:130px}
-      .info-row .lbl::after{content:':'}
-      table{width:100%;border-collapse:collapse}
-      th,td{border:1px solid #000;padding:5px 7px;font-size:10px}
-      th{background:#f5a623;color:#0a0d12;font-size:9px;text-transform:uppercase;text-align:center}
-      td.r{text-align:right;font-family:monospace}
-      td.c{text-align:center}
-      tr.total-row td{font-weight:bold;border-top:2px solid #000}
-      .amt-words{padding:7px 12px;border-top:1px solid #000;font-size:10px}
-      .sign-grid{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:2px solid #000;min-height:80px}
-      .sign-box{border-right:1px solid #000;padding:8px 10px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;text-align:center;font-size:9px}
-      .sign-box:last-child{border-right:none}
-      .sign-box .role{font-weight:bold;margin-top:30px;border-top:1px solid #555;padding-top:4px;width:75%}
-      .footer-note{text-align:center;padding:5px;font-size:8px;color:#555;border-top:1px solid #000}
-      @media print{body{padding:0}@page{size:landscape;margin:0.3in}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
+      body{font-family:'Segoe UI',Arial,sans-serif;background:#e9ecef;color:#191c1e;padding:24px}
+      .sheet{max-width:800px;margin:0 auto;background:#fff;padding:36px;box-shadow:0 0 20px rgba(0,0,0,0.12);position:relative}
+      header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #e8891a;padding-bottom:20px;margin-bottom:24px}
+      .brand{display:flex;align-items:center;gap:12px}
+      .brand-mark{width:40px;height:40px;border-radius:4px;background:#e8891a;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}
+      .brand-logo{height:40px;max-width:120px;object-fit:contain}
+      .brand-name{font-size:19px;font-weight:800;letter-spacing:.3px;color:#191c1e}
+      .brand-sub{font-size:10px;color:#666;margin-top:2px;max-width:260px}
+      .doc-title{text-align:right}
+      .doc-title h2{font-size:17px;font-weight:700;color:#191c1e}
+      .badge{display:inline-block;margin-top:6px;padding:2px 8px;font-size:9px;font-weight:700;letter-spacing:.5px;border:1px solid #dac2af;border-radius:3px;background:#f2f4f6;color:#544435}
+      .doc-no{font-size:13px;font-weight:700;color:#e8891a;margin-top:8px}
+      .meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid #dac2af;margin-bottom:24px;background:#f7f9fb}
+      .meta-grid>div{padding:10px 14px;border-right:1px solid #dac2af}
+      .meta-grid>div:last-child{border-right:none}
+      .meta-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#544435;font-weight:600}
+      .meta-val{font-size:13px;font-weight:700;color:#191c1e;margin-top:3px}
+      .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+      h3.section{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#191c1e;border-left:3px solid #e8891a;padding-left:10px;margin-bottom:10px}
+      section{margin-bottom:24px}
+      .pill-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+      .pill{background:#eceef0;border:1px solid #dac2af;padding:10px 12px}
+      .pill-lbl{font-size:9px;color:#544435;text-transform:uppercase;letter-spacing:.4px}
+      .pill-val{font-size:15px;font-weight:700;color:#191c1e;margin-top:3px}
+      .task-box{border:1px solid #dac2af;padding:14px}
+      .task-title{font-size:14px;font-weight:700;margin-bottom:6px}
+      .task-desc{font-size:11px;line-height:1.6;color:#3a3a3a;text-align:justify}
+      .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+      table.kv{width:100%;border-collapse:collapse}
+      table.kv td{padding:6px 0;font-size:11px;border-bottom:1px dotted #ccc}
+      table.kv td:first-child{color:#544435}
+      table.kv td:last-child{text-align:right;font-weight:700}
+      table.fin{width:100%;border-collapse:collapse;border:1px solid #dac2af}
+      table.fin td{padding:7px 12px;font-size:11px;border-bottom:1px solid #eceef0}
+      table.fin tr:last-child td{border-bottom:none}
+      td.lbl-cell{color:#544435}
+      td.val-cell{text-align:right;font-weight:700;font-family:'Consolas',monospace}
+      .amt-words{margin-top:10px;font-size:10px;font-style:italic;color:#544435}
+      footer{margin-top:32px;padding-top:20px}
+      .sign-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px}
+      .sign-line{border-top:1px solid #191c1e;padding-top:6px}
+      .sign-role{font-size:10px;font-weight:700;text-transform:uppercase}
+      .sign-sub{font-size:9px;color:#666;margin-top:1px}
+      .doc-footer{margin-top:24px;padding-top:12px;border-top:1px solid #dac2af;display:flex;justify-content:space-between;font-size:9px;color:#666}
+      .watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.03;transform:rotate(-35deg);pointer-events:none;font-size:90px;font-weight:800;text-transform:uppercase;white-space:nowrap}
+      @media print{body{background:#fff;padding:0}.sheet{box-shadow:none;padding:16mm}@page{size:A4;margin:0}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
+      .no-print{display:block}
+      @media print{.no-print{display:none!important}}
     </style></head><body>
-    <div class="po">
-      <div class="header"><div></div><div class="header-text"><h1>PURCHASE ORDER</h1><h2>${r.poNo}</h2></div></div>
-      <div class="info-grid">
+    <div class="sheet">
+      <div class="watermark">${esc(r.status)}</div>
+      <header>
+        <div class="brand">
+          ${logoHtml}
+          <div>
+            <div class="brand-name">${esc(companyName)}</div>
+            <div class="brand-sub">${esc(companyAddress)}${companyGstin ? ` &middot; GSTIN ${esc(companyGstin)}` : ''}${companyPan ? ` &middot; PAN ${esc(companyPan)}` : ''}</div>
+          </div>
+        </div>
+        <div class="doc-title">
+          <h2>WORK ORDER</h2>
+          <span class="badge">${r.status === 'Active' ? 'IN PROGRESS' : r.status.toUpperCase()}</span>
+          <div class="doc-no">${esc(r.poNo)}</div>
+        </div>
+      </header>
+
+      <div class="meta-grid">
+        <div><div class="meta-lbl">Order Initiation Date</div><div class="meta-val">${fmtDate(r.orderInitiationDate)}</div></div>
+        <div><div class="meta-lbl">Est. Completion</div><div class="meta-val">${fmtDate(r.orderCompletionDate)}</div></div>
+        <div><div class="meta-lbl">Status</div><div class="meta-val"><span class="status-dot" style="background:${statusColor(r.status)}"></span>${esc(r.status)}</div></div>
+      </div>
+
+      <section>
+        <h3 class="section">Project Classification</h3>
+        <div class="pill-grid">
+          <div class="pill"><div class="pill-lbl">Site Code</div><div class="pill-val">${esc(siteName)}</div></div>
+          <div class="pill"><div class="pill-lbl">Job Code</div><div class="pill-val">${esc(r.jobCode || '—')}</div></div>
+          <div class="pill"><div class="pill-lbl">Cost Center</div><div class="pill-val">${esc(r.costCenter || '—')}</div></div>
+        </div>
+      </section>
+
+      <section>
+        <h3 class="section">Task Specification</h3>
+        <div class="task-box">
+          <div class="task-title">${esc(r.vendorName)}${r.vendorId ? ` <span style="font-weight:400;color:#666;font-size:11px">(${esc(r.vendorId)})</span>` : ''}</div>
+          <p class="task-desc">${esc(r.descriptionOfWork || 'No description provided.')}</p>
+        </div>
+      </section>
+
+      <section class="two-col">
         <div>
-          <div class="info-row"><span class="lbl">Vendor</span><span>${r.vendorName}</span></div>
-          <div class="info-row"><span class="lbl">Site</span><span>${siteName}</span></div>
-          <div class="info-row"><span class="lbl">Description</span><span>${r.descriptionOfWork || '—'}</span></div>
+          <h3 class="section">Allocation</h3>
+          <table class="kv">
+            <tr><td>Department</td><td>${esc(r.department || '—')}</td></tr>
+            <tr><td>Project Manager</td><td>${esc(r.projectManager || '—')}</td></tr>
+            ${r.subcontractedTo ? `<tr><td>Subcontracted To</td><td>${esc(r.subcontractedTo)}</td></tr>` : ''}
+          </table>
         </div>
         <div>
-          <div class="info-row"><span class="lbl">PO No</span><span><b>${r.poNo}</b></span></div>
-          <div class="info-row"><span class="lbl">Initiation Date</span><span>${fmtDate(r.orderInitiationDate)}</span></div>
-          <div class="info-row"><span class="lbl">Status</span><span>${r.status}</span></div>
+          <h3 class="section">Bank Guarantee</h3>
+          <table class="kv">
+            <tr><td>BG Amount</td><td>${fmtNum(r.bgAmount || 0)}</td></tr>
+            <tr><td>BG Source</td><td>${esc(r.bgSource || '—')}</td></tr>
+          </table>
         </div>
-      </div>
-      <table><thead><tr><th style="width:35px">#</th><th>PO No</th><th>Vendor</th><th>Description of Work</th><th>Total Amount</th></tr></thead><tbody>${linesHtml}</tbody></table>
-      <div class="amt-words"><b>Amount in Words:</b> Rupees ${numToWords(r.totalAmount || 0)}</div>
-      <div class="sign-grid">
-        <div class="sign-box"><div class="role">Prepared By</div></div>
-        <div class="sign-box"><div class="role">Checked By</div></div>
-        <div class="sign-box"><div class="role">Authorized By</div></div>
-      </div>
-      <div class="footer-note">This is a computer-generated document. E. &amp; O. E.</div>
+      </section>
+
+      ${r.reasonOfDelay || r.delayExtensionLetter ? `<section>
+        <h3 class="section">Delay Notes</h3>
+        <table class="kv">
+          ${r.reasonOfDelay ? `<tr><td>Reason of Delay</td><td>${esc(r.reasonOfDelay)}</td></tr>` : ''}
+          ${r.delayExtensionLetter ? `<tr><td>Extension Letter</td><td>${esc(r.delayExtensionLetter)}</td></tr>` : ''}
+        </table>
+      </section>` : ''}
+
+      <section>
+        <h3 class="section">Financial Summary</h3>
+        <table class="fin">${financialRows}</table>
+        <div class="amt-words">Amount in Words: Rupees ${numToWords(r.totalAmount || 0)}</div>
+      </section>
+
+      <footer>
+        <div class="sign-grid">
+          <div class="sign-line"><div class="sign-role">Prepared By</div><div class="sign-sub">Site Engineer</div></div>
+          <div class="sign-line"><div class="sign-role">Checked By</div><div class="sign-sub">Project Manager</div></div>
+          <div class="sign-line" style="border-top:2px solid #e8891a"><div class="sign-role" style="color:#e8891a">Authorized By</div><div class="sign-sub">Plant Director</div></div>
+        </div>
+        <div class="doc-footer">
+          <span>Document: ${esc(r.poNo)} &middot; This is a computer-generated document.</span>
+          <span>Printed ${statNow.toLocaleDateString('en-IN')} ${statNow.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+      </footer>
     </div>
     <div style="text-align:center;margin:20px" class="no-print">
-      <button onclick="window.print()" style="padding:8px 20px;background:#f5a623;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;color:#0a0d12">Print / Save PDF</button>
+      <button onclick="window.print()" style="padding:8px 20px;background:#e8891a;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;color:#fff">Print / Save PDF</button>
       <button onclick="window.close()" style="padding:8px 16px;background:#252e3a;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;color:#e2e8f0;margin-left:8px">Close</button>
     </div>
-    <style>.no-print{display:block}@media print{.no-print{display:none!important}}</style>
     </body></html>`;
     win.document.write(html);
     win.document.close();
@@ -344,46 +477,88 @@ export default function FinWorkOrders() {
             </div>
           )}
         </div>
-        <div className="overflow-x-auto"><div className="max-h-[480px] overflow-y-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]"><th className="py-2 px-3 w-8"><Checkbox checked={allPageSelected} onCheckedChange={toggleAllOnPage} /></th>{['PO No','Vendor','Description of Work','Init Date','Total Amt','Unexecuted','Bill Raised','Received','Status',''].map(h=><th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">{h}</th>)}</tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r=><tr key={r.id} className="hover:bg-[#141920]"><td className="py-2.5 px-3"><Checkbox checked={selected.has(r.id)} onCheckedChange={()=>toggleRow(r.id)} /></td><td className="py-2.5 px-3 text-[#f5a623] font-mono whitespace-nowrap">{r.poNo}</td><td className="py-2.5 px-3 text-[#e2e8f0] max-w-[150px] truncate">{r.vendorName||'—'}</td><td className="py-2.5 px-3 text-[#8899aa] max-w-[160px] truncate">{r.descriptionOfWork||'—'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.orderInitiationDate?.split('T')[0]||'—'}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-mono text-right whitespace-nowrap">{fmt(r.totalAmount)}</td><td className="py-2.5 px-3 text-[#ffab40] font-mono text-right whitespace-nowrap">{fmt(r.unexecutedWorkAmount)}</td><td className="py-2.5 px-3 text-[#00d4ff] font-mono text-right whitespace-nowrap">{fmt(r.billRaisedAmount)}</td><td className="py-2.5 px-3 text-[#00e676] font-mono text-right whitespace-nowrap">{fmt(r.amountReceivedOutOfBill)}</td><td className="py-2.5 px-3"><span className={`vc-badge ${r.status==='Active'?'bg-[#00e676]/15 text-[#00e676]':r.status==='Completed'?'bg-[#00d4ff]/15 text-[#00d4ff]':r.status==='On Hold'?'bg-[#ffab40]/15 text-[#ffab40]':'bg-[#5a6878]/15 text-[#5a6878]'}`}>{r.status}</span></td><td className="py-2.5 px-3"><div className="flex gap-1"><button onClick={()=>openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13}/></button><button onClick={()=>handlePrint(r)} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10"><Printer size={13}/></button><button onClick={()=>{setDeleteTarget(r);setDeleteOpen(true);}} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13}/></button></div></td></tr>)}{tc.pageItems.length===0&&<tr><td colSpan={11} className="py-8 text-center text-[#5a6878]">No matching work orders</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
+        <div className="overflow-x-auto"><div className="max-h-[480px] overflow-y-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]"><th className="py-2 px-3 w-8"><Checkbox checked={allPageSelected} onCheckedChange={toggleAllOnPage} /></th>{['PO No','Vendor','Job Code','Cost Center','Description of Work','Init Date','Total Amt','Unexecuted','Bill Raised','Received','Status',''].map(h=><th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">{h}</th>)}</tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r=><tr key={r.id} className="hover:bg-[#141920] transition-colors" style={{ borderLeft: `3px solid ${statusColor(r.status)}` }}><td className="py-2.5 px-3"><Checkbox checked={selected.has(r.id)} onCheckedChange={()=>toggleRow(r.id)} /></td><td className="py-2.5 px-3 text-[#f5a623] font-mono font-semibold whitespace-nowrap">{r.poNo}</td><td className="py-2.5 px-3 text-[#e2e8f0] max-w-[150px] truncate">{r.vendorName||'—'}</td><td className="py-2.5 px-3"><span className={chipCls}>{r.jobCode||'—'}</span></td><td className="py-2.5 px-3"><span className={chipCls}>{r.costCenter||'—'}</span></td><td className="py-2.5 px-3 text-[#8899aa] max-w-[160px] truncate">{r.descriptionOfWork||'—'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.orderInitiationDate?.split('T')[0]||'—'}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-mono text-right whitespace-nowrap">{fmt(r.totalAmount)}</td><td className="py-2.5 px-3 text-[#ffab40] font-mono text-right whitespace-nowrap">{fmt(r.unexecutedWorkAmount)}</td><td className="py-2.5 px-3 text-[#00d4ff] font-mono text-right whitespace-nowrap">{fmt(r.billRaisedAmount)}</td><td className="py-2.5 px-3 text-[#00e676] font-mono text-right whitespace-nowrap">{fmt(r.amountReceivedOutOfBill)}</td><td className="py-2.5 px-3"><span className="vc-badge" style={{ background: `${statusColor(r.status)}26`, color: statusColor(r.status) }}>{r.status}</span></td><td className="py-2.5 px-3"><div className="flex gap-1"><button onClick={()=>openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13}/></button><button onClick={()=>handlePrint(r)} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10"><Printer size={13}/></button><button onClick={()=>{setDeleteTarget(r);setDeleteOpen(true);}} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13}/></button></div></td></tr>)}{tc.pageItems.length===0&&<tr><td colSpan={13} className="py-8 text-center text-[#5a6878]">No matching work orders</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
 
-      <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle className="text-[#f5a623]">{editTarget?'Edit Purchase Order':'New Purchase Order'}</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className={lbl}>Vendor Name *</label><input value={form.vendorName} onChange={e=>setForm(p=>({...p,vendorName:e.target.value}))} className={inputCls}/></div>
-            <div><label className={lbl}>PO No *</label><input value={form.poNo} onChange={e=>setForm(p=>({...p,poNo:e.target.value}))} className={inputCls}/></div>
+      <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-[#f5a623]">{editTarget ? `Edit Work Order — ${editTarget.poNo}` : 'Create New Work Order'}</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Left rail — classification & status */}
+          <div className="lg:col-span-5 space-y-4">
+            <FormSection title="Classification" icon={Tag}>
+              <FormField label="Site Code" required error={formErrors.siteId}>
+                <SearchableSelect value={form.siteId ? String(form.siteId) : ''} onChange={v=>setField('siteId', v ? Number(v) : 0)} options={sites.map(s=>({ value: String(s.id), label: s.name }))} placeholder="Select site..."/>
+              </FormField>
+              <FormField label="Job Code" required error={formErrors.jobCode} hint="Flows this work order into Job-wise costing">
+                <DatalistField id="wo-job-code" value={form.jobCode} onChange={v=>setField('jobCode', v)} options={[...new Set(records.map(r=>r.jobCode).filter(Boolean) as string[])]} placeholder="JOB-2026-001" />
+              </FormField>
+              <FormField label="PO No" required error={formErrors.poNo} hint="This work order's own reference number">
+                <input value={form.poNo} readOnly className={inputCls + ' opacity-60'} placeholder="Auto-generated"/>
+              </FormField>
+            </FormSection>
+
+            <FormSection title="Costing" icon={IndianRupee}>
+              <CostingFields prefix="wo" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
+            </FormSection>
+
+            <FormSection title="Status" icon={ShieldCheck}>
+              <div className="grid grid-cols-4 gap-1 p-1 bg-[#0f1318] rounded-lg border border-[#252e3a]">
+                {STATUSES.map(s => (
+                  <button key={s} type="button" onClick={()=>setField('status', s)}
+                    className={`py-1.5 text-[10px] font-semibold rounded transition-colors ${form.status===s ? 'bg-[#f5a623] text-[#0a0d12]' : 'text-[#8899aa] hover:bg-[#1a2028]'}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </FormSection>
           </div>
-          <div><label className={lbl}>Description of Work</label><input value={form.descriptionOfWork} onChange={e=>setForm(p=>({...p,descriptionOfWork:e.target.value}))} className={inputCls}/></div>
-          <div className="grid grid-cols-3 gap-3">
-            <div><label className={lbl}>Site</label><select value={form.siteId} onChange={e=>setForm(p=>({...p,siteId:Number(e.target.value)}))} className={`${inputCls} appearance-none`}><option value={0}>— None —</option>{sites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-            <div><label className={lbl}>Order Initiation Date</label><input type="date" value={form.orderInitiationDate} onChange={e=>setForm(p=>({...p,orderInitiationDate:e.target.value}))} className={inputCls}/></div>
-            <div><label className={lbl}>Order Completion Date</label><input type="date" value={form.orderCompletionDate} onChange={e=>setForm(p=>({...p,orderCompletionDate:e.target.value}))} className={inputCls}/></div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div><label className={lbl}>Total Amount (₹)</label><input type="number" value={form.totalAmount||''} onChange={e=>setForm(p=>({...p,totalAmount:Number(e.target.value)}))} className={inputCls}/></div>
-            <div><label className={lbl}>Unexecuted Work Amount</label><input type="number" value={form.unexecutedWorkAmount||''} onChange={e=>setForm(p=>({...p,unexecutedWorkAmount:Number(e.target.value)}))} className={inputCls}/></div>
-            <div><label className={lbl}>Vendor ID</label><input value={form.vendorId} onChange={e=>setForm(p=>({...p,vendorId:e.target.value}))} className={inputCls} placeholder="V001"/></div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div><label className={lbl}>Amount Booked Last FY</label><input type="number" value={form.amountBookedLastFY||''} onChange={e=>setForm(p=>({...p,amountBookedLastFY:Number(e.target.value)}))} className={inputCls}/></div>
-            <div><label className={lbl}>Amount Booked Current FY</label><input type="number" value={form.amountBookedCurrentFY||''} onChange={e=>setForm(p=>({...p,amountBookedCurrentFY:Number(e.target.value)}))} className={inputCls}/></div>
-            <div><label className={lbl}>Amount To Be Booked End FY</label><input type="number" value={form.amountToBeBookedByEndFY||''} onChange={e=>setForm(p=>({...p,amountToBeBookedByEndFY:Number(e.target.value)}))} className={inputCls}/></div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div><label className={lbl}>Bill Raised</label><input type="number" value={form.billRaisedAmount||''} onChange={e=>setForm(p=>({...p,billRaisedAmount:Number(e.target.value)}))} className={inputCls}/></div>
-            <div><label className={lbl}>Amount Received Out of Bill</label><input type="number" value={form.amountReceivedOutOfBill||''} onChange={e=>setForm(p=>({...p,amountReceivedOutOfBill:Number(e.target.value)}))} className={inputCls}/></div>
-            <div><label className={lbl}>Work Done Not Billed</label><input type="number" value={form.workDoneNotBilled||''} onChange={e=>setForm(p=>({...p,workDoneNotBilled:Number(e.target.value)}))} className={inputCls}/></div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className={lbl}>BG Amount</label><input type="number" value={form.bgAmount||''} onChange={e=>setForm(p=>({...p,bgAmount:Number(e.target.value)}))} className={inputCls}/></div>
-            <div><label className={lbl}>BG Source</label><input value={form.bgSource} onChange={e=>setForm(p=>({...p,bgSource:e.target.value}))} className={inputCls}/></div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className={lbl}>Status</label><select value={form.status} onChange={e=>setForm(p=>({...p,status:e.target.value}))} className={`${inputCls} appearance-none`}>{STATUSES.map(s=><option key={s} value={s}>{s}</option>)}</select></div>
-            <div><label className={lbl}>Subcontracted To</label><input value={form.subcontractedTo} onChange={e=>setForm(p=>({...p,subcontractedTo:e.target.value}))} className={inputCls}/></div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className={lbl}>Delay/Extension Letter</label><input value={form.delayExtensionLetter} onChange={e=>setForm(p=>({...p,delayExtensionLetter:e.target.value}))} className={inputCls}/></div>
-            <div><label className={lbl}>Reason of Delay</label><input value={form.reasonOfDelay} onChange={e=>setForm(p=>({...p,reasonOfDelay:e.target.value}))} className={inputCls}/></div>
+
+          {/* Right canvas — details, timeline, financials */}
+          <div className="lg:col-span-7 space-y-4">
+            <FormSection title="General Details" icon={FileText}>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Vendor Name" required error={formErrors.vendorName}><input value={form.vendorName} onChange={e=>setField('vendorName', e.target.value)} className={inputCls}/></FormField>
+                <FormField label="Vendor ID"><input value={form.vendorId} onChange={e=>setForm(p=>({...p,vendorId:e.target.value}))} className={inputCls} placeholder="V001"/></FormField>
+              </div>
+              <FormField label="Description of Work"><input value={form.descriptionOfWork} onChange={e=>setForm(p=>({...p,descriptionOfWork:e.target.value}))} className={inputCls} placeholder="Scope of work..."/></FormField>
+            </FormSection>
+
+            <FormSection title="Timeline" icon={CalendarDays}>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className={lbl}>Order Initiation Date</label><input type="date" value={form.orderInitiationDate} onChange={e=>setForm(p=>({...p,orderInitiationDate:e.target.value}))} className={inputCls}/></div>
+                <div><label className={lbl}>Order Completion Date</label><input type="date" value={form.orderCompletionDate} onChange={e=>setForm(p=>({...p,orderCompletionDate:e.target.value}))} className={inputCls}/></div>
+              </div>
+            </FormSection>
+
+            <FormSection title="Financials" icon={IndianRupee}>
+              <div className="grid grid-cols-3 gap-3">
+                <div><label className={lbl}>Total Amount (₹)</label><input type="number" value={form.totalAmount||''} onChange={e=>setForm(p=>({...p,totalAmount:Number(e.target.value)}))} className={inputCls}/></div>
+                <div><label className={lbl}>Unexecuted Work Amount</label><input type="number" value={form.unexecutedWorkAmount||''} onChange={e=>setForm(p=>({...p,unexecutedWorkAmount:Number(e.target.value)}))} className={inputCls}/></div>
+                <div><label className={lbl}>Work Done Not Billed</label><input type="number" value={form.workDoneNotBilled||''} onChange={e=>setForm(p=>({...p,workDoneNotBilled:Number(e.target.value)}))} className={inputCls}/></div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div><label className={lbl}>Amount Booked Last FY</label><input type="number" value={form.amountBookedLastFY||''} onChange={e=>setForm(p=>({...p,amountBookedLastFY:Number(e.target.value)}))} className={inputCls}/></div>
+                <div><label className={lbl}>Amount Booked Current FY</label><input type="number" value={form.amountBookedCurrentFY||''} onChange={e=>setForm(p=>({...p,amountBookedCurrentFY:Number(e.target.value)}))} className={inputCls}/></div>
+                <div><label className={lbl}>Amount To Be Booked End FY</label><input type="number" value={form.amountToBeBookedByEndFY||''} onChange={e=>setForm(p=>({...p,amountToBeBookedByEndFY:Number(e.target.value)}))} className={inputCls}/></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className={lbl}>Bill Raised</label><input type="number" value={form.billRaisedAmount||''} onChange={e=>setForm(p=>({...p,billRaisedAmount:Number(e.target.value)}))} className={inputCls}/></div>
+                <div><label className={lbl}>Amount Received Out of Bill</label><input type="number" value={form.amountReceivedOutOfBill||''} onChange={e=>setForm(p=>({...p,amountReceivedOutOfBill:Number(e.target.value)}))} className={inputCls}/></div>
+              </div>
+            </FormSection>
+
+            <FormSection title="Bank Guarantee & Subcontract" icon={ShieldCheck} collapsible defaultOpen={false}>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className={lbl}>BG Amount</label><input type="number" value={form.bgAmount||''} onChange={e=>setForm(p=>({...p,bgAmount:Number(e.target.value)}))} className={inputCls}/></div>
+                <div><label className={lbl}>BG Source</label><input value={form.bgSource} onChange={e=>setForm(p=>({...p,bgSource:e.target.value}))} className={inputCls}/></div>
+              </div>
+              <div><label className={lbl}>Subcontracted To</label><input value={form.subcontractedTo} onChange={e=>setForm(p=>({...p,subcontractedTo:e.target.value}))} className={inputCls}/></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className={lbl}>Delay/Extension Letter</label><input value={form.delayExtensionLetter} onChange={e=>setForm(p=>({...p,delayExtensionLetter:e.target.value}))} className={inputCls}/></div>
+                <div><label className={lbl}>Reason of Delay</label><input value={form.reasonOfDelay} onChange={e=>setForm(p=>({...p,reasonOfDelay:e.target.value}))} className={inputCls}/></div>
+              </div>
+            </FormSection>
           </div>
         </div>
         <DialogFooter><button onClick={()=>setFormOpen(false)} className="vc-btn-ghost">Cancel</button><button onClick={handleSubmit} disabled={submitting} className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">{submitting?<Loader2 size={13} className="animate-spin"/>:<Plus size={13}/>}{editTarget?'Update':'Create'}</button></DialogFooter></DialogContent></Dialog>

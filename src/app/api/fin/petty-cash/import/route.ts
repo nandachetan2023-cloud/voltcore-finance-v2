@@ -10,6 +10,10 @@ interface ImportRecord {
   amount: number
   type?: string
   category?: string
+  jobCode?: string
+  costCenter?: string
+  department?: string
+  projectManager?: string
   authorizedBy?: string
   paymentMode?: string
   balance?: number | string
@@ -55,6 +59,10 @@ export async function POST(request: NextRequest) {
           amount,
           type,
           category: r.category || null,
+          jobCode: r.jobCode || null,
+          costCenter: r.costCenter || null,
+          department: r.department || null,
+          projectManager: r.projectManager || null,
           authorizedBy: r.authorizedBy || null,
           paymentMode: r.paymentMode || null,
           ...(explicitBalance !== undefined ? { balance: explicitBalance } : {}),

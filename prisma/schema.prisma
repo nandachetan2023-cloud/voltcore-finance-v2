@@ -181,52 +181,58 @@ model Employee {
 }
 
 model Invoice {
-  id           Int           @id @default(autoincrement())
-  invoiceNo    String        @unique
+  id           Int         @id @default(autoincrement())
+  invoiceNo    String      @unique
   invoiceDate  DateTime
   customerId   Int
   salesOrderId Int?
-  status       String        @default("draft")
-  totalAmount  Decimal       @db.Decimal(15, 2)
-  paidAmount   Decimal       @default(0) @db.Decimal(15, 2)
-  createdAt    DateTime      @default(now())
+  status       String      @default("draft")
+  totalAmount  Decimal     @db.Decimal(15, 2)
+  paidAmount   Decimal     @default(0) @db.Decimal(15, 2)
+  createdAt    DateTime    @default(now())
   updatedAt    DateTime
-  Customer     Customer      @relation(fields: [customerId], references: [id])
-  SalesOrder   SalesOrder?   @relation(fields: [salesOrderId], references: [id])
+  Customer     Customer    @relation(fields: [customerId], references: [id])
+  SalesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
 }
 
 model Item {
-  id                          Int                 @id @default(autoincrement())
-  sku                         String              @unique
+  id                          Int              @id @default(autoincrement())
+  sku                         String           @unique
   name                        String
   description                 String?
   categoryId                  Int?
-  type                        String              @default("finished_goods")
+  type                        String           @default("finished_goods")
   uomId                       Int
   purchaseUomId               Int?
   salesUomId                  Int?
   hsnSacCode                  String?
-  costPrice                   Decimal             @default(0.00) @db.Decimal(15, 2)
-  sellingPrice                Decimal             @default(0.00) @db.Decimal(15, 2)
-  reorderLevel                Decimal             @default(0.00) @db.Decimal(15, 3)
-  reorderQty                  Decimal             @default(0.00) @db.Decimal(15, 3)
-  trackInventory              Boolean             @default(true)
-  trackBatch                  Boolean             @default(false)
-  trackSerial                 Boolean             @default(false)
-  valuationMethod             String              @default("weighted_avg")
+  costPrice                   Decimal          @default(0.00) @db.Decimal(15, 2)
+  sellingPrice                Decimal          @default(0.00) @db.Decimal(15, 2)
+  reorderLevel                Decimal          @default(0.00) @db.Decimal(15, 3)
+  reorderQty                  Decimal          @default(0.00) @db.Decimal(15, 3)
+  trackInventory              Boolean          @default(true)
+  trackBatch                  Boolean          @default(false)
+  trackSerial                 Boolean          @default(false)
+  valuationMethod             String           @default("weighted_avg")
   imagePath                   String?
-  isActive                    Boolean             @default(true)
-  isDeleted                   Boolean             @default(false)
-  createdAt                   DateTime            @default(now())
+  isActive                    Boolean          @default(true)
+  isDeleted                   Boolean          @default(false)
+  createdAt                   DateTime         @default(now())
   updatedAt                   DateTime
-  ItemCategory                ItemCategory?       @relation(fields: [categoryId], references: [id])
-  Uom_Item_purchaseUomIdToUom Uom?                @relation("Item_purchaseUomIdToUom", fields: [purchaseUomId], references: [id])
-  Uom_Item_salesUomIdToUom    Uom?                @relation("Item_salesUomIdToUom", fields: [salesUomId], references: [id])
-  Uom_Item_uomIdToUom         Uom                 @relation("Item_uomIdToUom", fields: [uomId], references: [id])
+  ItemCategory                ItemCategory?    @relation(fields: [categoryId], references: [id])
+  Uom_Item_purchaseUomIdToUom Uom?             @relation("Item_purchaseUomIdToUom", fields: [purchaseUomId], references: [id])
+  Uom_Item_salesUomIdToUom    Uom?             @relation("Item_salesUomIdToUom", fields: [salesUomId], references: [id])
+  Uom_Item_uomIdToUom         Uom              @relation("Item_uomIdToUom", fields: [uomId], references: [id])
   QuotationItem               QuotationItem[]
-  SalesOrderItem              SalesOrderItem[]
-  StockEntryLine              StockEntryLine[]
-  StockLedger                 StockLedger[]
+  SalesOrderItem               SalesOrderItem[]
+  StockEntryLine               StockEntryLine[]
+  StockLedger                  StockLedger[]
+  FinStoreGrnLine               FinStoreGrnLine[]
+  FinMaterialRequisitionLine    FinMaterialRequisitionLine[]
+  FinStoreIssueLine             FinStoreIssueLine[]
+  FinMaterialReturnLine         FinMaterialReturnLine[]
+  FinScrapEntry                 FinScrapEntry[]
+  FinPhysicalVerificationLine   FinPhysicalVerificationLine[]
 }
 
 model ItemCategory {
@@ -316,17 +322,17 @@ model PayrollRun {
 }
 
 model PurchaseOrder {
-  id                Int                 @id @default(autoincrement())
-  poNo              String              @unique
-  poDate            DateTime
-  warehouseId       Int
-  status            String              @default("draft")
-  subtotal          Decimal             @db.Decimal(15, 2)
-  taxAmount         Decimal             @db.Decimal(15, 2)
-  totalAmount       Decimal             @db.Decimal(15, 2)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime
-  Warehouse         Warehouse           @relation(fields: [warehouseId], references: [id])
+  id          Int       @id @default(autoincrement())
+  poNo        String    @unique
+  poDate      DateTime
+  warehouseId Int
+  status      String    @default("draft")
+  subtotal    Decimal   @db.Decimal(15, 2)
+  taxAmount   Decimal   @db.Decimal(15, 2)
+  totalAmount Decimal   @db.Decimal(15, 2)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime
+  Warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
 }
 
 model Quotation {
@@ -1008,6 +1014,7 @@ model JournalEntry {
   siteId         Int?
   partyId        Int?
   jobCode        String? // job wise costing
+  poNo           String? // purchase order reference
   costCenter     String?
   department     String? // department wise costing
   projectManager String? // accountability
@@ -1029,27 +1036,30 @@ model JournalEntry {
 }
 
 model AccountsPayable {
-  id            Int       @id @default(autoincrement())
-  billNo        String    @unique
-  vendor        String
-  vendorCode    String?
-  invoiceRef    String?
-  description   String?
-  amount        Float
-  tax           Float     @default(0)
-  totalAmount   Float     @default(0)
-  dueDate       DateTime  @db.Date
-  paidDate      DateTime? @db.Date
-  paymentMethod String?
-  paymentRef    String?
-  status        String    @default("Pending")
-  remarks       String?
-  siteId        Int? // site wise costing
-  partyId       Int? // linked vendor master (FinParty), backfilled by name match
-  poId          Int? // linked purchase order
-  jobCode       String? // job wise costing
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             Int       @id @default(autoincrement())
+  billNo         String    @unique
+  vendor         String
+  vendorCode     String?
+  invoiceRef     String?
+  description    String?
+  amount         Float
+  tax            Float     @default(0)
+  totalAmount    Float     @default(0)
+  dueDate        DateTime  @db.Date
+  paidDate       DateTime? @db.Date
+  paymentMethod  String?
+  paymentRef     String?
+  status         String    @default("Pending")
+  remarks        String?
+  siteId         Int? // site wise costing
+  partyId        Int? // linked vendor master (FinParty), backfilled by name match
+  poId           Int? // linked purchase order
+  jobCode        String? // job wise costing
+  costCenter     String? // cost center reference
+  department     String? // department wise costing
+  projectManager String? // accountability
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   site  FinSite?          @relation(fields: [siteId], references: [id], onDelete: SetNull)
   party FinParty?         @relation(fields: [partyId], references: [id], onDelete: SetNull)
@@ -1066,26 +1076,34 @@ model AccountsPayable {
 }
 
 model AccountsReceivable {
-  id            Int       @id @default(autoincrement())
-  invoiceNo     String    @unique
-  client        String
-  clientCode    String?
-  invoiceRef    String?
-  description   String?
-  amount        Float
-  tax           Float     @default(0)
-  totalAmount   Float     @default(0)
-  dueDate       DateTime  @db.Date
-  receivedDate  DateTime? @db.Date
-  paymentMethod String?
-  paymentRef    String?
-  status        String    @default("Pending")
-  remarks       String?
-  siteId        Int? // site wise costing
-  partyId       Int? // linked customer master (FinParty), backfilled by name match
-  jobCode       String? // job wise costing
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             Int       @id @default(autoincrement())
+  invoiceNo      String    @unique
+  client         String
+  clientCode     String?
+  invoiceRef     String?
+  description    String?
+  amount         Float
+  tax            Float     @default(0)
+  totalAmount    Float     @default(0)
+  dueDate        DateTime  @db.Date
+  receivedAmount Float     @default(0) // payments collected so far
+  tdsAmount      Float     @default(0) // TDS deducted by client
+  deductionType  String? // other deduction option (Retention | Liquidated Damages | Advance Recovery | Discount | Freight | Other)
+  otherDeduction Float     @default(0) // other deduction amount
+  receivedDate   DateTime? @db.Date
+  paymentMethod  String?
+  paymentRef     String?
+  status         String    @default("Pending")
+  remarks        String?
+  siteId         Int? // site wise costing
+  partyId        Int? // linked customer master (FinParty), backfilled by name match
+  jobCode        String? // job wise costing
+  poNo           String? // purchase order reference
+  costCenter     String? // cost center reference
+  department     String? // department wise costing
+  projectManager String? // accountability
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   site  FinSite?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
   party FinParty? @relation(fields: [partyId], references: [id], onDelete: SetNull)
@@ -1122,41 +1140,55 @@ model BankAccount {
 }
 
 model BankTransaction {
-  id            Int      @id @default(autoincrement())
-  bankAccountId Int
-  date          DateTime @db.Date
-  type          String?
-  amount        Float
-  balance       Float    @default(0)
-  reference     String?
-  party         String?
-  description   String?
-  category      String?
-  status        String   @default("Completed")
-  reconciled    Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  bankAccountId   Int
+  date            DateTime @db.Date
+  type            String?
+  transactionType String? // Payment | Receipt | Contra | Transfer | Charges | Interest
+  amount          Float
+  balance         Float    @default(0)
+  reference       String?
+  party           String?
+  description     String?
+  category        String?
+  siteCode        String? // site wise costing
+  jobCode         String? // job wise costing
+  poNo            String? // purchase order reference
+  costCenter      String? // cost center reference
+  department      String? // department wise costing
+  projectManager  String? // accountability
+  status          String   @default("Completed")
+  reconciled      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
 
   @@index([bankAccountId])
   @@index([date])
   @@index([type])
+  @@index([transactionType])
   @@map("BankTransaction")
 }
 
 model TaxRecord {
-  id         Int       @id @default(autoincrement())
-  taxType    String
-  period     String
-  amount     Float
-  dueDate    DateTime  @db.Date
-  paidDate   DateTime? @db.Date
-  paymentRef String?
-  status     String    @default("Pending")
-  remarks    String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id             Int       @id @default(autoincrement())
+  taxType        String
+  period         String
+  amount         Float
+  dueDate        DateTime  @db.Date
+  paidDate       DateTime? @db.Date
+  paymentRef     String?
+  status         String    @default("Pending")
+  remarks        String?
+  siteCode       String? // site wise costing
+  jobCode        String? // job wise costing
+  poNo           String? // purchase order reference
+  costCenter     String? // cost center reference
+  department     String? // department wise costing
+  projectManager String? // accountability
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@unique([taxType, period])
   @@index([taxType])
@@ -1165,19 +1197,24 @@ model TaxRecord {
 }
 
 model BudgetItem {
-  id          Int      @id @default(autoincrement())
-  category    String
-  description String
-  planned     Float
-  actual      Float    @default(0)
-  variance    Float    @default(0)
-  period      String
-  month       String?
-  siteId      Int? // site wise budget vs actual
-  status      String   @default("On Track")
-  remarks     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  category       String
+  description    String
+  planned        Float
+  actual         Float    @default(0)
+  variance       Float    @default(0)
+  period         String
+  month          String?
+  siteId         Int? // site wise budget vs actual
+  jobCode        String? // job wise costing
+  poNo           String? // purchase order reference
+  costCenter     String? // cost center reference
+  department     String? // department wise costing
+  projectManager String? // accountability
+  status         String   @default("On Track")
+  remarks        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   site FinSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
@@ -1189,8 +1226,8 @@ model BudgetItem {
 
 // ── Finance – Site & AR Management ──────────────────────────────────
 model FinSite {
-  id                Int      @id @default(autoincrement())
-  siteCode          String   @unique
+  id                Int       @id @default(autoincrement())
+  siteCode          String    @unique
   name              String
   location          String?
   state             String?
@@ -1200,29 +1237,148 @@ model FinSite {
   contactPerson     String?
   contactPhone      String?
   contactEmail      String?
-  budget            Float    @default(0)
-  status            String   @default("Active")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  budget            Float     @default(0)
+  pettyCashLimit    Float?    @default(0) // sanctioned petty cash float for this site's custodian (responsiblePerson)
+  customerId        Int? // the customer this site/project belongs to
+  startDate         DateTime? @db.Date
+  endDate           DateTime? @db.Date
+  status            String    @default("Active")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  invoices           FinInvoice[]
-  areas              FinArea[]
-  expenseClaims      FinExpenseClaim[]
-  purchaseOrders     FinPurchaseOrder[]
-  paymentAdvices     FinPaymentAdvice[]
-  creditNotes        FinCreditNote[]
-  outstanding        FinOutstanding[]
-  alerts             FinAlert[]
-  finJournalEntries  FinJournalEntry[]
-  finBudgets         FinBudget[]
-  finAssets          FinAsset[]
-  finPettyCashes     FinPettyCash[]
-  budgetItems        BudgetItem[]
+  customer            FinParty?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  jobs                FinJob[]
+  invoices            FinInvoice[]
+  areas               FinArea[]
+  expenseClaims       FinExpenseClaim[]
+  purchaseOrders      FinPurchaseOrder[]
+  paymentAdvices      FinPaymentAdvice[]
+  creditNotes         FinCreditNote[]
+  outstanding         FinOutstanding[]
+  alerts              FinAlert[]
+  finJournalEntries   FinJournalEntry[]
+  finBudgets          FinBudget[]
+  finAssets           FinAsset[]
+  finPettyCashes      FinPettyCash[]
+budgetItems        BudgetItem[]
   accountsPayables   AccountsPayable[]
   accountsReceivables AccountsReceivable[]
+  storeGrns             FinStoreGrn[]
+  materialRequisitions  FinMaterialRequisition[]
+  storeIssues           FinStoreIssue[]
+  materialReturns       FinMaterialReturn[]
+  tools                 FinTool[]
+  gatePasses            FinGatePass[]
+  equipment             FinEquipment[]
+  scrapEntries          FinScrapEntry[]
+  physicalVerifications FinPhysicalVerification[]
 
   @@index([siteCode])
   @@map("FinSite")
+}
+
+// ── RBAC: finance approval roles, permissions, site-scoped assignments ──
+// level: 1=Requester … 5=Director. Higher level = more authority.
+// readOnly roles (Auditor) carry VIEW/EXPORT only.
+model FinRole {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique // e.g. CUSTODIAN, FIN_HEAD, AUDITOR
+  name      String // e.g. Finance Head
+  description String? // free-text role description (role-management screen)
+  level     Int      @default(1) // 1..5 hierarchy
+  readOnly  Boolean  @default(false) // Auditor-type: view/export only
+  color     String   @default("#00d4ff") // UI badge color
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  permissions FinRolePermission[]
+  assignments FinUserRole[]
+
+  @@map("FinRole")
+}
+
+// One permission code per (module, action), e.g. PETTYCASH_APPROVE
+model FinPermission {
+  id                 Int                 @id @default(autoincrement())
+  code               String              @unique // e.g. PETTYCASH_APPROVE
+  module             String // GL | AP | AR | PettyCash | Purchase | Payroll | Inventory | Reports
+  action             String // CREATE | VIEW | EDIT | APPROVE | DELETE | EXPORT
+  description        String?
+  finRolePermissions FinRolePermission[]
+
+  @@unique([module, code])
+  @@map("FinPermission")
+}
+
+// Many-to-many: which permissions each role carries
+model FinRolePermission {
+  id           Int           @id @default(autoincrement())
+  roleId       Int
+  permissionId Int
+  role         FinRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   FinPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now())
+
+  @@unique([roleId, permissionId])
+  @@map("FinRolePermission")
+}
+
+// Site-scoped assignment: (userEmail, role, siteCode). siteCode null = all sites.
+// One user may hold the same role across several sites; authority never crosses
+// to sites the user is not assigned to. SoD conflicts are enforced at write-time
+// via FinSodRule (see /api/fin/rbac/assignments).
+model FinUserRole {
+  id        Int      @id @default(autoincrement())
+  userEmail String
+  userName  String?
+  roleId    Int
+  role      FinRole  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  siteCode  String? // null = all sites
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userEmail, roleId, siteCode])
+  @@index([userEmail])
+  @@index([siteCode])
+  @@map("FinUserRole")
+}
+
+// Segregation-of-Duties: pairs of roles that cannot both be held by one person
+// (e.g. Custodian × Finance Head — prevents self-approval of petty cash).
+// Enforced when assigning users and when checking permissions.
+model FinSodRule {
+  id          Int      @id @default(autoincrement())
+  roleACode   String // e.g. CUSTODIAN
+  roleBCode   String // e.g. FINANC_MGR (must not be held simultaneously)
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@unique([roleACode, roleBCode])
+  @@map("FinSodRule")
+}
+
+// Compliance audit trail — every permission check (success and denial),
+// with actor, module, action, decision and request IP.
+model FinAccessAuditLog {
+  id             Int      @id @default(autoincrement())
+  userEmail      String
+  module         String
+  permissionCode String?
+  action         String
+  entityId       String? // e.g. voucher id / site the action targeted
+  siteCode       String?
+  ip             String?
+  success        Boolean
+  deniedReason   String?
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userEmail])
+  @@index([module])
+  @@map("FinAccessAuditLog")
 }
 
 // ── Finance Master: Party (Client/Vendor) ─────────────────────────────────────
@@ -1242,10 +1398,13 @@ model FinParty {
   tdsSection   String?
   tdsRate      Float    @default(0)
   gstTreatment String   @default("Unregistered") // Unregistered | Registered | Composition
+  taxType      String   @default("Auto") // Auto | Intra-State (CGST+SGST) | Inter-State (IGST) | Exempt/SEZ
+  paymentTerms String? // e.g. "Net 30", "Net 45", "Advance"
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  sites               FinSite[]
   invoices            FinInvoice[]
   paymentAdvices      FinPaymentAdvice[]
   tdsDeductions       FinTdsDeduction[]
@@ -1292,8 +1451,12 @@ model FinInvoice {
   eInvoiceDate    DateTime? @db.Date
   dueDate         DateTime  @db.Date
   jobCode         String? // job wise costing
+  costCenter      String? // cost center reference
+  department      String? // department wise costing
+  projectManager  String? // accountability
   hsnSac          String?
   taxableValue    Float     @default(0)
+  workPercent     Float     @default(0) // RA % work complete
   cgstAmount      Float     @default(0)
   sgstAmount      Float     @default(0)
   igstAmount      Float     @default(0)
@@ -1324,10 +1487,10 @@ model FinInvoice {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  party              FinParty?            @relation(fields: [partyId], references: [id])
-  site               FinSite              @relation(fields: [siteId], references: [id])
-  areaRef            FinArea?             @relation(fields: [areaId], references: [id])
-  po                 FinPurchaseOrder?    @relation(fields: [poId], references: [id])
+  party              FinParty?              @relation(fields: [partyId], references: [id])
+  site               FinSite                @relation(fields: [siteId], references: [id])
+  areaRef            FinArea?               @relation(fields: [areaId], references: [id])
+  po                 FinPurchaseOrder?      @relation(fields: [poId], references: [id])
   payments           FinPayment[]
   deductions         FinInvoiceDeduction[]
   tdsDeductions      FinTdsDeduction[]
@@ -1374,6 +1537,10 @@ model FinOutstanding {
   area              String?
   month             String?
   billDate          DateTime  @db.Date
+  jobCode           String? // job wise costing
+  costCenter        String? // cost center reference
+  department        String? // department wise costing
+  projectManager    String? // accountability
   invoiceValue      Float     @default(0)
   gstValue          Float     @default(0)
   totalInvoiceValue Float     @default(0)
@@ -1404,17 +1571,23 @@ model FinOutstanding {
 }
 
 model FinPayment {
-  id            Int      @id @default(autoincrement())
-  invoiceId     Int
-  amount        Float    @default(0)
-  paymentDate   DateTime @db.Date
-  paymentMode   String   @default("Bank Transfer")
-  bankAccountId Int?
-  voucherNo     String?
-  referenceNo   String?
-  status        String   @default("Received")
-  remarks       String?
-  createdAt     DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  invoiceId      Int
+  amount         Float    @default(0)
+  paymentDate    DateTime @db.Date
+  paymentMode    String   @default("Bank Transfer")
+  bankAccountId  Int?
+  voucherNo      String?
+  referenceNo    String?
+  siteCode       String? // site wise costing
+  jobCode        String? // job wise costing
+  poNo           String? // purchase order reference
+  costCenter     String? // cost center reference
+  department     String? // department wise costing
+  projectManager String? // accountability
+  status         String   @default("Received")
+  remarks        String?
+  createdAt      DateTime @default(now())
 
   invoice     FinInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
@@ -1422,6 +1595,100 @@ model FinPayment {
   @@index([invoiceId])
   @@index([paymentDate])
   @@map("FinPayment")
+}
+
+// ── Finance: Receipt Entry (money received against customer invoices) ────────
+model FinReceipt {
+  id          Int       @id @default(autoincrement())
+  receiptNo   String    @unique
+  receiptDate DateTime  @db.Date
+  partyName   String
+  invoiceRef  String?
+  amount      Float     @default(0)
+  mode        String    @default("NEFT") // NEFT | IMPS | RTGS | Cheque | UPI | Cash
+  bankRef     String?
+  jobCode     String? // job wise costing
+  siteCode    String? // site wise costing
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([receiptDate])
+  @@index([partyName])
+  @@map("FinReceipt")
+}
+
+// ── Inventory: Material Receipt / Goods Receipt Note (GRN) ──────────────────
+model FinMaterialReceipt {
+  id            Int       @id @default(autoincrement())
+  grnNo         String    @unique
+  grnDate       DateTime  @db.Date
+  poRef         String?
+  itemName      String
+  vendorName    String?
+  qtyReceived   Float     @default(0)
+  qtyPO         Float     @default(0)
+  unit          String    @default("nos")
+  rate          Float     @default(0)
+  value         Float     @default(0)
+  siteCode      String?
+  jobCode       String?
+  status        String    @default("Received") // Received | Posted | Rejected
+  remarks       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([grnDate])
+  @@index([poRef])
+  @@map("FinMaterialReceipt")
+}
+
+// ── Procurement: Vendor directory ─────────────────────────────────
+model FinVendor {
+  id            Int      @id @default(autoincrement())
+  name          String
+  categories    Json     @default("[]") // ["Electrical","Mechanical",...]
+  region        String
+  status        String   @default("standard") // preferred | standard | blacklisted
+  rating        Float    @default(3.0)
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  notes         String?
+  certificates  Json     @default("[]") // [{name,certNo,issueDate,expiryDate}]
+  metrics       Json     @default("{}") // {onTimeDelivery,qualityRating,priceCompetitiveness}
+  blacklistLog  Json     @default("[]") // [{date,reason,setBy}]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("FinVendor")
+}
+
+// ── Procurement: Purchase Order register (simplified ledger view) ──
+model FinPO {
+  id                 Int       @id @default(autoincrement())
+  poNo               String    @unique
+  vendor             String
+  project            String
+  projectShort       String
+  totalValue         Float     @default(0)
+  deliveryAddress    String
+  requiredDate       DateTime  @db.Date
+  actualDeliveryDate DateTime? @db.Date
+  lineItems          Json      @default("[]") // [{id,itemDesc,qtyOrdered,qtyReceived,unit,unitPrice,total}]
+  status             String    @default("Open") // Open | Partially Received | Completed | Overdue
+  poIssueDate        DateTime  @db.Date
+  grnDate            DateTime? @db.Date
+  invoiceMatchDate   DateTime? @db.Date
+  poIssued           Boolean   @default(true)
+  grnCompleted       Boolean   @default(false)
+  invoiceMatched     Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([poNo])
+  @@index([status])
+  @@map("FinPO")
 }
 
 model FinImportBatch {
@@ -1508,6 +1775,9 @@ model FinExpenseClaim {
   siteId         Int
   poId           Int?
   jobCode        String? // job wise costing
+  costCenter     String? // cost center reference
+  department     String? // department wise costing
+  projectManager String? // accountability
   siteType       String    @default("Site") // Site | HO
   expenseType    String    @default("") // GAP FOODING | Advance | ABF | etc.
   submittedBy    String
@@ -1525,8 +1795,8 @@ model FinExpenseClaim {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  site        FinSite            @relation(fields: [siteId], references: [id])
-  po          FinPurchaseOrder?  @relation(fields: [poId], references: [id], onDelete: SetNull)
+  site        FinSite           @relation(fields: [siteId], references: [id])
+  po          FinPurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
   items       FinExpenseItem[]
   approvals   FinApprovalLog[]
   pettyCashes FinPettyCash[]
@@ -1557,40 +1827,43 @@ model FinExpenseItem {
 
 // ── Finance – Petty Cash (HO) ───────────────────────────────────────
 model FinPettyCash {
-  id               Int      @id @default(autoincrement())
-  voucherNo        String   @unique
-  date             DateTime @db.Date
-  description      String
-  amount           Float
-  type             String   @default("Debit")
-  category         String?
-  partyId          Int?
-  siteId           Int?
-  poId             Int?
-  jobCode          String? // job wise costing
-  expenseClaimId   Int?
-  linkedType       String   @default("Direct")
-  authorizedBy     String?
-  custodian        String? // person holding this petty cash float (Site Incharge / Store Incharge / Admin Executive)
-  limitAmount      Float? // the custodian's sanctioned petty cash limit
-  paymentMode      String?
-  balance          Float    @default(0)
-  referenceNo      String?
-  remarks          String?
+  id                 Int       @id @default(autoincrement())
+  voucherNo          String    @unique
+  date               DateTime  @db.Date
+  description        String
+  amount             Float
+  type               String    @default("Debit")
+  category           String?
+  partyId            Int?
+  siteId             Int?
+  poId               Int?
+  jobCode            String? // job wise costing
+  costCenter         String? // cost center reference
+  department         String? // department wise costing
+  projectManager     String? // accountability
+  expenseClaimId     Int?
+  linkedType         String    @default("Direct")
+  authorizedBy       String?
+  custodian          String? // person holding this petty cash float (Site Incharge / Store Incharge / Admin Executive)
+  limitAmount        Float? // the custodian's sanctioned petty cash limit
+  paymentMode        String?
+  balance            Float     @default(0)
+  referenceNo        String?
+  remarks            String?
   billAttachmentPath String?
-  approvalStatus   String   @default("Draft") // Draft | Pending | Approved | Rejected
-  submittedBy      String?
-  submittedAt      DateTime?
-  approvedBy       String?
-  approvedAt       DateTime?
-  rejectionReason  String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  approvalStatus     String    @default("Draft") // Draft | Pending | Approved | Rejected
+  submittedBy        String?
+  submittedAt        DateTime?
+  approvedBy         String?
+  approvedAt         DateTime?
+  rejectionReason    String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  party        FinParty?          @relation(fields: [partyId], references: [id], onDelete: SetNull)
-  site         FinSite?           @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  po           FinPurchaseOrder?  @relation(fields: [poId], references: [id], onDelete: SetNull)
-  expenseClaim FinExpenseClaim?   @relation(fields: [expenseClaimId], references: [id], onDelete: SetNull)
+  party        FinParty?         @relation(fields: [partyId], references: [id], onDelete: SetNull)
+  site         FinSite?          @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  po           FinPurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
+  expenseClaim FinExpenseClaim?  @relation(fields: [expenseClaimId], references: [id], onDelete: SetNull)
   approvals    FinApprovalLog[]
 
   @@index([voucherNo])
@@ -1604,30 +1877,33 @@ model FinPettyCash {
 
 // ── Finance – Payment Advice ────────────────────────────────────────
 model FinPaymentAdvice {
-  id            Int       @id @default(autoincrement())
-  adviceNo      String    @unique
-  partyId       Int?
-  siteId        Int?
-  poId          Int?
-  jobCode       String? // job wise costing
-  totalAmount   Float
-  paymentDate   DateTime  @db.Date
-  paymentMode   String    @default("Bank Transfer")
-  referenceNo   String?
-  bankName      String?
-  accountNo     String?
-  ifscCode      String?
-  supplierName  String?
-  vendorCode    String?
-  panNo         String?
-  bankAccountId Int?
-  status        String    @default("Draft")
-  postedBy      String?
-  approvedBy    String?
-  notes         String?
-  emailedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             Int       @id @default(autoincrement())
+  adviceNo       String    @unique
+  partyId        Int?
+  siteId         Int?
+  poId           Int?
+  jobCode        String? // job wise costing
+  costCenter     String? // cost center reference
+  department     String? // department wise costing
+  projectManager String? // accountability
+  totalAmount    Float
+  paymentDate    DateTime  @db.Date
+  paymentMode    String    @default("Bank Transfer")
+  referenceNo    String?
+  bankName       String?
+  accountNo      String?
+  ifscCode       String?
+  supplierName   String?
+  vendorCode     String?
+  panNo          String?
+  bankAccountId  Int?
+  status         String    @default("Draft")
+  postedBy       String?
+  approvedBy     String?
+  notes          String?
+  emailedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   party       FinParty?              @relation(fields: [partyId], references: [id])
   site        FinSite?               @relation(fields: [siteId], references: [id])
@@ -1677,6 +1953,9 @@ model FinPurchaseOrder {
   vendorAddress           String?
   siteId                  Int
   jobCode                 String? // job wise costing
+  costCenter              String? // cost center reference
+  department              String? // department wise costing
+  projectManager          String? // accountability
   date                    DateTime  @db.Date
   descriptionOfWork       String?
   orderInitiationDate     DateTime? @db.Date
@@ -1705,21 +1984,84 @@ model FinPurchaseOrder {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  site           FinSite            @relation(fields: [siteId], references: [id])
-  originalPo     FinPurchaseOrder?  @relation("PORevision", fields: [originalPoId], references: [id])
-  revisions      FinPurchaseOrder[] @relation("PORevision")
-  items          FinPOItem[]
-  invoices       FinInvoice[]
-  paymentAdvices FinPaymentAdvice[]
-  pettyCashes    FinPettyCash[]
-  expenseClaims  FinExpenseClaim[]
-  clientFollowUps FinClientFollowUp[]
+  site             FinSite             @relation(fields: [siteId], references: [id])
+  originalPo       FinPurchaseOrder?   @relation("PORevision", fields: [originalPoId], references: [id])
+  revisions        FinPurchaseOrder[]  @relation("PORevision")
+  items            FinPOItem[]
+  invoices         FinInvoice[]
+  paymentAdvices   FinPaymentAdvice[]
+  pettyCashes      FinPettyCash[]
+  expenseClaims    FinExpenseClaim[]
+  clientFollowUps  FinClientFollowUp[]
   accountsPayables AccountsPayable[]
+  jobs             FinJob[]
+  storeGrns        FinStoreGrn[]
 
   @@index([poNo])
   @@index([siteId])
   @@index([status])
   @@map("FinPurchaseOrder")
+}
+
+// ── Finance – Project (contract level) ───────────────────────────────
+// A project is the top-level client contract. One project can hold many
+// jobs/sites, and each job can hold sub-jobs (phases). Drives roll-up
+// reporting from sub-job → job → project.
+model FinProject {
+  id              Int      @id @default(autoincrement())
+  projectCode     String   @unique // e.g. DEL-METRO-01
+  name            String
+  client          String
+  contractValue   Float    @default(0)
+  sector          String? // Power | Mining | Industrial
+  projectManager  String?
+  startDate       DateTime? @db.Date
+  endDate         DateTime? @db.Date
+  status          String   @default("Active") // Active | On Hold | Completed | Cancelled
+  description     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  jobs FinJob[]
+
+  @@index([projectCode])
+  @@index([status])
+  @@map("FinProject")
+}
+
+// ── Finance – Job Master (one unique job code per PO/project) ────────
+// Hierarchy: project (FinProject) → job → sub-job (parentId).
+// siteId points to the physical site the job executes at.
+model FinJob {
+  id          Int      @id @default(autoincrement())
+  jobCode     String   @unique // e.g. JOB-2026-001
+  projectId   Int? // the parent contract-level project
+  parentId    Int? // set when this is a sub-job / phase of another job
+  poId        Int?
+  siteId      Int
+  description String?
+  budget      Float    @default(0) // job-specific budget (from project budget)
+  status      String   @default("Active") // Active | Completed | On Hold | Closed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  po        FinPurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
+  site      FinSite           @relation(fields: [siteId], references: [id])
+  project   FinProject?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  parent    FinJob?           @relation("FinJobHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children  FinJob[]          @relation("FinJobHierarchy")
+  storeGrns            FinStoreGrn[]
+  materialRequisitions FinMaterialRequisition[]
+  storeIssues          FinStoreIssue[]
+  materialReturns      FinMaterialReturn[]
+  scrapEntries         FinScrapEntry[]
+
+  @@index([projectId])
+  @@index([parentId])
+  @@index([poId])
+  @@index([siteId])
+  @@index([status])
+  @@map("FinJob")
 }
 
 model FinPOItem {
@@ -1734,6 +2076,7 @@ model FinPOItem {
   receivedQty   Float  @default(0)
 
   po FinPurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  grnLines FinStoreGrnLine[]
 
   @@index([poId])
   @@map("FinPOItem")
@@ -1748,6 +2091,9 @@ model FinCreditNote {
   invoiceId                  Int
   siteId                     Int
   jobCode                    String? // job wise costing
+  costCenter                 String? // cost center reference
+  department                 String? // department wise costing
+  projectManager             String? // accountability
   creditNoteAgainstInvoiceNo String?
   client                     String?
   area                       String?
@@ -1786,6 +2132,7 @@ model FinAlert {
   message   String
   invoiceId Int?
   siteId    Int?
+  poId      Int?
   amount    Float    @default(0)
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -1806,14 +2153,15 @@ model FinAccount {
   group         String   @default("Assets") // Assets | Liabilities | Capital | Income | Expenses | Direct Income | Direct Expenses | Indirect Income | Indirect Expenses
   type          String   @default("Asset") // Asset | Liability | Equity | Income | Expense
   parentId      Int? // self-relation for hierarchy
+  sortOrder     Int      @default(0) // index within parent for drag-drop reorder
   taxApplicable Boolean  @default(false)
   isActive      Boolean  @default(true)
   description   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  parent       FinAccount?         @relation("AccountHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children     FinAccount[]        @relation("AccountHierarchy")
+  parent       FinAccount?      @relation("AccountHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     FinAccount[]     @relation("AccountHierarchy")
   journalLines FinJournalLine[]
   budgetLines  FinBudgetLine[]
 
@@ -1825,22 +2173,32 @@ model FinAccount {
 
 // ── Finance – Journal Entry ──────────────────────────────────────────
 model FinJournalEntry {
-  id          Int       @id @default(autoincrement())
-  entryNo     String    @unique
-  entryDate   DateTime  @db.Date
-  reference   String?
-  description String?
-  siteId      Int
-  status      String    @default("Draft") // Draft | Posted | Reversed
-  postedAt    DateTime?
-  postedBy    String?
-  approvedBy  String?
-  approvedAt  DateTime?
-  totalDebit  Float     @default(0)
-  totalCredit Float     @default(0)
-  createdBy   String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              Int       @id @default(autoincrement())
+  entryNo         String    @unique
+  entryDate       DateTime  @db.Date
+  reference       String?
+  description     String?
+  siteId          Int
+  jobCode         String? // job wise costing
+  poNo            String? // purchase order reference
+  costCenter      String? // cost center reference
+  department      String? // department wise costing
+  projectManager  String? // accountability
+  voucherType     String? // Journal | Payment | Receipt | Contra
+  status          String    @default("Draft") // Draft | Pending | Posted | Rejected | Reversed
+  submittedBy     String?
+  submittedAt     DateTime?
+  postedAt        DateTime?
+  postedBy        String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectionReason String?
+  attachmentPath  String? // supporting document, base64 data URL (same pattern as company logo upload)
+  totalDebit      Float     @default(0)
+  totalCredit     Float     @default(0)
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   site      FinSite          @relation(fields: [finSiteId], references: [id])
   lines     FinJournalLine[]
@@ -1931,6 +2289,11 @@ model FinAsset {
   siteId             Int?
   custodian          String?
   departmentCode     String?
+  jobCode            String? // job wise costing
+  poNo               String? // purchase order reference
+  costCenter         String? // cost center reference
+  department         String? // department wise costing
+  projectManager     String? // accountability
   status             String   @default("Active") // Active | Disposed | Retired
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -2001,9 +2364,9 @@ model FinApprovalLog {
   finExpenseClaimId  Int?
   finPaymentAdvice   FinPaymentAdvice? @relation(fields: [finPaymentAdviceId], references: [id])
   finPaymentAdviceId Int?
-  finJournalEntry    FinJournalEntry? @relation(fields: [finJournalEntryId], references: [id])
+  finJournalEntry    FinJournalEntry?  @relation(fields: [finJournalEntryId], references: [id])
   finJournalEntryId  Int?
-  finPettyCash       FinPettyCash?    @relation(fields: [finPettyCashId], references: [id])
+  finPettyCash       FinPettyCash?     @relation(fields: [finPettyCashId], references: [id])
   finPettyCashId     Int?
 
   @@index([entityType, entityId])
@@ -2532,21 +2895,21 @@ model FinMaterialTrackingItem {
 
 // ── Tally Sync Management ──────────────────────────────────────────
 model FinTallySync {
-  id          Int      @id @default(autoincrement())
-  syncType    String   // DayBook | TallyBook | SundryDebtors | SundryCreditors | PettyCash | ExpenseClaim
+  id          Int       @id @default(autoincrement())
+  syncType    String // DayBook | TallyBook | SundryDebtors | SundryCreditors | PettyCash | ExpenseClaim
   fileName    String
   periodFrom  DateTime? @db.Date
   periodTo    DateTime? @db.Date
-  totalRows   Int      @default(0)
-  createdRows Int      @default(0)
-  updatedRows Int      @default(0)
-  skippedRows Int      @default(0)
-  errorRows   Int      @default(0)
-  status      String   @default("Pending") // Pending | Processing | Completed | Failed
-  rawJson     String?  // JSON snapshot of parsed records (for audit)
-  log         String?  // error log / messages
+  totalRows   Int       @default(0)
+  createdRows Int       @default(0)
+  updatedRows Int       @default(0)
+  skippedRows Int       @default(0)
+  errorRows   Int       @default(0)
+  status      String    @default("Pending") // Pending | Processing | Completed | Failed
+  rawJson     String? // JSON snapshot of parsed records (for audit)
+  log         String? // error log / messages
   syncedAt    DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@index([syncType])
   @@index([status])
@@ -2577,22 +2940,22 @@ model SyncConfig {
 // ── Data Sync Log ────────────────────────────────────────────────
 // Individual sync operation log entries
 model SyncLog {
-  id            Int      @id @default(autoincrement())
-  module        String
-  action        String   // CREATE | UPDATE | DELETE | SYNC | RESOLVE
-  recordId      String?
-  recordData    String?  // JSON snapshot
-  status        String   @default("Pending") // Pending | Success | Conflict | Error | Resolved
-  direction     String   @default("Pull") // Pull | Push | Bidirectional
+  id             Int       @id @default(autoincrement())
+  module         String
+  action         String // CREATE | UPDATE | DELETE | SYNC | RESOLVE
+  recordId       String?
+  recordData     String? // JSON snapshot
+  status         String    @default("Pending") // Pending | Success | Conflict | Error | Resolved
+  direction      String    @default("Pull") // Pull | Push | Bidirectional
   conflictReason String?
-  syncBatchId   String?
-  duration      Int      @default(0) // ms
-  recordsSynced Int      @default(0)
-  errorMessage  String?
-  startedAt     DateTime?
-  completedAt   DateTime?
-  resolved      Boolean  @default(false)
-  createdAt     DateTime @default(now())
+  syncBatchId    String?
+  duration       Int       @default(0) // ms
+  recordsSynced  Int       @default(0)
+  errorMessage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  resolved       Boolean   @default(false)
+  createdAt      DateTime  @default(now())
 
   @@index([module])
   @@index([status])
@@ -2607,7 +2970,7 @@ model FinClientFollowUp {
   clientName      String
   balanceAmount   Float     @default(0)
   poId            Int?
-  invoiceNos      String?   // comma-separated invoice references
+  invoiceNos      String? // comma-separated invoice references
   contactNo       String?
   contactPerson   String?
   matterDiscussed String?
@@ -2628,4 +2991,514 @@ model FinClientFollowUp {
   @@map("FinClientFollowUp")
 }
 
+// ── Inventory – Stock Ledger running balance ─────────────────────
+// Posting direction: +qtyChange = receipt/in, -qtyChange = issue/out.
+model FinStockLedger {
+  id            Int      @id @default(autoincrement())
+  entryNo       String
+  postingDate   DateTime @db.Date
+  itemCode      String
+  itemName      String
+  category      String?
+  unit          String   @default("Nos")
+  warehouse     String?
+  warehouseId   Int?
+  qtyIn         Float    @default(0)
+  qtyOut        Float    @default(0)
+  balanceQty    Float    @default(0) // running balance after this line
+  rate          Float    @default(0)
+  valueIn       Float    @default(0)
+  valueOut      Float    @default(0)
+  referenceType String   @default("") // Stock Receipt | Material Issue | Stock Transfer | Adjustment
+  referenceNo   String?
+  jobCode       String?
+  siteCode      String?
+  remarks       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
+  @@index([itemCode])
+  @@index([postingDate])
+  @@index([jobCode])
+  @@index([itemCode, warehouseId])
+  @@map("FinStockLedger")
+}
+
+// ── Inventory – Material Issue → Job (WIP posting) ────────────────
+// Issued material debits a job's work-in-progress account.
+model FinMaterialIssue {
+  id         Int      @id @default(autoincrement())
+  issueNo    String   @unique
+  issueDate  DateTime @db.Date
+  siteCode   String?
+  siteId     Int?
+  jobCode    String
+  jobName    String @default("")
+  itemCode   String?
+  itemName   String @default("")
+  warehouseId Int?
+  description String
+  qty        Float    @default(0)
+  unit       String   @default("Nos")
+  rate       Float    @default(0)
+  amount     Float    @default(0)
+  wipAccount String? // coa code to credit/debit WIP
+  status     String   @default("Posted") // Draft | Posted | Reversed
+  remarks    String?
+  createdBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([jobCode])
+  @@index([issueDate])
+  @@index([status])
+  @@map("FinMaterialIssue")
+}
+
+// ── Sales – Running Account (RA) work-progress ────────────────────
+// Bills a % completion of a purchase order / job over time.
+model FinMootBill {
+  id            Int      @id @default(autoincrement())
+  raNo          String   @unique
+  raDate        DateTime @db.Date
+  siteCode      String?
+  siteId        Int?
+  jobCode       String
+  jobName       String  @default("")
+  poNo          String?
+  poId          Int?
+  poTotal       Float    @default(0)
+  workPercent   Float    @default(0) // % work complete
+  billAmount    Float    @default(0) // bill = workPercent% of PO total (computed)
+  previousWork  Float    @default(0) // already billed %
+  billedSoFar   Float    @default(0) // amount already billed from prev RAs
+  deducted      Float    @default(0)
+  withholding   Float    @default(0)
+  netRavFor     Float    @default(0)
+  invoiceNo     String?
+  status        String   @default("Draft") // Draft | Submitted | Approved | Invoiced
+  remarks       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([poId])
+  @@index([jobCode])
+  @@index([status])
+  @@map("FinMootBill")
+}
+
+// ── Projects – Bill of Quantities (BOQ) ───────────────
+// A BOQ belongs to a site (and optional job/PO) and carries line items with
+// quantity, rate and amount so budget-vs-actual can be tracked per item.
+model FinBoq {
+  id         Int         @id @default(autoincrement())
+  boqNo      String      @unique
+  title      String
+  siteId     Int?
+  siteCode   String?
+  jobCode    String?
+  jobName    String   @default("")
+  poNo       String?
+  project    String?
+  version    String   @default("V1")
+  status     String   @default("Draft") // Draft | Approved | Closed
+  totalQty   Float    @default(0)
+  totalAmount Float   @default(0)
+  remarks    String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  lines      FinBoqItem[]
+
+  @@index([siteId])
+  @@index([jobCode])
+  @@map("FinBoq")
+}
+
+model FinBoqItem {
+  id            Int      @id @default(autoincrement())
+  boqId         Int
+  itemNo        String   @default("")
+  description   String
+  uom           String   @default("Nos")
+  qty           Float    @default(0)
+  rate          Float    @default(0)
+  amount        Float    @default(0)
+  executedQty   Float    @default(0) // actual qty executed (progress)
+  executedValue Float    @default(0)
+  remarks       String?
+  sortOrder     Int      @default(0)
+
+  boq           FinBoq   @relation(fields: [boqId], references: [id], onDelete: Cascade)
+
+  @@index([boqId])
+  @@map("FinBoqItem")
+}
+
+// ── Projects – Job Progress & Milestones ──────────────
+// Tracks %-completion and milestone checklist per job/site.
+model FinProjectProgress {
+  id          Int      @id @default(autoincrement())
+  jobCode     String
+  jobName     String   @default("")
+  siteCode    String?
+  siteId      Int?
+  overallPct  Float    @default(0) // overall % complete (0-100)
+  status      String   @default("In Progress") // Not Started | In Progress | On Hold | Completed
+  milestone   String?  // current milestone name
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  milestones  FinMilestone[]
+
+  @@index([jobCode])
+  @@map("FinProjectProgress")
+}
+
+model FinMilestone {
+  id          Int      @id @default(autoincrement())
+  progressId  Int
+  name        String
+  pct         Float    @default(0) // weight of this milestone
+  achievedPct Float    @default(0) // how much of this milestone done (0-100)
+  done        Boolean  @default(false)
+  dueDate     DateTime? @db.Date
+  notes       String?
+
+  progress    FinProjectProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
+
+  @@index([progressId])
+  @@map("FinMilestone")
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Site Store Management — GRN, MRS-gated issue, returns, tool/gate-pass/
+// equipment registers, scrap and physical verification. Every header
+// carries real FKs to FinSite/FinJob so it rolls up into the same
+// site/job costing Finance already reports on; every line carries a
+// real FK to Item — the same catalog Sales (QuotationItem/SalesOrderItem)
+// already uses — instead of the free-text itemCode/jobCode string tags
+// the older FinMaterialReceipt/FinMaterialIssue/FinStockLedger models use.
+// ════════════════════════════════════════════════════════════════════
+
+model FinStoreGrn {
+  id          Int       @id @default(autoincrement())
+  grnNo       String    @unique
+  grnDate     DateTime  @db.Date
+  poId        Int?
+  siteId      Int
+  jobId       Int?
+  vendorName  String?
+  dcNo        String? // delivery challan no
+  invoiceNo   String?
+  status      String    @default("Draft") // Draft | Posted | Rejected
+  remarks     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  po    FinPurchaseOrder?  @relation(fields: [poId], references: [id], onDelete: SetNull)
+  site  FinSite            @relation(fields: [siteId], references: [id])
+  job   FinJob?            @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  lines FinStoreGrnLine[]
+
+  @@index([siteId])
+  @@index([jobId])
+  @@index([poId])
+  @@map("FinStoreGrn")
+}
+
+model FinStoreGrnLine {
+  id           Int      @id @default(autoincrement())
+  grnId        Int
+  itemId       Int
+  poItemId     Int?
+  qtyOrdered   Float    @default(0)
+  qtyReceived  Float    @default(0)
+  qtyAccepted  Float    @default(0)
+  qtyRejected  Float    @default(0)
+  rate         Float    @default(0)
+  amount       Float    @default(0)
+  condition    String   @default("Good") // Good | Damaged | Partial
+  remarks      String?
+
+  grn     FinStoreGrn @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  item    Item        @relation(fields: [itemId], references: [id])
+  poItem  FinPOItem?  @relation(fields: [poItemId], references: [id], onDelete: SetNull)
+
+  @@index([grnId])
+  @@index([itemId])
+  @@map("FinStoreGrnLine")
+}
+
+model FinMaterialRequisition {
+  id           Int      @id @default(autoincrement())
+  mrsNo        String   @unique
+  mrsDate      DateTime @db.Date
+  siteId       Int
+  jobId        Int?
+  requestedBy  String?
+  department   String?
+  purpose      String?
+  status       String   @default("Draft") // Draft | Pending | Approved | Rejected | Issued
+  approvedBy   String?
+  approvedAt   DateTime?
+  rejectionReason String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  site   FinSite                     @relation(fields: [siteId], references: [id])
+  job    FinJob?                     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  lines  FinMaterialRequisitionLine[]
+  issues FinStoreIssue[]
+
+  @@index([siteId])
+  @@index([jobId])
+  @@index([status])
+  @@map("FinMaterialRequisition")
+}
+
+model FinMaterialRequisitionLine {
+  id            Int    @id @default(autoincrement())
+  mrsId         Int
+  itemId        Int
+  qtyRequested  Float  @default(0)
+  qtyIssued     Float  @default(0)
+  remarks       String?
+
+  mrs  FinMaterialRequisition @relation(fields: [mrsId], references: [id], onDelete: Cascade)
+  item Item                   @relation(fields: [itemId], references: [id])
+
+  @@index([mrsId])
+  @@index([itemId])
+  @@map("FinMaterialRequisitionLine")
+}
+
+model FinStoreIssue {
+  id          Int       @id @default(autoincrement())
+  issueNo     String    @unique
+  issueDate   DateTime  @db.Date
+  mrsId       Int?
+  siteId      Int
+  jobId       Int?
+  issuedTo    String?
+  receiverSignature String?
+  issuedBy    String?
+  status      String    @default("Issued") // Issued | Reversed
+  remarks     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  mrs   FinMaterialRequisition? @relation(fields: [mrsId], references: [id], onDelete: SetNull)
+  site  FinSite                 @relation(fields: [siteId], references: [id])
+  job   FinJob?                 @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  lines FinStoreIssueLine[]
+
+  @@index([siteId])
+  @@index([jobId])
+  @@index([mrsId])
+  @@map("FinStoreIssue")
+}
+
+model FinStoreIssueLine {
+  id      Int    @id @default(autoincrement())
+  issueId Int
+  itemId  Int
+  qty     Float  @default(0)
+  rate    Float  @default(0)
+  amount  Float  @default(0)
+
+  issue FinStoreIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  item  Item          @relation(fields: [itemId], references: [id])
+
+  @@index([issueId])
+  @@index([itemId])
+  @@map("FinStoreIssueLine")
+}
+
+model FinMaterialReturn {
+  id          Int      @id @default(autoincrement())
+  returnNo    String   @unique
+  returnDate  DateTime @db.Date
+  siteId      Int
+  jobId       Int?
+  returnedBy  String?
+  remarks     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  site  FinSite                @relation(fields: [siteId], references: [id])
+  job   FinJob?                @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  lines FinMaterialReturnLine[]
+
+  @@index([siteId])
+  @@index([jobId])
+  @@map("FinMaterialReturn")
+}
+
+model FinMaterialReturnLine {
+  id        Int    @id @default(autoincrement())
+  returnId  Int
+  itemId    Int
+  qty       Float  @default(0)
+  condition String @default("Good") // Good | Damaged
+  remarks   String?
+
+  return FinMaterialReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  item   Item              @relation(fields: [itemId], references: [id])
+
+  @@index([returnId])
+  @@index([itemId])
+  @@map("FinMaterialReturnLine")
+}
+
+model FinTool {
+  id         Int      @id @default(autoincrement())
+  toolCode   String   @unique
+  name       String
+  category   String? // Grinding Machine | Welding Machine | Chain Pulley Block | Sling | Measuring Tool | Other
+  siteId     Int
+  status     String   @default("Available") // Available | Issued | Under Repair | Lost
+  remarks    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  site FinSite          @relation(fields: [siteId], references: [id])
+  logs FinToolIssueLog[]
+
+  @@index([siteId])
+  @@map("FinTool")
+}
+
+model FinToolIssueLog {
+  id                 Int       @id @default(autoincrement())
+  toolId             Int
+  issuedTo           String
+  issueDate          DateTime  @db.Date
+  expectedReturnDate DateTime? @db.Date
+  returnDate         DateTime? @db.Date
+  condition          String? // Good | Damaged | Lost
+  remarks            String?
+
+  tool FinTool @relation(fields: [toolId], references: [id], onDelete: Cascade)
+
+  @@index([toolId])
+  @@map("FinToolIssueLog")
+}
+
+model FinGatePass {
+  id             Int      @id @default(autoincrement())
+  gatePassNo     String   @unique
+  gatePassDate   DateTime @db.Date
+  type           String   @default("Outward") // Outward | Inward | Returnable | Non-Returnable
+  siteId         Int
+  itemDescription String
+  qty            Float    @default(0)
+  vehicleNo      String?
+  driverName     String?
+  purpose        String?
+  authorizedBy   String?
+  status         String   @default("Open") // Open | Closed
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  site FinSite @relation(fields: [siteId], references: [id])
+
+  @@index([siteId])
+  @@map("FinGatePass")
+}
+
+model FinEquipment {
+  id            Int      @id @default(autoincrement())
+  equipmentCode String   @unique
+  name          String
+  type          String? // Crane | Vehicle | Other
+  siteId        Int
+  status        String   @default("Active") // Active | Under Maintenance | Idle
+  operatorName  String?
+  remarks       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  site FinSite            @relation(fields: [siteId], references: [id])
+  logs FinEquipmentLog[]
+
+  @@index([siteId])
+  @@map("FinEquipment")
+}
+
+model FinEquipmentLog {
+  id            Int      @id @default(autoincrement())
+  equipmentId   Int
+  logDate       DateTime @db.Date
+  hoursUsed     Float?
+  kmReading     Float?
+  fuelConsumed  Float?
+  remarks       String?
+
+  equipment FinEquipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@index([equipmentId])
+  @@map("FinEquipmentLog")
+}
+
+model FinScrapEntry {
+  id             Int      @id @default(autoincrement())
+  scrapNo        String   @unique
+  scrapDate      DateTime @db.Date
+  siteId         Int
+  jobId          Int?
+  itemId         Int?
+  description    String
+  qty            Float    @default(0)
+  unit           String   @default("Nos")
+  estimatedValue Float    @default(0)
+  disposalStatus String   @default("Pending") // Pending | Disposed | Sold
+  remarks        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  site FinSite @relation(fields: [siteId], references: [id])
+  job  FinJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  item Item?   @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([siteId])
+  @@index([jobId])
+  @@map("FinScrapEntry")
+}
+
+model FinPhysicalVerification {
+  id             Int      @id @default(autoincrement())
+  verificationNo String   @unique
+  verificationDate DateTime @db.Date
+  siteId         Int
+  type           String   @default("Monthly") // Daily | Weekly | Monthly
+  verifiedBy     String?
+  status         String   @default("Draft") // Draft | Completed
+  remarks        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  site  FinSite                       @relation(fields: [siteId], references: [id])
+  lines FinPhysicalVerificationLine[]
+
+  @@index([siteId])
+  @@map("FinPhysicalVerification")
+}
+
+model FinPhysicalVerificationLine {
+  id            Int    @id @default(autoincrement())
+  verificationId Int
+  itemId        Int
+  bookQty       Float  @default(0)
+  physicalQty   Float  @default(0)
+  variance      Float  @default(0)
+  remarks       String?
+
+  verification FinPhysicalVerification @relation(fields: [verificationId], references: [id], onDelete: Cascade)
+  item         Item                    @relation(fields: [itemId], references: [id])
+
+  @@index([verificationId])
+  @@index([itemId])
+  @@map("FinPhysicalVerificationLine")
+}

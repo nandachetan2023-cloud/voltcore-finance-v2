@@ -57,6 +57,10 @@ async function handleFileUpload(pdb: any, file: File) {
       const existingPo = await pdb.finPurchaseOrder.findFirst({ where: { poNo } })
       const data = {
         poNo, vendorId: str(pick(r, 'VENDOR ID', 'Vendor Code')) || 'NA', vendorName, siteId,
+        jobCode: str(pick(r, 'JOB CODE', 'Job Code')) || null,
+        costCenter: str(pick(r, 'COST CENTER', 'Cost Center')) || null,
+        department: str(pick(r, 'DEPARTMENT', 'Department')) || null,
+        projectManager: str(pick(r, 'PROJECT MANAGER', 'Project Manager', 'PM')) || null,
         date: excelDateToJS(pick(r, 'DATE', 'PO DATE', 'Order Date')) || new Date(),
         descriptionOfWork: str(pick(r, 'DESCRIPTION', 'Description of Work', 'WORK')) || null,
         totalAmount: num(pick(r, 'ORDER AMOUNT', 'AMOUNT', 'Total Amount', 'TOTAL')),
@@ -77,10 +81,15 @@ async function handleJsonRecords(pdb: any, records: any[]) {
   for (let i = 0; i < records.length; i++) {
     const r = records[i]
     if (!r.poNo) { skipped++; continue }
+    const missing = ['siteId', 'jobCode', 'costCenter', 'department', 'projectManager'].filter(k => !r[k])
+    if (missing.length) { skipped++; errorRows.push({ row: i + 1, message: `Missing required fields: ${missing.join(', ')}` }); continue }
     try {
       const data = {
         poNo: r.poNo, vendorId: r.vendorId || 'NA', vendorName: r.vendorName || '',
-        siteId: Number(r.siteId) || 1, date: r.date ? new Date(r.date) : new Date(),
+        siteId: Number(r.siteId) || 1, jobCode: r.jobCode || null,
+        costCenter: r.costCenter || null, department: r.department || null,
+        projectManager: r.projectManager || null,
+        date: r.date ? new Date(r.date) : new Date(),
         descriptionOfWork: r.descriptionOfWork || null, totalAmount: Number(r.totalAmount) || 0,
         status: r.status || 'Draft',
       }

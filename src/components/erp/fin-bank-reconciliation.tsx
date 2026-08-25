@@ -13,7 +13,7 @@ interface BankAccount {
   currency: string; status: string;
 }
 interface BankTransaction {
-  id: number; bankAccountId: number; date: string; type: string | null;
+  id: number; bankAccountId: number; date: string; type: string | null; transactionType?: string | null;
   amount: number; balance: number; reference: string | null; party: string | null;
   description: string | null; category: string | null; status: string;
   reconciled: boolean;
@@ -22,11 +22,11 @@ interface BankTransaction {
 const BR_COLUMNS: ExportColumn<BankTransaction>[] = [
   { header: 'Transaction Date', accessor: (r) => r.date?.split('T')[0] ?? '' },
   { header: 'Type', accessor: 'type' },
+  { header: 'Transaction Type', accessor: 'transactionType' },
   { header: 'Party', accessor: 'party' },
   { header: 'Description', accessor: 'description' },
   { header: 'Category', accessor: 'category' },
-  { header: 'Debit', accessor: (r) => r.amount < 0 ? Math.abs(r.amount) : 0 },
-  { header: 'Credit', accessor: (r) => r.amount > 0 ? r.amount : 0 },
+  { header: 'Amount', accessor: 'amount' },
   { header: 'Balance', accessor: 'balance' },
   { header: 'Reference', accessor: 'reference' },
   { header: 'Reconciled', accessor: (r) => r.reconciled ? 'Yes' : 'No' },
@@ -36,6 +36,7 @@ const BR_COLUMNS: ExportColumn<BankTransaction>[] = [
 const BR_IMPORT_FIELDS: ImportField[] = [
   { key: 'date', label: 'Transaction Date', type: 'date', required: true },
   { key: 'type', label: 'Type (Credit/Debit)', required: true },
+  { key: 'transactionType', label: 'Transaction Type' },
   { key: 'party', label: 'Party' },
   { key: 'description', label: 'Description' },
   { key: 'category', label: 'Category' },
@@ -48,6 +49,7 @@ const BR_IMPORT_FIELDS: ImportField[] = [
 const BR_SAMPLE_ROW: Record<string, string | number> = {
   date: '2026-01-20',
   type: 'Credit',
+  transactionType: 'Receipt',
   party: 'NTPC Ltd',
   description: 'Client payment',
   category: 'Receipt',
@@ -337,7 +339,7 @@ export default function FinBankReconciliation() {
                         className="accent-[#f5a623]"
                       />
                     </th>
-                    {['Date', 'Type', 'Party', 'Description', 'Amount', 'Reference', ''].map((h) => (
+                    {['Date', 'Type', 'Txn Type', 'Party', 'Description', 'Amount', 'Reference', ''].map((h) => (
                       <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>
                     ))}
                   </tr>
@@ -355,6 +357,7 @@ export default function FinBankReconciliation() {
                       </td>
                       <td className="py-2.5 px-3 text-[#8899aa] font-mono">{fmtDate(t.date)}</td>
                       <td className="py-2.5 px-3"><span className={`vc-badge ${t.type === 'Credit' ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#ff3d3d]/15 text-[#ff3d3d]'}`}>{t.type || '—'}</span></td>
+                      <td className="py-2.5 px-3"><span className={`vc-badge ${t.transactionType === 'Receipt' ? 'bg-[#00e676]/15 text-[#00e676]' : t.transactionType === 'Contra' || t.transactionType === 'Transfer' ? 'bg-[#00d4ff]/15 text-[#00d4ff]' : t.transactionType === 'Payment' || t.transactionType === 'Charges' ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : t.transactionType === 'Interest' ? 'bg-[#ffab40]/15 text-[#ffab40]' : 'bg-[#5a6878]/15 text-[#5a6878]'}`}>{t.transactionType || '—'}</span></td>
                       <td className="py-2.5 px-3 text-[#e2e8f0]">{t.party || '—'}</td>
                       <td className="py-2.5 px-3 text-[#8899aa] max-w-[160px] truncate">{t.description || '—'}</td>
                       <td className="py-2.5 px-3 text-[#e2e8f0] font-mono">{fmtINR(t.amount)}</td>
@@ -403,7 +406,7 @@ export default function FinBankReconciliation() {
               <table className="w-full text-[11px]">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-[#0f1318]">
-                    {['Date', 'Type', 'Party', 'Description', 'Amount', 'Reference', ''].map((h) => (
+                    {['Date', 'Type', 'Txn Type', 'Party', 'Description', 'Amount', 'Reference', ''].map((h) => (
                       <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>
                     ))}
                   </tr>
@@ -413,6 +416,7 @@ export default function FinBankReconciliation() {
                     <tr key={t.id} className="hover:bg-[#141920] cursor-pointer opacity-80" onClick={() => viewDetail(t)}>
                       <td className="py-2.5 px-3 text-[#8899aa] font-mono">{fmtDate(t.date)}</td>
                       <td className="py-2.5 px-3"><span className={`vc-badge ${t.type === 'Credit' ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#ff3d3d]/15 text-[#ff3d3d]'}`}>{t.type || '—'}</span></td>
+                      <td className="py-2.5 px-3"><span className={`vc-badge ${t.transactionType === 'Receipt' ? 'bg-[#00e676]/15 text-[#00e676]' : t.transactionType === 'Contra' || t.transactionType === 'Transfer' ? 'bg-[#00d4ff]/15 text-[#00d4ff]' : t.transactionType === 'Payment' || t.transactionType === 'Charges' ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : t.transactionType === 'Interest' ? 'bg-[#ffab40]/15 text-[#ffab40]' : 'bg-[#5a6878]/15 text-[#5a6878]'}`}>{t.transactionType || '—'}</span></td>
                       <td className="py-2.5 px-3 text-[#8899aa]">{t.party || '—'}</td>
                       <td className="py-2.5 px-3 text-[#8899aa] max-w-[160px] truncate">{t.description || '—'}</td>
                       <td className="py-2.5 px-3 text-[#e2e8f0] font-mono">{fmtINR(t.amount)}</td>

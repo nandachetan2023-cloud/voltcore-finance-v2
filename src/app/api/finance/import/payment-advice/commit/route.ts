@@ -42,7 +42,7 @@ async function getOrCreateParty(nameRaw: string | null | undefined) {
 
 async function getOrCreateInvoice(invoiceNo: string) {
   if (!invoiceNo) return null
-  return db.finInvoice.findUnique({ where: { invoiceNo } })
+  return db.finInvoice.findFirst({ where: { invoiceNo } })
 }
 
 export async function POST(req: Request) {
@@ -109,7 +109,7 @@ export async function POST(req: Request) {
       const party = partyName ? await getOrCreateParty(partyName) : null
 
       const totalAmount = col.totalAmount >= 0 ? toFloat(rawRow[col.totalAmount]) : 0
-      const paymentDate = col.paymentDate >= 0 ? toDate(rawRow[col.paymentDate]) ?? undefined : undefined
+      const paymentDate = (col.paymentDate >= 0 ? toDate(rawRow[col.paymentDate]) : null) ?? new Date()
       const referenceNo = col.referenceNo >= 0 ? String(rawRow[col.referenceNo] ?? '').trim() || null : null
       const notes = col.notes >= 0 ? String(rawRow[col.notes] ?? '').trim() || null : null
 

@@ -4,9 +4,11 @@ import { FileText, Plus, Pencil, Trash2, Loader2, X, ChevronDown, ChevronRight, 
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
-import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
+import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { FormField, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
+import { useCompanyProfile, notifyCompanyProfileChanged } from '@/hooks/use-company-profile';
 
 interface Line {
   id?: number; billNo: string; invDate: string; month: string;
@@ -15,9 +17,12 @@ interface Line {
 }
 interface Party { id: number; name: string; code: string | null; pan: string | null; }
 interface PoRef { id: number; poNo: string; totalAmount: number; }
+interface SiteRef { id: number; name: string; siteCode: string; }
 interface Advice {
   id: number; adviceNo: string; partyId: number | null; party: Party | null;
+  siteId: number | null; site?: { name: string; siteCode: string } | null;
   poId: number | null; po: PoRef | null; jobCode: string | null;
+  costCenter: string | null; department: string | null; projectManager: string | null;
   totalAmount: number; paymentDate: string; paymentMode: string;
   referenceNo: string | null; notes: string | null;
   supplierName: string | null; vendorCode: string | null; panNo: string | null;
@@ -26,6 +31,7 @@ interface Advice {
 }
 interface FormData {
   adviceNo: string; partyId: string; poId: string; jobCode: string;
+  siteId: string; costCenter: string; department: string; projectManager: string;
   paymentDate: string; paymentMode: string;
   referenceNo: string; notes: string;
   supplierName: string; vendorCode: string; panNo: string;
@@ -36,6 +42,7 @@ interface FormData {
 const EMPTY_LINE: Line = { billNo: '', invDate: '', month: '', invAmount: 0, tdsAmount: 0, amount: 0, paidAmount: 0, balanceAmount: 0, remarks: '', voucherNo: '' };
 const EMPTY: FormData = {
   adviceNo: '', partyId: '', poId: '', jobCode: '',
+  siteId: '', costCenter: '', department: '', projectManager: '',
   paymentDate: new Date().toISOString().split('T')[0],
   paymentMode: 'NEFT', referenceNo: '', notes: '',
   supplierName: '', vendorCode: '', panNo: '', bankName: '', accountNo: '', ifscCode: '',
@@ -75,11 +82,11 @@ function mockLine(billNo: string, invAmount: number, tdsAmount: number, remarks:
 
 function generateMockAdvices(): Advice[] {
   return [
-    { id: 1, adviceNo: 'PA/2024-25/001', partyId: 1, party: { id: 1, name: 'Bharat Heavy Electricals Ltd', code: 'BHEL', pan: null }, totalAmount: 1500000, paymentDate: '2024-12-15T00:00:00', paymentMode: 'NEFT', referenceNo: 'UTR/NEFT/241215/001', notes: 'Payment for Nov 2024 billing', supplierName: 'Bharat Heavy Electricals Ltd', vendorCode: 'BHEL', panNo: 'AABCB1234F', bankName: 'SBI', accountNo: '12345678901', ifscCode: 'SBIN0001234', poId: null, po: null, jobCode: null, status: 'Approved', lines: [mockLine('BHEL/INV/001', 900000, 0, 'Phase 1 billing', 'Nov-24'), mockLine('BHEL/INV/002', 600000, 0, 'Material supply', 'Nov-24')] },
-    { id: 2, adviceNo: 'PA/2024-25/002', partyId: 2, party: { id: 2, name: 'Tata Projects Ltd', code: 'TPL', pan: null }, totalAmount: 2200000, paymentDate: '2025-01-10T00:00:00', paymentMode: 'RTGS', referenceNo: 'UTR/RTGS/250110/002', notes: 'December 2024 progress billing', supplierName: 'Tata Projects Ltd', vendorCode: 'TPL', panNo: 'AAACT1234D', bankName: 'HDFC Bank', accountNo: '50200012345', ifscCode: 'HDFC0001234', poId: null, po: null, jobCode: null, status: 'Paid', lines: [mockLine('TPL/INV/101', 1200000, 0, 'Civil works', 'Dec-24'), mockLine('TPL/INV/102', 1000000, 0, 'Electrical works', 'Dec-24')] },
-    { id: 3, adviceNo: 'PA/2024-25/003', partyId: 3, party: { id: 3, name: 'Larsen & Toubro Ltd', code: 'L&T', pan: null }, totalAmount: 3500000, paymentDate: '2025-02-20T00:00:00', paymentMode: 'Bank Transfer', referenceNo: 'TRF/250220/003', notes: 'January billing — Phase 2', supplierName: 'Larsen & Toubro Ltd', vendorCode: 'LNT', panNo: 'AAACL1234G', bankName: 'ICICI Bank', accountNo: '000601234567', ifscCode: 'ICIC0000006', poId: null, po: null, jobCode: null, status: 'Draft', lines: [mockLine('LT/INV/201', 2000000, 0, 'Structural steelwork', 'Jan-25'), mockLine('LT/INV/202', 1500000, 0, 'MEP works', 'Jan-25')] },
-    { id: 4, adviceNo: 'PA/2024-25/004', partyId: 1, party: { id: 1, name: 'Bharat Heavy Electricals Ltd', code: 'BHEL', pan: null }, totalAmount: 800000, paymentDate: '2025-03-05T00:00:00', paymentMode: 'Cheque', referenceNo: 'CHQ/004567', notes: 'Advance payment for supply order', supplierName: 'Bharat Heavy Electricals Ltd', vendorCode: 'BHEL', panNo: 'AABCB1234F', bankName: 'SBI', accountNo: '12345678901', ifscCode: 'SBIN0001234', poId: null, po: null, jobCode: null, status: 'Approved', lines: [mockLine('BHEL/ADV/003', 800000, 0, 'Advance — Turbine spares', 'Mar-25')] },
-    { id: 5, adviceNo: 'PA/2024-25/005', partyId: 2, party: { id: 2, name: 'Tata Projects Ltd', code: 'TPL', pan: null }, totalAmount: 1750000, paymentDate: '2025-04-12T00:00:00', paymentMode: 'IMPS', referenceNo: 'IMPS/250412/005', notes: 'February billing settlement', supplierName: 'Tata Projects Ltd', vendorCode: 'TPL', panNo: 'AAACT1234D', bankName: 'HDFC Bank', accountNo: '50200012345', ifscCode: 'HDFC0001234', poId: null, po: null, jobCode: null, status: 'Draft', lines: [mockLine('TPL/INV/103', 1000000, 0, 'Installation charges', 'Feb-25'), mockLine('TPL/INV/104', 750000, 0, 'Testing & commissioning', 'Feb-25')] },
+    { id: 1, adviceNo: 'PA/2024-25/001', partyId: 1, party: { id: 1, name: 'Bharat Heavy Electricals Ltd', code: 'BHEL', pan: null }, totalAmount: 1500000, paymentDate: '2024-12-15T00:00:00', paymentMode: 'NEFT', referenceNo: 'UTR/NEFT/241215/001', notes: 'Payment for Nov 2024 billing', supplierName: 'Bharat Heavy Electricals Ltd', vendorCode: 'BHEL', panNo: 'AABCB1234F', bankName: 'SBI', accountNo: '12345678901', ifscCode: 'SBIN0001234', siteId: null, site: null, poId: null, po: null, jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', status: 'Approved', lines: [mockLine('BHEL/INV/001', 900000, 0, 'Phase 1 billing', 'Nov-24'), mockLine('BHEL/INV/002', 600000, 0, 'Material supply', 'Nov-24')] },
+    { id: 2, adviceNo: 'PA/2024-25/002', partyId: 2, party: { id: 2, name: 'Tata Projects Ltd', code: 'TPL', pan: null }, totalAmount: 2200000, paymentDate: '2025-01-10T00:00:00', paymentMode: 'RTGS', referenceNo: 'UTR/RTGS/250110/002', notes: 'December 2024 progress billing', supplierName: 'Tata Projects Ltd', vendorCode: 'TPL', panNo: 'AAACT1234D', bankName: 'HDFC Bank', accountNo: '50200012345', ifscCode: 'HDFC0001234', siteId: null, site: null, poId: null, po: null, jobCode: 'JOB-2026-002', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'A. Verma', status: 'Paid', lines: [mockLine('TPL/INV/101', 1200000, 0, 'Civil works', 'Dec-24'), mockLine('TPL/INV/102', 1000000, 0, 'Electrical works', 'Dec-24')] },
+    { id: 3, adviceNo: 'PA/2024-25/003', partyId: 3, party: { id: 3, name: 'Larsen & Toubro Ltd', code: 'L&T', pan: null }, totalAmount: 3500000, paymentDate: '2025-02-20T00:00:00', paymentMode: 'Bank Transfer', referenceNo: 'TRF/250220/003', notes: 'January billing — Phase 2', supplierName: 'Larsen & Toubro Ltd', vendorCode: 'LNT', panNo: 'AAACL1234G', bankName: 'ICICI Bank', accountNo: '000601234567', ifscCode: 'ICIC0000006', siteId: null, site: null, poId: null, po: null, jobCode: 'JOB-2026-003', costCenter: 'CC-SIT-003', department: 'Operations', projectManager: 'P. Iyer', status: 'Draft', lines: [mockLine('LT/INV/201', 2000000, 0, 'Structural steelwork', 'Jan-25'), mockLine('LT/INV/202', 1500000, 0, 'MEP works', 'Jan-25')] },
+    { id: 4, adviceNo: 'PA/2024-25/004', partyId: 1, party: { id: 1, name: 'Bharat Heavy Electricals Ltd', code: 'BHEL', pan: null }, totalAmount: 800000, paymentDate: '2025-03-05T00:00:00', paymentMode: 'Cheque', referenceNo: 'CHQ/004567', notes: 'Advance payment for supply order', supplierName: 'Bharat Heavy Electricals Ltd', vendorCode: 'BHEL', panNo: 'AABCB1234F', bankName: 'SBI', accountNo: '12345678901', ifscCode: 'SBIN0001234', siteId: null, site: null, poId: null, po: null, jobCode: 'JOB-2026-004', costCenter: 'CC-SIT-004', department: 'Projects', projectManager: 'S. Rao', status: 'Approved', lines: [mockLine('BHEL/ADV/003', 800000, 0, 'Advance — Turbine spares', 'Mar-25')] },
+    { id: 5, adviceNo: 'PA/2024-25/005', partyId: 2, party: { id: 2, name: 'Tata Projects Ltd', code: 'TPL', pan: null }, totalAmount: 1750000, paymentDate: '2025-04-12T00:00:00', paymentMode: 'IMPS', referenceNo: 'IMPS/250412/005', notes: 'February billing settlement', supplierName: 'Tata Projects Ltd', vendorCode: 'TPL', panNo: 'AAACT1234D', bankName: 'HDFC Bank', accountNo: '50200012345', ifscCode: 'HDFC0001234', siteId: null, site: null, poId: null, po: null, jobCode: 'JOB-2026-005', costCenter: 'CC-SIT-005', department: 'Projects', projectManager: 'M. Khan', status: 'Draft', lines: [mockLine('TPL/INV/103', 1000000, 0, 'Installation charges', 'Feb-25'), mockLine('TPL/INV/104', 750000, 0, 'Testing & commissioning', 'Feb-25')] },
   ];
 }
 
@@ -88,6 +95,12 @@ const PA_COLUMNS: ExportColumn<Advice>[] = [
   { header: 'Date', accessor: (r) => r.paymentDate?.split('T')[0] ?? '' },
   { header: 'Supplier Name', accessor: (r) => r.supplierName || r.party?.name || '' },
   { header: 'Vendor Code', accessor: (r) => r.vendorCode || r.party?.code || '' },
+  { header: 'Site Code', accessor: (r) => r.site?.siteCode ?? '' },
+  { header: 'Job Code', accessor: 'jobCode' },
+  { header: 'PO Number', accessor: (r) => r.po?.poNo ?? '' },
+  { header: 'Cost Center', accessor: 'costCenter' },
+  { header: 'Department', accessor: 'department' },
+  { header: 'Project Manager', accessor: 'projectManager' },
   { header: 'PAN No', accessor: 'panNo' },
   { header: 'Amount', accessor: 'totalAmount' },
   { header: 'Mode', accessor: 'paymentMode' },
@@ -110,6 +123,12 @@ const PA_IMPORT_FIELDS: ImportField[] = [
   { key: 'accountNo', label: 'Bank Account Number', required: false },
   { key: 'ifscCode', label: 'IFSC Code', required: false },
   { key: 'notes', label: 'Notes', required: false },
+  { key: 'siteCode', label: 'Site Code', required: true },
+  { key: 'jobCode', label: 'Job Code', required: true },
+  { key: 'poNo', label: 'PO No', required: true },
+  { key: 'costCenter', label: 'Cost Center', required: true },
+  { key: 'department', label: 'Department', required: true },
+  { key: 'projectManager', label: 'Project Manager', required: true },
   { key: 'billNo', label: 'Bill No', required: false },
   { key: 'invDate', label: 'Invoice Date', required: false, type: 'date' },
   { key: 'month', label: 'Month', required: false },
@@ -132,6 +151,12 @@ const PA_SAMPLE_ROW = {
   accountNo: '12345678901',
   ifscCode: 'SBIN0001234',
   notes: 'Payment for Nov 2024 billing',
+  siteCode: 'SITE-001',
+  jobCode: 'JOB-2026-001',
+  poNo: 'PO-2026-001',
+  costCenter: 'CC-SIT-001',
+  department: 'Projects',
+  projectManager: 'R. Sharma',
   billNo: 'BHEL/INV/001',
   invDate: '2024-11-30',
   month: 'Nov-24',
@@ -142,6 +167,7 @@ function fmt(n: number) { return '₹' + (n ?? 0).toLocaleString('en-IN', { maxi
 export default function FinPaymentAdvices() {
   const [records, setRecords] = useState<Advice[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
+  const [sites, setSites] = useState<SiteRef[]>([]);
   const [poOptions, setPoOptions] = useState<PoRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
@@ -151,7 +177,9 @@ export default function FinPaymentAdvices() {
   const [form, setForm] = useState<FormData>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
-  const [logo, setLogo] = useState<string | null>(null);
+  const companyProfile = useCompanyProfile();
+  const logo = companyProfile.logoUrl;
+  const [logoSaving, setLogoSaving] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -162,31 +190,32 @@ export default function FinPaymentAdvices() {
 
   const existingAdviceKeys = useMemo(() => new Set(records.map(r => r.adviceNo)), [records]);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('pa_company_logo');
-    if (saved) setLogo(saved);
-  }, []);
+  const saveLogo = async (dataUrl: string | null) => {
+    setLogoSaving(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: { logo_url: dataUrl || '' }, groups: { logo_url: 'branding' } }),
+      });
+      const j = await res.json();
+      if (j.success) { notifyCompanyProfileChanged(); toast.success(dataUrl ? 'Logo saved' : 'Logo removed'); }
+      else toast.error(j.error || 'Failed to save logo');
+    } catch { toast.error('Network error'); }
+    finally { setLogoSaving(false); }
+  };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 500 * 1024) { toast.error('Logo must be under 500 KB'); return; }
     const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      setLogo(dataUrl);
-      localStorage.setItem('pa_company_logo', dataUrl);
-      toast.success('Logo saved');
-    };
+    reader.onload = () => { saveLogo(reader.result as string); };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
-  const removeLogo = () => {
-    setLogo(null);
-    localStorage.removeItem('pa_company_logo');
-    toast.success('Logo removed');
-  };
+  const removeLogo = () => { saveLogo(null); };
 
   const fetch_ = useCallback(async (month?: string, status?: string) => {
     try {
@@ -207,6 +236,11 @@ export default function FinPaymentAdvices() {
         else setParties([{ id: 1, name: 'L&T Construction', code: null, pan: null }, { id: 2, name: 'Siemens India Ltd', code: null, pan: null }, { id: 3, name: 'Tata Projects', code: null, pan: null }]);
       } catch { setParties([{ id: 1, name: 'L&T Construction', code: null, pan: null }, { id: 2, name: 'Siemens India Ltd', code: null, pan: null }, { id: 3, name: 'Tata Projects', code: null, pan: null }]); }
       try {
+        const r = await fetch('/api/fin/sites');
+        const rj = await r.json();
+        if (rj.success && rj.data?.length) setSites(rj.data.map((s: any) => ({ id: s.id, name: s.name, siteCode: s.siteCode })));
+      } catch { /* non-critical */ }
+      try {
         const r = await fetch('/api/fin/purchase-orders');
         const rj = await r.json();
         if (rj.success && rj.data?.length) setPoOptions(rj.data.map((p: any) => ({ id: p.id, poNo: p.poNo, totalAmount: p.totalAmount })));
@@ -215,13 +249,29 @@ export default function FinPaymentAdvices() {
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { fetch_(monthFilter, statusFilter); }, [fetch_, monthFilter, statusFilter]);
+  useEffect(() => {
+    const onDataChanged = () => fetch_(monthFilter, statusFilter);
+    window.addEventListener('finance:data-changed', onDataChanged);
+    return () => window.removeEventListener('finance:data-changed', onDataChanged);
+  }, [fetch_, monthFilter, statusFilter]);
 
-  const openNew = () => { setEditTarget(null); setForm({ ...EMPTY, lines: [{ ...EMPTY_LINE }] }); setFormOpen(true); };
+  const generateAdviceNo = () => {
+    const now = new Date();
+    const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    const fy = `${fyStart}-${String((fyStart + 1) % 100).padStart(2, '0')}`;
+    let seq = records.length + 1;
+    let candidate = `PA/${fy}/${String(seq).padStart(3, '0')}`;
+    while (existingAdviceKeys.has(candidate)) { seq += 1; candidate = `PA/${fy}/${String(seq).padStart(3, '0')}`; }
+    return candidate;
+  };
+  const openNew = () => { setEditTarget(null); setForm({ ...EMPTY, adviceNo: generateAdviceNo(), lines: [{ ...EMPTY_LINE }] }); setFormErrors({}); setFormOpen(true); };
   const openEdit = (r: Advice) => {
     setEditTarget(r);
     setForm({
       adviceNo: r.adviceNo, partyId: r.partyId ? String(r.partyId) : '',
+      siteId: r.siteId ? String(r.siteId) : '',
       poId: r.poId ? String(r.poId) : '', jobCode: r.jobCode || '',
+      costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '',
       paymentDate: r.paymentDate?.split('T')[0] || '', paymentMode: r.paymentMode,
       referenceNo: r.referenceNo || '', notes: r.notes || '',
       supplierName: r.supplierName || r.party?.name || '',
@@ -235,6 +285,7 @@ export default function FinPaymentAdvices() {
         remarks: l.remarks || '', voucherNo: l.voucherNo || '',
       })) : [{ ...EMPTY_LINE }],
     });
+    setFormErrors({});
     setFormOpen(true);
   };
 
@@ -254,15 +305,30 @@ export default function FinPaymentAdvices() {
   const removeLine = (i: number) => setForm(p => ({ ...p, lines: p.lines.length > 1 ? p.lines.filter((_, idx) => idx !== i) : p.lines }));
   const formTotal = form.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
 
+  const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<FormData>({
+    siteId: required('Site Code'),
+    jobCode: required('Job Code'),
+    poId: required('PO Number'),
+    costCenter: required('Cost Center'),
+    department: required('Department'),
+    projectManager: required('Project Manager'),
+  });
+  const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
+
   const handleSubmit = async () => {
     if (!form.adviceNo) { toast.error('Advice No is required'); return; }
+    if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
     setSubmitting(true);
     try {
       const payload = {
         adviceNo: form.adviceNo,
         partyId: form.partyId ? Number(form.partyId) : null,
+        siteId: form.siteId ? Number(form.siteId) : null,
         poId: form.poId ? Number(form.poId) : null,
         jobCode: form.jobCode || null,
+        costCenter: form.costCenter || null,
+        department: form.department || null,
+        projectManager: form.projectManager || null,
         totalAmount: formTotal,
         paymentDate: new Date(form.paymentDate),
         paymentMode: form.paymentMode,
@@ -365,7 +431,7 @@ export default function FinPaymentAdvices() {
     <div class="pa">
       <div class="header">
         <div class="header-logo">${logo ? `<img src="${logo}" alt="Logo" />` : ''}</div>
-        <div class="header-text"><h1>UAPASANA ASSOCIATE</h1><h2>PAYMENT ADVICE</h2></div>
+        <div class="header-text"><h1>${companyProfile.name || 'UPASANA ASSOCIATE'}</h1><h2>PAYMENT ADVICE</h2></div>
         <div></div>
       </div>
       <div class="info-grid">
@@ -399,7 +465,7 @@ export default function FinPaymentAdvices() {
         <div class="sign-box"><div class="role">Authorized By</div></div>
         <div class="sign-box"><div class="role">Approved By</div></div>
       </div>
-      <div class="footer-note">This is a computer-generated document. E. &amp; O. E.</div>
+      <div class="footer-note">${companyProfile.footerNote || 'This is a computer-generated document. E. &amp; O. E.'}</div>
     </div>
     <div style="text-align:center;margin-top:20px;margin-bottom:20px" class="no-print">
       <button onclick="window.print()" style="padding:8px 20px;background:#f5a623;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;color:#0a0d12">Print / Save PDF</button>
@@ -476,9 +542,19 @@ export default function FinPaymentAdvices() {
 
         <div className="overflow-x-auto"><div className="max-h-[520px] overflow-y-auto"><table className="w-full text-[11px]">
           <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
-            {['', '', 'Advice No', 'Date', 'Supplier / Party', 'Vendor Code', 'Mode', 'Reference No', 'Lines', 'Total Amount', ''].map((h, i) => (
-              <th key={i} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{i === 1 ? <input type="checkbox" checked={selectedIds.size === tc.pageItems.length && tc.pageItems.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(tc.pageItems.map(x => x.id))); else setSelectedIds(new Set()); }} className="accent-[#f5a623]" /> : h}</th>
-            ))}
+            <th className="py-2 px-3 w-8"></th>
+            <th className="py-2 px-3 w-8"><input type="checkbox" checked={selectedIds.size === tc.pageItems.length && tc.pageItems.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(tc.pageItems.map(x => x.id))); else setSelectedIds(new Set()); }} className="accent-[#f5a623]" /></th>
+            <SortableTh label="Advice No" sortKey="adviceNo" accessor={(r: Advice) => r.adviceNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Date" sortKey="paymentDate" accessor={(r: Advice) => r.paymentDate} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Supplier / Party" sortKey="supplierName" accessor={(r: Advice) => r.supplierName || r.party?.name} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Vendor Code" sortKey="vendorCode" accessor={(r: Advice) => r.vendorCode} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: Advice) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Cost Center" sortKey="costCenter" accessor={(r: Advice) => r.costCenter} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Mode" sortKey="paymentMode" accessor={(r: Advice) => r.paymentMode} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Reference No" sortKey="referenceNo" accessor={(r: Advice) => r.referenceNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="Lines" sortKey="lines" accessor={(r: Advice) => r.lines?.length ?? 0} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+            <SortableTh label="Total Amount" sortKey="totalAmount" accessor={(r: Advice) => r.totalAmount} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+            <th className="py-2 px-3"></th>
           </tr></thead>
           <tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => (
             <React.Fragment key={r.id}>
@@ -492,6 +568,8 @@ export default function FinPaymentAdvices() {
                   {r.panNo && <div className="text-[9px] text-[#5a6878] mt-0.5">PAN: {r.panNo}</div>}
                 </td>
                 <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.vendorCode || r.party?.code || '—'}</td>
+                <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || '—'}</td>
+                <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.costCenter || '—'}</td>
                 <td className="py-2.5 px-3"><span className="vc-badge bg-[#252e3a] text-[#8899aa]">{r.paymentMode}</span></td>
                 <td className="py-2.5 px-3 text-[#8899aa] font-mono max-w-[140px] truncate">{r.referenceNo || '—'}</td>
                 <td className="py-2.5 px-3 text-[#8899aa] text-center">{r.lines.length}</td>
@@ -506,7 +584,7 @@ export default function FinPaymentAdvices() {
 
               {expanded === r.id && (
                 <tr className="bg-[#0d1117]">
-                  <td colSpan={11} className="px-6 py-3">
+                  <td colSpan={13} className="px-6 py-3">
                     {/* Supplier + bank strip */}
                     <div className="grid grid-cols-2 gap-4 mb-3">
                       <div>
@@ -570,8 +648,8 @@ export default function FinPaymentAdvices() {
               )}
             </React.Fragment>
           ))}
-          {records.length === 0 && <tr><td colSpan={11} className="py-8 text-center text-[#5a6878]">No payment advices yet</td></tr>}
-          {records.length > 0 && tc.pageItems.length === 0 && <tr><td colSpan={11} className="py-8 text-center text-[#5a6878]">No matching advices</td></tr>}
+          {records.length === 0 && <tr><td colSpan={13} className="py-8 text-center text-[#5a6878]">No payment advices yet</td></tr>}
+          {records.length > 0 && tc.pageItems.length === 0 && <tr><td colSpan={13} className="py-8 text-center text-[#5a6878]">No matching advices</td></tr>}
           </tbody>
         </table></div>
         <PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} />
@@ -585,7 +663,7 @@ export default function FinPaymentAdvices() {
           <div className="space-y-3">
             {/* Payment info */}
             <div className="grid grid-cols-3 gap-3">
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Advice No *</label><input value={form.adviceNo} onChange={e => setForm(p => ({ ...p, adviceNo: e.target.value }))} className="vc-input" placeholder="PA/2024-25/001" /></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Advice No</label><input value={form.adviceNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated" /></div>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Payment Date</label><input type="date" value={form.paymentDate} onChange={e => setForm(p => ({ ...p, paymentDate: e.target.value }))} className="vc-input" /></div>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Payment Mode</label><select value={form.paymentMode} onChange={e => setForm(p => ({ ...p, paymentMode: e.target.value }))} className="vc-input appearance-none">{MODES.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
             </div>
@@ -603,12 +681,21 @@ export default function FinPaymentAdvices() {
             </div>
             {/* Ref + party */}
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Party (Linked)</label><select value={form.partyId} onChange={e => setForm(p => ({ ...p, partyId: e.target.value }))} className="vc-input appearance-none"><option value="">— None —</option>{parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+              <FormField label="Party (Linked)"><SearchableSelect value={form.partyId} onChange={v => setForm(p => ({ ...p, partyId: v }))} options={parties.map(p => ({ value: String(p.id), label: p.name }))} placeholder="— None —"/></FormField>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Reference No (UTR / Cheque)</label><input value={form.referenceNo} onChange={e => setForm(p => ({ ...p, referenceNo: e.target.value }))} className="vc-input" /></div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Job Code</label><input value={form.jobCode} onChange={e => setForm(p => ({ ...p, jobCode: e.target.value }))} placeholder="JOB-2026-001" className="vc-input" /></div>
+            <div className="grid grid-cols-3 gap-3">
+              <FormField label="Site Code" required error={formErrors.siteId}>
+                <SearchableSelect value={form.siteId} onChange={v => setField('siteId', v)} options={sites.map(s => ({ value: String(s.id), label: s.name, sublabel: s.siteCode }))} placeholder="— Select site —" />
+              </FormField>
+              <FormField label="Job Code" required error={formErrors.jobCode}>
+                <DatalistField id="pa-job-code" value={form.jobCode} onChange={v => setField('jobCode', v)} options={[...new Set(records.map(r => r.jobCode).filter(Boolean) as string[])]} placeholder="JOB-2026-001" />
+              </FormField>
+              <FormField label="PO Number" required error={formErrors.poId}>
+                <SearchableSelect value={form.poId} onChange={v => setField('poId', v)} options={poOptions.map(p => ({ value: String(p.id), label: p.poNo, sublabel: p.totalAmount ? fmt(p.totalAmount) : undefined }))} placeholder="— Select PO —" />
+              </FormField>
             </div>
+            <CostingFields prefix="pa" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
             <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Notes</label><input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} className="vc-input" /></div>
 
             {/* Line items */}
