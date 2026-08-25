@@ -180,8 +180,8 @@ export default function ExitManagement() {
             <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#a78bfa]" />
             <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-2">Exit Reasons</div>
             <div className="flex flex-wrap gap-2">
-              {analytics.reasonBreakdown?.map((r: any) => (
-                <div key={r.reason} className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ background: `${REASON_COLORS[r.reason] || '#5a6878'}15` }}>
+              {analytics.reasonBreakdown?.map((r: any, ri: number) => (
+                <div key={`reason-${ri}`} className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ background: `${REASON_COLORS[r.reason] || '#5a6878'}15` }}>
                   <span className="text-[10px] font-semibold" style={{ color: REASON_COLORS[r.reason] || '#5a6878' }}>{REASONS.find(x => x.value === r.reason)?.label || r.reason}</span>
                   <span className="text-[9px] text-[#5a6878]">({r.count})</span>
                 </div>
@@ -252,7 +252,7 @@ export default function ExitManagement() {
 
       {/* Exit Interview Dialog */}
       <Dialog open={interviewOpen} onOpenChange={setInterviewOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-lg">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-[#a78bfa] flex items-center gap-2">
               <FileText size={16} />

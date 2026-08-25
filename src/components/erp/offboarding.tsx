@@ -332,7 +332,7 @@ export default function OffboardingModule() {
       </div>
 
       <Dialog open={showForm} onOpenChange={(open) => { setShowForm(open); if (!open) setOffboardFieldErrors({}); }}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2"><UserX size={16} /> Submit Resignation</DialogTitle>
           </DialogHeader>

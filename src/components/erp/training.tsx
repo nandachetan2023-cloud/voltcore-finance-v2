@@ -355,7 +355,7 @@ export default function Training() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="vc-stat-card">
@@ -491,7 +491,7 @@ export default function Training() {
 
       {/* ===== ADD CERT DIALOG ===== */}
       <Dialog open={createCertOpen} onOpenChange={setCreateCertOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] text-sm flex items-center gap-2">
               <Plus size={14} /><Award size={14} />
@@ -615,7 +615,7 @@ export default function Training() {
 
       {/* ===== DELETE CERT DIALOG ===== */}
       <Dialog open={deleteCertOpen} onOpenChange={setDeleteCertOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] max-w-sm">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-[#ff3d3d] text-sm flex items-center gap-2">
               <AlertTriangle size={14} /> Delete Certification

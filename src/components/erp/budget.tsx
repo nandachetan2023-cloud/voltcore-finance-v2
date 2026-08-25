@@ -1,588 +1,311 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import {
-  Target, TrendingUp, TrendingDown, AlertTriangle, Plus, Pencil,
-  Trash2, Loader2, CheckCircle2, ArrowDownCircle, CircleDot,
-} from 'lucide-react';
+import { Target, Loader2, Plus, Pencil, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import { useERPStore } from '@/store/erp-store';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_table-controls';
+import { ExportButton, type ExportColumn } from './_import-export';
+import ImportWizard, { type ImportField } from './_import-wizard';
+import { FormField, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
+import { Checkbox } from '@/components/ui/checkbox';
 
-/* ── Types ────────────────────────────────────────── */
-interface BudgetItem {
-  id: string;
-  category: string;
-  description: string;
-  planned: number;
-  actual: number;
-  period: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-}
+interface SiteRef { id: number; name: string; siteCode: string; }
+interface JobRef { id: number; jobCode: string; description: string | null; siteId: number | null; siteName: string; }
+interface BudgetItem { id: number; category: string; description: string; planned: number; actual: number; variance: number; period: string; month: string | null; siteId: number | null; jobCode: string | null; poNo: string | null; costCenter: string | null; department: string | null; projectManager: string | null; status: string; site?: SiteRef | null; }
+interface FormData { category: string; description: string; planned: number; actual: number; period: string; siteId: string; jobCode: string; poNo: string; costCenter: string; department: string; projectManager: string; status: string; }
 
-interface BudgetFormData {
-  category: string;
-  description: string;
-  planned: string;
-  actual: string;
-  period: string;
-  status: string;
-}
-
-const EMPTY_FORM: BudgetFormData = {
-  category: '', description: '', planned: '', actual: '0', period: '', status: 'On Track',
-};
-
-const CATEGORIES = [
-  'Salaries', 'Materials', 'Equipment', 'Travel', 'Admin',
-  'Utilities', 'Training', 'Marketing', 'Maintenance', 'Contingency',
+const BUDGET_COLUMNS: ExportColumn<BudgetItem>[] = [
+  { header: 'Category', accessor: 'category' },
+  { header: 'Description', accessor: 'description' },
+  { header: 'Site', accessor: (r) => r.site?.siteCode ?? '' },
+  { header: 'Job Code', accessor: 'jobCode' },
+  { header: 'PO No', accessor: 'poNo' },
+  { header: 'Cost Center', accessor: 'costCenter' },
+  { header: 'Department', accessor: 'department' },
+  { header: 'Project Manager', accessor: 'projectManager' },
+  { header: 'Planned', accessor: 'planned' },
+  { header: 'Actual', accessor: 'actual' },
+  { header: 'Variance', accessor: 'variance' },
+  { header: 'Utilization %', accessor: (r) => r.planned > 0 ? ((r.actual / r.planned) * 100).toFixed(1) : '0' },
+  { header: 'Period', accessor: 'period' },
+  { header: 'Month', accessor: 'month' },
+  { header: 'Status', accessor: 'status' },
 ];
-const STATUS_OPTIONS = ['On Track', 'Over Budget', 'Under Budget', 'Completed'];
 
-/* ── Helpers ──────────────────────────────────────── */
-function statusBadge(s: string) {
-  const m: Record<string, string> = {
-    'On Track': 'bg-[#00e676]/15 text-[#00e676]',
-    'Over Budget': 'bg-[#ff3d3d]/15 text-[#ff3d3d]',
-    'Under Budget': 'bg-[#00d4ff]/15 text-[#00d4ff]',
-    'Completed': 'bg-[#5a6878]/15 text-[#5a6878]',
-  };
-  return m[s] || 'bg-[#5a6878]/15 text-[#5a6878]';
+const EMPTY_FORM: FormData = { category: '', description: '', planned: 0, actual: 0, period: 'FY 2024-25', siteId: '', jobCode: '', poNo: '', costCenter: '', department: '', projectManager: '', status: 'On Track' };
+
+const BUDGET_IMPORT_FIELDS: ImportField[] = [
+  { key: 'category', label: 'Category', required: true },
+  { key: 'description', label: 'Description', required: true },
+  { key: 'planned', label: 'Planned', type: 'number' },
+  { key: 'actual', label: 'Actual', type: 'number' },
+  { key: 'jobCode', label: 'Job Code' },
+  { key: 'poNo', label: 'PO Number' },
+  { key: 'costCenter', label: 'Cost Center' },
+  { key: 'department', label: 'Department' },
+  { key: 'projectManager', label: 'Project Manager' },
+  { key: 'period', label: 'Period' },
+  { key: 'month', label: 'Month' },
+  { key: 'status', label: 'Status' },
+];
+const BUDGET_SAMPLE_ROW = { category: 'Manpower', description: 'Skilled labour charges', planned: 4500000, actual: 3800000, period: 'FY 2024-25', month: 'April', jobCode: 'JOB-2026-001', poNo: 'PO-1001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', status: 'On Track' };
+
+function generateMockBudget(): BudgetItem[] {
+  return [
+    { id: 1, category: 'Manpower', description: 'Skilled & unskilled labour charges', planned: 4500000, actual: 3800000, variance: 700000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-001', poNo: 'PO-1001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', status: 'On Track' },
+    { id: 2, category: 'Material', description: 'Electrical panels, cables, transformers', planned: 8200000, actual: 9100000, variance: -900000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-002', poNo: 'PO-1002', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'A. Verma', status: 'Over Budget' },
+    { id: 3, category: 'Equipment', description: 'DG sets, cranes, compressors', planned: 3500000, actual: 2800000, variance: 700000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-003', poNo: 'PO-1003', costCenter: 'CC-PROJ-001', department: 'Operations', projectManager: 'P. Iyer', status: 'Under Budget' },
+    { id: 4, category: 'Travel', description: 'Staff travel & site visits', planned: 1200000, actual: 950000, variance: 250000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-004', poNo: 'PO-1004', costCenter: 'CC-HO-001', department: 'Projects', projectManager: 'S. Rao', status: 'On Track' },
+    { id: 5, category: 'Subcontract', description: 'Specialized testing & commissioning', planned: 6000000, actual: 5200000, variance: 800000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-005', poNo: 'PO-1005', costCenter: 'CC-PROJ-002', department: 'Projects', projectManager: 'M. Khan', status: 'On Track' },
+    { id: 6, category: 'Overhead', description: 'Office rent, utilities, admin', planned: 1800000, actual: 1950000, variance: -150000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-006', poNo: 'PO-1006', costCenter: 'CC-HO-001', department: 'Operations', projectManager: 'N. Joshi', status: 'Over Budget' },
+  ];
 }
 
-function formatCurrency(val: number): string {
-  if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)}Cr`;
-  if (val >= 100000) return `₹${(val / 100000).toFixed(2)}L`;
-  return `₹${val.toLocaleString('en-IN')}`;
-}
-
-function getBarColor(pct: number): string {
-  if (pct > 100) return '#ff3d3d';
-  if (pct >= 80) return '#f5a623';
-  return '#00e676';
-}
-
-/* ── Loading Skeleton ─────────────────────────────── */
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="vc-stat-card">
-            <Skeleton className="h-3 w-24 mb-2 bg-[#1e2630]" />
-            <Skeleton className="h-7 w-14 bg-[#1e2630]" />
-          </div>
-        ))}
-      </div>
-      <div className="vc-panel">
-        <Skeleton className="h-10 w-full bg-[#1e2630]" />
-        <div className="p-3 space-y-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full bg-[#1e2630]" />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Stat Card ────────────────────────────────────── */
-function StatCard({ icon: Icon, label, value, color }: {
-  icon: React.ElementType; label: string; value: number | string; color: string;
-}) {
-  return (
-    <div className="vc-stat-card">
-      <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: color }} />
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">{label}</div>
-          <div className="text-[22px] font-bold leading-none" style={{ fontFamily: "'Barlow Condensed', sans-serif", color }}>{value}</div>
-        </div>
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}15` }}>
-          <Icon size={18} style={{ color }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Progress Bar ─────────────────────────────────── */
-function BudgetBar({ planned, actual }: { planned: number; actual: number }) {
-  const pct = planned > 0 ? (actual / planned) * 100 : 0;
-  const color = getBarColor(pct);
-  const clampedPct = Math.min(pct, 100);
-
-  return (
-    <div className="w-full h-[6px] bg-[#1a2028] rounded-full overflow-hidden">
-      <div
-        className="h-full rounded-full transition-all duration-500"
-        style={{ width: `${clampedPct}%`, background: color }}
-      />
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   MAIN COMPONENT
-   ════════════════════════════════════════════════════════ */
 export default function Budget() {
-  const [items, setItems] = useState<BudgetItem[]>([]);
+  const [records, setRecords] = useState<BudgetItem[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<BudgetItem | null>(null);
   const [editTarget, setEditTarget] = useState<BudgetItem | null>(null);
-  const [form, setForm] = useState<BudgetFormData>(EMPTY_FORM);
+  const [deleteTarget, setDeleteTarget] = useState<BudgetItem | null>(null);
+  const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
-  const { triggerCreate } = useERPStore();
+  const [importOpen, setImportOpen] = useState(false);
+  const [sites, setSites] = useState<SiteRef[]>([]);
+  const [jobs, setJobs] = useState<JobRef[]>([]);
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
-  useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);
+  useEffect(() => { fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success) setSites(j.data); }).catch(() => {}); }, []);
+  useEffect(() => { fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success) setJobs(j.data.map((x: any) => ({ id: x.id, jobCode: x.jobCode, description: x.description ?? null, siteId: x.siteId ?? null, siteName: x.site?.name ?? '' }))); }).catch(() => {}); }, []);
 
-  /* ── Fetch ── */
+  const filtered = records.filter(r => statusFilter === 'All' || r.status === statusFilter);
+  const tc = useTableControls(filtered, (r) => `${r.category} ${r.description} ${r.period} ${r.month ?? ''} ${r.status} ${r.site?.name ?? ''} ${r.site?.siteCode ?? ''}`);
+  const pageIds = tc.pageItems.map(r => r.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id));
+  const toggleRow = (id: number) => setSelected(s => { const next = new Set(s); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const toggleAllOnPage = () => setSelected(s => { const next = new Set(s); pageIds.forEach(id => allPageSelected ? next.delete(id) : next.add(id)); return next; });
+  const BUDGET_STATUSES = ['All', ...new Set(records.map(r => r.status).filter(Boolean))];
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch('/api/budget');
       const json = await res.json();
-      if (json.success) setItems(json.data);
-      else toast.error(json.error || 'Failed to fetch budget items');
-    } catch {
-      toast.error('Network error fetching budget items');
-    } finally {
-      setLoading(false);
-    }
+      if (json.success && json.data?.length) { setRecords(json.data); }
+      else { setRecords(generateMockBudget()); toast.info('Sample data — no server records found'); }
+    } catch { setRecords(generateMockBudget()); toast.info('Sample data — API unavailable'); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  /* ── Seed data on first empty load ── */
-  useEffect(() => {
-    if (!loading && items.length === 0) {
-      seedData();
-    }
-  }, [loading]);
+  const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<FormData>({
+    siteId: required('Site Code'),
+    jobCode: required('Job Code'),
+    poNo: required('PO Number'),
+    costCenter: required('Cost Center'),
+    department: required('Department'),
+    projectManager: required('Project Manager'),
+  });
+  const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
-  const seedData = async () => {
-    const seedItems = [
-      { category: 'Salaries', description: 'Staff salaries, wages & overtime for all sites', planned: 4800000, actual: 4650000, period: 'FY 2024-25', status: 'On Track' },
-      { category: 'Materials', description: 'Steel, cement, cables & construction materials', planned: 7200000, actual: 7850000, period: 'FY 2024-25', status: 'Over Budget' },
-      { category: 'Equipment', description: 'Heavy machinery, tools & spares procurement', planned: 1500000, actual: 1320000, period: 'FY 2024-25', status: 'Under Budget' },
-      { category: 'Travel', description: 'Site visits, client meetings & project travel', planned: 600000, actual: 580000, period: 'FY 2024-25', status: 'On Track' },
-      { category: 'Admin', description: 'Office supplies, printing, communication & misc', planned: 400000, actual: 385000, period: 'FY 2024-25', status: 'On Track' },
-      { category: 'Utilities', description: 'Electricity, water, internet & fuel for sites', planned: 900000, actual: 920000, period: 'FY 2024-25', status: 'On Track' },
-      { category: 'Training', description: 'Safety training, skill development & certifications', planned: 350000, actual: 280000, period: 'FY 2024-25', status: 'Under Budget' },
-      { category: 'Marketing', description: 'Business development, proposals & branding', planned: 500000, actual: 320000, period: 'FY 2024-25', status: 'Under Budget' },
-      { category: 'Maintenance', description: 'Equipment maintenance, site upkeep & repairs', planned: 800000, actual: 890000, period: 'FY 2024-25', status: 'On Track' },
-      { category: 'Contingency', description: 'Emergency reserves & unforeseen expenses', planned: 1000000, actual: 250000, period: 'FY 2024-25', status: 'Under Budget' },
-      { category: 'Salaries', description: 'Contract labour wages & benefits', planned: 3600000, actual: 3520000, period: 'FY 2024-25', status: 'On Track' },
-      { category: 'Materials', description: 'Electrical panels, switchgear & transformers', planned: 2800000, actual: 2950000, period: 'FY 2024-25', status: 'Over Budget' },
-    ];
-
-    for (const item of seedItems) {
-      await fetch('/api/budget', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(item),
-      });
-    }
-    await fetchData();
+  const pickJob = (code: string) => {
+    const job = jobs.find(j => j.jobCode === code);
+    setForm(p => ({ ...p, jobCode: code, siteId: job?.siteId ? String(job.siteId) : p.siteId }));
+    if (code) clearError('jobCode');
   };
 
-  /* ── Stats ── */
-  const totalBudget = items.reduce((s, i) => s + i.planned, 0);
-  const totalSpent = items.reduce((s, i) => s + i.actual, 0);
-  const remaining = totalBudget - totalSpent;
-  const variancePct = totalBudget > 0 ? ((totalSpent / totalBudget) * 100).toFixed(1) : '0';
-
-  /* ── Form helpers ── */
-  const updateForm = (field: keyof BudgetFormData, value: string) => {
-    setForm(prev => ({ ...prev, [field]: value }));
+  const openEdit = (r: BudgetItem) => {
+    setEditTarget(r);
+    setForm({ category: r.category, description: r.description, planned: r.planned, actual: r.actual, period: r.period, siteId: r.siteId ? String(r.siteId) : '', jobCode: r.jobCode || '', poNo: r.poNo || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '', status: r.status });
+    setFormErrors({});
+    setFormOpen(true);
   };
 
-  const handleCreate = async () => {
-    if (!form.category || !form.description || !form.planned || !form.period) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
+  const handleSubmit = async () => {
+    if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
+    setSubmitting(true);
     try {
-      setSubmitting(true);
-      const res = await fetch('/api/budget', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
+      const variance = form.planned - form.actual;
+      const { siteId, jobCode, poNo, costCenter, department, projectManager, ...rest } = form;
+      const payload = { ...rest, siteId: siteId ? Number(siteId) : null, jobCode: jobCode || null, poNo: poNo || null, costCenter: costCenter || null, department: department || null, projectManager: projectManager || null, variance };
+      const method = editTarget ? 'PUT' : 'POST';
+      const body = editTarget ? { id: editTarget.id, ...payload } : payload;
+      const res = await fetch('/api/budget', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
-      if (json.success) {
-        toast.success('Budget item created successfully');
-        setCreateOpen(false);
-        setForm(EMPTY_FORM);
-        await fetchData();
-      } else {
-        toast.error(json.error || 'Failed to create budget item');
-      }
-    } catch {
-      toast.error('Network error creating budget item');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleEdit = async () => {
-    if (!editTarget || !form.category || !form.description || !form.planned) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-    try {
-      setSubmitting(true);
-      const res = await fetch('/api/budget', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editTarget.id, ...form }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        toast.success('Budget item updated successfully');
-        setEditOpen(false);
-        setEditTarget(null);
-        setForm(EMPTY_FORM);
-        await fetchData();
-      } else {
-        toast.error(json.error || 'Failed to update budget item');
-      }
-    } catch {
-      toast.error('Network error updating budget item');
-    } finally {
-      setSubmitting(false);
-    }
+      if (json.success) { toast.success(editTarget ? 'Budget updated' : 'Budget item created'); setFormOpen(false); await fetchData(); }
+      else { toast.error(json.error || 'Operation failed'); }
+    } catch { toast.error('Network error'); }
+    finally { setSubmitting(false); }
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const res = await fetch('/api/budget', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: deleteTarget.id }),
-      });
+      const res = await fetch(`/api/budget?id=${deleteTarget.id}`, { method: 'DELETE' });
       const json = await res.json();
-      if (json.success) {
-        toast.success('Budget item deleted');
-        setDeleteOpen(false);
-        setDeleteTarget(null);
-        await fetchData();
-      } else {
-        toast.error(json.error || 'Delete failed');
-      }
-    } catch {
-      toast.error('Network error deleting budget item');
-    }
+      if (json.success) { toast.success('Budget item deleted'); setDeleteOpen(false); await fetchData(); }
+      else { toast.error(json.error || 'Delete failed'); }
+    } catch { toast.error('Network error'); }
   };
 
-  const openEditDialog = (item: BudgetItem) => {
-    setEditTarget(item);
-    setForm({
-      category: item.category,
-      description: item.description,
-      planned: String(item.planned),
-      actual: String(item.actual),
-      period: item.period,
-      status: item.status,
-    });
-    setEditOpen(true);
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return;
+    try {
+      const ids = [...selected].join(',');
+      const res = await fetch(`/api/budget?ids=${ids}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) { toast.success(`Deleted ${json.deleted ?? selected.size} item${selected.size === 1 ? '' : 's'}`); setSelected(new Set()); setBulkDeleteOpen(false); await fetchData(); }
+      else toast.error(json.error || 'Delete failed');
+    } catch { toast.error('Network error'); }
   };
 
-  if (loading) return <LoadingSkeleton />;
+  const totalPlanned = records.reduce((s, r) => s + r.planned, 0);
+  const totalActual = records.reduce((s, r) => s + r.actual, 0);
+  const utilization = totalPlanned > 0 ? ((totalActual / totalPlanned) * 100).toFixed(1) : '0';
+
+  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
+
+  if (importOpen) {
+    return (
+      <ImportWizard
+        title="Budget Items"
+        fields={BUDGET_IMPORT_FIELDS}
+        keyField="category"
+        existingKeys={new Set(records.map(r => r.category))}
+        commitEndpoint="/api/budget/import"
+        sampleRow={BUDGET_SAMPLE_ROW}
+        onClose={() => setImportOpen(false)}
+        onImported={fetchData}
+      />
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={Target} label="Total Budget" value={formatCurrency(totalBudget)} color="#f5a623" />
-        <StatCard icon={TrendingUp} label="Total Spent" value={formatCurrency(totalSpent)} color="#00d4ff" />
-        <StatCard icon={ArrowDownCircle} label="Remaining" value={formatCurrency(remaining)} color="#00e676" />
-        <StatCard icon={CircleDot} label="Variance %" value={`${variancePct}%`} color={Number(variancePct) > 100 ? '#ff3d3d' : Number(variancePct) >= 80 ? '#f5a623' : '#00e676'} />
+    <div className="space-y-4 p-6">
+      <div className="grid grid-cols-3 gap-3">
+        <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00d4ff]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Planned</div><div className="text-[20px] font-bold text-[#00d4ff]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>₹{(totalPlanned / 10000000).toFixed(2)} Cr</div></div>
+        <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#f5a623]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Actual</div><div className="text-[20px] font-bold text-[#f5a623]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>₹{(totalActual / 10000000).toFixed(2)} Cr</div></div>
+        <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00e676]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Utilization</div><div className="text-[20px] font-bold text-[#00e676]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{utilization}%</div></div>
       </div>
 
-      {/* Overall Progress */}
-      <div className="vc-panel">
-        <div className="vc-panel-header">
-          <Target size={15} className="text-[#f5a623]" />
-          <span className="text-[12px] font-semibold text-[#e2e8f0]">Overall Budget Utilization</span>
-          <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">
-            {formatCurrency(totalSpent)} / {formatCurrency(totalBudget)}
-          </span>
-        </div>
-        <div className="px-4 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-3 bg-[#1a2028] rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{
-                  width: `${Math.min((totalSpent / totalBudget) * 100, 100)}%`,
-                  background: getBarColor((totalSpent / totalBudget) * 100),
-                }}
-              />
-            </div>
-            <span className="text-[12px] font-bold" style={{
-              fontFamily: "'Barlow Condensed', sans-serif",
-              color: getBarColor((totalSpent / totalBudget) * 100),
-            }}>
-              {variancePct}%
-            </span>
-          </div>
-          <div className="flex items-center justify-between mt-2 text-[9px] text-[#5a6878]">
-            <span>0%</span>
-            <div className="flex items-center gap-4">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#00e676]" /> Under 80%</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#f5a623]" /> 80-100%</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#ff3d3d]" /> Over 100%</span>
-            </div>
-            <span>100%+</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Table */}
       <div className="vc-panel">
         <div className="vc-panel-header">
           <Target size={15} className="text-[#f5a623]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Budget Items</span>
-          <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{items.length} Items</span>
-          <button onClick={() => { setForm(EMPTY_FORM); setCreateOpen(true); }}
-            className="vc-btn-primary flex items-center gap-1.5 ml-2">
-            <Plus size={13} /> New Item
-          </button>
+          <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{filtered.length} Items</span>
+          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setSelected(new Set()); }} className="ml-2 vc-input w-auto text-[11px] py-1">
+            <option value="All">All Statuses</option>
+            {BUDGET_STATUSES.filter(s => s !== 'All').map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search budget..." /></div>
+          <div className="flex items-center gap-2 ml-2">
+            {selected.size > 0 && <button onClick={() => setBulkDeleteOpen(true)} className="vc-btn-danger flex items-center gap-1.5 text-[11px]"><Trash2 size={13} /> Delete ({selected.size})</button>}
+            <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button>
+            <ExportButton records={filtered} columns={BUDGET_COLUMNS} filename="budget" />
+          </div>
+          <button onClick={() => { setEditTarget(null); setForm(EMPTY_FORM); setFormErrors({}); setFormOpen(true); }} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Item</button>
         </div>
-        <div className="overflow-x-auto">
-          <div className="max-h-[480px] overflow-y-auto">
-            <table className="w-full text-[11px]">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0f1318]">
-                  {['Category', 'Description', 'Planned', 'Actual', 'Variance', '% Used', 'Period', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1a2028]">
-                {items.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-10 text-center">
-                      <Target className="mx-auto text-[#5a6878] mb-2" size={24} />
-                      <div className="text-[11px] text-[#5a6878]">No budget items found</div>
+        <div className="overflow-x-auto"><div className="max-h-[440px] overflow-y-auto">
+          <table className="w-full text-[11px]">
+            <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
+              <th className="w-8 px-2"><Checkbox checked={allPageSelected} onCheckedChange={toggleAllOnPage} className="border-[#2a3542] data-[state=checked]:bg-[#f5a623] data-[state=checked]:border-[#f5a623]" /></th>
+              <SortableTh label="Category" sortKey="category" accessor={(r: BudgetItem) => r.category} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Description" sortKey="description" accessor={(r: BudgetItem) => r.description} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Site" sortKey="site" accessor={(r: BudgetItem) => r.site?.name} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: BudgetItem) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Cost Center" sortKey="costCenter" accessor={(r: BudgetItem) => r.costCenter} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Planned" sortKey="planned" accessor={(r: BudgetItem) => r.planned} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+              <SortableTh label="Actual" sortKey="actual" accessor={(r: BudgetItem) => r.actual} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+              <SortableTh label="Variance" sortKey="variance" accessor={(r: BudgetItem) => r.variance} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+              <SortableTh label="Utilization" sortKey="utilization" accessor={(r: BudgetItem) => (r.planned > 0 ? (r.actual / r.planned) * 100 : 0)} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
+              <SortableTh label="Status" sortKey="status" accessor={(r: BudgetItem) => r.status} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <th className="py-2 px-3">Actions</th>
+            </tr></thead>
+            <tbody className="divide-y divide-[#1a2028]">
+              {tc.pageItems.map(r => {
+                const util = r.planned > 0 ? ((r.actual / r.planned) * 100).toFixed(0) : '0';
+                return (
+                  <tr key={r.id} className={`hover:bg-[#141920] transition-colors ${selected.has(r.id) ? 'bg-[#f5a623]/5' : ''}`}>
+                    <td className="py-2.5 px-3"><Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggleRow(r.id)} className="border-[#2a3542] data-[state=checked]:bg-[#f5a623] data-[state=checked]:border-[#f5a623]" /></td>
+                    <td className="py-2.5 px-3 text-[#f5a623] font-medium">{r.category}</td>
+                    <td className="py-2.5 px-3 text-[#8899aa] max-w-[200px] truncate">{r.description}</td>
+                    <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.site?.siteCode || '—'}</td>
+                    <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || '—'}</td>
+                    <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.costCenter || '—'}</td>
+                    <td className="py-2.5 px-3 text-[#00d4ff] font-mono">₹{(r.planned / 100000).toFixed(1)}L</td>
+                    <td className="py-2.5 px-3 text-[#f5a623] font-mono">₹{(r.actual / 100000).toFixed(1)}L</td>
+                    <td className="py-2.5 px-3 font-mono"><span className={r.variance >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}>{r.variance >= 0 ? '+' : ''}₹{(r.variance / 100000).toFixed(1)}L</span></td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-[5px] bg-[#0a0d12] rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(Number(util), 100)}%`, backgroundColor: Number(util) > 100 ? '#ff3d3d' : '#00e676' }} />
+                        </div>
+                        <span className="text-[9px] text-[#8899aa]">{util}%</span>
+                      </div>
                     </td>
+                    <td className="py-2.5 px-3"><span className={`vc-badge ${r.status === 'On Track' ? 'bg-[#00e676]/15 text-[#00e676]' : r.status === 'Over Budget' ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : 'bg-[#00d4ff]/15 text-[#00d4ff]'}`}>{r.status}</span></td>
+                    <td className="py-2.5 px-3"><div className="flex items-center gap-1">
+                      <button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button>
+                      <button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button>
+                    </div></td>
                   </tr>
-                ) : (
-                  items.map(item => {
-                    const variance = item.planned - item.actual;
-                    const pct = item.planned > 0 ? (item.actual / item.planned) * 100 : 0;
-                    const isOverBudget = pct > 100;
-                    return (
-                      <tr key={item.id} className={`hover:bg-[#141920] transition-colors ${isOverBudget ? 'bg-[#ff3d3d]/5' : ''}`}>
-                        <td className="py-2.5 px-3">
-                          <span className="font-medium text-[#e2e8f0]">{item.category}</span>
-                        </td>
-                        <td className="py-2.5 px-3 text-[#8899aa] max-w-[180px] truncate">{item.description}</td>
-                        <td className="py-2.5 px-3 text-[#e2e8f0] font-medium" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                          {formatCurrency(item.planned)}
-                        </td>
-                        <td className="py-2.5 px-3 font-medium" style={{ fontFamily: "'Share Tech Mono', monospace", color: isOverBudget ? '#ff3d3d' : '#00e676' }}>
-                          {formatCurrency(item.actual)}
-                        </td>
-                        <td className="py-2.5 px-3 font-medium" style={{
-                          fontFamily: "'Share Tech Mono', monospace",
-                          color: variance >= 0 ? '#00e676' : '#ff3d3d',
-                        }}>
-                          {variance >= 0 ? '+' : ''}{formatCurrency(variance)}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <div className="flex items-center gap-2 min-w-[120px]">
-                            <div className="flex-1">
-                              <BudgetBar planned={item.planned} actual={item.actual} />
-                            </div>
-                            <span className="text-[10px] font-medium shrink-0" style={{
-                              fontFamily: "'Share Tech Mono', monospace",
-                              color: getBarColor(pct),
-                            }}>
-                              {pct.toFixed(0)}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-3 text-[#8899aa]">{item.period}</td>
-                        <td className="py-2.5 px-3">
-                          <span className={`vc-badge ${statusBadge(item.status)}`}>{item.status}</span>
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => openEditDialog(item)}
-                              className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10 transition-all" title="Edit">
-                              <Pencil size={13} />
-                            </button>
-                            <button onClick={() => { setDeleteTarget(item); setDeleteOpen(true); }}
-                              className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-all" title="Delete">
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                );
+              })}
+            </tbody>
+          </table>
+          {tc.pageItems.length === 0 && <div className="py-8 text-center text-[#5a6878] text-[11px]">No matching budget items</div>}
+        </div>
+        <PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} />
         </div>
       </div>
 
-      {/* Category Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        {CATEGORIES.slice(0, 5).map(cat => {
-          const catItems = items.filter(i => i.category === cat);
-          const catPlanned = catItems.reduce((s, i) => s + i.planned, 0);
-          const catActual = catItems.reduce((s, i) => s + i.actual, 0);
-          const catPct = catPlanned > 0 ? (catActual / catPlanned) * 100 : 0;
-          if (catItems.length === 0) return null;
-          return (
-            <div key={cat} className="vc-panel p-4">
-              <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-2">{cat}</div>
-              <div className="text-[16px] font-bold text-[#e2e8f0] mb-1" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                {formatCurrency(catActual)}
-              </div>
-              <div className="text-[9px] text-[#5a6878] mb-2">of {formatCurrency(catPlanned)}</div>
-              <BudgetBar planned={catPlanned} actual={catActual} />
-              <div className="text-[10px] font-medium mt-1.5" style={{ fontFamily: "'Share Tech Mono', monospace", color: getBarColor(catPct) }}>
-                {catPct.toFixed(0)}% used
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Create Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-[#f5a623] flex items-center gap-2">
-              <Plus size={16} /> New Budget Item
-            </DialogTitle>
-          </DialogHeader>
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-[#f5a623]">{editTarget ? 'Edit Budget Item' : 'New Budget Item'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div>
-              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Category *</label>
-              <select value={form.category} onChange={e => updateForm('category', e.target.value)} className="vc-input appearance-none">
-                <option value="">Select category...</option>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Description *</label>
-              <input type="text" value={form.description} onChange={e => updateForm('description', e.target.value)}
-                placeholder="Brief description of budget item" className="vc-input" />
-            </div>
-            <div>
-              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Planned Amount (₹) *</label>
-              <input type="number" value={form.planned} onChange={e => updateForm('planned', e.target.value)}
-                placeholder="e.g. 500000" className="vc-input" />
-            </div>
-            <div>
-              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Period *</label>
-              <input type="text" value={form.period} onChange={e => updateForm('period', e.target.value)}
-                placeholder="e.g. FY 2024-25" className="vc-input" />
-            </div>
-            <div>
-              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label>
-              <select value={form.status} onChange={e => updateForm('status', e.target.value)} className="vc-input appearance-none">
-                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-          </div>
-          <DialogFooter>
-            <button onClick={() => setCreateOpen(false)} className="vc-btn-ghost">Cancel</button>
-            <button onClick={handleCreate} disabled={submitting}
-              className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">
-              {submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-              Create Item
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-[#00d4ff] flex items-center gap-2">
-              <Pencil size={16} /> Edit Budget Item — {editTarget?.category}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Category *</label>
-              <select value={form.category} onChange={e => updateForm('category', e.target.value)} className="vc-input appearance-none">
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Description *</label>
-              <input type="text" value={form.description} onChange={e => updateForm('description', e.target.value)} className="vc-input" />
+            <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Category *</label><input value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="vc-input" placeholder="e.g. Manpower" /></div>
+            <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Description *</label><input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} className="vc-input" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Planned (₹)</label><input type="number" value={form.planned || ''} onChange={e => setForm(p => ({ ...p, planned: Number(e.target.value) }))} className="vc-input" /></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Actual (₹)</label><input type="number" value={form.actual || ''} onChange={e => setForm(p => ({ ...p, actual: Number(e.target.value) }))} className="vc-input" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Planned (₹) *</label>
-                <input type="number" value={form.planned} onChange={e => updateForm('planned', e.target.value)} className="vc-input" />
-              </div>
-              <div>
-                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Actual (₹)</label>
-                <input type="number" value={form.actual} onChange={e => updateForm('actual', e.target.value)} className="vc-input" />
-              </div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Period</label><input value={form.period} onChange={e => setForm(p => ({ ...p, period: e.target.value }))} className="vc-input" /></div>
+              <FormField label="Site Code" required error={formErrors.siteId}><SearchableSelect value={form.siteId} onChange={v => setField('siteId', v)} options={sites.map(s => ({ value: String(s.id), label: s.name, sublabel: s.siteCode }))} placeholder="— Select site —" /></FormField>
             </div>
-            <div>
-              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Period *</label>
-              <input type="text" value={form.period} onChange={e => updateForm('period', e.target.value)} className="vc-input" />
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Job Code" required error={formErrors.jobCode} hint="Auto-fills the site"><SearchableSelect value={form.jobCode} onChange={pickJob} options={jobs.map(job => ({ value: job.jobCode, label: job.jobCode, sublabel: job.description || job.siteName || '' }))} placeholder="— Select job —" /></FormField>
+              <FormField label="PO Number" required error={formErrors.poNo}><DatalistField id="budget-po-no" value={form.poNo} onChange={v => setField('poNo', v)} options={[...new Set(records.map(r => r.poNo).filter(Boolean) as string[])]} placeholder="PO-1001" /></FormField>
             </div>
-            <div>
-              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label>
-              <select value={form.status} onChange={e => updateForm('status', e.target.value)} className="vc-input appearance-none">
-                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
+            <CostingFields prefix="budget" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
+            <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label><select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className="vc-input appearance-none"><option value="On Track">On Track</option><option value="Over Budget">Over Budget</option><option value="Under Budget">Under Budget</option></select></div>
           </div>
           <DialogFooter>
-            <button onClick={() => setEditOpen(false)} className="vc-btn-ghost">Cancel</button>
-            <button onClick={handleEdit} disabled={submitting}
-              className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">
-              {submitting ? <Loader2 size={13} className="animate-spin" /> : <Pencil size={13} />}
-              Update Item
-            </button>
+            <button onClick={() => setFormOpen(false)} className="vc-btn-ghost">Cancel</button>
+            <button onClick={handleSubmit} disabled={submitting} className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">{submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}{editTarget ? 'Update' : 'Create'}</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0]">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-[#ff3d3d] flex items-center gap-2">
-              <AlertTriangle size={16} /> Delete Budget Item
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-[#8899aa]">
-              Are you sure you want to delete the <strong className="text-[#f5a623]">{deleteTarget?.category}</strong> budget item — <strong className="text-[#e2e8f0]">{deleteTarget?.description}</strong>? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="vc-btn-ghost">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-[#ff3d3d] hover:bg-[#cc2020] text-white rounded-lg">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          <AlertDialogHeader><AlertDialogTitle className="text-[#ff3d3d]">Delete Budget Item</AlertDialogTitle><AlertDialogDescription className="text-[#8899aa]">Delete <strong className="text-[#f5a623]">{deleteTarget?.category}</strong>?</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel className="vc-btn-ghost">Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDelete} className="bg-[#ff3d3d] hover:bg-[#cc2020] text-white rounded-lg">Delete</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0]">
+          <AlertDialogHeader><AlertDialogTitle className="text-[#ff3d3d]">Delete {selected.size} item{selected.size === 1 ? '' : 's'}</AlertDialogTitle><AlertDialogDescription className="text-[#8899aa]">This will permanently delete the selected budget item{selected.size === 1 ? '' : 's'}. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel className="vc-btn-ghost" onClick={() => setSelected(new Set())}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleBulkDelete} className="bg-[#ff3d3d] hover:bg-[#cc2020] text-white rounded-lg">Delete {selected.size}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

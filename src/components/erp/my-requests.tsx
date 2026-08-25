@@ -223,7 +223,7 @@ export default function MyRequests() {
                         <div className="flex items-center gap-2 mt-1 text-[11px] font-semibold flex-wrap">
                           <span className="flex items-center gap-1 text-[#f5a623]">
                             <IndianRupee size={11} />
-                            {Number(r.amount).toLocaleString('en-IN')}
+                            {(Number(r.amount) || 0).toLocaleString('en-IN')}
                             <span className="text-[10px] font-normal text-[#8899aa]">requested</span>
                           </span>
                           {r.approvedAmount !== null && r.approvedAmount !== undefined && r.status === 'approved' && (
@@ -231,7 +231,7 @@ export default function MyRequests() {
                               <span className="text-[#5a6878]">→</span>
                               <span className="flex items-center gap-1 text-[#00e676]">
                                 <IndianRupee size={11} />
-                                {Number(r.approvedAmount).toLocaleString('en-IN')}
+                                {(Number(r.approvedAmount) || 0).toLocaleString('en-IN')}
                                 <span className="text-[10px] font-normal text-[#8899aa]">approved</span>
                               </span>
                               {Number(r.approvedAmount) < Number(r.amount) && (
@@ -265,7 +265,7 @@ export default function MyRequests() {
 
       {/* New Request Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
               <Send size={16} /> New Request
@@ -322,7 +322,7 @@ export default function MyRequests() {
 
       {/* Approval chain not configured — block error dialog */}
       <Dialog open={!!blockError} onOpenChange={() => setBlockError(null)}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
               <AlertTriangle size={16} /> Cannot Submit Request

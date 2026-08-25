@@ -1,12 +1,35 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Building2, Save, Loader2, RefreshCw, FileText, IndianRupee, Users, Settings as SettingsIcon } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Building2, Save, Loader2, RefreshCw, FileText, IndianRupee, Users, Settings as SettingsIcon, Image as ImageIcon, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
+import { notifyCompanyProfileChanged } from '@/hooks/use-company-profile'
 
 // ── Field groups ─────────────────────────────────────────────────
 
-const GROUPS: { id: string; label: string; icon: any; color: string; fields: { key: string; label: string; type?: string; mono?: boolean; placeholder?: string; span?: boolean }[] }[] = [
+const GROUPS: { id: string; label: string; icon: any; color: string; fields: { key: string; label: string; type?: string; mono?: boolean; placeholder?: string; span?: boolean; hint?: string }[] }[] = [
+  {
+    id: 'branding',
+    label: 'Logo & Branding',
+    icon: ImageIcon,
+    color: '#f5a623',
+    fields: [
+      { key: 'logo_url', label: 'Company Logo', type: 'logo', span: true },
+    ],
+  },
+  {
+    id: 'documents',
+    label: 'Document Header & Footer',
+    icon: FileText,
+    color: '#7c5cff',
+    fields: [
+      { key: 'doc_tagline', label: 'Header Tagline', placeholder: 'e.g. Heavy Fabrication & Engineering', span: true, hint: 'Shown under the company name on Purchase Orders and other documents.' },
+      { key: 'doc_signatory_label', label: 'Signatory Label', placeholder: 'Authorized Signatory' },
+      { key: 'doc_footer_note', label: 'Footer Note', placeholder: 'e.g. This is a computer-generated document. E. & O.E.', span: true },
+      { key: 'doc_declaration', label: 'Tax Invoice Declaration', type: 'textarea', span: true, hint: 'The legal declaration paragraph printed at the bottom of every GST Tax Invoice.' },
+      { key: 'doc_terms', label: 'Terms & Conditions', type: 'textarea', span: true, hint: 'One condition per line — printed on Purchase Orders.' },
+    ],
+  },
   {
     id: 'company',
     label: 'Company Identity',
@@ -105,7 +128,8 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeGroup, setActiveGroup] = useState('company')
+  const [activeGroup, setActiveGroup] = useState('branding')
+  const logoInputRef = useRef<HTMLInputElement>(null)
 
   const fetchSettings = useCallback(async () => {
     setLoading(true)
@@ -136,10 +160,20 @@ export default function SettingsPage() {
         body: JSON.stringify({ settings, groups }),
       })
       const json = await res.json()
-      if (json.success) toast.success('Settings saved')
+      if (json.success) { toast.success('Settings saved'); notifyCompanyProfileChanged() }
       else toast.error(json.error || 'Failed to save')
     } catch { toast.error('Network error') }
     finally { setSaving(false) }
+  }
+
+  const handleLogoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 500 * 1024) { toast.error('Logo must be under 500 KB'); return }
+    const reader = new FileReader()
+    reader.onload = () => set('logo_url', reader.result as string)
+    reader.readAsDataURL(file)
+    e.target.value = ''
   }
 
   const currentGroup = GROUPS.find(g => g.id === activeGroup)!
@@ -197,9 +231,43 @@ export default function SettingsPage() {
             <span className="text-[13px] font-bold text-[#e2e8f0]">{currentGroup.label}</span>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            {currentGroup.fields.map(f => (
+            {currentGroup.fields.map(f => f.type === 'logo' ? (
               <div key={f.key} className={f.span ? 'col-span-2' : ''}>
                 <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">{f.label}</label>
+                <p className="text-[10px] text-[#5a6878] mb-2">Used on Site Invoices, Payment Advices, Credit Notes and Sales invoices. PNG/JPG, under 500 KB.</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-20 h-20 rounded-lg border border-[#252e3a] bg-[#0a0d12] flex items-center justify-center overflow-hidden shrink-0">
+                    {get(f.key) ? <img src={get(f.key)} alt="Company logo" className="max-w-full max-h-full object-contain" /> : <ImageIcon size={20} className="text-[#5a6878]" />}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <input ref={logoInputRef} type="file" accept="image/png,image/jpeg" onChange={handleLogoFile} className="hidden" />
+                    <button type="button" onClick={() => logoInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#161c24] border border-[#252e3a] text-[#e2e8f0] text-[11px] font-semibold rounded-lg hover:border-[#f5a623]/50">
+                      <Upload size={12} /> {get(f.key) ? 'Replace' : 'Upload'} Logo
+                    </button>
+                    {get(f.key) && (
+                      <button type="button" onClick={() => set(f.key, '')} className="flex items-center gap-1.5 px-3 py-1.5 text-[#ff3d3d] text-[11px] font-semibold hover:underline w-fit">
+                        <X size={12} /> Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : f.type === 'textarea' ? (
+              <div key={f.key} className={f.span ? 'col-span-2' : ''}>
+                <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">{f.label}</label>
+                {f.hint && <p className="text-[10px] text-[#5a6878] mb-1.5">{f.hint}</p>}
+                <textarea
+                  value={get(f.key)}
+                  onChange={e => set(f.key, e.target.value)}
+                  placeholder={f.placeholder || ''}
+                  rows={4}
+                  className="vc-input resize-y"
+                />
+              </div>
+            ) : (
+              <div key={f.key} className={f.span ? 'col-span-2' : ''}>
+                <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">{f.label}</label>
+                {f.hint && <p className="text-[10px] text-[#5a6878] mb-1.5">{f.hint}</p>}
                 <input
                   type={f.type || 'text'}
                   value={get(f.key)}

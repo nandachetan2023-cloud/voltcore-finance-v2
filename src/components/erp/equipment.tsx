@@ -262,7 +262,7 @@ export default function EquipmentModule() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={CheckCircle2} label="Total" value={equipment.length} color="#f5a623" sub="All assets" />
         <StatCard icon={CheckCircle2} label="Operational" value={operational} color="#00e676" sub="Running" />
@@ -289,7 +289,7 @@ export default function EquipmentModule() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Add New Equipment</DialogTitle></DialogHeader>{dialogContent()}
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Add New Equipment</DialogTitle></DialogHeader>{dialogContent()}
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('create')}>{submitting ? 'Adding...' : 'Add Equipment'}</Button>
@@ -299,7 +299,7 @@ export default function EquipmentModule() {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Edit Equipment</DialogTitle></DialogHeader>{dialogContent()}
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Edit Equipment</DialogTitle></DialogHeader>{dialogContent()}
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setEditOpen(false)}>Cancel</Button>
             <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('edit')}>{submitting ? 'Saving...' : 'Save Changes'}</Button>
@@ -309,7 +309,7 @@ export default function EquipmentModule() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Delete Equipment</DialogTitle></DialogHeader>
           <div className="flex items-start gap-3 py-2">
             <div className="w-10 h-10 rounded-full bg-[#ff3d3d]/15 flex items-center justify-center shrink-0 mt-0.5"><AlertTriangle size={20} className="text-[#ff3d3d]" /></div>

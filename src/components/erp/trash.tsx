@@ -220,7 +220,7 @@ export default function TrashModule() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <div className="vc-panel">
         <div className="vc-panel-header">
           <Trash2 size={16} className="text-[#ff3d3d]" />
@@ -331,7 +331,7 @@ export default function TrashModule() {
 
       {/* Restore Dialog */}
       <Dialog open={restoreOpen} onOpenChange={setRestoreOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2">
               <RotateCcw size={20} className="text-[#00e676]" /> Restore Item
@@ -353,7 +353,7 @@ export default function TrashModule() {
 
       {/* Permanent Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2">
               <AlertTriangle size={20} className="text-[#ff3d3d]" /> Permanently Delete

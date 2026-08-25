@@ -2,7 +2,12 @@ import { PrismaClient } from '@prisma/client'
 import { NextRequest } from 'next/server'
 
 // ── Singleton cache keyed by DB URL ─────────────────────────────
-const clientCache = new Map<string, PrismaClient>()
+// Persist on globalThis so Next.js dev HMR reloads REUSE clients
+// instead of leaking a new connection pool on every hot reload
+// (which exhausts Postgres "too many clients").
+const globalForPrisma = globalThis as unknown as { __prismaClientCache?: Map<string, PrismaClient> }
+const clientCache: Map<string, PrismaClient> = globalForPrisma.__prismaClientCache ?? new Map()
+if (process.env.NODE_ENV !== 'production') globalForPrisma.__prismaClientCache = clientCache
 
 function getClientForUrl(url: string): PrismaClient {
   if (clientCache.has(url)) return clientCache.get(url)!
@@ -14,9 +19,12 @@ function getClientForUrl(url: string): PrismaClient {
   return client
 }
 
-// ── Named clients for backward compat ───────────────────────────
-export const db = getClientForUrl(process.env.DATABASE_URL!)
-export const demoDb = getClientForUrl(process.env.DEMO_DATABASE_URL!)
+// ── Fallback URL so module never breaks if .env is missed ────────
+const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/erp_finance_dev?schema=public&sslmode=disable'
+const DEMO_DB_URL = process.env.DEMO_DATABASE_URL || DB_URL
+
+export const db = getClientForUrl(DB_URL)
+export const demoDb = getClientForUrl(DEMO_DB_URL)
 
 // ── Get DB from a request (reads erp_tenant_db cookie) ──────────
 export function getDbForRequest(request: NextRequest): PrismaClient {

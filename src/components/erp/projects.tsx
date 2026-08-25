@@ -79,8 +79,8 @@ function formatDate(d: string) {
 function formatCurrency(val: string) {
   const num = parseFloat(val);
   if (isNaN(num)) return val;
-  if (num >= 100) return `₹${num.toLocaleString('en-IN')}Cr`;
-  return `₹${num.toLocaleString('en-IN')}L`;
+  if (num >= 100) return `₹${(num ?? 0).toLocaleString('en-IN')}Cr`;
+  return `₹${(num ?? 0).toLocaleString('en-IN')}L`;
 }
 
 // ── Stat Card ──────────────────────────────────────────
@@ -281,12 +281,12 @@ export default function ProjectsModule() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       {/* ── Stats Row ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={Building2} label="Total Projects" value={projects.length} color="#f5a623" sub={`${activeCount} active`} />
         <StatCard icon={TrendingUp} label="Active Projects" value={activeCount} color="#00d4ff" sub="Currently running" />
-        <StatCard icon={IndianRupee} label="Contract Value" value={totalContract >= 100 ? `₹${totalContract.toLocaleString('en-IN')}Cr` : `₹${totalContract.toLocaleString('en-IN')}L`} color="#00e676" sub="All projects" />
+        <StatCard icon={IndianRupee} label="Contract Value" value={totalContract >= 100 ? `₹${(totalContract ?? 0).toLocaleString('en-IN')}Cr` : `₹${(totalContract ?? 0).toLocaleString('en-IN')}L`} color="#00e676" sub="All projects" />
         <StatCard icon={AlertTriangle} label="Delayed" value={delayedCount} color="#ff3d3d" sub="Need attention" />
       </div>
 
@@ -335,7 +335,7 @@ export default function ProjectsModule() {
                           <div className="flex-1 h-[6px] bg-[#141920] rounded-full overflow-hidden min-w-[50px]">
                             <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(0, Math.min(100, proj.progress))}%`, background: `linear-gradient(90deg, ${pColor}80, ${pColor})` }} />
                           </div>
-                          <span className="text-[10px] font-bold w-8 text-right" style={{ fontFamily: "'Share Tech Mono', monospace", color: pColor }}>{proj.progress}%</span>
+                          <span className="text-[10px] font-bold w-8 text-right" style={{ fontFamily: "'Share Tech Mono', monospace", color: pColor }}>{(Number.isFinite(proj.progress) ? proj.progress : 0)}%</span>
                         </div>
                       </td>
                       <td className="px-3 py-[10px] text-[#8899aa] whitespace-nowrap">
@@ -359,7 +359,7 @@ export default function ProjectsModule() {
 
       {/* ── Create Dialog ── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Create New Project</DialogTitle></DialogHeader>
           {dialogContent('create')}
           <DialogFooter className="gap-2">
@@ -373,7 +373,7 @@ export default function ProjectsModule() {
 
       {/* ── Edit Dialog ── */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Edit Project</DialogTitle></DialogHeader>
           {dialogContent('edit')}
           <DialogFooter className="gap-2">
@@ -387,7 +387,7 @@ export default function ProjectsModule() {
 
       {/* ── Delete Dialog ── */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Delete Project</DialogTitle></DialogHeader>
           <div className="flex items-start gap-3 py-2">
             <div className="w-10 h-10 rounded-full bg-[#ff3d3d]/15 flex items-center justify-center shrink-0 mt-0.5">
