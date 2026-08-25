@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FileText, Plus, Pencil, Trash2, Loader2, Search, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { getCurrentUserEmail } from '@/lib/current-user';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_table-controls';
@@ -259,6 +260,7 @@ export default function FinCreditNotes() {
         costCenter: form.costCenter || null,
         department: form.department || null,
         projectManager: form.projectManager || null,
+        actor: getCurrentUserEmail(),
       };
       const method = editTarget ? 'PUT' : 'POST';
       const body = editTarget ? { id: editTarget.id, ...payload } : payload;
@@ -272,7 +274,7 @@ export default function FinCreditNotes() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const res = await fetch(`/api/fin/credit-notes?id=${deleteTarget.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/fin/credit-notes?id=${deleteTarget.id}`, { method: 'DELETE', headers: { 'x-actor-email': getCurrentUserEmail() } });
       const json = await res.json();
       if (json.success) { toast.success('Deleted'); setDeleteOpen(false); await fetch_(); }
       else toast.error(json.error || 'Failed');
@@ -283,7 +285,7 @@ export default function FinCreditNotes() {
     if (selected.size === 0) return;
     try {
       const ids = [...selected].join(',');
-      const res = await fetch(`/api/fin/credit-notes?ids=${ids}`, { method: 'DELETE' });
+      const res = await fetch(`/api/fin/credit-notes?ids=${ids}`, { method: 'DELETE', headers: { 'x-actor-email': getCurrentUserEmail() } });
       const json = await res.json();
       if (json.success) { toast.success(`Deleted ${json.deleted ?? selected.size} credit note${selected.size === 1 ? '' : 's'}`); setSelected(new Set()); setBulkDeleteOpen(false); await fetch_(); }
       else toast.error(json.error || 'Failed');

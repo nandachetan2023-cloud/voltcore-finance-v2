@@ -3,17 +3,18 @@
  * "Role Management" screen (role-management.tsx, backed by the also-removed
  * /api/fin/role-matrix route) created — one MODULE_VIEW-style permission per
  * raw UI module key (e.g. LEDGER_VIEW, SALES_ORDERS_VIEW). These never
- * matched the real Finance RBAC catalog (GL/AP/AR/PettyCash/Purchase/
- * Payroll/Inventory/Reports × CREATE/VIEW/EDIT/APPROVE/DELETE/EXPORT) that
- * assertPermission() actually enforces, so they only cluttered the
- * Permissions tab in Finance Access Control. Cascades to delete any
- * FinRolePermission bindings on them too (schema: onDelete: Cascade).
+ * matched the real Finance RBAC catalog (see rbac-constants.ts's MODULES ×
+ * CREATE/VIEW/EDIT/APPROVE/DELETE/EXPORT) that assertPermission() actually
+ * enforces, so they only cluttered the Permissions tab in Finance Access
+ * Control. Cascades to delete any FinRolePermission bindings too (schema:
+ * onDelete: Cascade).
  */
 import { PrismaClient } from '@prisma/client'
+import { MODULES } from './rbac-constants'
 
 const db = new PrismaClient()
 
-const CANONICAL_MODULES = new Set(['GL', 'AP', 'AR', 'PettyCash', 'Purchase', 'Payroll', 'Inventory', 'Reports'])
+const CANONICAL_MODULES = new Set(MODULES)
 
 async function main() {
   const all = await db.finPermission.findMany()

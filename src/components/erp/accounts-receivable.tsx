@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ArrowDownCircle, Plus, Pencil, Trash2, Loader2, Send, Save, CircleDot, FileText, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { getCurrentUserEmail } from '@/lib/current-user';
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
@@ -225,6 +226,7 @@ export default function AccountsReceivable() {
         costCenter: form.costCenter || null,
         department: form.department || null,
         projectManager: form.projectManager || null,
+        actor: getCurrentUserEmail(),
       };
       const body = editTarget ? { id: editTarget.id, ...payload } : payload;
       const res = await fetch('/api/accounts-receivable', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -238,7 +240,7 @@ export default function AccountsReceivable() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const res = await fetch(`/api/accounts-receivable?id=${deleteTarget.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/accounts-receivable?id=${deleteTarget.id}`, { method: 'DELETE', headers: { 'x-actor-email': getCurrentUserEmail() } });
       const json = await res.json();
       if (json.success) { toast.success('Record deleted'); setDeleteOpen(false); await fetchData(); }
       else { toast.error(json.error || 'Delete failed'); }

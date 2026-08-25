@@ -107,7 +107,7 @@ export default function JournalEntries() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    try { const r = await fetch(`/api/journal-entries?id=${deleteTarget.id}`, { method: 'DELETE' }); const j = await r.json(); if (j.success) { toast.success('Entry deleted'); setDeleteOpen(false); await fetchData(); } else toast.error(j.error || 'Failed'); }
+    try { const r = await fetch(`/api/journal-entries?id=${deleteTarget.id}`, { method: 'DELETE', headers: { 'x-actor-email': getCurrentUserEmail() } }); const j = await r.json(); if (j.success) { toast.success('Entry deleted'); setDeleteOpen(false); await fetchData(); } else toast.error(j.error || 'Failed'); }
     catch { toast.error('Network error'); }
   };
 

@@ -28,18 +28,24 @@ export async function POST(request: NextRequest) {
     const pdb = getDbForRequest(request)
     if (!body.siteId) return NextResponse.json({ success: false, error: 'siteId is required' }, { status: 400 })
     const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
-    const denied = await assertPermission(pdb, body.actor || '', 'INVENTORY_CREATE', { request, module: 'Inventory', siteCode: site?.siteCode ?? null })
-    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to issue material' }, { status: 403 })
 
-    // Never issue material without an approved MRS (best-practice rule from the
-    // store SOP) — the one exception is a direct/emergency issue explicitly
-    // flagged by the caller, which still requires an actor for accountability.
-    if (body.mrsId) {
-      const mrs = await pdb.finMaterialRequisition.findUnique({ where: { id: Number(body.mrsId) } })
-      if (!mrs) return NextResponse.json({ success: false, error: 'MRS not found' }, { status: 404 })
-      if (mrs.status !== 'Approved') return NextResponse.json({ success: false, error: `Cannot issue against an MRS that is ${mrs.status} — it must be Approved first` }, { status: 400 })
-    } else if (!body.allowDirectIssue) {
-      return NextResponse.json({ success: false, error: 'An approved MRS is required to issue material (or pass allowDirectIssue for an emergency issue)' }, { status: 400 })
+    // Never issue material without an approved MRS (best-practice rule from
+    // the store SOP) — the one exception is a direct/emergency issue
+    // explicitly flagged by the caller. That path is gated on the higher
+    // INVENTORY_APPROVE authority INSTEAD OF ordinary INVENTORY_CREATE (not
+    // in addition to it) — requiring both would mean nobody could ever use
+    // it, since the storekeeper role that holds CREATE deliberately doesn't
+    // hold APPROVE, and vice versa. This also makes emergency issues
+    // distinguishable in the audit log from a routine MRS-backed issue.
+    if (!body.mrsId && body.allowDirectIssue) {
+      const emergencyDenied = await assertPermission(pdb, body.actor || '', 'INVENTORY_APPROVE', { request, module: 'Inventory', entityId: 'direct-issue', siteCode: site?.siteCode ?? null })
+      if (!emergencyDenied.allowed) return NextResponse.json({ success: false, error: emergencyDenied.reason || 'Direct/emergency issue requires approval-level authority' }, { status: 403 })
+    } else {
+      const denied = await assertPermission(pdb, body.actor || '', 'INVENTORY_CREATE', { request, module: 'Inventory', siteCode: site?.siteCode ?? null })
+      if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to issue material' }, { status: 403 })
+      if (!body.mrsId) {
+        return NextResponse.json({ success: false, error: 'An approved MRS is required to issue material (or pass allowDirectIssue for an emergency issue)' }, { status: 400 })
+      }
     }
 
     const { lines, allowDirectIssue, ...data } = body
@@ -48,42 +54,64 @@ export async function POST(request: NextRequest) {
       const count = (await pdb.finStoreIssue.count()) + 1
       data.issueNo = `SI/${year}/${String(count).padStart(4, '0')}`
     }
-    const record = await pdb.finStoreIssue.create({
-      data: {
-        issueNo: data.issueNo,
-        issueDate: new Date(data.issueDate || Date.now()),
-        mrsId: data.mrsId ? Number(data.mrsId) : null,
-        siteId: Number(data.siteId),
-        jobId: data.jobId ? Number(data.jobId) : null,
-        issuedTo: data.issuedTo || null,
-        receiverSignature: data.receiverSignature || null,
-        issuedBy: data.issuedBy || null,
-        remarks: data.remarks || null,
-        lines: lines?.length ? {
-          create: lines.map((l: any) => ({
-            itemId: Number(l.itemId),
-            qty: Number(l.qty) || 0,
-            rate: Number(l.rate) || 0,
-            amount: (Number(l.qty) || 0) * (Number(l.rate) || 0),
-          })),
-        } : undefined,
-      },
-      include: INCLUDE,
-    })
 
-    if (body.mrsId && lines?.length) {
-      for (const l of lines) {
-        await pdb.finMaterialRequisitionLine.updateMany({
-          where: { mrsId: Number(body.mrsId), itemId: Number(l.itemId) },
-          data: { qtyIssued: { increment: Number(l.qty) || 0 } },
-        }).catch(() => {})
+    const record = await pdb.$transaction(async (tx) => {
+      // Atomically re-check and flip the MRS status inside the same
+      // transaction as the issue creation — this closes the race where two
+      // concurrent requests both read status:'Approved' before either write
+      // lands and both succeed in issuing against the same requisition.
+      if (body.mrsId) {
+        const claimed = await tx.finMaterialRequisition.updateMany({
+          where: { id: Number(body.mrsId), status: 'Approved' },
+          data: { status: 'Issued' },
+        })
+        if (claimed.count === 0) {
+          const mrs = await tx.finMaterialRequisition.findUnique({ where: { id: Number(body.mrsId) } })
+          throw new Error(mrs ? `Cannot issue against an MRS that is ${mrs.status} — it must be Approved first` : 'MRS not found')
+        }
       }
-      await pdb.finMaterialRequisition.update({ where: { id: Number(body.mrsId) }, data: { status: 'Issued' } }).catch(() => {})
-    }
+
+      const issue = await tx.finStoreIssue.create({
+        data: {
+          issueNo: data.issueNo,
+          issueDate: new Date(data.issueDate || Date.now()),
+          mrsId: data.mrsId ? Number(data.mrsId) : null,
+          siteId: Number(data.siteId),
+          jobId: data.jobId ? Number(data.jobId) : null,
+          issuedTo: data.issuedTo || null,
+          receiverSignature: data.receiverSignature || null,
+          issuedBy: data.issuedBy || null,
+          remarks: data.remarks || null,
+          lines: lines?.length ? {
+            create: lines.map((l: any) => ({
+              itemId: Number(l.itemId),
+              qty: Number(l.qty) || 0,
+              rate: Number(l.rate) || 0,
+              amount: (Number(l.qty) || 0) * (Number(l.rate) || 0),
+            })),
+          } : undefined,
+        },
+        include: INCLUDE,
+      })
+
+      if (body.mrsId && lines?.length) {
+        for (const l of lines) {
+          await tx.finMaterialRequisitionLine.updateMany({
+            where: { mrsId: Number(body.mrsId), itemId: Number(l.itemId) },
+            data: { qtyIssued: { increment: Number(l.qty) || 0 } },
+          })
+        }
+      }
+
+      return issue
+    })
 
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating issue:', error)
+    if (error instanceof Error && (error.message.startsWith('Cannot issue') || error.message === 'MRS not found')) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.message === 'MRS not found' ? 404 : 400 })
+    }
     return NextResponse.json({ success: false, error: 'Failed to create record' }, { status: 500 })
   }
 }

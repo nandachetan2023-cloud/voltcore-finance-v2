@@ -5,6 +5,7 @@ import {
   ArrowUpRight, Landmark, Clock, Plus, Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getCurrentUserEmail } from '@/lib/current-user';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
@@ -212,6 +213,7 @@ export default function FinPayments() {
         body: JSON.stringify({
           billId: target?.id, bankAccountId, amount, paymentMethod: method,
           reference: reference || null, party: party || null, description: description || null, date: payDate,
+          actor: getCurrentUserEmail(),
           siteId: form.siteId ? Number(form.siteId) : null,
           jobCode: form.jobCode || null,
           poNo: form.poNo || null,

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FileText, Plus, Trash2, Loader2, Send, Save, CircleDot, Pencil, Printer, Upload, History } from 'lucide-react';
 import { toast } from 'sonner';
+import { getCurrentUserEmail } from '@/lib/current-user';
 import InvoiceDocument from './fin-invoice-document';
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
@@ -221,7 +222,7 @@ export default function FinInvoices() {
     setSubmitting(true);
     try {
       const method = editTarget ? 'PUT' : 'POST';
-      const common = { invoiceNo: form.invoiceNo, siteId: form.siteId, partyId: form.partyId, poId: form.poId, jobCode: form.jobCode || null, invoiceDate: new Date(form.invoiceDate), dueDate: new Date(form.dueDate), invoiceValue, gstValue, grandTotal, balanceAmount: grandTotal, description: form.description, status, poNo: form.poNo, trackingNo: form.trackingNo, costCenter: form.costCenter || null, department: form.department || null, projectManager: form.projectManager || null };
+      const common = { invoiceNo: form.invoiceNo, siteId: form.siteId, partyId: form.partyId, poId: form.poId, jobCode: form.jobCode || null, invoiceDate: new Date(form.invoiceDate), dueDate: new Date(form.dueDate), invoiceValue, gstValue, grandTotal, balanceAmount: grandTotal, description: form.description, status, poNo: form.poNo, trackingNo: form.trackingNo, costCenter: form.costCenter || null, department: form.department || null, projectManager: form.projectManager || null, actor: getCurrentUserEmail() };
       const body = editTarget ? { id: editTarget.id, ...common } : common;
       const res = await fetch('/api/fin/invoices', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
@@ -230,13 +231,13 @@ export default function FinInvoices() {
     } catch { toast.error('Network error'); } finally { setSubmitting(false); }
   };
 
-  const handleDelete = async (id: number) => { try { const r = await fetch(`/api/fin/invoices?id=${id}`, { method: 'DELETE' }); const j = await r.json(); if (j.success) { toast.success('Deleted'); await fetch_(); } else toast.error(j.error); } catch { toast.error('Network error'); } };
+  const handleDelete = async (id: number) => { try { const r = await fetch(`/api/fin/invoices?id=${id}`, { method: 'DELETE', headers: { 'x-actor-email': getCurrentUserEmail() } }); const j = await r.json(); if (j.success) { toast.success('Deleted'); await fetch_(); } else toast.error(j.error); } catch { toast.error('Network error'); } };
 
   const handleBulkDelete = async () => {
     if (selected.size === 0) return;
     try {
       const ids = [...selected].join(',');
-      const r = await fetch(`/api/fin/invoices?ids=${ids}`, { method: 'DELETE' });
+      const r = await fetch(`/api/fin/invoices?ids=${ids}`, { method: 'DELETE', headers: { 'x-actor-email': getCurrentUserEmail() } });
       const j = await r.json();
       if (j.success) { toast.success(`Deleted ${j.deleted ?? selected.size} invoice${selected.size === 1 ? '' : 's'}`); setSelected(new Set()); setBulkDeleteOpen(false); await fetch_(); } else toast.error(j.error);
     } catch { toast.error('Network error'); }

@@ -417,12 +417,14 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
   const fetchNotifications = async () => {
     try {
       let url = '/api/notifications';
+      let email: string | null = null;
       try {
         const user = localStorage.getItem('erp_auth_user');
-        const email = user ? JSON.parse(user).email : null;
+        email = user ? JSON.parse(user).email : null;
         if (email) url += `?userEmail=${encodeURIComponent(email)}`;
       } catch {}
-      const response = await fetch(url);
+      if (!email) { setNotifications([]); return; }
+      const response = await fetch(url, { headers: { 'x-actor-email': email } });
       const data = await response.json();
       if (data.success) {
         setNotifications(data.data.notifications || []);

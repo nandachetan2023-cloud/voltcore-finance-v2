@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { assertPermission } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,8 +35,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const missing = ['siteId', 'jobCode', 'poId', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
-    const { lines, ...data } = body
     const pdb = getDbForRequest(request)
+    const site = body.siteId ? await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } }) : null
+    const denied = await assertPermission(pdb, body.actor || '', 'AP_CREATE', { request, module: 'AP', siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create payment advices' }, { status: 403 })
+    const { lines, actor: _actor, ...data } = body
     const record = await pdb.finPaymentAdvice.create({
       data: { ...data, lines: lines?.length ? { create: lines } : undefined },
       include: { party: true, lines: true, po: { select: { id: true, poNo: true, totalAmount: true } } },
@@ -52,9 +56,12 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const missing = ['siteId', 'jobCode', 'poId', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
-    const { id, lines, ...data } = body
+    const { id, lines, actor, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
+    const site = data.siteId ? await pdb.finSite.findUnique({ where: { id: Number(data.siteId) } }) : null
+    const denied = await assertPermission(pdb, actor || '', 'AP_EDIT', { request, module: 'AP', entityId: String(id), siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit payment advices' }, { status: 403 })
     if (Array.isArray(lines)) {
       await pdb.finPaymentAdviceLine.deleteMany({ where: { adviceId: Number(id) } })
       const record = await pdb.finPaymentAdvice.update({
@@ -76,6 +83,10 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const pdb = getDbForRequest(request)
+    const actor = request.headers.get('x-actor-email') || ''
+    const idForCheck = searchParams.get('ids') || searchParams.get('id') || ''
+    const denied = await assertPermission(pdb, actor, 'AP_DELETE', { request, module: 'AP', entityId: idForCheck })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to delete payment advices' }, { status: 403 })
     const ids = searchParams.get('ids')
     const id = searchParams.get('id')
     if (ids) {

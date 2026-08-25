@@ -295,6 +295,7 @@ export default function CreateJournalEntry() {
       const active = lines.filter(l => l.debitAmount > 0 || l.creditAmount > 0);
       const payload = {
         entryNo,
+        actor: getCurrentUserEmail(),
         date: new Date(date),
         siteId: siteId || null,
         partyId: partyId || null,

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Trash2, Loader2, Send, Save, FileText, CircleDot, Pencil, Search, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { getCurrentUserEmail } from '@/lib/current-user';
 import { useERPStore } from '@/store/erp-store';
 import { useTableControls, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
@@ -200,6 +201,7 @@ export default function AccountsPayable() {
         costCenter: form.costCenter || null,
         department: form.department || null,
         projectManager: form.projectManager || null,
+        actor: getCurrentUserEmail(),
       };
       const body = editTarget ? { id: editTarget.id, ...common } : common;
       const res = await fetch('/api/accounts-payable', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -210,7 +212,7 @@ export default function AccountsPayable() {
   };
 
   const handleDelete = async (id: number) => {
-    try { const res = await fetch(`/api/accounts-payable?id=${id}`, { method: 'DELETE' }); const json = await res.json(); if (json.success) { toast.success('Deleted'); await fetchData(); } else toast.error(json.error); }
+    try { const res = await fetch(`/api/accounts-payable?id=${id}`, { method: 'DELETE', headers: { 'x-actor-email': getCurrentUserEmail() } }); const json = await res.json(); if (json.success) { toast.success('Deleted'); await fetchData(); } else toast.error(json.error); }
     catch { toast.error('Network error'); }
   };
 

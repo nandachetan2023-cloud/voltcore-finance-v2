@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { postJournalEntry, GL_ACCOUNTS } from '@/lib/gl-posting'
+import { assertPermission } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,12 +25,16 @@ export async function POST(request: NextRequest) {
     if (missing.length) {
       return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     }
+    const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
+    const denied = await assertPermission(pdb, body.actor || '', 'AR_CREATE', { request, module: 'AR', siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create AR invoices' }, { status: 403 })
     if (!body.invoiceNo) {
       const year = new Date().getFullYear()
       const count = (await pdb.accountsReceivable.count()) + 1
       body.invoiceNo = `AR-${year}-${String(count).padStart(3, '0')}`
     }
-    const record = await pdb.accountsReceivable.create({ data: body })
+    const { actor: _actor, ...createData } = body
+    const record = await pdb.accountsReceivable.create({ data: createData })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating AR record:', error)
@@ -40,7 +45,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, ...data } = body
+    const { id, actor, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
     const missing = ['siteId', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager']
@@ -48,6 +53,9 @@ export async function PUT(request: NextRequest) {
     if (missing.length) {
       return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     }
+    const site = data.siteId ? await pdb.finSite.findUnique({ where: { id: Number(data.siteId) } }) : null
+    const denied = await assertPermission(pdb, actor || '', 'AR_EDIT', { request, module: 'AR', entityId: String(id), siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit AR invoices' }, { status: 403 })
 
     // Capture the pre-update state so we can post the GL entry for only the
     // *delta* in receivedAmount — this route also handles unrelated field
@@ -93,6 +101,9 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const idsParam = searchParams.get('ids')
     const pdb = getDbForRequest(request)
+    const actor = request.headers.get('x-actor-email') || ''
+    const denied = await assertPermission(pdb, actor, 'AR_DELETE', { request, module: 'AR' })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to delete AR invoices' }, { status: 403 })
     if (idsParam) {
       const ids = idsParam.split(',').map((s) => Number(s.trim())).filter((n) => !isNaN(n))
       if (ids.length === 0) return NextResponse.json({ success: false, error: 'No valid ids provided' }, { status: 400 })

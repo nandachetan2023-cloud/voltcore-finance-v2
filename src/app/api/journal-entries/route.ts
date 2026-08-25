@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { assertPermission } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +68,9 @@ export async function POST(request: NextRequest) {
     if (!body.siteId) {
       return NextResponse.json({ success: false, error: 'Site is required' }, { status: 400 })
     }
+    const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
+    const denied = await assertPermission(pdb, body.actor || '', 'GL_CREATE', { request, module: 'GL', siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create journal entries' }, { status: 403 })
 
     // Resolve each line's account CODE to a real FinAccount id — this is
     // the whole point of the migration off the legacy flat model, where
@@ -96,6 +100,9 @@ export async function POST(request: NextRequest) {
 
     const totalDebit = resolvedLines.reduce((s, l) => s + l.debit, 0)
     const totalCredit = resolvedLines.reduce((s, l) => s + l.credit, 0)
+    if (Math.abs(totalDebit - totalCredit) > 0.01) {
+      return NextResponse.json({ success: false, error: `Entry is unbalanced: total debit ${totalDebit} does not equal total credit ${totalCredit}` }, { status: 400 })
+    }
 
     let entryNo = body.entryNo
     if (!entryNo) {
@@ -140,6 +147,9 @@ export async function PUT(request: NextRequest) {
     const { id, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
+    const site = data.siteId ? await pdb.finSite.findUnique({ where: { id: Number(data.siteId) } }) : null
+    const denied = await assertPermission(pdb, body.actor || '', 'GL_EDIT', { request, module: 'GL', entityId: String(id), siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit journal entries' }, { status: 403 })
 
     // This PUT only handles header-level edits (description, reference,
     // costing tags) on a single entry — line-level edits go through the
@@ -170,11 +180,18 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
+    const actor = request.headers.get('x-actor-email') || ''
     // `id` here is a FinJournalLine id (per the flattened row shape) — find
     // its parent entry and delete the whole entry (cascades to lines) so a
     // multi-line entry can't be left unbalanced by deleting a single line.
-    const line = await pdb.finJournalLine.findUnique({ where: { id: Number(id) } })
+    const line = await pdb.finJournalLine.findUnique({ where: { id: Number(id) }, include: { entry: { select: { id: true, status: true, siteId: true } } } })
     if (!line) return NextResponse.json({ success: false, error: 'Entry not found' }, { status: 404 })
+    if (line.entry.status === 'Posted') {
+      return NextResponse.json({ success: false, error: 'Cannot delete a Posted journal entry — it has already been approved and reconciled to the GL' }, { status: 400 })
+    }
+    const site = line.entry.siteId ? await pdb.finSite.findUnique({ where: { id: line.entry.siteId } }) : null
+    const denied = await assertPermission(pdb, actor, 'GL_DELETE', { request, module: 'GL', entityId: String(line.entryId), siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to delete journal entries' }, { status: 403 })
     await pdb.finJournalEntry.delete({ where: { id: line.entryId } })
     return NextResponse.json({ success: true })
   } catch (error) {

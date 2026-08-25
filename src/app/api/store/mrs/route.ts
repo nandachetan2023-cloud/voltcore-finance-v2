@@ -82,16 +82,29 @@ export async function PUT(request: NextRequest) {
       const permCode = action === 'approve' || action === 'reject' ? 'INVENTORY_APPROVE' : 'INVENTORY_EDIT'
       const denied = await assertPermission(pdb, actor || '', permCode, { request, module: 'Inventory', entityId: String(id), siteCode: mrs.site?.siteCode ?? null })
       if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || `Not allowed to ${action} material requisitions` }, { status: 403 })
+      // Each transition is only valid from a specific prior status — an
+      // updateMany with that status in the WHERE clause makes the check
+      // atomic (no TOCTOU gap between reading mrs.status above and writing),
+      // so a double-submit or two racing approve calls can't both succeed.
       if (action === 'submit') {
-        const updated = await pdb.finMaterialRequisition.update({ where: { id: Number(id) }, data: { status: 'Pending' }, include: INCLUDE })
+        if (mrs.status !== 'Draft') return NextResponse.json({ success: false, error: `Cannot submit an MRS that is ${mrs.status}` }, { status: 400 })
+        const result = await pdb.finMaterialRequisition.updateMany({ where: { id: Number(id), status: 'Draft' }, data: { status: 'Pending' } })
+        if (result.count === 0) return NextResponse.json({ success: false, error: 'MRS was already submitted' }, { status: 409 })
+        const updated = await pdb.finMaterialRequisition.findUnique({ where: { id: Number(id) }, include: INCLUDE })
         return NextResponse.json({ success: true, data: updated })
       }
       if (action === 'approve') {
-        const updated = await pdb.finMaterialRequisition.update({ where: { id: Number(id) }, data: { status: 'Approved', approvedBy: actor || null, approvedAt: new Date() }, include: INCLUDE })
+        if (mrs.status !== 'Pending') return NextResponse.json({ success: false, error: `Cannot approve an MRS that is ${mrs.status}` }, { status: 400 })
+        const result = await pdb.finMaterialRequisition.updateMany({ where: { id: Number(id), status: 'Pending' }, data: { status: 'Approved', approvedBy: actor || null, approvedAt: new Date() } })
+        if (result.count === 0) return NextResponse.json({ success: false, error: 'MRS is no longer Pending — it may have already been approved or rejected' }, { status: 409 })
+        const updated = await pdb.finMaterialRequisition.findUnique({ where: { id: Number(id) }, include: INCLUDE })
         return NextResponse.json({ success: true, data: updated })
       }
       if (action === 'reject') {
-        const updated = await pdb.finMaterialRequisition.update({ where: { id: Number(id) }, data: { status: 'Rejected', rejectionReason: data.rejectionReason || null }, include: INCLUDE })
+        if (mrs.status !== 'Pending') return NextResponse.json({ success: false, error: `Cannot reject an MRS that is ${mrs.status}` }, { status: 400 })
+        const result = await pdb.finMaterialRequisition.updateMany({ where: { id: Number(id), status: 'Pending' }, data: { status: 'Rejected', rejectionReason: data.rejectionReason || null } })
+        if (result.count === 0) return NextResponse.json({ success: false, error: 'MRS is no longer Pending — it may have already been approved or rejected' }, { status: 409 })
+        const updated = await pdb.finMaterialRequisition.findUnique({ where: { id: Number(id) }, include: INCLUDE })
         return NextResponse.json({ success: true, data: updated })
       }
       return NextResponse.json({ success: false, error: `Unknown action: ${action}` }, { status: 400 })

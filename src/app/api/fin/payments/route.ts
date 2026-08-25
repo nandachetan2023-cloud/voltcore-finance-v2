@@ -141,10 +141,15 @@ export async function POST(request: NextRequest) {
       // 3. Settle the bill if linked
       let updatedBill: Awaited<ReturnType<typeof tx.accountsPayable.update>> | null = null
       if (bill) {
-        const fullyPaid = payAmount >= bill.totalAmount
+        // Compare against the cumulative paidAmount, not just this payment —
+        // a bill settled across multiple installments must still transition
+        // to Paid once the running total reaches totalAmount.
+        const newPaidAmount = bill.paidAmount + payAmount
+        const fullyPaid = newPaidAmount >= bill.totalAmount
         updatedBill = await tx.accountsPayable.update({
           where: { id: bill.id },
           data: {
+            paidAmount: newPaidAmount,
             status: fullyPaid ? 'Paid' : 'Partially Paid',
             paidDate: fullyPaid ? paymentDate : bill.paidDate,
             paymentMethod: paymentMethod || null,

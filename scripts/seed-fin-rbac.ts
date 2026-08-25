@@ -12,10 +12,10 @@
  * migration only runs while the FinApprovalRole table still exists.
  */
 import { PrismaClient } from '@prisma/client'
+import { MODULES } from './rbac-constants'
 
 const db = new PrismaClient()
 
-const MODULES = ['GL', 'AP', 'AR', 'PettyCash', 'Purchase', 'Payroll', 'Inventory', 'Reports', 'Admin']
 const ACTIONS = ['CREATE', 'VIEW', 'EDIT', 'APPROVE', 'DELETE', 'EXPORT']
 
 // ── Role catalog: level = authority (higher wins). readOnly = view/export only. ──

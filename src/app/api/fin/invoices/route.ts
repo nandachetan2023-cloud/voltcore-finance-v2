@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { postJournalEntry, GL_ACCOUNTS } from '@/lib/gl-posting'
+import { assertPermission } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,12 +25,16 @@ export async function POST(request: NextRequest) {
     const missing = ['siteId', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
+    const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
+    const denied = await assertPermission(pdb, body.actor || '', 'AR_CREATE', { request, module: 'AR', siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create invoices' }, { status: 403 })
     if (!body.invoiceNo) {
       const year = new Date().getFullYear()
       const count = (await pdb.finInvoice.count()) + 1
       body.invoiceNo = `INV-${year}-${String(count).padStart(3, '0')}`
     }
-    const record = await pdb.finInvoice.create({ data: body })
+    const { actor: _actor, ...createData } = body
+    const record = await pdb.finInvoice.create({ data: createData })
 
     // Auto-post the GL entry for this invoice: Dr Accounts Receivable / Cr
     // Project Revenue. FinInvoice has no invoice-type field to distinguish
@@ -63,11 +68,14 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, ...data } = body
+    const { id, actor, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const missing = ['siteId', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => data[k] === undefined || data[k] === null || data[k] === '')
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
+    const site = data.siteId ? await pdb.finSite.findUnique({ where: { id: Number(data.siteId) } }) : null
+    const denied = await assertPermission(pdb, actor || '', 'AR_EDIT', { request, module: 'AR', entityId: String(id), siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit invoices' }, { status: 403 })
     const record = await pdb.finInvoice.update({ where: { id }, data })
     return NextResponse.json({ success: true, data: record })
   } catch (error) {
@@ -80,6 +88,9 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const pdb = getDbForRequest(request)
+    const actor = request.headers.get('x-actor-email') || ''
+    const denied = await assertPermission(pdb, actor, 'AR_DELETE', { request, module: 'AR' })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to delete invoices' }, { status: 403 })
     const ids = searchParams.get('ids')
     if (ids) {
       const idList = ids.split(',').map(Number).filter(Boolean)

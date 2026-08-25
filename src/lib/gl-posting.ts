@@ -59,31 +59,46 @@ export async function postJournalEntry(pdb: any, opts: PostJournalEntryOptions):
     }
 
     const year = opts.entryDate.getFullYear();
-    const count = (await pdb.finJournalEntry.count()) + 1;
-    const entryNo = `${opts.prefix}/${year}/${String(count).padStart(4, '0')}`;
 
-    await pdb.finJournalEntry.create({
-      data: {
-        entryNo,
-        entryDate: opts.entryDate,
-        reference: opts.reference || null,
-        description: opts.description,
-        siteId: opts.siteId,
-        finSiteId: opts.siteId,
-        jobCode: opts.jobCode || null,
-        poNo: opts.poNo || null,
-        costCenter: opts.costCenter || null,
-        department: opts.department || null,
-        projectManager: opts.projectManager || null,
-        voucherType: opts.voucherType,
-        status: 'Draft',
-        totalDebit,
-        totalCredit,
-        lines: { create: resolvedLines },
-      },
-    });
+    // entryNo is generated from a count(), which races under concurrent
+    // postings (two entries computing the same number, the second failing
+    // its unique constraint). Retry a few times with a fresh count on that
+    // specific failure so a losing request still gets its GL entry posted
+    // instead of silently vanishing into the catch below.
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const count = (await pdb.finJournalEntry.count()) + 1 + attempt;
+      const entryNo = `${opts.prefix}/${year}/${String(count).padStart(4, '0')}`;
+      try {
+        await pdb.finJournalEntry.create({
+          data: {
+            entryNo,
+            entryDate: opts.entryDate,
+            reference: opts.reference || null,
+            description: opts.description,
+            siteId: opts.siteId,
+            finSiteId: opts.siteId,
+            jobCode: opts.jobCode || null,
+            poNo: opts.poNo || null,
+            costCenter: opts.costCenter || null,
+            department: opts.department || null,
+            projectManager: opts.projectManager || null,
+            voucherType: opts.voucherType,
+            status: 'Draft',
+            totalDebit,
+            totalCredit,
+            lines: { create: resolvedLines },
+          },
+        });
+        return;
+      } catch (err: any) {
+        lastError = err;
+        if (err?.code !== 'P2002') break; // only retry on the entryNo unique-constraint race
+      }
+    }
+    throw lastError;
   } catch (error) {
-    console.error('[gl-posting] Failed to auto-post journal entry:', error);
+    console.error('[gl-posting] Failed to auto-post journal entry — GL is now out of sync with this transaction until this is investigated:', error);
   }
 }
 

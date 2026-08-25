@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { postJournalEntry, GL_ACCOUNTS } from '@/lib/gl-posting'
+import { assertPermission } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,12 +22,16 @@ export async function POST(request: NextRequest) {
     const missing = ['siteId', 'jobCode', 'poId', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
+    const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
+    const denied = await assertPermission(pdb, body.actor || '', 'AP_CREATE', { request, module: 'AP', siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create AP bills' }, { status: 403 })
     if (!body.billNo) {
       const year = new Date().getFullYear()
       const count = (await pdb.accountsPayable.count()) + 1
       body.billNo = `AP-${year}-${String(count).padStart(3, '0')}`
     }
-    const record = await pdb.accountsPayable.create({ data: body })
+    const { actor: _actor, ...createData } = body
+    const record = await pdb.accountsPayable.create({ data: createData })
 
     // Auto-post the GL entry for this bill: Dr Inventory / Cr Vendor Payable
     // (matches the spec's own worked example). A posting failure must never
@@ -65,7 +70,11 @@ export async function PUT(request: NextRequest) {
     const { id, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
-    const record = await pdb.accountsPayable.update({ where: { id }, data })
+    const site = data.siteId ? await pdb.finSite.findUnique({ where: { id: Number(data.siteId) } }) : null
+    const denied = await assertPermission(pdb, body.actor || '', 'AP_EDIT', { request, module: 'AP', entityId: String(id), siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit AP bills' }, { status: 403 })
+    const { actor: _actor, ...updateData } = data
+    const record = await pdb.accountsPayable.update({ where: { id }, data: updateData })
     return NextResponse.json({ success: true, data: record })
   } catch (error) {
     console.error('Error updating AP record:', error)
@@ -79,6 +88,9 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
+    const actor = request.headers.get('x-actor-email') || ''
+    const denied = await assertPermission(pdb, actor, 'AP_DELETE', { request, module: 'AP', entityId: id })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to delete AP bills' }, { status: 403 })
     await pdb.accountsPayable.delete({ where: { id: Number(id) } })
     return NextResponse.json({ success: true })
   } catch (error) {

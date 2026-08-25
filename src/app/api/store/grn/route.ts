@@ -11,6 +11,13 @@ const INCLUDE = {
   lines: { include: { item: { select: { id: true, sku: true, name: true } } } },
 }
 
+// qtyAccepted defaults to qtyReceived only when genuinely omitted — a caller
+// explicitly sending 0 (a fully-rejected line) must not fall back to
+// qtyReceived via `||`, since 0 is falsy but a legitimate accepted quantity.
+const resolveAccepted = (l: any) => l.qtyAccepted !== undefined && l.qtyAccepted !== null && l.qtyAccepted !== ''
+  ? Number(l.qtyAccepted) || 0
+  : Number(l.qtyReceived) || 0
+
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
@@ -54,10 +61,10 @@ export async function POST(request: NextRequest) {
             poItemId: l.poItemId ? Number(l.poItemId) : null,
             qtyOrdered: Number(l.qtyOrdered) || 0,
             qtyReceived: Number(l.qtyReceived) || 0,
-            qtyAccepted: Number(l.qtyAccepted) || Number(l.qtyReceived) || 0,
+            qtyAccepted: resolveAccepted(l),
             qtyRejected: Number(l.qtyRejected) || 0,
             rate: Number(l.rate) || 0,
-            amount: (Number(l.qtyAccepted) || Number(l.qtyReceived) || 0) * (Number(l.rate) || 0),
+            amount: resolveAccepted(l) * (Number(l.rate) || 0),
             condition: l.condition || 'Good',
             remarks: l.remarks || null,
           })),
@@ -73,7 +80,7 @@ export async function POST(request: NextRequest) {
         if (l.poItemId) {
           await pdb.finPOItem.update({
             where: { id: Number(l.poItemId) },
-            data: { receivedQty: { increment: Number(l.qtyAccepted) || Number(l.qtyReceived) || 0 } },
+            data: { receivedQty: { increment: resolveAccepted(l) } },
           }).catch(() => {})
         }
       }
@@ -116,10 +123,10 @@ export async function PUT(request: NextRequest) {
             poItemId: l.poItemId ? Number(l.poItemId) : null,
             qtyOrdered: Number(l.qtyOrdered) || 0,
             qtyReceived: Number(l.qtyReceived) || 0,
-            qtyAccepted: Number(l.qtyAccepted) || Number(l.qtyReceived) || 0,
+            qtyAccepted: resolveAccepted(l),
             qtyRejected: Number(l.qtyRejected) || 0,
             rate: Number(l.rate) || 0,
-            amount: (Number(l.qtyAccepted) || Number(l.qtyReceived) || 0) * (Number(l.rate) || 0),
+            amount: resolveAccepted(l) * (Number(l.rate) || 0),
             condition: l.condition || 'Good',
             remarks: l.remarks || null,
           })),

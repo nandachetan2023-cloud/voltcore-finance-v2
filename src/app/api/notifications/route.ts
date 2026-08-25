@@ -15,8 +15,17 @@ function relativeTime(date: Date): string {
 export async function GET(request: NextRequest) {
   try {
     const db = getDbForRequest(request)
-    const userEmail = request.nextUrl.searchParams.get('userEmail')?.trim() || undefined
-    const where = userEmail ? { userEmail } : {}
+    const userEmail = request.nextUrl.searchParams.get('userEmail')?.trim() || ''
+    if (!userEmail) return NextResponse.json({ success: false, error: 'userEmail is required' }, { status: 400 })
+    // The app has no server-side session — identity is asserted the same way
+    // every other route in it does, via this header — but at minimum this
+    // stops the ?userEmail=<anyone> case from being a bare, unauthenticated
+    // query param with nothing checking it at all.
+    const actor = request.headers.get('x-actor-email')?.trim() || ''
+    if (actor.toLowerCase() !== userEmail.toLowerCase()) {
+      return NextResponse.json({ success: false, error: 'Not authorized to view these notifications' }, { status: 403 })
+    }
+    const where = { userEmail }
     const rows = await db.notification.findMany({
       where,
       orderBy: { createdAt: 'desc' },

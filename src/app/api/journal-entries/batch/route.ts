@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { assertPermission } from '@/lib/fin-rbac'
 
 const INCLUDE = { lines: { include: { account: true } } }
 
@@ -39,6 +40,12 @@ export async function PUT(request: NextRequest) {
     const pdb = getDbForRequest(request)
     const existing = await pdb.finJournalEntry.findFirst({ where: { entryNo } })
     if (!existing) return NextResponse.json({ success: false, error: 'Entry not found' }, { status: 404 })
+    if (existing.status === 'Posted') {
+      return NextResponse.json({ success: false, error: 'Cannot edit a Posted journal entry — it has already been approved and reconciled to the GL' }, { status: 400 })
+    }
+    const site = base.siteId ? await pdb.finSite.findUnique({ where: { id: Number(base.siteId) } }) : (existing.siteId ? await pdb.finSite.findUnique({ where: { id: existing.siteId } }) : null)
+    const denied = await assertPermission(pdb, base.actor || '', 'GL_EDIT', { request, module: 'GL', entityId: String(existing.id), siteCode: site?.siteCode ?? null })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit journal entries' }, { status: 403 })
 
     const resolvedLines: { accountId: number; description: string | null; debit: number; credit: number; costCenter: string | null; jobCode: string | null; siteCode: string | null; department: string | null; projectManager: string | null }[] = []
     for (const line of lines) {
@@ -62,6 +69,9 @@ export async function PUT(request: NextRequest) {
     }
     const totalDebit = resolvedLines.reduce((s, l) => s + l.debit, 0)
     const totalCredit = resolvedLines.reduce((s, l) => s + l.credit, 0)
+    if (Math.abs(totalDebit - totalCredit) > 0.01) {
+      return NextResponse.json({ success: false, error: `Entry is unbalanced: total debit ${totalDebit} does not equal total credit ${totalCredit}` }, { status: 400 })
+    }
 
     const entry = await pdb.$transaction(async (tx) => {
       await tx.finJournalLine.deleteMany({ where: { entryId: existing.id } })
