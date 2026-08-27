@@ -429,7 +429,10 @@ export default function LeaveModule() {
     try {
       setLoading(true);
       const [leaveRes, empRes, policiesRes] = await Promise.all([
-        fetch('/api/leave'),
+        // no-store: without it the browser can serve the pre-approval response
+        // back to the refetch, leaving an approved row still showing Pending
+        // with its Approve/Reject buttons.
+        fetch('/api/leave', { cache: 'no-store' }),
         fetch('/api/employees'),
         fetch('/api/leave-policies'),
       ]);

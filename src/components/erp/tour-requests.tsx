@@ -55,7 +55,8 @@ export default function TourRequests() {
     try {
       const url = filter !== 'all' ? `/api/tour-requests?status=${filter}` : '/api/tour-requests';
       const [trRes, empRes] = await Promise.all([
-        fetch(url).then(r => r.json()),
+        // no-store so an approval is reflected immediately (see leave.tsx).
+        fetch(url, { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/employees?active=true').then(r => r.json()),
       ]);
       if (trRes.success) setRequests(trRes.data);
@@ -108,7 +109,7 @@ export default function TourRequests() {
       body: JSON.stringify({ id, action: 'approve' }),
     });
     const data = await res.json();
-    if (data.success) { toast.success('Tour approved — days will count as paid attendance'); fetchData(); }
+    if (data.success) { toast.success('Tour approved — days will count as paid attendance'); await fetchData(); }
     else toast.error(data.error);
   };
 
@@ -120,7 +121,7 @@ export default function TourRequests() {
       body: JSON.stringify({ id: rejectId, action: 'reject', rejectionReason: rejectReason }),
     });
     const data = await res.json();
-    if (data.success) { toast.success('Tour request rejected'); setRejectId(null); setRejectReason(''); fetchData(); }
+    if (data.success) { toast.success('Tour request rejected'); setRejectId(null); setRejectReason(''); await fetchData(); }
     else toast.error(data.error);
   };
 

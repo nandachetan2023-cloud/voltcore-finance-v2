@@ -89,7 +89,7 @@ export default function MyLeave() {
     setLoading(true);
     try {
       const [leaveRes, policiesRes, empRes] = await Promise.all([
-        fetch(`/api/leave?employeeId=${empId}`),
+        fetch(`/api/leave?employeeId=${empId}`, { cache: 'no-store' }),
         fetch('/api/leave-policies'),
         fetch(`/api/employees/${empId}`),
       ]);

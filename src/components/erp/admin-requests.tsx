@@ -50,7 +50,7 @@ export default function AdminRequests() {
   const fetchRequests = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/employee-requests');
+      const res = await fetch('/api/employee-requests', { cache: 'no-store' });
       const data = await res.json();
       if (data.success) setRequests(data.data);
     } catch { toast.error('Failed to load requests'); }

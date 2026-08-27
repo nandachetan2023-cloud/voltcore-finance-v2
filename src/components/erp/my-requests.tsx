@@ -52,7 +52,7 @@ export default function MyRequests() {
   const fetchRequests = useCallback(async (empId: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/employee-requests?employeeId=${empId}`);
+      const res = await fetch(`/api/employee-requests?employeeId=${empId}`, { cache: 'no-store' });
       const data = await res.json();
       if (data.success) setRequests(data.data);
     } catch { toast.error('Failed to load requests'); }

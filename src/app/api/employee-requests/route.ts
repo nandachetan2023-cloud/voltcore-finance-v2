@@ -217,7 +217,15 @@ export async function GET(request: NextRequest) {
       enriched = await annotateRequesterStage(tenantId, parseInt(employeeId), requests)
     }
 
-    return NextResponse.json({ success: true, data: enriched })
+    // no-store: these lists change the moment an approver acts, and a cached
+    // response would show an already-approved request as still pending, with
+    // its Approve/Reject buttons live. force-dynamic governs Next's own cache
+    // and does NOT emit a Cache-Control header, so the browser is free to
+    // reuse the stale body without it.
+    return NextResponse.json(
+      { success: true, data: enriched },
+      { headers: { 'Cache-Control': 'no-store, must-revalidate' } },
+    )
   } catch (e) {
     console.error('GET employee-requests error:', e)
     return NextResponse.json({ success: false, error: 'Failed to fetch requests' }, { status: 500 })

@@ -47,7 +47,7 @@ export default function MyTours() {
     if (!employeeId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/tour-requests?employeeId=${employeeId}`);
+      const res = await fetch(`/api/tour-requests?employeeId=${employeeId}`, { cache: 'no-store' });
       const data = await res.json();
       if (data.success) setRequests(data.data);
     } catch { toast.error('Failed to load tour requests'); }
