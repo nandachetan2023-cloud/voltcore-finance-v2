@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const dryRun = searchParams.get('dryRun') === '1' || searchParams.get('dryRun') === 'true'
     const trigger = searchParams.get('trigger') || 'scheduled'
 
-    let cfg = await pdb.syncConfig.findUnique({ where: { module: 'tally-export' } })
+    let cfg: any = await pdb.syncConfig.findUnique({ where: { module: 'tally-export' } })
     // Auto-create default config if missing (so dryRun works without setup)
     if (!cfg) {
       cfg = await pdb.syncConfig.create({
@@ -20,9 +20,9 @@ export async function GET(request: NextRequest) {
       }).catch(()=> null) as any
       if (!cfg) cfg = { enabled: true, autoSync: false } as any
     }
-    if (!cfg.enabled) return NextResponse.json({ success: false, error: 'Tally auto-sync disabled in SyncConfig' }, { status: 400 })
+    if (!cfg!.enabled) return NextResponse.json({ success: false, error: 'Tally auto-sync disabled in SyncConfig' }, { status: 400 })
     // if trigger is scheduled, respect autoSync flag (but allow dryRun to bypass)
-    if (trigger === 'scheduled' && !cfg.autoSync && !dryRun) {
+    if (trigger === 'scheduled' && !cfg!.autoSync && !dryRun) {
       return NextResponse.json({ success: false, error: 'Scheduled autoSync is off. Toggle autoSync in SyncConfig.' }, { status: 400 })
     }
 
