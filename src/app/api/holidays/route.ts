@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
       isRecurring = false,
       applicableTo = 'all',
       branchId,
+      branchIds,
     } = body;
 
     if (!name || !date) {
@@ -69,18 +70,72 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // A holiday can now be declared for SEVERAL sites at once. Each selected
+    // site gets its own Holiday row rather than the rows sharing a join table,
+    // because every consumer — getHolidaysInRange, the payroll working-day
+    // calculations, the timesheet — filters on the scalar `branchId`. One row
+    // per site keeps all of that correct and lets a site's holiday be edited or
+    // deleted on its own afterwards.
+    //
+    // `branchIds` is the multi-select path; `branchId` is kept for existing
+    // callers and for the company-wide case (null = all sites).
+    const ids: number[] = Array.isArray(branchIds)
+      ? [...new Set(
+          branchIds
+            .map((b: unknown) => parseInt(String(b)))
+            .filter((n: number) => Number.isFinite(n))
+        )]
+      : [];
+
+    const baseData = {
+      name,
+      date: new Date(date),
+      type,
+      description,
+      isRecurring,
+      applicableTo,
+      isActive: true,
+      updatedAt: new Date(),
+    };
+
+    if (ids.length > 0) {
+      // Skip sites that already have this holiday on this date, so re-submitting
+      // a partially-created set does not produce duplicates.
+      const existing = await db.holiday.findMany({
+        where: {
+          date: new Date(date),
+          branchId: { in: ids },
+          isActive: true,
+        },
+        select: { branchId: true },
+      });
+      const already = new Set(existing.map((h: { branchId: number | null }) => h.branchId));
+      const toCreate = ids.filter(id => !already.has(id));
+
+      if (toCreate.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'This holiday already exists on that date for every selected site.' },
+          { status: 409 }
+        );
+      }
+
+      // Created one at a time rather than with createMany, which is a single
+      // statement — one bad row would abort the whole batch.
+      const created: unknown[] = [];
+      for (const id of toCreate) {
+        created.push(await db.holiday.create({ data: { ...baseData, branchId: id } }));
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: created,
+        created: created.length,
+        skipped: ids.length - toCreate.length,
+      });
+    }
+
     const holiday = await db.holiday.create({
-      data: {
-        name,
-        date: new Date(date),
-        type,
-        description,
-        isRecurring,
-        applicableTo,
-        branchId: branchId ? parseInt(branchId) : null,
-        isActive: true,
-        updatedAt: new Date(),
-      },
+      data: { ...baseData, branchId: branchId ? parseInt(branchId) : null },
     });
 
     return NextResponse.json({ success: true, data: holiday });
