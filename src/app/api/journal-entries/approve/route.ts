@@ -97,6 +97,12 @@ export async function POST(request: NextRequest) {
           data: { entityType: 'FinJournalEntry', entityId: String(entry.id), status: 'Posted', action: 'Approve', checkerId: actor || null, comments: comments || null, finJournalEntryId: entry.id },
         }),
       ])
+      // Tally auto-push onApprove (best-effort, never blocks approval)
+      try {
+        const { autoPushSingle } = await import('@/lib/tally-sync-engine')
+        const companyName = process.env.TALLY_COMPANY || 'VoltCore'
+        autoPushSingle(pdb, 'FinJournalEntry', updated.id, { trigger: 'onApprove', actor: actor || '', companyName }).catch(()=>{})
+      } catch {}
       return NextResponse.json({ success: true, data: flatten(updated) })
     }
 

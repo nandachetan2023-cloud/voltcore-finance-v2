@@ -2897,7 +2897,7 @@ model FinMaterialTrackingItem {
 // ── Tally Sync Management ──────────────────────────────────────────
 model FinTallySync {
   id          Int       @id @default(autoincrement())
-  syncType    String // DayBook | TallyBook | SundryDebtors | SundryCreditors | PettyCash | ExpenseClaim
+  syncType    String // DayBook | TallyBook | SundryDebtors | SundryCreditors | PettyCash | ExpenseClaim | Export
   fileName    String
   periodFrom  DateTime? @db.Date
   periodTo    DateTime? @db.Date
@@ -2912,10 +2912,65 @@ model FinTallySync {
   syncedAt    DateTime?
   createdAt   DateTime  @default(now())
 
+  // CA-grade extensions
+  direction   String    @default("Import") // Import | Export
+  companyName String?
+  finYear     String? // e.g. "2025-26"
+  voucherType String? // Sales | Purchase | Payment | Receipt | Journal | Contra | Credit Note
+  trigger     String? // manual | scheduled | onApprove
+  hash        String? // SHA256 of canonical XML
+  alterID     String? // Tally AlterID
+  actorEmail  String?
+  actorIp     String?
+  durationMs  Int       @default(0)
+  attemptCount Int      @default(0)
+  nextRetryAt DateTime?
+  reconciled  Boolean   @default(false)
+  reconciledAt DateTime?
+
   @@index([syncType])
   @@index([status])
   @@index([syncedAt])
+  @@index([companyName, finYear])
+  @@index([direction])
   @@map("FinTallySync")
+}
+
+// ── Tally Voucher Link (ERP ↔ Tally AlterID, idempotency) ──────────
+model FinTallyVoucher {
+  id           Int       @id @default(autoincrement())
+  finYear      String // "2025-26"
+  voucherNo    String
+  voucherType  String // Sales | Purchase | Payment | Receipt | Journal | Contra | Credit Note
+  companyName  String
+  erpRefType   String // FinInvoice | FinJournalEntry | AccountsPayable | FinPayment | FinCreditNote
+  erpRefId     Int
+  tallyAlterID String?
+  tallyMasterID String?
+  hash         String // SHA256 canonical XML
+  status       String    @default("Pending") // Pending | Sent | Acked | Failed | Voided
+  jsonPayload  Json?
+  responseXml  String?   @db.Text
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([companyName, finYear, voucherType, voucherNo])
+  @@index([erpRefType, erpRefId])
+  @@index([companyName, finYear])
+  @@index([status])
+  @@map("FinTallyVoucher")
+}
+
+// ── Voucher Series (gapless FY sequential) ─────────────────────────
+model FinVoucherSeries {
+  id      Int    @id @default(autoincrement())
+  finYear String // "2025-26"
+  type    String // Sales | Purchase | Payment | Receipt | Journal | Contra | Credit Note
+  lastNo  Int    @default(0)
+
+  @@unique([finYear, type])
+  @@map("FinVoucherSeries")
 }
 
 // ── Data Sync Configuration ─────────────────────────────────────
