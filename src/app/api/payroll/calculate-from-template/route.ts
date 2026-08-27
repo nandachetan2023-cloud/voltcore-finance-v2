@@ -144,7 +144,25 @@ export async function POST(request: NextRequest) {
         // ACTUAL OT AMOUNT: hourly rate = gross / otDivisor / 8, at the OT multiplier.
         // Fixed employees earn no non-compliance OT (multiplier 0).
         const W = Math.round((Q / otDivisor / 8) * otMultiplier * V); // ACTUAL OT AMOUNT
-        const X = U + W; // GROSS EARN WAGES
+
+        // LEAVE DAYS PAYMENT — gross / 26 x leave days.
+        //
+        // This is PAY, not a report. The JULY-2026 Lapanga reference computes it
+        // as col 24 ("Leaves days payment") and feeds it into GROSS EARN WAGES:
+        //     col 26  GROSS EARN WAGES = V + Y + X   (earn wages + OT + leave pay)
+        // It then cascades into TOTAL NON COMPLIANCE -> NETT PAYBLE NON
+        // COMPLIANCE -> GRAND TOTAL NETT PAYBLE SALARY.
+        //
+        // It used to be computed here but written only to col 70 and left out of
+        // every total, so employees with approved leave were underpaid by exactly
+        // this amount. Verified against the reference: replaying all 87 employee
+        // rows, the 14 rows that disagreed were explained by precisely this term.
+        //
+        // The /26 divisor is the reference's, and is deliberately NOT earnDivisor:
+        // leave is paid at the statutory 26-day month regardless of the site's
+        // working-day configuration.
+        const leavePayment = Math.round((Q / 26) * S); // LEAVE DAYS PAYMENT
+        const X = U + W + leavePayment; // GROSS EARN WAGES
 
         // Payroll Calculation (AD-AN)
         const AD = Y * 26; // WAGES/MONTH (hardcoded 26)
@@ -165,17 +183,29 @@ export async function POST(request: NextRequest) {
 
         // Non-Compliance (AR, AU, AV)
         const AR = X - AM - AN; // TOTAL NON COMPLIANCE AMOUNT
-        const AU = AR - AS + AT; // NETT PAYBLE NON COMPLIANCE
+
+        // The non-compliance portion is a TOP-UP over the statutory compliance
+        // pay, so it floors at zero. When compliance pay already meets or beats
+        // gross earn wages, AR goes negative — and paying a negative top-up
+        // would claw money back out of the compliance salary the employee is
+        // legally owed.
+        //
+        // The JULY-2026 Lapanga reference confirms this: 10 employees have a
+        // negative TOTAL NON COMPLIANCE AMOUNT, and every one of them has a
+        // BLANK (not negative) NETT PAYBLE NON COMPLIANCE. Across all 87 rows
+        // the reference has zero negative values in either column.
+        const AU = Math.max(0, AR - AS + AT); // NETT PAYBLE NON COMPLIANCE
         const AV = AN + AU; // GRAND TOTAL NETT PAYBLE SALARY
 
         // Leave & Bonus (AX, AY)
         const AX = Math.round((AB / 20) * (AD / 26)); // LEAVE
         const AY = Math.round(AE * 0.0833); // BONUS (8.33%)
 
-        // LEAVE AMOUNT (col 70) — matches the JUNE reference formula:
-        //   Leave Amount = ROUND((MONTHLY GROSS / 26) * LEAVE DAYS, 0)
-        // Kept as a separate column; it is NOT folded into GROSS EARN WAGES.
-        const leaveAmount = Math.round((Q / 26) * S);
+        // LEAVE AMOUNT (col 70) — the same figure that is now folded into GROSS
+        // EARN WAGES above, surfaced as its own column so the sheet still shows
+        // what the leave was worth. Reuses leavePayment rather than recomputing,
+        // so the column and the total can never disagree.
+        const leaveAmount = leavePayment;
 
         // Compliance Breakdown (BC-BL)
         const BC = AE; // MONTHLY BASIC SALARY
