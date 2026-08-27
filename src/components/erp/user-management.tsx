@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, Pencil, Trash2, X, Eye, EyeOff, RefreshCw,
   Users, Shield, Check, UserCheck, UserX, Layers, Lock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ModuleSelect from '@/components/superadmin/module-select';
+import { SearchInput, matchesSearch } from './search-input';
 
 /* ── Types ─────────────────────────────────────────────────────── */
 interface TenantUser {
@@ -66,6 +67,9 @@ export default function UserManagement() {
   const emptyForm = { name: '', email: '', password: '', phone: '', orgRoleId: '', employeeId: '', requireOnboarding: false };
   const [form, setForm] = useState(emptyForm);
   const [empSearch, setEmpSearch] = useState('');
+  // Search across the USER LIST. Distinct from empSearch above, which filters
+  // the employee picker inside the create form.
+  const [userSearch, setUserSearch] = useState('');
   const [showEmpDropdown, setShowEmpDropdown] = useState(false);
 
   // Bulk assign state
@@ -85,6 +89,30 @@ export default function UserManagement() {
       e.employeeCode.toLowerCase().includes(q) ||
       e.email.toLowerCase().includes(q);
   });
+
+  // Employee code / department per linked employee, so a user can be found by
+  // the employee ID printed on their card as well as by name or email.
+  const employeeById = useMemo(
+    () => new Map(employees.map(e => [e.id, e])),
+    [employees]
+  );
+
+  const filteredUsers = useMemo(() => {
+    if (!userSearch.trim()) return users;
+    return users.filter(u => {
+      const emp = u.employeeId != null ? employeeById.get(u.employeeId) : undefined;
+      const role = roles.find(r => r.id === u.orgRoleId);
+      return matchesSearch(userSearch, [
+        u.name,
+        u.email,
+        u.phone,
+        emp?.employeeCode,
+        emp?.department,
+        emp?.designation,
+        role?.name,
+      ]);
+    });
+  }, [users, userSearch, employeeById, roles]);
 
   const selectedEmployee = form.employeeId ? employees.find(e => String(e.id) === form.employeeId) : null;
 
@@ -542,9 +570,23 @@ export default function UserManagement() {
         </div>
       )}
 
+      {/* Search — name, email, phone, employee code, department, designation, role */}
+      <div className="flex items-center gap-3 mb-3">
+        <SearchInput
+          value={userSearch}
+          onChange={setUserSearch}
+          placeholder="Search by name, email or employee ID..."
+        />
+        {userSearch.trim() && (
+          <span className="text-[11px] text-[#5a6878] shrink-0">
+            {filteredUsers.length} of {users.length} {users.length === 1 ? 'account' : 'accounts'}
+          </span>
+        )}
+      </div>
+
       {/* Users list */}
       <div className="space-y-2">
-        {users.map(u => {
+        {filteredUsers.map(u => {
           const role = roles.find(r => r.id === u.orgRoleId);
           return (
             <div key={u.id} className={`bg-[#161c24] border rounded-xl p-4 transition-colors ${u.isActive ? 'border-[#252e3a]' : 'border-[#252e3a] opacity-60'}`}>
@@ -637,6 +679,23 @@ export default function UserManagement() {
             <Users size={32} className="mx-auto text-[#5a6878] mb-3" />
             <p className="text-[13px] font-semibold text-[#e2e8f0] mb-1">No users yet</p>
             <p className="text-[11px] text-[#5a6878]">Add your first user to give them ERP access</p>
+          </div>
+        )}
+
+        {/* Distinct from "no users yet" — accounts exist, none match the search. */}
+        {users.length > 0 && filteredUsers.length === 0 && (
+          <div className="text-center py-12 bg-[#161c24] border border-[#252e3a] rounded-xl">
+            <Users size={32} className="mx-auto text-[#5a6878] mb-3" />
+            <p className="text-[13px] font-semibold text-[#e2e8f0] mb-1">No matching accounts</p>
+            <p className="text-[11px] text-[#5a6878] mb-3">
+              Nothing matches &ldquo;{userSearch.trim()}&rdquo;.
+            </p>
+            <button
+              onClick={() => setUserSearch('')}
+              className="text-[11px] font-semibold text-[#f5a623] hover:underline"
+            >
+              Clear search
+            </button>
           </div>
         )}
       </div>
