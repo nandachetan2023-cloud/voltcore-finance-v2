@@ -19,8 +19,11 @@ function getClientForUrl(url: string): PrismaClient {
   return client
 }
 
-// ── Fallback URL so module never breaks if .env is missed ────────
-const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/erp_finance_dev?schema=public&sslmode=disable'
+// ── DB URL must come from environment variables (Railway injects these) ──
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL environment variable is not set. Configure it in your Railway service variables.')
+}
+const DB_URL = process.env.DATABASE_URL
 const DEMO_DB_URL = process.env.DEMO_DATABASE_URL || DB_URL
 
 export const db = getClientForUrl(DB_URL)
