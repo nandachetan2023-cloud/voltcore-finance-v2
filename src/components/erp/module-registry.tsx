@@ -74,6 +74,7 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   'fin-credit-notes': () => import('@/components/erp/fin-credit-notes'),
   'fin-bank-reconciliation': () => import('@/components/erp/fin-bank-reconciliation'),
   'tally-sync': () => import('@/components/erp/tally-sync'),
+  'notifications-ultra': () => import('@/components/erp/notifications-ultra'),
   'sales-tax-invoices': () => import('@/components/erp/sales-tax-invoices'),
   'sales-opportunity-pipeline': () => import('@/components/erp/sales-opportunity-pipeline'),
   'sales-tender-register': () => import('@/components/erp/sales-tender-register'),

@@ -2973,6 +2973,63 @@ model FinVoucherSeries {
   @@map("FinVoucherSeries")
 }
 
+// ── Ultra Notifications (Finance Purchase & Sales) ─────────────────
+model FinNotification {
+  id           Int       @id @default(autoincrement())
+  userEmail    String
+  actorEmail   String?
+  entityType   String // FinInvoice|FinPurchaseOrder|AccountsPayable|FinTallyVoucher|FinJournalEntry|FinPR|FinStoreGrn
+  entityId     String
+  title        String
+  message      String    @db.Text
+  type         String    @default("info") // info|warning|error|success
+  priority     String    @default("P2") // P0|P1|P2
+  channel      String    @default("inapp") // inapp|email|whatsapp|sms|push
+  siteCode     String?
+  jobCode      String?
+  finYear      String? // 2025-26
+  amount       Float?
+  currency     String?   @default("INR")
+  link         String?
+  status       String    @default("unread") // unread|read|actioned|snoozed|escalated|archived
+  isRead       Boolean   @default(false)
+  readAt       DateTime?
+  snoozedUntil DateTime?
+  escalatedAt  DateTime?
+  escalatedTo  String?
+  hash         String?   @unique
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userEmail, status])
+  @@index([finYear, siteCode])
+  @@index([hash])
+  @@index([priority])
+  @@map("FinNotification")
+}
+
+model FinNotificationPreference {
+  userEmail  String   @id
+  channels   Json     @default("{\"inapp\":true,\"email\":true}")
+  digest     String   @default("realtime") // realtime|hourly|daily|off
+  quietHours Json?
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@map("FinNotificationPreference")
+}
+
+model FinNotificationTemplate {
+  code       String @id // AP_OVERDUE_45D | TALLY_FAILED | GRN_SHORT
+  titleTpl   String
+  messageTpl String
+  priority   String @default("P2")
+  channel    String @default("inapp")
+  createdAt  DateTime @default(now())
+
+  @@map("FinNotificationTemplate")
+}
+
 // ── Data Sync Configuration ─────────────────────────────────────
 // Per-module sync configuration (used by /api/sync/route.ts)
 model SyncConfig {
