@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { SearchInput, matchesSearch } from './search-input';
 import { Building2, Plus, Pencil, Trash2, Users, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { FieldError, fieldBorderError } from '@/components/ui/field-error';
@@ -20,6 +21,7 @@ function isAutoCreated(code: string) {
 
 export default function DepartmentsModule() {
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -82,6 +84,11 @@ export default function DepartmentsModule() {
 
   const autoCount = departments.filter(d => isAutoCreated(d.code)).length;
 
+  const filteredDepartments = useMemo(
+    () => departments.filter(d => matchesSearch(search, [d.name, d.code])),
+    [departments, search]
+  );
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-8 h-8 border-2 border-[#f5a623]/30 border-t-[#f5a623] rounded-full animate-spin" />
@@ -107,8 +114,12 @@ export default function DepartmentsModule() {
         </button>
       </div>
 
+      {departments.length > 0 && (
+        <SearchInput value={search} onChange={setSearch} placeholder="Search departments by name or code..." />
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {departments.map(dept => (
+        {filteredDepartments.map(dept => (
           <div key={dept.id} className={`bg-[#161c24] border rounded-lg p-4 hover:border-[#f5a623]/30 transition-colors ${isAutoCreated(dept.code) ? 'border-[#00d4ff]/30' : 'border-[#252e3a]'}`}>
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
@@ -143,6 +154,12 @@ export default function DepartmentsModule() {
         <div className="text-center py-12 text-[#5a6878]">
           <Building2 size={48} className="mx-auto mb-4 opacity-50" />
           <p>No departments found. Create your first department.</p>
+        </div>
+      )}
+      {departments.length > 0 && filteredDepartments.length === 0 && (
+        <div className="text-center py-12 text-[#5a6878]">
+          <Building2 size={48} className="mx-auto mb-4 opacity-50" />
+          <p>No departments match &quot;{search}&quot;.</p>
         </div>
       )}
 

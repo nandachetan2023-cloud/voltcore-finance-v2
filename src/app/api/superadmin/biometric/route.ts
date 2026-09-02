@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { superadminDb } from '@/lib/superadmin-db'
-import { PrismaClient } from '@prisma/client'
+import { getClientForUrl } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +65,9 @@ export async function PUT(request: NextRequest) {
     const newSiteId: string | undefined = typeof rest.siteId === 'string' ? rest.siteId.trim() : undefined
     const siteIdChanged = !!newSiteId && newSiteId !== existing.siteId
 
+    const newSiteName: string | undefined = typeof rest.siteName === 'string' ? rest.siteName.trim() : undefined
+    const siteNameChanged = !!newSiteName && newSiteName !== existing.siteName
+
     if (siteIdChanged) {
       // Guard: don't collide with another site config for the same tenant
       const clash = await superadminDb.biometricSiteConfig.findFirst({
@@ -77,28 +80,67 @@ export async function PUT(request: NextRequest) {
 
     const config = await superadminDb.biometricSiteConfig.update({ where: { id }, data })
 
-    // Cascade the siteId rename into the tenant's DB so existing punch/sync
-    // logs keep resolving to the right site (otherwise they orphan to the raw id).
-    let cascade: { rawLogs: number; syncLogs: number } | null = null
-    if (siteIdChanged) {
+    // Cascade renames into the tenant's DB:
+    //  - siteId  → punch/sync logs, so they keep resolving to the right site
+    //  - siteName → the matching Branch row, so every site dropdown shows the
+    //    new name immediately instead of keeping the stale one alongside it
+    let cascade: { rawLogs: number; syncLogs: number; branchRenamed: boolean } | null = null
+    if (siteIdChanged || siteNameChanged) {
       const tenant = await superadminDb.tenant.findUnique({ where: { id: existing.tenantId } })
       if (tenant?.dbUrl) {
-        const tenantDb = new PrismaClient({ datasources: { db: { url: tenant.dbUrl } } })
-        try {
-          const raw = await tenantDb.biometricRawLog.updateMany({
-            where: { siteId: existing.siteId },
-            data: { siteId: newSiteId! },
-          })
-          const sync = await tenantDb.biometricSyncLog.updateMany({
-            where: { siteId: existing.siteId },
-            data: { siteId: newSiteId! },
-          })
-          cascade = { rawLogs: raw.count, syncLogs: sync.count }
-        } catch (err) {
-          console.error('[Biometric config] Failed to cascade siteId rename to tenant DB:', err)
-        } finally {
-          await tenantDb.$disconnect()
+        const tenantDb = getClientForUrl(tenant.dbUrl)
+        let rawCount = 0
+        let syncCount = 0
+        let branchRenamed = false
+
+        if (siteIdChanged) {
+          try {
+            const raw = await tenantDb.biometricRawLog.updateMany({
+              where: { siteId: existing.siteId },
+              data: { siteId: newSiteId! },
+            })
+            const sync = await tenantDb.biometricSyncLog.updateMany({
+              where: { siteId: existing.siteId },
+              data: { siteId: newSiteId! },
+            })
+            rawCount = raw.count
+            syncCount = sync.count
+          } catch (err) {
+            console.error('[Biometric config] Failed to cascade siteId rename to tenant DB:', err)
+          }
         }
+
+        // Branch rows are tagged "Site ID: <siteId>" by the /api/branches sync.
+        try {
+          const oldTag = `Site ID: ${existing.siteId}`
+          const newTag = `Site ID: ${newSiteId ?? existing.siteId}`
+          const branch =
+            (await tenantDb.branch.findFirst({ where: { address: oldTag } })) ||
+            (await tenantDb.branch.findFirst({ where: { address: newTag } })) ||
+            // Pre-tag rows: fall back to the OLD name, which is what the
+            // branch would have been created with.
+            (await tenantDb.branch.findFirst({ where: { name: existing.siteName } }))
+
+          if (branch) {
+            const finalName = newSiteName ?? existing.siteName
+            // Branch.name is unique — skip the rename if another branch owns it.
+            const clash = await tenantDb.branch.findFirst({
+              where: { name: finalName, id: { not: branch.id } },
+            })
+            await tenantDb.branch.update({
+              where: { id: branch.id },
+              data: {
+                ...(clash ? {} : { name: finalName }),
+                address: newTag,
+              },
+            })
+            branchRenamed = !clash && branch.name !== finalName
+          }
+        } catch (err) {
+          console.error('[Biometric config] Failed to cascade siteName to tenant Branch:', err)
+        }
+
+        cascade = { rawLogs: rawCount, syncLogs: syncCount, branchRenamed }
       }
     }
 

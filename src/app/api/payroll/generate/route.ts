@@ -52,6 +52,18 @@ export async function POST(request: NextRequest) {
           Department: true,
           Designation: true,
           Branch: true,
+          SalaryStructureAssignment: {
+            where: { effectiveFrom: { lte: new Date(year, month - 1, 1) } },
+            orderBy: { effectiveFrom: 'desc' },
+            include: {
+              SalaryStructure: {
+                include: {
+                  SalaryStructureItem: { include: { SalaryComponent: true } },
+                },
+              },
+            },
+            take: 1,
+          },
         },
       });
       if (!emp) {
@@ -80,6 +92,18 @@ export async function POST(request: NextRequest) {
           Department: true,
           Designation: true,
           Branch: true,
+          SalaryStructureAssignment: {
+            where: { effectiveFrom: { lte: new Date(year, month - 1, 1) } },
+            orderBy: { effectiveFrom: 'desc' },
+            include: {
+              SalaryStructure: {
+                include: {
+                  SalaryStructureItem: { include: { SalaryComponent: true } },
+                },
+              },
+            },
+            take: 1,
+          },
         },
       });
     }
@@ -200,7 +224,9 @@ export async function POST(request: NextRequest) {
           paidLeaveDays += days; // Tour days count as paid days (same as leave)
         }
 
-        // Calculate OT hours (includes holiday work as full OT)
+        // Calculate OT hours — driven by the employee's shift (net working hours
+        // + OT threshold). Holiday work counts fully as OT. Falls back to 8h if
+        // the shift is somehow missing.
         const totalOTHours = await calculateTotalOvertimeHours(
           attendanceLogs.map(log => ({
             punchIn: log.punchIn,
@@ -208,13 +234,37 @@ export async function POST(request: NextRequest) {
             logDate: log.logDate
           })),
           employee.branchId,
-          8 // Standard hours
+          shiftAssignment.Shift, // shift-driven OT config
         );
 
-        // Get salary structure (for now, use basic values from employee or defaults)
-        // In production, fetch from SalaryStructureAssignment
-        const basicSalary = 15000; // Default, should come from salary structure
-        const hra = basicSalary * 0.4;
+        // ── Resolve salary from the employee's active Salary Structure ──
+        // Mirrors the generate-excel module: read components from the structure,
+        // default to 0 when absent (never a hardcoded placeholder). Note: your
+        // primary payroll flow is the compliance / non-compliance salary sheets
+        // and Generate Excel — those take the real basic from admin input / stored
+        // PayrollItems. This auto-generate path simply avoids inventing numbers.
+        const salaryAssignment = employee.SalaryStructureAssignment?.[0];
+        let basicSalary = 0;
+        let hra = 0;
+        let conveyanceAllowance = 0;
+        let medicalAllowance = 0;
+        let specialAllowance = 0;
+
+        if (salaryAssignment) {
+          const items = salaryAssignment.SalaryStructure?.SalaryStructureItem ?? [];
+          for (const item of items) {
+            const amount = Number(item.fixedAmount) || 0;
+            const componentName = (item.SalaryComponent?.name || '').toLowerCase();
+            if (componentName.includes('basic')) basicSalary += amount;
+            else if (componentName.includes('hra') || componentName.includes('house')) hra += amount;
+            else if (componentName.includes('conveyance') || componentName.includes('transport')) conveyanceAllowance += amount;
+            else if (componentName.includes('medical')) medicalAllowance += amount;
+            else if (componentName.includes('special')) specialAllowance += amount;
+          }
+          // Fall back to the assignment's baseSalary as basic when the structure
+          // has no explicit "basic" component.
+          if (basicSalary === 0) basicSalary = Number(salaryAssignment.baseSalary) || 0;
+        }
 
         const attendanceData = {
           totalDays: endDate.getDate(),
@@ -231,10 +281,9 @@ export async function POST(request: NextRequest) {
             id: employee.id,
             basicSalary,
             hra,
-            conveyanceAllowance: 1600,
-            medicalAllowance: 1250,
-            specialAllowance: 2000,
-            state: 'Maharashtra',
+            conveyanceAllowance,
+            medicalAllowance,
+            specialAllowance,
           },
           attendanceData,
           month,

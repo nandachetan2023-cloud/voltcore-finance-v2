@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   CalendarDays, Clock, CheckCircle2, XCircle, Plus, Trash2,
-  CalendarRange, FileCheck, RefreshCw, AlertTriangle
+  CalendarRange, FileCheck, RefreshCw, AlertTriangle, Paperclip, MessageSquare
 } from 'lucide-react';
+import { rejectionPositionLabel } from '@/lib/rejection-position-format';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -71,6 +72,8 @@ export default function MyLeave() {
 
   const emptyForm = { leaveType: '', fromDate: '', toDate: '', days: 0, reason: '' };
   const [form, setForm] = useState(emptyForm);
+  const [supportingDoc, setSupportingDoc] = useState<File | null>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
 
   // Get employee ID from localStorage
   useEffect(() => {
@@ -86,7 +89,7 @@ export default function MyLeave() {
     setLoading(true);
     try {
       const [leaveRes, policiesRes, empRes] = await Promise.all([
-        fetch(`/api/leave?employeeId=${empId}`),
+        fetch(`/api/leave?employeeId=${empId}`, { cache: 'no-store' }),
         fetch('/api/leave-policies'),
         fetch(`/api/employees/${empId}`),
       ]);
@@ -147,8 +150,22 @@ export default function MyLeave() {
       toast.error(policyViolation.replace('⚠ ', ''));
       return;
     }
+    if (selectedPolicy?.requiresDocument && !supportingDoc) {
+      toast.error('A supporting document is required for this leave type (e.g. medical certificate)');
+      return;
+    }
     setSubmitting(true);
     try {
+      let docPayload: { name: string; type: string; size: number; data: string } | null = null;
+      if (supportingDoc) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(supportingDoc);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+        });
+        docPayload = { name: supportingDoc.name, type: supportingDoc.type, size: supportingDoc.size, data: base64 };
+      }
       const res = await fetch('/api/leave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -159,6 +176,7 @@ export default function MyLeave() {
           toDate: form.toDate,
           days: form.days,
           reason: form.reason,
+          supportingDocument: docPayload,
         }),
       });
       const data = await res.json();
@@ -166,6 +184,8 @@ export default function MyLeave() {
         toast.success('Leave application submitted successfully');
         setCreateOpen(false);
         setForm(emptyForm);
+        setSupportingDoc(null);
+        if (docInputRef.current) docInputRef.current.value = '';
         fetchData(employeeId);
       } else if (res.status === 422) {
         // No approval chain configured — show persistent dialog
@@ -381,9 +401,32 @@ export default function MyLeave() {
                   <td className="py-2.5 px-3 text-[#8899aa]">{fmtDate(r.fromDate)}</td>
                   <td className="py-2.5 px-3 text-[#8899aa]">{fmtDate(r.toDate)}</td>
                   <td className="py-2.5 px-3 text-[#e2e8f0] font-semibold">{r.days}</td>
-                  <td className="py-2.5 px-3 text-[#8899aa] max-w-[160px] truncate" title={r.reason}>{r.reason || '—'}</td>
+                  <td className="py-2.5 px-3 max-w-[160px]">
+                    <div className="text-[#8899aa] truncate" title={r.reason}>{r.reason || '—'}</div>
+                    {r.status === 'Rejected' && r.rejectionReason && (
+                      <div className="flex items-start gap-1 text-[9px] text-[#ff3d3d] mt-1" title={r.rejectionReason}>
+                        <MessageSquare size={9} className="mt-[1px] shrink-0" />
+                        <span className="line-clamp-2">{r.rejectionReason}</span>
+                      </div>
+                    )}
+                  </td>
                   <td className="py-2.5 px-3 text-[#8899aa]">{fmtDate(r.appliedDate || r.createdAt)}</td>
-                  <td className="py-2.5 px-3"><span className={`vc-badge ${statusBadge(r.status)}`}>{r.status}</span></td>
+                  <td className="py-2.5 px-3">
+                    <span className={`vc-badge ${statusBadge(r.status)}`}>{r.status}</span>
+                    {r.status === 'Pending' && r.approvalStage && (
+                      <div className="text-[9px] text-[#00d4ff] font-semibold mt-1">
+                        Awaiting {r.approvalStage.approverRole}
+                        {r.approvalStage.totalSteps > 1 ? ` · Step ${r.approvalStage.currentStep}/${r.approvalStage.totalSteps}` : ''}
+                      </div>
+                    )}
+                    {/* Where it was rejected. Absent on rows that predate this
+                        feature, which fall back to the bare status badge. */}
+                    {r.status === 'Rejected' && rejectionPositionLabel(r.rejectedAtStep, r.rejectedByRoleName) && (
+                      <div className="text-[9px] text-[#ff3d3d] font-semibold mt-1">
+                        Rejected at {rejectionPositionLabel(r.rejectedAtStep, r.rejectedByRoleName)}
+                      </div>
+                    )}
+                  </td>
                   <td className="py-2.5 px-3">
                     {r.status === 'Pending' && (
                       <button onClick={() => setDeleteTarget(r)} className="p-1 text-[#5a6878] hover:text-[#ff3d3d] transition-colors" title="Cancel">
@@ -399,7 +442,7 @@ export default function MyLeave() {
       </div>
 
       {/* Apply Leave Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={v => { setCreateOpen(v); if (!v) { setSupportingDoc(null); if (docInputRef.current) docInputRef.current.value = ''; } }}>
         <DialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#f5a623] flex items-center gap-2">
@@ -461,12 +504,57 @@ export default function MyLeave() {
               <textarea value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}
                 rows={3} className="vc-input resize-none" placeholder="Reason for leave..." />
             </div>
+            {/* Supporting document upload — shown & required when policy mandates it */}
+            {selectedPolicy?.requiresDocument && (
+              <div>
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#ff3d3d] font-bold mb-1 flex items-center gap-1">
+                  <Paperclip size={10} /> Supporting Document *
+                </label>
+                <div
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                    supportingDoc
+                      ? 'border-[#00e676]/40 bg-[#00e676]/5'
+                      : 'border-[#ff3d3d]/40 bg-[#ff3d3d]/5 hover:border-[#ff3d3d]/70'
+                  }`}
+                  onClick={() => docInputRef.current?.click()}
+                >
+                  <Paperclip size={13} className={supportingDoc ? 'text-[#00e676]' : 'text-[#ff3d3d]'} />
+                  <span className={`text-[11px] flex-1 truncate ${supportingDoc ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>
+                    {supportingDoc ? supportingDoc.name : 'Click to attach document (PDF, JPG, PNG)'}
+                  </span>
+                  {supportingDoc && (
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setSupportingDoc(null); if (docInputRef.current) docInputRef.current.value = ''; }}
+                      className="text-[#5a6878] hover:text-[#ff3d3d] text-[10px]"
+                    >✕</button>
+                  )}
+                </div>
+                <input
+                  ref={docInputRef}
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  className="hidden"
+                  onChange={e => setSupportingDoc(e.target.files?.[0] || null)}
+                />
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] border border-[#2e3a48]" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button className={`font-semibold ${balanceWarning || policyViolation ? 'bg-[#ff3d3d] hover:bg-[#cc2020] text-white' : 'bg-[#f5a623] text-black hover:bg-[#e8891a]'}`} disabled={submitting || !!balanceWarning || !!policyViolation} onClick={handleSubmit}>
-              {submitting ? 'Submitting...' : balanceWarning ? 'Exceeds Balance' : policyViolation ? 'Policy Violation' : 'Submit Application'}
-            </Button>
+            {(() => {
+              const docMissing = selectedPolicy?.requiresDocument && !supportingDoc;
+              const blocked = !!balanceWarning || !!policyViolation || docMissing;
+              return (
+                <Button
+                  className={`font-semibold ${blocked ? 'bg-[#ff3d3d] hover:bg-[#cc2020] text-white' : 'bg-[#f5a623] text-black hover:bg-[#e8891a]'}`}
+                  disabled={submitting || blocked}
+                  onClick={handleSubmit}
+                >
+                  {submitting ? 'Submitting...' : balanceWarning ? 'Exceeds Balance' : policyViolation ? 'Policy Violation' : docMissing ? 'Document Required' : 'Submit Application'}
+                </Button>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -2,6 +2,7 @@ import { getDbForRequest } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { PayslipGenerator } from '@/lib/services/payslip-generator';
 import { PayrollCalculator } from '@/lib/services/payroll-calculator';
+import { getTenantLogo } from '@/lib/tenant-branding';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,11 +29,13 @@ export async function POST(request: NextRequest) {
     const calculator = new PayrollCalculator();
     console.log('[Payslip API] Generator and calculator initialized');
 
-    // Company info (should come from settings)
+    // Company info (logo comes from the superadmin-managed tenant branding)
+    const logo = await getTenantLogo(request);
     const companyInfo = {
       name: 'Upasana Associate',
-      address: 'Flat No. G+1/3, Vinayakpuram, In front of MME Ground, Jharsuguda, Odisha-768201',
+      address: 'UPASANA VILLA, KHATA NO-747/5139, PLOT NO-666/11857,\nINFRONT OF MAMTA MARBLE, BRUNDABAN COLONY,\nJHARSUGUDA, Jharsuguda, Odisha, 768203',
       principalEmployer: 'Hindalco Industries Ltd., Lapanga, Sambalpur-768212',
+      logo,
     };
 
     // Generate single payslip
@@ -70,12 +73,14 @@ export async function POST(request: NextRequest) {
         presentDays: payrollItem.presentDays || 0,
         paidLeaveDays: payrollItem.paidLeaveDays || 0,
         lopDays: payrollItem.lopDays || 0,
-        otHours: payrollItem.otHours || 0,
+        otHours: Number(payrollItem.otHours) || 0,
         basicSalary: Number(payrollItem.basicSalary) || 0,
         hra: Number(payrollItem.hra) || 0,
         conveyanceAllowance: Number(payrollItem.conveyanceAllowance) || 0,
         medicalAllowance: Number(payrollItem.medicalAllowance) || 0,
         specialAllowance: Number(payrollItem.specialAllowance) || 0,
+        attendanceAllowance: Number(payrollItem.attendanceAllowance) || 0,
+        phAmount: Number(payrollItem.phAmount) || 0,
         otAmount: Number(payrollItem.otAmount) || 0,
         grossEarnings: Number(payrollItem.grossEarning),
         pfDeduction: Number(payrollItem.pfDeduction) || 0,

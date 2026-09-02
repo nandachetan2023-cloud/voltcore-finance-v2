@@ -106,7 +106,7 @@ function StatCard({ icon: Icon, label, value, color, sub }: {
 }) {
   return (
     <div className="vc-stat-card">
-      <div className="absolute top-0 left-0 right-0 h-[4px]" style={{ background: `linear-gradient(90deg, ${color} 0%, ${color}dd 100%)` }} />
+      <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: color }} />
       <div className="flex items-start justify-between">
         <div>
           <div className="text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-2">{label}</div>

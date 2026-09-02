@@ -1,4 +1,6 @@
 import { getDbForRequest } from '@/lib/db';
+import { Prisma } from '@prisma/client';
+import { syncComplianceRunFromNonCompliance } from '@/lib/services/compliance-run';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 
@@ -67,6 +69,11 @@ export async function POST(request: NextRequest) {
     // Process each row
     for (const item of decodedData) {
       const { rowNumber, employeeId, rowData } = item;
+      // Prisma's Json array rejects `undefined` AND sparse-array holes (empty
+      // Excel cells). Array.from visits holes (unlike .map) so every slot becomes
+      // an explicit value; then normalise undefined/null → null.
+      const sanitizedRow = Array.from({ length: (rowData as any[]).length },
+        (_, i) => { const v = (rowData as any[])[i]; return v === undefined || v === null ? null : v; });
 
       try {
         // Check if this employee has a duplicate action
@@ -95,17 +102,22 @@ export async function POST(request: NextRequest) {
           monthlyWorkingDays: Number(rowData[26]) || 26,
           actualOtHrs: Number(rowData[22]) || 0,
           actualOtAmount: Number(rowData[23]) || 0,
+          grossEarnWages: Number(rowData[24]) || 0,
           monthlyBasicSalary: Number(rowData[55]) || 0,
+          basicWagesPerDay: Number(rowData[25]) || 0,
           monthlyHRA: Number(rowData[59]) || 0,
           monthlySiteAllow: Number(rowData[60]) || 0,
           monthlyLTA: Number(rowData[61]) || 0,
           monthlySpecialAllow: Number(rowData[62]) || 0,
+          monthlyAttendanceAllow: Number(rowData[63]) || 0,
+          phAmount: Number(rowData[32]) || 0,
           epf: Number(rowData[36]) || 0,
           esic: Number(rowData[37]) || 0,
           pt: Number(rowData[38]) || 0,
           tds: Number(rowData[67]) || 0,
           totalDeduction: Number(rowData[39]) || 0,
           nettPayable: Number(rowData[40]) || 0,
+          totalNonComplianceAmount: Number(rowData[44]) || 0,
           advance: Number(rowData[45]) || 0,
           bankName: String(rowData[8] || ''),
           accountNo: String(rowData[9] || ''),
@@ -120,27 +132,36 @@ export async function POST(request: NextRequest) {
           lopDays: salaryData.monthlyWorkingDays - salaryData.actualAttendance,
           otHours: salaryData.actualOtHrs,
           basicSalary: salaryData.monthlyBasicSalary,
+          basicWagesPerDay: salaryData.basicWagesPerDay,
           hra: salaryData.monthlyHRA,
           conveyanceAllowance: salaryData.monthlySiteAllow,
           medicalAllowance: salaryData.monthlyLTA,
           specialAllowance: salaryData.monthlySpecialAllow,
+          attendanceAllowance: salaryData.monthlyAttendanceAllow,
+          phAmount: salaryData.phAmount,
           otAmount: salaryData.actualOtAmount,
           grossEarning: salaryData.monthlyGrossSalary,
+          grossEarnWages: salaryData.grossEarnWages,
+          totalNonComplianceAmount: salaryData.totalNonComplianceAmount,
           pfDeduction: salaryData.epf,
           esiDeduction: salaryData.esic,
-          ptDeduction: salaryData.pt,
-          tdsDeduction: salaryData.tds,
+          ptDeduction: 0, // PT — not deducted by the company
+          tdsDeduction: 0, // TDS — not deducted by the company
           lopDeduction: 0,
           otherDeductions: salaryData.advance,
           totalDeduction: salaryData.totalDeduction,
           netPay: salaryData.nettPayable,
           status: 'pending',
-          details: { 
-            imported: true, 
-            importedAt: new Date().toISOString(), 
+          details: {
+            imported: true,
+            importedAt: new Date().toISOString(),
+            rawData: salaryData,
+            // Full uploaded row, verbatim — lets the salary-sheet download
+            // re-emit an identical sheet (see salary-non-compliance-import).
+            rawRow: sanitizedRow,
             format: 'non-compliance',
             duplicateAction: action || 'new',
-          },
+          } as unknown as Prisma.InputJsonValue,
         };
 
         if (existing) {
@@ -192,8 +213,11 @@ export async function POST(request: NextRequest) {
       where: { payrollRunId: payrollRun.id },
     });
 
-    const totalGross = items.reduce((sum, item) => sum + Number(item.grossEarning), 0);
-    const totalNet = items.reduce((sum, item) => sum + Number(item.netPay), 0);
+    // Run totals reflect the non-compliance sheet's own columns:
+    //   Total Gross = Σ GROSS EARN WAGES (sheet col 24)
+    //   Total Net   = Σ TOTAL NON COMPLIANCE AMOUNT (sheet col AQ / 44)
+    const totalGross = items.reduce((sum, item) => sum + Number(item.grossEarnWages), 0);
+    const totalNet = items.reduce((sum, item) => sum + Number(item.totalNonComplianceAmount), 0);
 
     await db.payrollRun.update({
       where: { id: payrollRun.id },
@@ -205,6 +229,13 @@ export async function POST(request: NextRequest) {
         processedAt: new Date(),
       },
     });
+
+    // Auto-generate the matching compliance run so it appears in the Compliance view
+    try {
+      await syncComplianceRunFromNonCompliance(db, payrollRun.id, month, year);
+    } catch (e) {
+      console.error('Failed to auto-generate compliance run:', e);
+    }
 
     return NextResponse.json({
       success: true,

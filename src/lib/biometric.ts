@@ -274,18 +274,22 @@ export class BiometricService {
     const skippedRecords: Array<{ empCode: string; name: string; date: string; reason: string }> = []
     const employeeRecordCount = new Map<string, { name: string; count: number }>()
 
-    // Group by employee and date
-    const groupedLogs = this.groupLogsByEmployeeAndDate(unprocessedLogs)
+    // Group by employee and date, then stitch cross-midnight (night-shift)
+    // punches: a lone early-morning punch is moved onto the previous day's
+    // open evening punch as its punch-OUT, so night shifts don't end up with a
+    // punch-in and no punch-out (and a stray "in" the next morning).
+    const groupedLogs = this.mergeCrossMidnightPunches(
+      this.groupLogsByEmployeeAndDate(unprocessedLogs)
+    )
 
     for (const [key, logs] of Object.entries(groupedLogs)) {
       try {
         const [identifier, dateStr] = key.split('|')
 
         // ── Employee matching ─────────────────────────────────────────────────
-        // We match ONLY on enrolledId (EmpcardNo from the device) because the
-        // device-assigned Empcode is NOT unique and is uneditable. enrolledId is
-        // unique + editable, set to mirror the employee code as "UA" + enrolledId.
-        // enrolledId arrives 8-digit zero-padded (e.g. "00000005") → code "UA00000005".
+        // We match on enrolledId (EmpcardNo from the device) formatted as "UA" + last 4 digits.
+        // enrolledId arrives 8-digit zero-padded (e.g. "00000005") → code "UA0005".
+        // We try both the full 8-digit format and the last-4-digit format for compatibility.
         const enrolledId = logs[0]?.enrolledId || null
 
         if (!enrolledId) {
@@ -299,16 +303,26 @@ export class BiometricService {
           continue
         }
 
+        // Try to match using the last 4 digits of enrolledId (UA + last 4 digits)
+        const last4Digits = enrolledId.slice(-4)
+        const employeeCodeLast4 = `UA${last4Digits}`
+        
+        // Also try the full 8-digit format for backward compatibility
+        const employeeCodeFull8 = `UA${enrolledId}`
+
         const employee = await this.db.employee.findFirst({
           where: {
-            employeeCode: `UA${enrolledId}`,
+            OR: [
+              { employeeCode: employeeCodeLast4 },   // Try last 4 digits (e.g., UA0005)
+              { employeeCode: employeeCodeFull8 },   // Try full 8 digits (e.g., UA00000005)
+            ],
           },
-          select: { id: true, employeeCode: true, firstName: true, lastName: true },
+          select: { id: true, employeeCode: true, firstName: true, lastName: true, branchId: true, Branch: { select: { name: true } } },
         })
 
         if (!employee) {
-          const reason = `No employee found with code "UA${enrolledId}"`
-          console.warn(`[Biometric] ${reason}. Ensure the employee exists with this enrolled ID.`)
+          const reason = `No employee found with code "${employeeCodeLast4}" or "${employeeCodeFull8}"`
+          console.warn(`[Biometric] ${reason}. Ensure the employee exists with enrolled ID ${enrolledId} (last 4: ${last4Digits}).`)
           skippedRecords.push({ empCode: enrolledId, name: logs[0]?.name || 'Unknown', date: dateStr, reason })
           // Mark as processed with skip reason so they don't keep retrying
           await this.db.biometricRawLog.updateMany({
@@ -318,7 +332,34 @@ export class BiometricService {
           continue
         }
 
+        // ── Site/Branch filter: only process employees assigned to THIS site ──
+        // If multiple biometric sites have the same API credentials (same device data),
+        // each site should only create attendance for employees assigned to its branch.
+        // Match by comparing the employee's Branch name with this site's siteName.
+        const employeeBranchName = employee.Branch?.name || ''
+        const currentSiteName = this.config.siteName || ''
+        
+        if (currentSiteName && employeeBranchName) {
+          const branchMatch = employeeBranchName.toLowerCase().trim() === currentSiteName.toLowerCase().trim()
+          if (!branchMatch) {
+            // This employee belongs to a different site — skip silently (don't mark as error,
+            // the correct site will process them).
+            // Don't mark processed — let the other site's processRawLogs pick it up.
+            // However, since raw logs are filtered by siteId, and both sites store the same
+            // punch data under their own siteId, each site has its own copy. Mark as processed.
+            const reason = `Employee ${employee.employeeCode} is assigned to branch "${employeeBranchName}", not this site "${currentSiteName}". Skipped.`
+            console.log(`[Biometric] ${reason}`)
+            await this.db.biometricRawLog.updateMany({
+              where: { id: { in: logs.map(l => l.id) } },
+              data: { processed: true, matched: false, skipReason: reason, processedAt: new Date() },
+            })
+            continue
+          }
+        }
+
         const employeeName = `${employee.firstName} ${employee.lastName}`
+
+        console.log(`[Biometric] Matched enrolledId=${enrolledId} → ${employee.employeeCode} (${employeeName})`)
 
         // Sort logs by time
         const sortedLogs = logs.sort((a, b) => 
@@ -337,29 +378,61 @@ export class BiometricService {
         console.log(`  - First punch: ${firstPunch.punchDate}`)
         console.log(`  - Calculated logDate: ${logDate.toISOString()} (${logDate.toLocaleDateString()})`)
 
-        // Check if attendance already exists
+        // Check if attendance already exists for this employee on this day.
+        // Match on a day WINDOW around logDate, not exact equality: a pre-existing
+        // row (e.g. an Absent placeholder, or a row seeded on a UTC server) can
+        // carry a logDate offset by the IST↔UTC gap (±5.5h). An exact-equality
+        // lookup would miss it and create a DUPLICATE (there is no unique
+        // constraint on employeeId+logDate). A ±6h window catches the offset row
+        // without bleeding into the adjacent calendar day.
+        const SIX_H = 6 * 60 * 60 * 1000
         const existingAttendance = await this.db.attendanceLog.findFirst({
           where: {
             employeeId: employee.id,
-            logDate: logDate,
+            logDate: { gte: new Date(logDate.getTime() - SIX_H), lte: new Date(logDate.getTime() + SIX_H) },
           },
+          orderBy: { logDate: 'asc' },
         })
 
         const punchIn = new Date(firstPunch.punchDate)
         const punchOut = sortedLogs.length > 1 ? new Date(lastPunch.punchDate) : null
 
         // ── Shift guard: skip employees without an active shift ──
-        const shiftAssignment = await getActiveShiftAssignment(employee.id, logDate, this.db)
-        if (!shiftAssignment) {
-          const reason = `No active shift assignment for ${employee.employeeCode} (${employeeName})`
-          console.log(`[Biometric] Skipping: ${reason}`)
-          skippedRecords.push({ empCode: employee.employeeCode, name: employeeName, date: dateStr, reason })
-          // Mark logs as processed so they don't keep retrying
-          await this.db.biometricRawLog.updateMany({
-            where: { id: { in: logs.map(l => l.id) } },
-            data: { processed: true, matched: false, skipReason: reason, processedAt: new Date() },
+        // First, let's check what shift assignments exist for this employee
+        const allShiftAssignments = await this.db.shiftAssignment.findMany({
+          where: { employeeId: employee.id },
+          include: { Shift: true },
+          orderBy: { effectiveFrom: 'desc' },
+        })
+        
+        console.log(`[Biometric] Employee ${employee.employeeCode} (${employeeName}) - Checking shift for ${dateStr}`)
+        console.log(`[Biometric] - logDate: ${logDate.toISOString()} (UTC: ${logDate.toUTCString()})`)
+        console.log(`[Biometric] - Total shift assignments: ${allShiftAssignments.length}`)
+        
+        if (allShiftAssignments.length > 0) {
+          console.log(`[Biometric] - Shift assignments:`)
+          allShiftAssignments.forEach((sa, idx) => {
+            console.log(`[Biometric]   ${idx + 1}. Shift: ${sa.Shift.name}, From: ${sa.effectiveFrom.toISOString()}, To: ${sa.effectiveTo ? sa.effectiveTo.toISOString() : 'null (ongoing)'}`)
+            console.log(`[Biometric]      Check: effectiveFrom <= logDate? ${sa.effectiveFrom <= logDate} (${sa.effectiveFrom} <= ${logDate})`)
+            if (sa.effectiveTo) {
+              console.log(`[Biometric]      Check: effectiveTo >= logDate? ${sa.effectiveTo >= logDate} (${sa.effectiveTo} >= ${logDate})`)
+            }
           })
-          continue
+        }
+        
+        const shiftAssignment = await getActiveShiftAssignment(employee.id, logDate, this.db)
+
+        // NOTE: a missing shift assignment is NOT a reason to drop the punch.
+        // classifyAttendance() already handles "no shift" by marking the record
+        // present (it just can't compute late/half-day without shift timing).
+        // Previously we hard-skipped here, which is why matched employees without
+        // a shift assignment showed up as Absent with no time-in even though the
+        // biometric raw log had their punch. We now record the attendance and only
+        // lose the late/half-day refinement.
+        if (!shiftAssignment) {
+          console.log(`[Biometric] ⚠️ No active shift for ${employee.employeeCode} (${employeeName}) on ${dateStr} — recording punch as present without shift-based late/half-day rules.`)
+        } else {
+          console.log(`[Biometric] ✅ Found active shift: ${shiftAssignment.Shift.name} (${shiftAssignment.Shift.startTime}-${shiftAssignment.Shift.endTime})`)
         }
 
         // Apply attendance rules to classify the record
@@ -476,30 +549,39 @@ export class BiometricService {
   // punches. The data is stored in monthly tables and the cursor is "MMyyyy$ID".
   // So to fetch existing/historical data we must SEED the cursor with a month anchor
   // ("MMyyyy$0") and page forward, walking month-by-month up to the current month.
-  async syncIncremental(): Promise<{ 
-    fetched: number; 
+  async syncIncremental(opts?: { startMonth?: number; startYear?: number }): Promise<{
+    fetched: number;
     processed: number;
     processedEmployees: Array<{ empCode: string; name: string; recordsCount: number }>;
   }> {
     try {
+      // A forced start (month+year) ignores the stored cursor and re-walks from that
+      // month up to now — used by the one-off backfill script. Because saveRawLogs
+      // de-duplicates, re-fetching already-synced months creates no duplicates.
+      // Normal scheduled syncs pass nothing and behave exactly as before.
+      const forceStart = opts?.startMonth && opts?.startYear
+        ? { m: opts.startMonth, y: opts.startYear }
+        : null
+
       // Get last successful sync for this site to retrieve the stored cursor (MaxRecord)
       const lastSync = await this.db.biometricSyncLog.findFirst({
-        where: { 
+        where: {
           status: 'success',
           siteId: this.config.siteId,
         },
         orderBy: { createdAt: 'desc' },
       })
 
-      const storedCursor = lastSync?.lastRecord && lastSync.lastRecord.includes('$')
+      const storedCursor = !forceStart && lastSync?.lastRecord && lastSync.lastRecord.includes('$')
         ? lastSync.lastRecord
         : ''
 
-      // First-ever sync starts from May 1st of the current year, then every
-      // subsequent sync resumes from the stored cursor (continues where it left off).
-      // Override the anchor month/year via env if needed.
-      const anchorMonth = parseInt(process.env.BIOMETRIC_BACKFILL_START_MONTH || '5')  // May
-      const anchorYear = parseInt(process.env.BIOMETRIC_BACKFILL_START_YEAR || String(new Date().getFullYear()))
+      // First-ever sync (no stored cursor) starts from September of LAST year,
+      // then every subsequent sync resumes from the stored cursor (continues where
+      // it left off). A forced start (backfill) overrides both. Override the default
+      // anchor month/year via env if needed.
+      const anchorMonth = forceStart ? forceStart.m : parseInt(process.env.BIOMETRIC_BACKFILL_START_MONTH || '9')  // September
+      const anchorYear = forceStart ? forceStart.y : parseInt(process.env.BIOMETRIC_BACKFILL_START_YEAR || String(new Date().getFullYear() - 1))  // last year
 
       const now = new Date()
       // Determine the first (month, year) to start walking from.
@@ -581,10 +663,14 @@ export class BiometricService {
 
   // Helper: Parse punch date from API format
   private parsePunchDate(dateStr: string): string {
-    // Format: "02/01/2020 15:58:00" -> ISO format
+    // Format: "02/01/2020 15:58:00" (device local time = IST) -> ISO with the
+    // IST offset so `new Date()` yields the correct absolute instant no matter
+    // what timezone the server runs in. Without the +05:30 suffix the string is
+    // parsed in the server's local zone, shifting every punch time (and, near
+    // midnight, the day it lands on — which broke night-shift punch pairing).
     const [datePart, timePart] = dateStr.split(' ')
     const [day, month, year] = datePart.split('/')
-    return `${year}-${month}-${day}T${timePart}`
+    return `${year}-${month}-${day}T${timePart || '00:00:00'}+05:30`
   }
 
   // Helper: Group logs by employee and date
@@ -592,11 +678,9 @@ export class BiometricService {
     const grouped: Record<string, any[]> = {}
 
     for (const log of logs) {
-      const date = new Date(log.punchDate)
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      const dateKey = `${year}-${month}-${day}`
+      // Bucket by the IST calendar day (matching how times are stored/displayed),
+      // independent of the server's own timezone. en-CA gives YYYY-MM-DD.
+      const dateKey = new Date(log.punchDate).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
       // Group strictly by enrolledId (EmpcardNo) — the unique identifier we match on.
       // Logs without an enrolledId are grouped by empCode so they can be reported
       // as skipped (they cannot be reliably matched to an employee).
@@ -607,6 +691,62 @@ export class BiometricService {
         grouped[key] = []
       }
       grouped[key].push(log)
+    }
+
+    return grouped
+  }
+
+  // Hour-of-day (0–23) of a punch in IST, regardless of server timezone.
+  private istHour(punchDate: any): number {
+    const h = new Date(punchDate).toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })
+    return parseInt(h, 10)
+  }
+
+  // Stitch night-shift punches that straddle midnight. The device emits an
+  // out-punch after 00:00 as a separate record that buckets into the NEXT
+  // calendar day, leaving day-1 with an in-punch and no out, and day-2 with a
+  // lone "in". When a day bucket holds a single early-morning punch (≤ EARLY_HR)
+  // and the same employee's immediately-previous day ended with a single
+  // late-evening punch (≥ EVENING_HR) and no closing punch, move the morning
+  // punch onto the previous day so it becomes that shift's punch-OUT.
+  private mergeCrossMidnightPunches(grouped: Record<string, any[]>): Record<string, any[]> {
+    const EARLY_HR = 11   // a lone punch at/before 11:00 IST looks like a night-shift exit
+    const EVENING_HR = 14 // a lone punch at/after 14:00 IST looks like a night-shift entry
+
+    // Index buckets by employee identifier so we can look at consecutive days.
+    const byEmp = new Map<string, string[]>()
+    for (const key of Object.keys(grouped)) {
+      const [identifier] = key.split('|')
+      if (!byEmp.has(identifier)) byEmp.set(identifier, [])
+      byEmp.get(identifier)!.push(key)
+    }
+
+    for (const [identifier, keys] of byEmp) {
+      // Sort the employee's day-keys chronologically by their date part.
+      keys.sort((a, b) => a.split('|')[1].localeCompare(b.split('|')[1]))
+
+      for (let i = 1; i < keys.length; i++) {
+        const todayKey = keys[i]
+        const today = grouped[todayKey]
+        if (!today || today.length !== 1) continue
+        if (this.istHour(today[0].punchDate) > EARLY_HR) continue
+
+        const prevKey = keys[i - 1]
+        const prev = grouped[prevKey]
+        if (!prev || prev.length !== 1) continue
+        if (this.istHour(prev[0].punchDate) < EVENING_HR) continue
+
+        // Confirm the two days are actually consecutive (prev day + 1 = today).
+        const prevDate = prevKey.split('|')[1]
+        const todayDate = todayKey.split('|')[1]
+        const nextOfPrev = new Date(`${prevDate}T00:00:00Z`)
+        nextOfPrev.setUTCDate(nextOfPrev.getUTCDate() + 1)
+        if (nextOfPrev.toISOString().slice(0, 10) !== todayDate) continue
+
+        // Move the morning exit-punch onto the previous (shift-start) day.
+        prev.push(today[0])
+        delete grouped[todayKey]
+      }
     }
 
     return grouped

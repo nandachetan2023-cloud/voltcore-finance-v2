@@ -13,6 +13,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '100')
     const offset = parseInt(searchParams.get('offset') || '0')
     const date = searchParams.get('date')
+    const from = searchParams.get('from')
+    const to = searchParams.get('to')
     const employeeId = searchParams.get('employeeId')
 
     // Build where clause
@@ -26,6 +28,22 @@ export async function GET(request: NextRequest) {
         gte: targetDate,
         lt: nextDate,
       }
+    } else if (from || to) {
+      // Inclusive [from, to] date range — lets the client fetch an arbitrary
+      // month/period instead of just the 100 most-recent rows.
+      const range: any = {}
+      if (from) {
+        const start = new Date(from)
+        start.setHours(0, 0, 0, 0)
+        range.gte = start
+      }
+      if (to) {
+        const end = new Date(to)
+        end.setHours(0, 0, 0, 0)
+        end.setDate(end.getDate() + 1) // make the upper bound inclusive of `to`
+        range.lt = end
+      }
+      where.logDate = range
     }
     if (employeeId) {
       where.employeeId = parseInt(employeeId)
@@ -69,20 +87,63 @@ export async function GET(request: NextRequest) {
     })
     const branchMap = new Map(empBranches.map(e => [e.id, e.Branch?.name ?? null]))
 
+    // Fetch every shift assignment for the page's employees in ONE query, then
+    // resolve the active one per row in memory (was an N+1: one query per row).
+    const allAssignments = await db.shiftAssignment.findMany({
+      where: { employeeId: { in: uniqueEmpIds } },
+      orderBy: { effectiveFrom: 'desc' },
+      include: { Shift: { select: { name: true, startTime: true, endTime: true, breakMinutes: true, crossesMidnight: true, otThresholdMin: true } } },
+    })
+    const assignmentsByEmp = new Map<number, typeof allAssignments>()
+    for (const asg of allAssignments) {
+      const list = assignmentsByEmp.get(asg.employeeId)
+      if (list) list.push(asg)
+      else assignmentsByEmp.set(asg.employeeId, [asg])
+    }
+
+    // Minutes-of-day (IST) for a punch timestamp — used to pick the shift whose
+    // start time is closest to when the employee actually punched in.
+    const istMinutesOfDay = (d: Date): number => {
+      const hm = new Intl.DateTimeFormat('en-GB', {
+        hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata',
+      }).format(d)
+      const [h, m] = hm.split(':').map(Number)
+      return h * 60 + m
+    }
+    const shiftStartMinutes = (startTime?: string | null): number | null => {
+      if (!startTime) return null
+      const [h, m] = startTime.split(':').map(Number)
+      return Number.isNaN(h) || Number.isNaN(m) ? null : h * 60 + m
+    }
+
     // Enrich each record with the shift that was active ON the log date
     // (respects the shift assignment's effective date range), including its
     // start/end time, plus the employee's branch/site name.
-    const enriched = await Promise.all(attendance.map(async (a) => {
+    const enriched = attendance.map((a) => {
       const logDate = new Date(a.logDate)
-      const assignment = await db.shiftAssignment.findFirst({
-        where: {
-          employeeId: a.employeeId,
-          effectiveFrom: { lte: logDate },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: logDate } }],
-        },
-        orderBy: { effectiveFrom: 'desc' },
-        include: { Shift: { select: { name: true, startTime: true, endTime: true } } },
-      })
+      // All assignments active on the log date.
+      const active = (assignmentsByEmp.get(a.employeeId) || []).filter(asg =>
+        new Date(asg.effectiveFrom) <= logDate &&
+        (asg.effectiveTo == null || new Date(asg.effectiveTo) >= logDate)
+      )
+
+      // When several shifts are active at once, show the one whose start time is
+      // closest to the actual punch-in (matching how attendance is classified) —
+      // NOT just the most-recently-assigned one. Falls back to the most recent
+      // (list is sorted effectiveFrom desc) when there's no punch-in.
+      let assignment = active[0] || null
+      if (active.length > 1 && a.punchIn) {
+        const punchMin = istMinutesOfDay(new Date(a.punchIn))
+        let bestDiff = Infinity
+        for (const asg of active) {
+          const startMin = shiftStartMinutes(asg.Shift?.startTime)
+          if (startMin == null) continue
+          // Compare on a 24h circle so 23:30 vs 00:15 is 45 min, not 23h.
+          const raw = Math.abs(punchMin - startMin)
+          const diff = Math.min(raw, 1440 - raw)
+          if (diff < bestDiff) { bestDiff = diff; assignment = asg }
+        }
+      }
 
       const shiftName = assignment?.Shift
         ? `${assignment.Shift.name}${assignment.Shift.startTime && assignment.Shift.endTime ? ` (${assignment.Shift.startTime}–${assignment.Shift.endTime})` : ''}`
@@ -94,9 +155,12 @@ export async function GET(request: NextRequest) {
         shiftName,
         shiftStartTime: assignment?.Shift?.startTime ?? null,
         shiftEndTime: assignment?.Shift?.endTime ?? null,
-        siteName: branchMap.get(a.employeeId) ?? null,
+        shiftBreakMinutes: assignment?.Shift?.breakMinutes ?? null,
+        shiftCrossesMidnight: assignment?.Shift?.crossesMidnight ?? null,
+        shiftOtThresholdMin: assignment?.Shift?.otThresholdMin ?? null,
+        siteName: branchMap.get(a.employeeId) || null,
       }
-    }))
+    })
 
     return NextResponse.json({ 
       success: true, 

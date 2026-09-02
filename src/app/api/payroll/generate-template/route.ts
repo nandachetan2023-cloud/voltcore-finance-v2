@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
         Grade: true,
       },
       orderBy: [
-        { Department: { name: 'asc' } },
         { employeeCode: 'asc' },
       ],
     });
@@ -111,20 +110,24 @@ export async function GET(request: NextRequest) {
     // Define column headers (69 columns - SL NO. first, then EMPLOYEE ID, then original 67 columns)
     const headers = [
       'SL NO.', 'EMPLOYEE ID', 'WORKMEN SL. NO.', 'TOKEN NO.', 'NAME OF EMPLOYEE', "FATHER'S NAME",
-      'DOJ', 'DOB', 'BANK NAME', 'ACCOUNT NO.', 'IFSC CODE NO.', '',
+      'DOJ', 'DOB', 'BANK NAME', 'ACCOUNT NO.', 'IFSC CODE NO.', 'SITE',
       'UAN NO.', 'ESIC IP NO', 'DESIGNATION', 'DEPARTMENT', 'NATURE OF DESIGNATION',
       'MONTHLY GROSS SALARY', 'ACTUAL ATTENDANCE', 'LEAVE DAYS', 'PH DAYS',
       'ACTUAL EARN WAGES', 'ACTUAL OT HRS', 'ACTUAL OT AMOUNT', 'GROSS EARN WAGES',
       'BASIC WAGES/DAY', 'MONTHLY WORKING DAYS', 'OT. HRS', 'ATTENDANCE', 'PH',
       'WAGES/MONTH', 'EARN WAGES', 'PH AMOUNT', 'TOTAL EARN WAGES', 'OT HRS PAYMENT',
-      'TOTAL NETT PAYBLE', 'EPF', 'ESIC', 'PT', 'TOTAL DEDUCTION', 'NETT PAYBLE',
+      'TOTAL NETT PAYBLE', 'EPF', 'ESIC', '', 'TOTAL DEDUCTION', 'NETT PAYBLE',
       'EMPLOYEE SIGNATURE/THUMB IMPRESSION', '', '', 'TOTAL NON COMPLIANCE AMOUNT',
       'ADVANCE', 'AREEARS', 'NETT PAYBLE NON COMPLIANCE', 'GRAND TOTAL NETT PAYBLE SALARY',
       '', 'LEAVE', 'BONUS', '', '', '',
       'MONTHLY BASIC SALARY', 'PH AMOUNT', 'OT AMOUNT', 'EARN SALARY',
       'MONTHLY House Rent Allow.', 'Monthly Site Allow.', 'Monthly Leave Travel Allow.',
       'Monthly Special Allow.', 'MonthlyAttendence Allow.', 'TOTAL SALARY',
-      'EPF', 'ESIC', 'TDS', 'ADVANCE'
+      'EPF', 'ESIC', '', 'ADVANCE',
+      // col 70 (index 69): Leave Amount = ROUND((MONTHLY GROSS / 26) * LEAVE DAYS, 0)
+      // Matches the JUNE reference's "Leave Amount" column. Appended at the end so
+      // the existing fixed column indices used by the calc/import/download stay put.
+      'LEAVE AMOUNT'
     ];
 
     // Add header row
@@ -188,6 +191,42 @@ export async function GET(request: NextRequest) {
       const attendance = attendanceMap.get(employee.id) || { present: 0, leaveDays: 0 };
       const advance = advanceMap.get(employee.id) || 0;
 
+      // ── Wages, from the employee master ────────────────────────────────
+      // These two columns drive every downstream calculation (see
+      // calculate-from-template: it REJECTS a row whose BASIC WAGES/DAY or
+      // MONTHLY WORKING DAYS is blank). They used to ship blank for every
+      // employee, so the wages an admin had set on the employee record were
+      // never carried into the sheet and had to be retyped by hand.
+      //
+      // MONTHLY WORKING DAYS is the divisor the calculator uses, and it depends
+      // on the employee's type — mirror that here so the sheet agrees with what
+      // the calculator would do:
+      //   Fixed         → the site's monthlyWorkingDays
+      //   Non-Fixed OT1 → the site's otType1Divisor
+      //   Non-Fixed OT2 → the site's otType2Divisor
+      const isFixed = (employee.employmentType || '').toLowerCase() === 'fixed';
+      const workingDays = isFixed
+        ? (employee.Branch?.monthlyWorkingDays || 26)
+        : (employee.otType === 2
+            ? (employee.Branch?.otType2Divisor || 26)
+            : (employee.Branch?.otType1Divisor || 26));
+
+      // BASIC WAGES/DAY: an explicit dailyWage on the employee wins — it is the
+      // compliance "daily rate of wages" and is meant to be used verbatim.
+      // Otherwise derive it from the monthly gross over the same divisor the
+      // calculator will use, so gross ÷ days × days round-trips.
+      const grossSalary = employee.monthlyGrossSalary
+        ? parseFloat(employee.monthlyGrossSalary.toString())
+        : 0;
+      const explicitDailyWage = employee.dailyWage
+        ? parseFloat(employee.dailyWage.toString())
+        : 0;
+      const basicWagesPerDay = explicitDailyWage > 0
+        ? explicitDailyWage
+        : (grossSalary > 0 && workingDays > 0
+            ? Math.round((grossSalary / workingDays) * 100) / 100
+            : '');
+
       const row = worksheet.addRow([
         index + 1,               // col 0: SL NO.
         employee.employeeCode,   // col 1: EMPLOYEE ID
@@ -200,7 +239,7 @@ export async function GET(request: NextRequest) {
         employee.bankName || '', // H: BANK NAME
         employee.bankAccount || '', // I: ACCOUNT NO
         employee.bankIfsc || '', // J: IFSC CODE
-        '', // K: Empty
+        employee.Branch?.name || '', // L: SITE
         employee.uanNumber || '', // L: UAN
         employee.esicNumber || '', // M: ESIC
         employee.Designation?.name || '', // N: DESIGNATION
@@ -214,18 +253,19 @@ export async function GET(request: NextRequest) {
         '', // V: ACTUAL OT HRS (USER INPUT)
         '', // W: ACTUAL OT AMOUNT (CALCULATED)
         '', // X: GROSS EARN WAGES (CALCULATED)
-        '', // Y: BASIC WAGES/DAY (USER INPUT)
-        '', // Z: MONTHLY WORKING DAYS (USER INPUT)
+        basicWagesPerDay, // Y: BASIC WAGES/DAY (auto-filled from employee master)
+        workingDays,      // Z: MONTHLY WORKING DAYS (auto-filled from the site)
         '', // AA: OT HRS (USER INPUT)
         '', // AB: ATTENDANCE (USER INPUT)
         '', // AC: PH (USER INPUT)
         '', // AD-AN: CALCULATED
-        '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+        '', '', '', '', '', '', '', '', '', '', '', '',
         '',      // col 45: TOTAL NON COMPLIANCE AMOUNT (CALCULATED)
         advance, // col 46: ADVANCE (EDITABLE AUTO-FILL)
         '',      // col 47: ARREARS (USER INPUT)
         '', // AU-BP: CALCULATED
-        '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''
+        '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+        '' // col 70: LEAVE AMOUNT (CALCULATED after upload)
       ]);
 
       // Apply styles to data cells
@@ -233,13 +273,11 @@ export async function GET(request: NextRequest) {
       // Yellow = user input required
       // White  = calculated after upload — leave blank
 
-      // cols 1-20: auto-filled (blue, editable)
+      // cols 1-20: auto-filled (blue, editable) — incl. col 12 (SITE)
       for (let col = 1; col <= 20; col++) {
-        if (col !== 12) { // Skip col 12 (empty column K shifted)
-          const cell = row.getCell(col);
-          cell.style = autoFilledStyle;
-          cell.note = 'Auto-filled by system. You can edit this value if needed.';
-        }
+        const cell = row.getCell(col);
+        cell.style = autoFilledStyle;
+        cell.note = 'Auto-filled by system. You can edit this value if needed.';
       }
 
       // col 46 (ADVANCE): Editable auto-filled (Light Green — fetched from advance requests)
@@ -247,11 +285,23 @@ export async function GET(request: NextRequest) {
       asCell.style = editableAutoFillStyle;
       asCell.note = 'Auto-filled from approved advance payment requests. You can edit this value if needed.';
 
+      // Wage columns (Light Green): auto-filled from the employee master and the
+      // site's working-day settings, but still editable for a one-off override.
+      // col 26=Y(BASIC WAGES/DAY), col 27=Z(MONTHLY WORKING DAYS)
+      const wageCell = row.getCell(26);
+      wageCell.style = editableAutoFillStyle;
+      wageCell.note = explicitDailyWage > 0
+        ? 'Auto-filled from the daily wage on the employee record. You can edit this value if needed.'
+        : 'Auto-filled: monthly gross salary ÷ monthly working days. You can edit this value if needed.';
+
+      const daysCell = row.getCell(27);
+      daysCell.style = editableAutoFillStyle;
+      daysCell.note = 'Auto-filled from this site’s working-day settings for the employee’s type. You can edit this value if needed.';
+
       // User input columns (Yellow):
-      // col 21=T(PH DAYS), col 23=V(OT HRS), col 26=Y(BASIC WAGES/DAY),
-      // col 27=Z(MONTHLY WORKING DAYS), col 28=AA(OT HRS), col 29=AB(ATTENDANCE),
-      // col 30=AC(PH), col 47=AT(ARREARS)
-      const userInputColumns = [21, 23, 26, 27, 28, 29, 30, 47];
+      // col 21=T(PH DAYS), col 23=V(OT HRS), col 28=AA(OT HRS),
+      // col 29=AB(ATTENDANCE), col 30=AC(PH), col 47=AT(ARREARS)
+      const userInputColumns = [21, 23, 28, 29, 30, 47];
       userInputColumns.forEach(col => {
         const cell = row.getCell(col);
         cell.style = userInputStyle;

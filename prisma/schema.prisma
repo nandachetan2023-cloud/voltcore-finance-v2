@@ -22,6 +22,9 @@ model AttendanceLog {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime
   Employee          Employee  @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, logDate])
+  @@index([logDate])
 }
 
 model BiometricRawLog {
@@ -64,6 +67,13 @@ model Branch {
   id             Int              @id @default(autoincrement())
   name           String           @unique
   address        String?
+  // Payroll divisors for this site (per attended day):
+  //   monthlyWorkingDays — Fixed employees' earn-wages divisor.
+  //   otType1Divisor / otType2Divisor — Non-fixed employees' earn-wages AND OT
+  //     hourly-rate divisor, by their OT type. All default to 26.
+  monthlyWorkingDays Int          @default(26)
+  otType1Divisor     Int          @default(26)
+  otType2Divisor     Int          @default(26)
   Employee       Employee[]
   Warehouse      Warehouse[]
   Holiday        Holiday[]
@@ -104,6 +114,22 @@ model Designation {
   Employee          Employee[]
   LeavePolicy       LeavePolicy[]
   ChecklistTemplate ChecklistTemplate[]
+  SubDesignation SubDesignation[]
+}
+
+// A sub-designation is a child of a Designation (e.g. Fitter → Fitter Grade-1).
+// Name is unique WITHIN its parent designation, not globally.
+model SubDesignation {
+  id            Int         @id @default(autoincrement())
+  name          String
+  designationId Int
+  Designation   Designation @relation(fields: [designationId], references: [id], onDelete: Cascade)
+  Employee      Employee[]
+  LeavePolicy       LeavePolicy[]
+  ChecklistTemplate ChecklistTemplate[]
+
+  @@unique([designationId, name])
+  @@index([designationId])
 }
 
 model Employee {
@@ -112,6 +138,10 @@ model Employee {
   tokenNumber               String?                     @unique
   workmenSlNo               String?
   monthlyGrossSalary        Decimal?                    @db.Decimal(15, 2)
+  // Fixed daily rate of wages — the compliance "Register of Wages" column K
+  // ("daily rate of wages/piece rate/monthly"). When set it is used verbatim in
+  // payroll (compliance daily rate) instead of deriving basicSalary/workingDays.
+  dailyWage                 Decimal?                    @db.Decimal(10, 2)
   natureOfDesignation       String?
   userId                    Int?                        @unique
   firstName                 String
@@ -135,11 +165,18 @@ model Employee {
   permanentPincode          String?
   departmentId              Int
   designationId             Int
+  subDesignationId          Int?
   branchId                  Int
   reportingManagerId        Int?
   dateOfJoining             DateTime
   confirmationDate          DateTime?
+  // employmentType now classifies payroll behaviour: "fixed" | "non_fixed".
+  // Fixed employees earn over the branch's monthly working days and get no OT;
+  // non-fixed employees earn over 26 and get OT at the otType multiplier.
   employmentType            String?
+  // OT multiplier class for NON-FIXED employees: 1 = 1x hourly OT, 2 = 2x hourly OT.
+  // Ignored (no OT) when the employee is fixed. Mirrors the sheet's "OT Types".
+  otType                    Int                         @default(1)
   employmentStatus          String
   probationMonths           Int                         @default(6)
   noticePeriodDays          Int                         @default(30)
@@ -157,6 +194,9 @@ model Employee {
   emergencyContactName      String?
   emergencyContactRelation  String?
   emergencyContactPhone     String?
+  nomineeName               String?
+  nomineeRelation           String?
+  nomineeAddress            String?
   isActive                  Boolean                     @default(true)
   isDeleted                 Boolean                     @default(false)
   gradeId                   Int?
@@ -166,6 +206,7 @@ model Employee {
   Branch                    Branch                      @relation(fields: [branchId], references: [id])
   Department                Department                  @relation(fields: [departmentId], references: [id])
   Designation               Designation                 @relation(fields: [designationId], references: [id])
+  SubDesignation            SubDesignation?             @relation(fields: [subDesignationId], references: [id])
   Grade                     Grade?                      @relation(fields: [gradeId], references: [id])
   Employee                  Employee?                   @relation("EmployeeToEmployee", fields: [reportingManagerId], references: [id])
   other_Employee            Employee[]                  @relation("EmployeeToEmployee")
@@ -178,6 +219,10 @@ model Employee {
   EmployeeRequest           EmployeeRequest[]
   OnboardingChecklist       OnboardingChecklist[]
   Resignation               Resignation[]
+
+  @@index([isDeleted, employmentStatus])
+  @@index([departmentId])
+  @@index([branchId])
 }
 
 model Invoice {
@@ -243,63 +288,84 @@ model ItemCategory {
 }
 
 model LeaveRequest {
-  id              Int       @id @default(autoincrement())
-  employeeId      Int
-  leaveType       String
-  fromDate        DateTime
-  toDate          DateTime
-  days            Decimal   @default(1.0) @db.Decimal(5, 1)
-  reason          String?
-  status          String    @default("pending")
-  currentStep     Int       @default(1)
-  appliedDate     DateTime  @default(now())
-  approvedBy      Int?
-  approvedDate    DateTime?
-  rejectedBy      Int?
-  rejectedDate    DateTime?
-  rejectionReason String?
-  isDeleted       Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime
-  Employee        Employee  @relation(fields: [employeeId], references: [id])
+  id                  Int       @id @default(autoincrement())
+  employeeId          Int
+  leaveType           String
+  fromDate            DateTime
+  toDate              DateTime
+  days                Decimal   @default(1.0) @db.Decimal(5, 1)
+  reason              String?
+  supportingDocument  Json?
+  status              String    @default("pending")
+  currentStep         Int       @default(1)
+  // When the request entered its CURRENT step. Reset on every step advance so
+  // the 24h auto-approval window restarts for each approver. Null on rows that
+  // predate the column; the sweep treats those as entering at appliedDate.
+  stepEnteredAt       DateTime?
+  // Steps that were passed by the 24h timer rather than by a person, as a
+  // comma-separated list of step numbers ("1,3"). Kept so the audit trail can
+  // distinguish an auto-approval from a real one.
+  autoApprovedSteps   String    @default("")
+  appliedDate         DateTime  @default(now())
+  approvedBy          Int?
+  approvedDate        DateTime?
+  rejectedBy          Int?
+  rejectedDate        DateTime?
+  rejectionReason     String?
+  // Which chain step rejected, and the approver role's name at that step.
+  // Captured at rejection time because the chain can be edited afterwards —
+  // resolving the role later could name whoever holds the step TODAY rather
+  // than who actually rejected it.
+  rejectedAtStep      Int?
+  rejectedByRoleName  String?
+  isDeleted           Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime
+  Employee            Employee  @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId, status])
   @@index([fromDate, toDate])
 }
 
 model PayrollItem {
-  id                  Int        @id @default(autoincrement())
-  payrollRunId        Int
-  employeeId          Int
-  workingDays         Int        @default(26)
-  presentDays         Int        @default(0)
-  paidLeaveDays       Int        @default(0)
-  lopDays             Int        @default(0)
-  otHours             Decimal    @default(0) @db.Decimal(5, 2)
-  basicSalary         Decimal    @default(0) @db.Decimal(15, 2)
-  hra                 Decimal    @default(0) @db.Decimal(15, 2)
-  conveyanceAllowance Decimal    @default(0) @db.Decimal(15, 2)
-  medicalAllowance    Decimal    @default(0) @db.Decimal(15, 2)
-  specialAllowance    Decimal    @default(0) @db.Decimal(15, 2)
-  otAmount            Decimal    @default(0) @db.Decimal(15, 2)
-  grossEarning        Decimal    @db.Decimal(15, 2)
-  pfDeduction         Decimal    @default(0) @db.Decimal(15, 2)
-  esiDeduction        Decimal    @default(0) @db.Decimal(15, 2)
-  ptDeduction         Decimal    @default(0) @db.Decimal(15, 2)
-  tdsDeduction        Decimal    @default(0) @db.Decimal(15, 2)
-  lopDeduction        Decimal    @default(0) @db.Decimal(15, 2)
-  otherDeductions     Decimal    @default(0) @db.Decimal(15, 2)
-  totalDeduction      Decimal    @db.Decimal(15, 2)
-  netPay              Decimal    @db.Decimal(15, 2)
-  status              String     @default("pending")
-  payslipGenerated    Boolean    @default(false)
-  payslipPath         String?
-  remarks             String?
-  details             Json?
-  Employee            Employee   @relation(fields: [employeeId], references: [id])
-  PayrollRun          PayrollRun @relation(fields: [payrollRunId], references: [id])
+  id                   Int        @id @default(autoincrement())
+  payrollRunId         Int
+  employeeId           Int
+  workingDays          Int        @default(26)
+  presentDays          Int        @default(0)
+  paidLeaveDays        Int        @default(0)
+  lopDays              Int        @default(0)
+  otHours              Decimal    @default(0) @db.Decimal(5, 2)
+  basicSalary          Decimal    @default(0) @db.Decimal(15, 2)
+  basicWagesPerDay     Decimal    @default(0) @db.Decimal(10, 2)
+  hra                  Decimal    @default(0) @db.Decimal(15, 2)
+  conveyanceAllowance  Decimal    @default(0) @db.Decimal(15, 2)
+  medicalAllowance     Decimal    @default(0) @db.Decimal(15, 2)
+  specialAllowance     Decimal    @default(0) @db.Decimal(15, 2)
+  attendanceAllowance  Decimal    @default(0) @db.Decimal(15, 2)
+  phAmount             Decimal    @default(0) @db.Decimal(15, 2)
+  otAmount             Decimal    @default(0) @db.Decimal(15, 2)
+  grossEarning         Decimal    @db.Decimal(15, 2)
+  grossEarnWages       Decimal    @default(0) @db.Decimal(15, 2)
+  totalNonComplianceAmount Decimal @default(0) @db.Decimal(15,2)
+  pfDeduction          Decimal    @default(0) @db.Decimal(15, 2)
+  esiDeduction         Decimal    @default(0) @db.Decimal(15, 2)
+  ptDeduction          Decimal    @default(0) @db.Decimal(15, 2)
+  tdsDeduction         Decimal    @default(0) @db.Decimal(15, 2)
+  lopDeduction         Decimal    @default(0) @db.Decimal(15, 2)
+  otherDeductions      Decimal    @default(0) @db.Decimal(15, 2)
+  totalDeduction       Decimal    @db.Decimal(15, 2)
+  netPay               Decimal    @db.Decimal(15, 2)
+  status               String     @default("pending")
+  payslipGenerated     Boolean    @default(false)
+  payslipPath          String?
+  remarks              String?
+  details              Json?
+  Employee             Employee   @relation(fields: [employeeId], references: [id])
+  PayrollRun           PayrollRun @relation(fields: [payrollRunId], references: [id])
 
   @@index([employeeId, payrollRunId])
+  @@index([payrollRunId])
 }
 
 model PayrollRun {
@@ -449,6 +515,12 @@ model Shift {
   breakMinutes    Int               @default(60)
   graceMinutes    Int               @default(15)
   otThresholdMin  Int               @default(30)
+  // Hours-worked thresholds that decide attendance status for this shift:
+  //   worked ≥ minPresentHours            → Present
+  //   minHalfDayHours ≤ worked < minPresent → Half Day
+  //   worked < minHalfDayHours            → Absent
+  minPresentHours Float             @default(8)
+  minHalfDayHours Float             @default(4)
   weekOffDays     Int[]
   isActive        Boolean           @default(true)
   isDeleted       Boolean           @default(false)
@@ -468,6 +540,8 @@ model ShiftAssignment {
   updatedAt     DateTime
   Employee      Employee  @relation(fields: [employeeId], references: [id])
   Shift         Shift     @relation(fields: [shiftId], references: [id])
+
+  @@index([employeeId, effectiveFrom])
 }
 
 model StockEntry {
@@ -598,13 +672,14 @@ model JobOpening {
   id            Int      @id @default(autoincrement())
   position      String
   designationId Int?
-  site          String
-  openings      Int
-  applications  Int      @default(0)
-  priority      String
-  status        String   @default("Open")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime
+  subDesignationId Int?
+  site         String
+  openings     Int
+  applications Int      @default(0)
+  priority     String
+  status       String   @default("Open")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
 }
 
 model Certification {
@@ -653,38 +728,42 @@ model Holiday {
 }
 
 model LeavePolicy {
-  id                           Int          @id @default(autoincrement())
-  name                         String
-  code                         String       @unique
-  leaveType                    String
-  annualQuota                  Decimal      @default(0) @db.Decimal(5, 1)
-  carryForward                 Boolean      @default(false)
-  maxCarryForward              Decimal      @default(0) @db.Decimal(5, 1)
-  encashable                   Boolean      @default(false)
-  maxEncashment                Decimal      @default(0) @db.Decimal(5, 1)
-  minDaysNotice                Int          @default(0)
-  maxConsecutiveDays           Int          @default(0)
-  applicableAfterMonths        Int          @default(0)
-  applicableGender             String       @default("all")
-  applicableTo                 String       @default("all")
-  departmentId                 Int?
-  designationId                Int?
-  requiresDocument             Boolean      @default(false)
-  isActive                     Boolean      @default(true)
-  createdAt                    DateTime     @default(now())
-  updatedAt                    DateTime
+  id                    Int          @id @default(autoincrement())
+  name                  String
+  code                  String       @unique
+  leaveType             String
+  annualQuota           Decimal      @default(0) @db.Decimal(5, 1)
+  carryForward          Boolean      @default(false)
+  maxCarryForward       Decimal      @default(0) @db.Decimal(5, 1)
+  encashable            Boolean      @default(false)
+  maxEncashment         Decimal      @default(0) @db.Decimal(5, 1)
+  minDaysNotice         Int          @default(0)
+  maxConsecutiveDays    Int          @default(0)
+  applicableAfterMonths Int          @default(0)
+  applicableGender      String       @default("all")
+  applicableTo          String       @default("all")
+  departmentId          Int?
+  designationId         Int?
+  employeeId            Int?         // set when applicableTo == "employee" (scopes to one employee)
+  requiresDocument      Boolean      @default(false)
+  isActive              Boolean      @default(true)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime
   // Earned Leave specific settings
-  earnedLeaveAccrualMethod     String? // "monthly" | "quarterly" | "annual"
-  earnedLeaveAccrualRate       Decimal?     @db.Decimal(5, 2) // days earned per accrual period
-  earnedLeaveMaxAccumulation   Decimal?     @db.Decimal(5, 1) // max days that can accumulate
-  earnedLeaveRoundingRule      String? // "none" | "round_up" | "round_down" | "round_nearest"
-  earnedLeaveEligibleAfterDays Int? // days of service before EL starts accruing
-  Department                   Department?  @relation(fields: [departmentId], references: [id])
-  Designation                  Designation? @relation(fields: [designationId], references: [id])
+  earnedLeaveAccrualMethod   String?  // "monthly" | "quarterly" | "annual"
+  earnedLeaveAccrualRate     Decimal? @db.Decimal(5, 2) // days earned per accrual period
+  earnedLeaveMaxAccumulation Decimal? @db.Decimal(5, 1) // max days that can accumulate
+  earnedLeaveRoundingRule    String?  // "none" | "round_up" | "round_down" | "round_nearest"
+  earnedLeaveEligibleAfterDays Int?   // days of service before EL starts accruing
+  subDesignationId      Int?
+  Department            Department?  @relation(fields: [departmentId], references: [id])
+  Designation           Designation? @relation(fields: [designationId], references: [id])
+  SubDesignation        SubDesignation? @relation(fields: [subDesignationId], references: [id])
 
   @@index([leaveType])
   @@index([departmentId])
   @@index([designationId])
+  @@index([employeeId])
 }
 
 model AttendanceRule {
@@ -768,8 +847,10 @@ model EmployeeRequest {
   rejectedBy     Int?
   rejectedDate   DateTime?
   rejectionNote  String?
-  isDeleted      Boolean   @default(false)
-  createdAt      DateTime  @default(now())
+  rejectedAtStep      Int?
+  rejectedByRoleName  String?
+  isDeleted      Boolean  @default(false)
+  createdAt      DateTime @default(now())
   updatedAt      DateTime
 
   Employee Employee @relation(fields: [employeeId], references: [id])
@@ -806,8 +887,10 @@ model ChecklistTemplate {
   isActive      Boolean                 @default(true)
   createdAt     DateTime                @default(now())
   updatedAt     DateTime
-  Department    Department?             @relation(fields: [departmentId], references: [id])
-  Designation   Designation?            @relation(fields: [designationId], references: [id])
+  subDesignationId Int?
+  Department    Department?              @relation(fields: [departmentId], references: [id])
+  Designation   Designation?             @relation(fields: [designationId], references: [id])
+  SubDesignation SubDesignation?         @relation(fields: [subDesignationId], references: [id])
   tasks         ChecklistTemplateTask[]
   instances     OnboardingChecklist[]
 
@@ -978,6 +1061,8 @@ model TourRequest {
   rejectedBy      Int?
   rejectedDate    DateTime?
   rejectionReason String?
+  rejectedAtStep      Int?
+  rejectedByRoleName  String?
   isDeleted       Boolean   @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime

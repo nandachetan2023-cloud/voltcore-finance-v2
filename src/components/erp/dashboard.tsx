@@ -179,14 +179,11 @@ function StatCard({
 }) {
   return (
     <div className="vc-stat-card">
-      <div
-        className="absolute top-0 left-0 right-0 h-[3px]"
-        style={{ background: color }}
-      />
+      <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: color, opacity: 0.7 }} />
       <div className="flex items-center justify-between mb-3">
         <div
           className="w-9 h-9 rounded-lg flex items-center justify-center"
-          style={{ background: `${color}15` }}
+          style={{ background: `${color}1a` }}
         >
           <Icon size={18} style={{ color }} />
         </div>
@@ -201,10 +198,7 @@ function StatCard({
           </span>
         )}
       </div>
-      <div
-        className="text-[26px] font-bold leading-none mb-1"
-        style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
-      >
+      <div className="text-[26px] font-bold leading-none mb-1 tracking-tight tabular-nums">
         {value}
       </div>
       <div className="text-[11px] text-[#8899aa]">{sub}</div>

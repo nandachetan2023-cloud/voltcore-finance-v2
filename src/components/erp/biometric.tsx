@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { RefreshCw, CheckCircle2, XCircle, Clock, Database, Fingerprint, AlertCircle, Building2 } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, Clock, Database, Fingerprint, AlertCircle, Building2, Search, X } from 'lucide-react';
 
 interface BiometricSite {
   id: string;
@@ -31,6 +31,7 @@ interface SyncStatus {
 interface RawLog {
   id: number;
   empCode: string;
+  enrolledId?: string;
   name: string;
   punchDate: string;
   deviceId?: string;
@@ -53,6 +54,8 @@ export default function BiometricPage() {
   const [syncing, setSyncing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [logFilter, setLogFilter] = useState<'all' | 'pending' | 'matched' | 'unmatched'>('all');
+  const [logSearch, setLogSearch] = useState('');
+  const [logDate, setLogDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [skippedRecords, setSkippedRecords] = useState<Array<{ empCode: string; name: string; date: string; reason: string }>>([]);
 
   useEffect(() => {
@@ -68,7 +71,7 @@ export default function BiometricPage() {
 
   useEffect(() => {
     fetchRawLogs();
-  }, [logFilter]);
+  }, [logFilter, logDate]);
 
   const fetchSites = async () => {
     try {
@@ -92,11 +95,12 @@ export default function BiometricPage() {
   const fetchRawLogs = async () => {
     setLoadingLogs(true);
     try {
-      let url = '/api/biometric/logs?limit=50';
+      let url = '/api/biometric/logs?limit=500';
       if (logFilter === 'pending') url += '&processed=false';
       else if (logFilter === 'matched') url += '&matched=true';
       else if (logFilter === 'unmatched') url += '&processed=true&matched=false';
       if (selectedSite !== 'all') url += `&siteId=${selectedSite}`;
+      if (logDate) url += `&date=${logDate}`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.success) setRawLogs(data.data);
@@ -190,6 +194,67 @@ export default function BiometricPage() {
   const lastSync = syncStatus?.lastSuccessfulSync;
   const unprocessed = syncStatus?.unprocessedCount || 0;
   const activeSiteName = selectedSite === 'all' ? 'All Sites' : (sites.find(s => s.id === selectedSite)?.name || selectedSite);
+
+  // Client-side search on top of the server-filtered logFilter/siteId results
+  const filteredLogs = logSearch.trim()
+    ? rawLogs.filter(log => {
+        const q = logSearch.toLowerCase();
+        return (
+          (log.empCode || '').toLowerCase().includes(q) ||
+          (log.enrolledId || '').toLowerCase().includes(q) ||
+          (log.name || '').toLowerCase().includes(q)
+        );
+      })
+    : rawLogs;
+
+  // Group filtered logs by employee + date, showing first punch (in) and last punch (out)
+  type GroupedEntry = {
+    key: string;
+    enrolledId: string;
+    name: string;
+    siteId?: string;
+    siteName?: string | null;
+    date: string;
+    punchIn: string;
+    punchOut: string | null;
+    totalPunches: number;
+    processed: boolean;
+    matched?: boolean;
+    skipReason?: string | null;
+  };
+
+  const groupedLogs: GroupedEntry[] = (() => {
+    const map = new Map<string, RawLog[]>();
+    for (const log of filteredLogs) {
+      const dateStr = new Date(log.punchDate).toISOString().split('T')[0];
+      const key = `${log.enrolledId || log.empCode}__${dateStr}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(log);
+    }
+    const groups: GroupedEntry[] = [];
+    for (const [key, logs] of map.entries()) {
+      // Already sorted asc from API
+      const first = logs[0];
+      const last = logs[logs.length - 1];
+      const dateStr = new Date(first.punchDate).toISOString().split('T')[0];
+      groups.push({
+        key,
+        enrolledId: first.enrolledId || first.empCode,
+        name: first.name,
+        siteId: first.siteId,
+        siteName: first.siteName,
+        date: dateStr,
+        punchIn: first.punchDate,
+        punchOut: logs.length > 1 ? last.punchDate : null,
+        totalPunches: logs.length,
+        processed: logs.every(l => l.processed),
+        matched: logs.some(l => l.matched),
+        skipReason: logs.find(l => l.skipReason)?.skipReason ?? null,
+      });
+    }
+    // Sort by date desc then by name
+    return groups.sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name));
+  })();
 
   return (
     <div className="p-4 space-y-5">
@@ -352,28 +417,54 @@ export default function BiometricPage() {
         </div>
       )}
 
-      {/* Punch Logs */}
+      {/* Punch Logs — grouped by employee+day, showing first (in) and last (out) punch */}
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#252e3a]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#252e3a] flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-semibold text-[#e2e8f0]">Punch Logs</span>
             {selectedSite !== 'all' && (
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f5a623]/10 text-[#f5a623] font-semibold">{activeSiteName}</span>
             )}
+            <span className="text-[10px] text-[#5a6878]">{groupedLogs.length} employees</span>
           </div>
-          <div className="flex items-center gap-1">
-            {(['all', 'pending', 'matched', 'unmatched'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setLogFilter(f)}
-                className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-colors capitalize ${logFilter === f ? 'bg-[#f5a623] text-black' : 'text-[#5a6878] hover:text-[#e2e8f0]'}`}
-              >
-                {f}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Date */}
+            <div className="flex items-center gap-1.5 bg-[#0d1117] border border-[#2e3a48] rounded-lg px-2.5 py-[5px]">
+              <span className="text-[10px] text-[#5a6878] shrink-0">Date:</span>
+              <input
+                type="date"
+                value={logDate}
+                onChange={e => setLogDate(e.target.value)}
+                className="bg-transparent border-none outline-none text-[11px] text-[#e2e8f0]"
+              />
+            </div>
+            {/* Search */}
+            <div className="flex items-center gap-1.5 bg-[#0d1117] border border-[#2e3a48] rounded-lg px-2.5 py-[5px] min-w-[150px]">
+              <Search size={12} className="text-[#5a6878] shrink-0" />
+              <input
+                type="text"
+                placeholder="Name or ID…"
+                value={logSearch}
+                onChange={e => setLogSearch(e.target.value)}
+                className="bg-transparent border-none outline-none text-[11px] text-[#e2e8f0] placeholder:text-[#5a6878] w-full"
+              />
+              {logSearch && (
+                <button onClick={() => setLogSearch('')} className="text-[#5a6878] hover:text-[#e2e8f0]"><X size={11} /></button>
+              )}
+            </div>
+            {/* Status pills */}
+            <div className="flex items-center gap-1">
+              {(['all', 'pending', 'matched', 'unmatched'] as const).map(f => (
+                <button key={f} onClick={() => setLogFilter(f)}
+                  className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-colors capitalize ${logFilter === f ? 'bg-[#f5a623] text-black' : 'text-[#5a6878] hover:text-[#e2e8f0]'}`}>
+                  {f}
+                </button>
+              ))}
+              <button onClick={fetchRawLogs} className="ml-1 p-1 text-[#5a6878] hover:text-[#e2e8f0] transition-colors">
+                <RefreshCw size={12} className={loadingLogs ? 'animate-spin' : ''} />
               </button>
-            ))}
-            <button onClick={fetchRawLogs} className="ml-2 p-1 text-[#5a6878] hover:text-[#e2e8f0] transition-colors">
-              <RefreshCw size={12} className={loadingLogs ? 'animate-spin' : ''} />
-            </button>
+            </div>
           </div>
         </div>
 
@@ -382,49 +473,52 @@ export default function BiometricPage() {
             <RefreshCw size={20} className="animate-spin text-[#5a6878]" />
           </div>
         ) : rawLogs.length === 0 ? (
-          <div className="text-center py-12 text-[#5a6878] text-[12px]">No punch logs found.</div>
+          <div className="text-center py-12 text-[#5a6878] text-[12px]">No punch logs for this date.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b border-[#252e3a] bg-[#141920]">
-                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Enrolled ID</th>
-                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Punch Time</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Employee</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Punch In</th>
+                  <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Punch Out</th>
                   <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Site</th>
+                  <th className="text-center px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Punches</th>
                   <th className="text-left px-4 py-2.5 text-[#5a6878] font-semibold uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {rawLogs.map(log => (
-                  <tr key={log.id} className="border-b border-[#1e252e] hover:bg-[#1a2028] transition-colors">
+                {groupedLogs.length === 0 ? (
+                  <tr><td colSpan={6} className="text-center py-8 text-[#5a6878] text-[11px]">No records match your search.</td></tr>
+                ) : groupedLogs.map(g => (
+                  <tr key={g.key} className="border-b border-[#1e252e] hover:bg-[#1a2028] transition-colors">
                     <td className="px-4 py-2.5">
-                      {log.enrolledId
-                        ? <span className="font-mono text-[#f5a623]">{log.enrolledId}</span>
-                        : <span className="font-mono text-[#ff6b6b]" title="No enrolled ID — cannot be matched">—</span>}
-                      {log.name && <span className="text-[#8899aa] ml-2">{log.name}</span>}
+                      <span className="font-mono text-[#f5a623] text-[10px]">{g.enrolledId}</span>
+                      {g.name && <span className="text-[#8899aa] ml-2">{g.name}</span>}
                     </td>
-                    <td className="px-4 py-2.5 text-[#e2e8f0]">{fmt(log.punchDate)}</td>
+                    <td className="px-4 py-2.5 font-mono text-[#00e676] text-[10px] whitespace-nowrap">
+                      {new Date(g.punchIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-[10px] whitespace-nowrap">
+                      {g.punchOut
+                        ? <span className="text-[#ff3d3d]">{new Date(g.punchOut).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                        : <span className="text-[#5a6878]">—</span>}
+                    </td>
                     <td className="px-4 py-2.5">
-                      {log.siteId ? (
+                      {g.siteId ? (
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00d4ff]/10 text-[#00d4ff] font-semibold">
-                          {log.siteName || sites.find(s => s.id === log.siteId)?.name || log.siteId}
+                          {g.siteName || sites.find(s => s.id === g.siteId)?.name || g.siteId}
                         </span>
                       ) : <span className="text-[#5a6878]">—</span>}
                     </td>
+                    <td className="px-4 py-2.5 text-center text-[#8899aa]" title={`${g.totalPunches} total punch event(s) today`}>{g.totalPunches}</td>
                     <td className="px-4 py-2.5">
-                      {!log.processed ? (
-                        <span className="inline-flex items-center gap-1 text-[#ffab40] text-[10px] font-semibold">
-                          <Clock size={11} /> Pending
-                        </span>
-                      ) : log.matched ? (
-                        <span className="inline-flex items-center gap-1 text-[#00e676] text-[10px] font-semibold">
-                          <CheckCircle2 size={11} /> Matched
-                        </span>
+                      {!g.processed ? (
+                        <span className="inline-flex items-center gap-1 text-[#ffab40] text-[10px] font-semibold"><Clock size={11} /> Pending</span>
+                      ) : g.matched ? (
+                        <span className="inline-flex items-center gap-1 text-[#00e676] text-[10px] font-semibold"><CheckCircle2 size={11} /> Matched</span>
                       ) : (
-                        <span
-                          className="inline-flex items-center gap-1 text-[#ff6b6b] text-[10px] font-semibold cursor-help"
-                          title={log.skipReason || 'No matching employee'}
-                        >
+                        <span className="inline-flex items-center gap-1 text-[#ff6b6b] text-[10px] font-semibold cursor-help" title={g.skipReason || 'No matching employee'}>
                           <AlertCircle size={11} /> Not Matched
                         </span>
                       )}

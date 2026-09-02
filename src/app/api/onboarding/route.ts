@@ -52,7 +52,9 @@ export async function GET(request: NextRequest) {
         include: {
           Employee: { select: { id: true, employeeCode: true, firstName: true, lastName: true, Department: { select: { name: true } }, Designation: { select: { name: true } } } },
           template: { select: { id: true, name: true } },
-          tasks: { include: { templateTask: true }, orderBy: { templateTask: { order: 'asc' } } },
+          // Omit the heavy documentData (Bytes, up to 10MB) — the UI only needs
+          // documentPath to know a file exists; bytes download separately.
+          tasks: { omit: { documentData: true }, include: { templateTask: true }, orderBy: { templateTask: { order: 'asc' } } },
         },
       })
       return NextResponse.json({ success: true, data: checklist })
@@ -68,6 +70,8 @@ export async function GET(request: NextRequest) {
         template: { select: { id: true, name: true } },
         _count: { select: { tasks: true } },
         tasks: {
+          // Omit the heavy documentData blob from the list payload (see above).
+          omit: { documentData: true },
           include: {
             templateTask: {
               include: { dependsOn: { select: { id: true, title: true } } },
@@ -144,7 +148,8 @@ export async function PATCH(request: NextRequest) {
       where: { id: parseInt(taskId) },
       include: {
         templateTask: { include: { dependsOn: true } },
-        checklist: { include: { tasks: { include: { templateTask: true } } } },
+        // Dependency check only needs task status/templateTaskId — skip the blob.
+        checklist: { include: { tasks: { omit: { documentData: true }, include: { templateTask: true } } } },
       },
     })
 

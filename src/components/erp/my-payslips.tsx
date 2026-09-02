@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { IndianRupee, AlertTriangle, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { IndianRupee, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -11,6 +11,7 @@ export default function MyPayslips() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [hasEmployee, setHasEmployee] = useState(true);
+  const [downloading, setDownloading] = useState<number | null>(null);
 
   const fetchPayslips = async () => {
     setLoading(true);
@@ -26,6 +27,36 @@ export default function MyPayslips() {
   useEffect(() => { fetchPayslips(); }, []);
 
   const toggle = (id: number) => setExpanded(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const downloadPayslip = async (payrollItemId: number, label: string) => {
+    setDownloading(payrollItemId);
+    try {
+      const res = await fetch('/api/employee-self/payslips/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payrollItemId }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        toast.error(json.error || 'Failed to download payslip');
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Payslip_${label.replace(/\s+/g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Payslip downloaded');
+    } catch {
+      toast.error('Failed to download payslip');
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   if (!hasEmployee) return (
     <div className="p-6 text-center">
@@ -130,9 +161,20 @@ export default function MyPayslips() {
                     <span className="text-[13px] font-bold text-[#00e676]">Net Pay</span>
                     <span className="text-[16px] font-black text-[#00e676]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>₹{fmt(net)}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-[10px] text-[#5a6878]">
-                    <span>Days Present: <strong className="text-[#e2e8f0]">{p.presentDays || 0}/{p.workingDays || 26}</strong></span>
-                    {Number(p.otHours) > 0 && <span>OT Hours: <strong className="text-[#e2e8f0]">{Number(p.otHours).toFixed(2)}h</strong></span>}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 text-[10px] text-[#5a6878]">
+                      <span>Days Present: <strong className="text-[#e2e8f0]">{p.presentDays || 0}/{p.workingDays || 26}</strong></span>
+                      {Number(p.otHours) > 0 && <span>OT Hours: <strong className="text-[#e2e8f0]">{Number(p.otHours).toFixed(2)}h</strong></span>}
+                    </div>
+                    <button
+                      onClick={() => downloadPayslip(p.id, monthLabel)}
+                      disabled={downloading === p.id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#00e676]/10 text-[#00e676] hover:bg-[#00e676]/20 border border-[#00e676]/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    >
+                      {downloading === p.id
+                        ? <><div className="w-3 h-3 border-2 border-[#00e676]/30 border-t-[#00e676] rounded-full animate-spin" /> Preparing…</>
+                        : <><Download size={12} /> Download PDF</>}
+                    </button>
                   </div>
                 </div>
               )}

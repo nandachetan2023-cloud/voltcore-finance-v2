@@ -41,7 +41,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  /* Brand colors — same in both themes */
+  /* Brand colors — original VoltCore amber, same in both themes */
   --color-vc-accent: #f5a623;
   --color-vc-accent2: #e8891a;
   --color-vc-cyan: #00d4ff;
@@ -63,10 +63,10 @@
 
 /* ── Shared radius ─────────────────────────────────────────────── */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.5rem;
 }
 
-/* ── Light Mode (default) ──────────────────────────────────────── */
+/* ── Light Mode (ORIGINAL palette) ─────────────────────────────── */
 :root {
   /* VoltCore semantic tokens */
   --vc-bg:      #f0f2f5;
@@ -78,6 +78,11 @@
   --vc-text:    #1a2332;
   --vc-text2:   #4a5568;
   --vc-text3:   #718096;
+
+  /* Brand accent */
+  --vc-accent:  #f5a623;
+  --vc-accent2: #e8891a;
+  --vc-accent-fg: #000000;
 
   /* Shadcn/Tailwind tokens */
   --background: #f0f2f5;
@@ -113,7 +118,7 @@
   --sidebar-ring: #f5a623;
 }
 
-/* ── Dark Mode ─────────────────────────────────────────────────── */
+/* ── Dark Mode (ORIGINAL palette) ──────────────────────────────── */
 .dark {
   /* VoltCore semantic tokens */
   --vc-bg:      #0a0d12;
@@ -125,6 +130,11 @@
   --vc-text:    #e2e8f0;
   --vc-text2:   #8899aa;
   --vc-text3:   #5a6878;
+
+  /* Brand accent */
+  --vc-accent:  #f5a623;
+  --vc-accent2: #e8891a;
+  --vc-accent-fg: #000000;
 
   /* Shadcn/Tailwind tokens */
   --background: #0a0d12;
@@ -168,38 +178,40 @@
   body {
     background: var(--vc-bg);
     color: var(--vc-text);
-    font-family: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.01em;
   }
+  h1, h2, h3, h4, h5, h6 { letter-spacing: -0.02em; }
 }
 
 /* Light-mode overrides live in ONE consolidated block further below
    ("LIGHT MODE OVERRIDES"). Do not add partial overrides here —
    they previously conflicted with the consolidated layer. */
 
-/* ── Scrollbar ─────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: var(--vc-bg2); border-radius: 4px; }
-::-webkit-scrollbar-thumb { background: var(--vc-border2); border-radius: 4px; border: 2px solid var(--vc-bg2); }
-::-webkit-scrollbar-thumb:hover { background: var(--vc-text3); }
+/* ── Scrollbar — slim and unobtrusive ──────────────────────────── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--vc-border2); border-radius: 8px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--vc-text3); background-clip: content-box; }
 
-/* ── VC Utility Classes (theme-aware) ──────────────────────────── */
+/* ── VC Utility Classes (theme-aware, flat & professional) ─────── */
 .vc-panel {
   background: var(--vc-panel);
   border: 1px solid var(--vc-border);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
 }
 
 .vc-panel-header {
-  padding: 16px 18px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--vc-border);
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--vc-bg3);
+  background: transparent;
 }
 
 .vc-panel-body { padding: 18px; }
@@ -207,156 +219,188 @@
 .vc-badge {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 3px 9px;
   border-radius: 6px;
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.2px;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .vc-input {
-  background: var(--vc-bg3);
-  border: 1.5px solid var(--vc-border2);
+  background: var(--vc-bg);
+  border: 1px solid var(--vc-border2);
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 9px 13px;
   color: var(--vc-text);
   font-size: 13px;
   outline: none;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   width: 100%;
 }
-.vc-input:hover { border-color: var(--vc-text3); background: var(--vc-bg2); }
-.vc-input:focus { border-color: #f5a623; box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.15); background: var(--vc-bg2); }
+.dark .vc-input { background: var(--vc-bg2); }
+.vc-input:hover { border-color: var(--vc-text3); }
+.vc-input:focus { border-color: #f5a623; box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.15); }
 .vc-input::placeholder { color: var(--vc-text3); }
+/* Native <option> popups inherit the OS list background (often white), so a
+   dark-theme text colour made them invisible. Force a readable dark background
+   and light text on every option inside a vc-input <select>. */
+.vc-input option {
+  background: #1a2028;
+  color: #e2e8f0;
+}
+
+/* Same problem for bare <select> elements that style themselves with the raw
+   dark hexes instead of .vc-input — the employee bulk-import site picker is
+   one. Scope by the background class they carry so we don't restyle every
+   select on the page. */
+select.bg-\[\#0d1117\] option,
+select.bg-\[\#161b22\] option,
+select.bg-\[\#161c24\] option,
+select.bg-\[\#0f141a\] option {
+  background: #1a2028;
+  color: #e2e8f0;
+}
+/* In light mode the same selects are repainted light, so their options must
+   flip to dark ink on a light list or they become white-on-white. */
+html:not(.dark) .vc-input option,
+html:not(.dark) select.bg-\[\#0d1117\] option,
+html:not(.dark) select.bg-\[\#161b22\] option,
+html:not(.dark) select.bg-\[\#161c24\] option,
+html:not(.dark) select.bg-\[\#0f141a\] option {
+  background: #ffffff;
+  color: #1a2332;
+}
 
 .vc-btn-primary {
-  background: linear-gradient(135deg, #f5a623 0%, #e8891a 100%);
+  background: #f5a623;
   color: #000000;
-  padding: 10px 18px;
+  padding: 9px 16px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   border: none;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(245, 166, 35, 0.3);
+  transition: background 0.15s ease, opacity 0.15s ease;
 }
-.vc-btn-primary:hover { background: linear-gradient(135deg, #e8891a 0%, #d97706 100%); box-shadow: 0 4px 12px rgba(245, 166, 35, 0.4); transform: translateY(-1px); }
-.vc-btn-primary:active { transform: translateY(0); box-shadow: 0 1px 4px rgba(245, 166, 35, 0.3); }
+.vc-btn-primary:hover { background: #e8891a; }
+.vc-btn-primary:active { background: #d97706; }
+.vc-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .vc-btn-ghost {
-  background: var(--vc-bg3);
+  background: transparent;
   color: var(--vc-text2);
-  padding: 10px 18px;
+  padding: 9px 16px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  border: 1.5px solid var(--vc-border2);
-  transition: all 0.2s ease;
+  border: 1px solid var(--vc-border2);
+  transition: all 0.15s ease;
 }
-.vc-btn-ghost:hover { color: var(--vc-text); border-color: #f5a623; background: var(--vc-bg2); box-shadow: 0 2px 8px rgba(245, 166, 35, 0.15); }
+.vc-btn-ghost:hover { color: var(--vc-text); border-color: var(--vc-text3); background: var(--vc-bg2); }
 
 .vc-stat-card {
   background: var(--vc-panel);
   border: 1px solid var(--vc-border);
   border-radius: 12px;
-  padding: 20px;
+  padding: 18px;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
-  transition: all 0.2s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.vc-stat-card:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12); transform: translateY(-2px); border-color: var(--vc-border2); }
-.vc-stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #f5a623 0%, #e8891a 100%); }
+.vc-stat-card:hover { border-color: var(--vc-border2); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
 
-/* Shadow utilities */
-.dark-shadow-sm { box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08); }
-.dark-shadow { box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
-.dark-shadow-md { box-shadow: 0 6px 12px rgba(0, 0, 0, 0.12); }
-.dark-shadow-lg { box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15); }
+/* Shadow utilities — soft, restrained */
+.dark-shadow-sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
+.dark-shadow { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+.dark-shadow-md { box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08); }
+.dark-shadow-lg { box-shadow: 0 10px 24px rgba(0, 0, 0, 0.10); }
+.dark .dark-shadow-sm, .dark .dark-shadow, .dark .dark-shadow-md, .dark .dark-shadow-lg { box-shadow: none; }
 
 /* Table */
 .dark-table { background: var(--vc-panel); border-radius: 12px; overflow: hidden; border: 1px solid var(--vc-border); }
-.dark-table thead { background: var(--vc-bg3); border-bottom: 2px solid var(--vc-border2); }
-.dark-table th { color: var(--vc-text2); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; padding: 14px 16px; }
-.dark-table td { padding: 14px 16px; border-bottom: 1px solid var(--vc-border); color: var(--vc-text); }
-.dark-table tbody tr:hover { background: var(--vc-bg3); transition: background 0.15s ease; }
+.dark-table thead { background: var(--vc-bg2); border-bottom: 1px solid var(--vc-border); }
+.dark-table th { color: var(--vc-text2); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; padding: 12px 16px; }
+.dark-table td { padding: 12px 16px; border-bottom: 1px solid var(--vc-border); color: var(--vc-text); }
+.dark-table tbody tr:hover { background: var(--vc-bg2); transition: background 0.12s ease; }
 .dark-table tbody tr:last-child td { border-bottom: none; }
 
 /* Form */
-.dark-form-label { display: block; font-size: 11px; font-weight: 600; color: var(--vc-text2); margin-bottom: 8px; letter-spacing: 0.5px; text-transform: uppercase; }
-.dark-form-input { width: 100%; background: var(--vc-bg3); border: 1.5px solid var(--vc-border2); border-radius: 8px; padding: 11px 14px; color: var(--vc-text); font-size: 13px; transition: all 0.2s ease; }
-.dark-form-input:hover { border-color: var(--vc-text3); background: var(--vc-bg2); }
-.dark-form-input:focus { outline: none; border-color: #f5a623; box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.15); background: var(--vc-bg2); }
+.dark-form-label { display: block; font-size: 11px; font-weight: 600; color: var(--vc-text2); margin-bottom: 7px; letter-spacing: 0.3px; text-transform: uppercase; }
+.dark-form-input { width: 100%; background: var(--vc-bg); border: 1px solid var(--vc-border2); border-radius: 8px; padding: 10px 13px; color: var(--vc-text); font-size: 13px; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.dark .dark-form-input { background: var(--vc-bg2); }
+.dark-form-input:hover { border-color: var(--vc-text3); }
+.dark-form-input:focus { outline: none; border-color: #f5a623; box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.15); }
 .dark-form-input::placeholder { color: var(--vc-text3); }
 .dark-form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238899aa' d='M6 9L1 4h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; cursor: pointer; }
 
-/* Badges */
-.dark-badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.4px; border: 1px solid; }
+/* Badges — original status colors */
+.dark-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.2px; border: 1px solid; }
 .dark-badge-success { background: rgba(0, 230, 118, 0.15); color: #00e676; border-color: rgba(0, 230, 118, 0.3); }
 .dark-badge-warning { background: rgba(255, 171, 64, 0.15); color: #ffab40; border-color: rgba(255, 171, 64, 0.3); }
 .dark-badge-error { background: rgba(255, 61, 61, 0.15); color: #ff3d3d; border-color: rgba(255, 61, 61, 0.3); }
 .dark-badge-info { background: rgba(0, 212, 255, 0.15); color: #00d4ff; border-color: rgba(0, 212, 255, 0.3); }
-.dark-badge-default { background: rgba(136, 153, 170, 0.15); color: var(--vc-text2); border-color: rgba(136, 153, 170, 0.3); }
+.dark-badge-default { background: var(--vc-bg3); color: var(--vc-text2); border-color: var(--vc-border2); }
 
 /* Buttons */
-.dark-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; border: none; outline: none; }
-.dark-btn-primary { background: linear-gradient(135deg, #f5a623 0%, #e8891a 100%); color: #000000; box-shadow: 0 2px 8px rgba(245, 166, 35, 0.3); }
-.dark-btn-primary:hover { background: linear-gradient(135deg, #e8891a 0%, #d97706 100%); box-shadow: 0 4px 12px rgba(245, 166, 35, 0.4); transform: translateY(-1px); }
-.dark-btn-primary:active { transform: translateY(0); box-shadow: 0 1px 4px rgba(245, 166, 35, 0.3); }
-.dark-btn-secondary { background: var(--vc-bg3); color: var(--vc-text2); border: 1.5px solid var(--vc-border2); }
-.dark-btn-secondary:hover { color: var(--vc-text); border-color: #f5a623; background: var(--vc-bg2); box-shadow: 0 2px 8px rgba(245, 166, 35, 0.15); }
+.dark-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s ease; border: none; outline: none; }
+.dark-btn-primary { background: #f5a623; color: #000000; }
+.dark-btn-primary:hover { background: #e8891a; }
+.dark-btn-primary:active { background: #d97706; }
+.dark-btn-secondary { background: transparent; color: var(--vc-text2); border: 1px solid var(--vc-border2); }
+.dark-btn-secondary:hover { color: var(--vc-text); border-color: var(--vc-text3); background: var(--vc-bg2); }
 .dark-btn-ghost { background: transparent; color: var(--vc-text2); }
 .dark-btn-ghost:hover { background: var(--vc-bg3); color: var(--vc-text); }
-.dark-btn-sm { padding: 7px 14px; font-size: 12px; }
-.dark-btn-lg { padding: 14px 26px; font-size: 15px; }
+.dark-btn-sm { padding: 7px 13px; font-size: 12px; }
+.dark-btn-lg { padding: 13px 24px; font-size: 15px; }
 
 /* Cards */
-.dark-card { background: var(--vc-panel); border: 1px solid var(--vc-border); border-radius: 12px; padding: 22px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08); transition: all 0.2s ease; }
-.dark-card:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12); transform: translateY(-2px); border-color: var(--vc-border2); }
-.dark-card-header { display: flex; align-items: center; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--vc-border); margin-bottom: 18px; }
-.dark-card-title { font-size: 16px; font-weight: 700; color: var(--vc-text); letter-spacing: -0.2px; }
+.dark-card { background: var(--vc-panel); border: 1px solid var(--vc-border); border-radius: 12px; padding: 20px; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.dark-card:hover { border-color: var(--vc-border2); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
+.dark .dark-card:hover { box-shadow: none; }
+.dark-card-header { display: flex; align-items: center; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid var(--vc-border); margin-bottom: 16px; }
+.dark-card-title { font-size: 15px; font-weight: 600; color: var(--vc-text); letter-spacing: -0.01em; }
 .dark-card-subtitle { font-size: 13px; color: var(--vc-text2); margin-top: 4px; }
 
-/* Alerts */
-.dark-alert { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px; border-radius: 10px; border: 1px solid; font-size: 13px; line-height: 1.6; }
+/* Alerts — original status colors */
+.dark-alert { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-radius: 10px; border: 1px solid; font-size: 13px; line-height: 1.6; }
 .dark-alert-success { background: rgba(0, 230, 118, 0.1); color: #00e676; border-color: rgba(0, 230, 118, 0.25); }
 .dark-alert-warning { background: rgba(255, 171, 64, 0.1); color: #ffab40; border-color: rgba(255, 171, 64, 0.25); }
 .dark-alert-error { background: rgba(255, 61, 61, 0.1); color: #ff3d3d; border-color: rgba(255, 61, 61, 0.25); }
 .dark-alert-info { background: rgba(0, 212, 255, 0.1); color: #00d4ff; border-color: rgba(0, 212, 255, 0.25); }
 
 /* Progress */
-.dark-progress { width: 100%; height: 8px; background: var(--vc-bg3); border-radius: 10px; overflow: hidden; }
-.dark-progress-bar { height: 100%; background: linear-gradient(90deg, #f5a623 0%, #e8891a 100%); border-radius: 10px; transition: width 0.4s ease; box-shadow: 0 0 10px rgba(245, 166, 35, 0.4); }
+.dark-progress { width: 100%; height: 6px; background: var(--vc-bg3); border-radius: 10px; overflow: hidden; }
+.dark-progress-bar { height: 100%; background: #f5a623; border-radius: 10px; transition: width 0.4s ease; }
 
 /* Stat cards */
-.dark-stat-card { background: var(--vc-panel); border: 1px solid var(--vc-border); border-radius: 12px; padding: 22px; position: relative; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08); transition: all 0.2s ease; }
-.dark-stat-card:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12); transform: translateY(-2px); border-color: var(--vc-border2); }
-.dark-stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #f5a623 0%, #e8891a 100%); }
-.dark-stat-value { font-size: 34px; font-weight: 700; color: var(--vc-text); line-height: 1; margin: 10px 0; font-family: 'Barlow Condensed', sans-serif; }
-.dark-stat-label { font-size: 10px; font-weight: 600; color: var(--vc-text2); text-transform: uppercase; letter-spacing: 0.6px; }
+.dark-stat-card { background: var(--vc-panel); border: 1px solid var(--vc-border); border-radius: 12px; padding: 20px; position: relative; overflow: hidden; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.dark-stat-card:hover { border-color: var(--vc-border2); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
+.dark .dark-stat-card:hover { box-shadow: none; }
+.dark-stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #f5a623; opacity: 0.7; }
+.dark-stat-value { font-size: 30px; font-weight: 700; color: var(--vc-text); line-height: 1; margin: 10px 0; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.dark-stat-label { font-size: 10px; font-weight: 600; color: var(--vc-text2); text-transform: uppercase; letter-spacing: 0.5px; }
 .dark-stat-subtitle { font-size: 12px; color: var(--vc-text3); margin-top: 6px; }
 
 /* Icon containers */
-.dark-icon-container { display: flex; align-items: center; justify-content: center; border-radius: 10px; transition: all 0.2s ease; }
+.dark-icon-container { display: flex; align-items: center; justify-content: center; border-radius: 10px; transition: all 0.15s ease; }
 .dark-icon-sm { width: 36px; height: 36px; }
 .dark-icon-md { width: 44px; height: 44px; }
 .dark-icon-lg { width: 52px; height: 52px; }
 
 /* Misc */
-.hover-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
-.hover-lift:hover { transform: translateY(-2px); }
+.hover-lift { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.hover-lift:hover { transform: translateY(-1px); }
 .glass-panel { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); border: 1px solid var(--vc-border); }
 .dark .glass-panel { background: rgba(22, 28, 36, 0.8); }
-.gradient-text { background: linear-gradient(135deg, #f5a623 0%, #e8891a 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.gradient-text { color: #f5a623; }
 
 /* Animations */
-@keyframes dark-fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-.dark-fade-in { animation: dark-fade-in 0.3s ease-out; }
-@keyframes dark-glow { 0%, 100% { box-shadow: 0 0 5px rgba(245, 166, 35, 0.3); } 50% { box-shadow: 0 0 20px rgba(245, 166, 35, 0.5); } }
+@keyframes dark-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.dark-fade-in { animation: dark-fade-in 0.25s ease-out; }
+@keyframes dark-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.85; } }
 .dark-glow { animation: dark-glow 2s ease-in-out infinite; }
 
 /* Focus & selection */
@@ -365,23 +409,19 @@
 
 /* Responsive */
 @media (max-width: 768px) {
-  .dark-btn { padding: 9px 16px; font-size: 12px; }
-  .dark-card { padding: 18px; }
-  .dark-stat-value { font-size: 26px; }
+  .dark-btn { padding: 9px 15px; font-size: 12px; }
+  .dark-card { padding: 16px; }
+  .dark-stat-value { font-size: 24px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   LIGHT MODE OVERRIDES (single consolidated layer)
-   Every dark hex used across components is remapped to a
-   professional light-mode equivalent here. One source of truth —
-   keep this list complete when adding new hex classes.
+   LIGHT MODE OVERRIDES (single consolidated layer, ORIGINAL palette)
+   Maps the raw dark hex values used inline across components onto
+   the original light palette. One source of truth — keep this list
+   complete when adding new hex classes.
    ═══════════════════════════════════════════════════════════════ */
 
-html:not(.dark) body {
-  background-color: #f0f2f5 !important;
-  color: #1a2332 !important;
-}
-
+html:not(.dark) body { background-color: #f0f2f5 !important; color: #1a2332 !important; }
 html:not(.dark) .min-h-screen { background-color: #f0f2f5 !important; }
 html:not(.dark) aside { background-color: #ffffff !important; border-color: #d1d9e0 !important; }
 html:not(.dark) header { background-color: #ffffff !important; border-color: #d1d9e0 !important; }
@@ -392,10 +432,15 @@ html:not(.dark) .bg-\[\#0d1017\]  { background-color: #f5f7fa !important; }
 html:not(.dark) .bg-\[\#0d1117\]  { background-color: #f5f7fa !important; }
 html:not(.dark) .bg-\[\#0f1318\]  { background-color: #edf0f4 !important; }
 html:not(.dark) .bg-\[\#0f1419\]  { background-color: #edf0f4 !important; }
-html:not(.dark) .bg-\[\#141920\]  { background-color: #eef1f5 !important; }
+/* #0f141a is used as an input background alongside text-[#e2e8f0]; without
+   this the field stayed near-black while its text was remapped to dark ink,
+   making anything typed into it unreadable. */
+html:not(.dark) .bg-\[\#0f141a\]  { background-color: #f5f7fa !important; }
+html:not(.dark) .bg-\[\#141920\]  { background-color: #e8eaed !important; }
 html:not(.dark) .bg-\[\#161b22\]  { background-color: #ffffff !important; }
 html:not(.dark) .bg-\[\#161c24\]  { background-color: #ffffff !important; }
 html:not(.dark) .bg-\[\#1a2028\]  { background-color: #f0f2f5 !important; }
+html:not(.dark) .bg-\[\#1a212c\]  { background-color: #edf0f4 !important; }
 html:not(.dark) .bg-\[\#1a2030\]  { background-color: #f0f2f5 !important; }
 html:not(.dark) .bg-\[\#1a2332\]  { background-color: #edf0f4 !important; }
 html:not(.dark) .bg-\[\#1a2430\]  { background-color: #edf0f4 !important; }
@@ -412,7 +457,10 @@ html:not(.dark) .bg-\[\#3a4a5a\]  { background-color: #c8d0d8 !important; }
 html:not(.dark) .bg-\[\#8899aa\]  { background-color: #6b7c8f !important; }
 
 /* ── Dark text overrides ──────────────────────────────────────── */
+/* These are the light-on-dark text colours; in light mode they must become
+   dark ink or they vanish against the light surface. */
 html:not(.dark) .text-\[\#e2e8f0\] { color: #1a2332 !important; }
+html:not(.dark) .text-\[\#c8d2dc\] { color: #1a2332 !important; }
 html:not(.dark) .text-\[\#8899aa\] { color: #4a5568 !important; }
 html:not(.dark) .text-\[\#5a6878\] { color: #718096 !important; }
 html:not(.dark) .text-\[\#3a4858\] { color: #4a5568 !important; }
@@ -449,6 +497,7 @@ html:not(.dark) .border-\[\#2e3a48\] { border-color: #c4ccd6 !important; }
 html:not(.dark) .border-\[\#1e252e\] { border-color: #dde1e7 !important; }
 html:not(.dark) .border-\[\#1e2530\] { border-color: #dde1e7 !important; }
 html:not(.dark) .border-\[\#1e2a38\] { border-color: #dde1e7 !important; }
+html:not(.dark) .border-\[\#1a2028\] { border-color: #e2e6eb !important; }
 html:not(.dark) .border-\[\#3a4858\] { border-color: #a0aec0 !important; }
 html:not(.dark) .border-\[\#30363d\] { border-color: #d1d9e0 !important; }
 html:not(.dark) .border-\[\#161b22\] { border-color: #d1d9e0 !important; }
@@ -466,15 +515,34 @@ html:not(.dark) .divide-\[\#1a2028\] > * + * { border-color: #e2e8f0 !important;
 html:not(.dark) .divide-\[\#1e2530\] > * + * { border-color: #e2e8f0 !important; }
 
 /* ── Hover overrides ──────────────────────────────────────────── */
+/* Every dark hover background used inline must be remapped here. A missing
+   entry keeps the dark background while the paired hover TEXT colour is
+   remapped to dark ink by the rule below — the row then goes dark-on-dark and
+   the label disappears on hover. That is what happened to the sidebar nav,
+   which hovers to #1a212c. */
 html:not(.dark) .hover\:bg-\[\#1a2028\]:hover  { background-color: #f0f2f5 !important; }
-html:not(.dark) .hover\:bg-\[\#141920\]:hover  { background-color: #eef1f5 !important; }
+html:not(.dark) .hover\:bg-\[\#141920\]:hover  { background-color: #e8eaed !important; }
+html:not(.dark) .hover\:bg-\[\#1a212c\]:hover  { background-color: #edf0f4 !important; }
 html:not(.dark) .hover\:bg-\[\#1a2332\]:hover  { background-color: #edf0f4 !important; }
+html:not(.dark) .hover\:bg-\[\#1e252e\]:hover  { background-color: #dde1e7 !important; }
+html:not(.dark) .hover\:bg-\[\#1e2530\]:hover  { background-color: #dde1e7 !important; }
+html:not(.dark) .hover\:bg-\[\#1e2630\]:hover  { background-color: #dde1e7 !important; }
 html:not(.dark) .hover\:bg-\[\#1e2838\]:hover  { background-color: #e8eaed !important; }
-html:not(.dark) .hover\:bg-\[\#252e3a\]:hover  { background-color: #e2e6ec !important; }
-html:not(.dark) .hover\:bg-\[\#2e3a48\]:hover  { background-color: #d3dae2 !important; }
+html:not(.dark) .hover\:bg-\[\#1e2a38\]:hover  { background-color: #e8eaed !important; }
+html:not(.dark) .hover\:bg-\[\#161b22\]:hover  { background-color: #f5f7fa !important; }
+html:not(.dark) .hover\:bg-\[\#161c24\]:hover  { background-color: #f5f7fa !important; }
+html:not(.dark) .hover\:bg-\[\#0d1117\]:hover  { background-color: #f5f7fa !important; }
+html:not(.dark) .hover\:bg-\[\#252e3a\]:hover  { background-color: #d1d9e0 !important; }
+html:not(.dark) .hover\:bg-\[\#2e3a48\]:hover  { background-color: #b8c4ce !important; }
 html:not(.dark) .hover\:bg-\[\#1a2332\]:hover  { background-color: #edf0f4 !important; }
 html:not(.dark) .hover\:text-\[\#e2e8f0\]:hover { color: #1a2332 !important; }
 html:not(.dark) .hover\:text-\[\#8899aa\]:hover { color: #4a5568 !important; }
+
+/* ── Border opacity variants ──────────────────────────────────── */
+html:not(.dark) .border-\[\#252e3a\]\/30 { border-color: rgba(209,217,224,0.7) !important; }
+html:not(.dark) .border-\[\#252e3a\]\/40 { border-color: rgba(209,217,224,0.8) !important; }
+html:not(.dark) .border-\[\#252e3a\]\/50 { border-color: rgba(209,217,224,0.9) !important; }
+html:not(.dark) .border-\[\#252e3a\]\/60 { border-color: #d1d9e0 !important; }
 
 /* ── Ring (focus) overrides ───────────────────────────────────── */
 html:not(.dark) .ring-\[\#f5a623\] { --tw-ring-color: #c2740a !important; }
@@ -596,9 +664,8 @@ html:not(.dark) .dark-shadow-md { box-shadow: 0 4px 6px -1px rgba(15,23,42,0.08)
 html:not(.dark) .dark-shadow-lg { box-shadow: 0 10px 15px -3px rgba(15,23,42,0.10), 0 4px 6px -4px rgba(15,23,42,0.05) !important; }
 
 /* ── Scrollbar ────────────────────────────────────────────────── */
-html:not(.dark) ::-webkit-scrollbar-track { background: #e8eaed; }
-html:not(.dark) ::-webkit-scrollbar-thumb { background: #b8c4ce; border-color: #e8eaed; }
-html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #718096; }
+html:not(.dark) ::-webkit-scrollbar-thumb { background: #b8c4ce; background-clip: content-box; }
+html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #718096; background-clip: content-box; }
 
 /* Finance Help chat — always-visible, draggable vertical scrollbar.
    Used on the chat message list so users can manually scroll/adjust the
@@ -627,4 +694,89 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #718096; }
 }
 .finance-help-scroll::-webkit-scrollbar-thumb:active {
   background: #f5a623;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FLATTEN LEGACY AMBER GRADIENT BUTTONS / AVATARS
+   Keep the flat (non-gradient) professional treatment while using
+   the original amber color.
+   ═══════════════════════════════════════════════════════════════ */
+[class*="from-[#f5a623]"][class*="to-[#e8891a]"] {
+  background-image: none !important;
+  background-color: #f5a623 !important;
+  color: #000000 !important;
+}
+[class*="from-[#f5a623]"][class*="to-[#e8891a]"]:hover {
+  background-color: #e8891a !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TYPOGRAPHY NORMALISATION — keep the cohesive Inter / JetBrains
+   Mono system (structural refinement, not a color change).
+   ═══════════════════════════════════════════════════════════════ */
+[style*="Barlow Condensed"] {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  letter-spacing: -0.02em !important;
+}
+[style*="Share Tech Mono"] {
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: -0.01em !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SELECTIVE GLASS / FROSTED SURFACES
+   Applied ONLY to floating / static chrome (sidebar, topbar,
+   dropdowns, dialogs). Data panels & tables stay solid for
+   readability and performance. Each surface uses a translucent
+   token + backdrop-blur, with a solid fallback for browsers
+   without backdrop-filter support.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Translucent surface tokens (derived from panel colors) */
+:root {
+  --vc-glass:        rgba(255, 255, 255, 0.72);
+  --vc-glass-strong: rgba(255, 255, 255, 0.85);
+  --vc-glass-border: rgba(209, 217, 224, 0.6);
+}
+.dark {
+  --vc-glass:        rgba(22, 28, 36, 0.62);
+  --vc-glass-strong: rgba(22, 28, 36, 0.80);
+  --vc-glass-border: rgba(46, 58, 72, 0.55);
+}
+
+/* Base glass surface — solid fallback first */
+.vc-glass {
+  background: var(--vc-panel);
+}
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .vc-glass {
+    background: var(--vc-glass);
+    -webkit-backdrop-filter: saturate(150%) blur(14px);
+    backdrop-filter: saturate(150%) blur(14px);
+  }
+  .vc-glass-strong {
+    background: var(--vc-glass-strong);
+    -webkit-backdrop-filter: saturate(150%) blur(18px);
+    backdrop-filter: saturate(150%) blur(18px);
+  }
+}
+.vc-glass-strong { background: var(--vc-panel); }
+
+/* Subtle ambient tint on the app canvas so the glass has depth to
+   pick up (extremely cheap — a fixed radial gradient, no blur). */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 600px at 12% -5%, rgba(245, 166, 35, 0.05), transparent 60%),
+    radial-gradient(800px 600px at 100% 0%, rgba(0, 212, 255, 0.04), transparent 55%);
+}
+.dark body::before {
+  background:
+    radial-gradient(900px 600px at 12% -5%, rgba(245, 166, 35, 0.06), transparent 60%),
+    radial-gradient(800px 600px at 100% 0%, rgba(0, 212, 255, 0.05), transparent 55%);
 }

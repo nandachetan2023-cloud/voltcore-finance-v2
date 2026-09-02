@@ -61,6 +61,8 @@ export interface PayrollItem {
   conveyanceAllowance: number;
   medicalAllowance: number;
   specialAllowance: number;
+  attendanceAllowance: number;
+  phAmount: number;
   otAmount: number;
   grossEarnings: number;
   pfDeduction: number;
@@ -163,9 +165,8 @@ export class PayrollCalculator {
       ? (grossSalary * this.config.esiEmployeeRate) / 100 
       : 0;
 
-    // Professional Tax (state-specific)
-    const ptConfig = this.config.professionalTax.find(pt => pt.state === state);
-    const ptDeduction = ptConfig ? ptConfig.amount : 0;
+    // Professional Tax — not deducted by the company
+    const ptDeduction = 0;
 
     return {
       pfDeduction: Math.round(pfDeduction * 100) / 100,
@@ -262,6 +263,8 @@ export class PayrollCalculator {
       conveyanceAllowance: Math.round(conveyanceAllowance * 100) / 100,
       medicalAllowance: Math.round(medicalAllowance * 100) / 100,
       specialAllowance: Math.round(specialAllowance * 100) / 100,
+      attendanceAllowance: 0,
+      phAmount: 0,
       otAmount: Math.round(otAmount * 100) / 100,
       grossEarnings: Math.round(grossEarnings * 100) / 100,
       pfDeduction: deductions.pfDeduction,
@@ -285,12 +288,53 @@ export class PayrollCalculator {
    */
   generatePayslipData(payrollItem: PayrollItem, employee: any, company: any): any {
     const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    
+
+    // The payslip must be OBEDIENT to the uploaded sheet — display the values the
+    // user filled in, not recomputed ones. The import stores the parsed sheet in
+    // details.rawData, so read from there; fall back to the DB fields only for
+    // records imported before rawData capture.
+    const raw = (payrollItem.details && typeof payrollItem.details === 'object'
+      ? (payrollItem.details as Record<string, unknown>).rawData
+      : null) as Record<string, number> | null;
+    const rv = (key: string, fallback: number): number => {
+      const n = raw ? Number(raw[key]) : NaN;
+      return Number.isFinite(n) ? n : fallback;
+    };
+
+    // Earning lines (mirrors the reference payslip's 8 rows). conveyanceAllowance
+    // holds the Site allowance and medicalAllowance holds the Travel allowance.
+    const earn = {
+      basicSalary: rv('monthlyBasicSalary', Number(payrollItem.basicSalary) || 0),
+      hra: rv('monthlyHRA', Number(payrollItem.hra) || 0),
+      siteAllowance: rv('monthlySiteAllow', Number(payrollItem.conveyanceAllowance) || 0),
+      travelAllowance: rv('monthlyLTA', Number(payrollItem.medicalAllowance) || 0),
+      specialAllowance: rv('monthlySpecialAllow', Number(payrollItem.specialAllowance) || 0),
+      attendanceAllowance: rv('monthlyAttendanceAllow', Number(payrollItem.attendanceAllowance) || 0),
+      overtime: rv('actualOtAmount', Number(payrollItem.otAmount) || 0),
+      phAmount: rv('phAmount', Number(payrollItem.phAmount) || 0),
+    };
+    // Gross = the uploaded GROSS EARN WAGES / TOTAL SALARY (what the user filled),
+    // not a re-sum of the split allowances (which round independently).
+    const grossTotal = rv('grossEarnWages',
+      rv('totalSalary',
+        earn.basicSalary + earn.hra + earn.siteAllowance + earn.travelAllowance +
+        earn.specialAllowance + earn.attendanceAllowance + earn.overtime + earn.phAmount));
+
+    const ded = {
+      pf: rv('epf', Number(payrollItem.pfDeduction) || 0),
+      esi: rv('esic', Number(payrollItem.esiDeduction) || 0),
+      pt: 0, // PT is not deducted by the company — kept at 0, not shown on the slip
+      advance: rv('advance', Number(payrollItem.otherDeductions) || 0),
+      other: 0,
+    };
+    const deductionTotal = ded.pf + ded.esi + ded.advance + ded.other;
+
     return {
       company: {
         name: company.name || 'Upasana Associate',
-        address: company.address || 'Flat No. G+1/3, Vinayakpuram, In front of MME Ground, Jharsuguda, Odisha-768201',
+        address: company.address || 'UPASANA VILLA, KHATA NO-747/5139, PLOT NO-666/11857,\nINFRONT OF MAMTA MARBLE, BRUNDABAN COLONY,\nJHARSUGUDA, Jharsuguda, Odisha, 768203',
         principalEmployer: company.principalEmployer || 'Hindalco Industries Ltd., Lapanga, Sambalpur-768212',
+        logo: company.logo || null,
       },
       employee: {
         code: employee.employeeCode,
@@ -313,29 +357,32 @@ export class PayrollCalculator {
         dateOfPayment: '', // Can be set from company settings if needed
       },
       earnings: {
-        basicSalary: payrollItem.basicSalary,
-        hra: payrollItem.hra,
-        siteAllowance: payrollItem.conveyanceAllowance,
-        travelAllowance: payrollItem.medicalAllowance,
-        specialAllowance: payrollItem.specialAllowance,
-        attendanceAllowance: 0,
-        overtime: payrollItem.otAmount,
-        phAmount: 0,
-        total: payrollItem.grossEarnings,
+        basicSalary: earn.basicSalary,
+        hra: earn.hra,
+        siteAllowance: earn.siteAllowance,
+        travelAllowance: earn.travelAllowance,
+        specialAllowance: earn.specialAllowance,
+        attendanceAllowance: earn.attendanceAllowance,
+        overtime: earn.overtime,
+        phAmount: earn.phAmount,
+        // Gross = the uploaded GROSS EARN WAGES (user-entered), not a re-sum.
+        total: grossTotal,
       },
       deductions: {
-        pf: payrollItem.pfDeduction,
-        esi: payrollItem.esiDeduction,
-        pt: payrollItem.ptDeduction,
-        advance: payrollItem.otherDeductions,
-        other: 0,
-        total: payrollItem.totalDeductions,
+        pf: ded.pf,
+        esi: ded.esi,
+        pt: ded.pt,
+        advance: ded.advance,
+        other: ded.other,
+        total: deductionTotal,
       },
       attendance: {
         workingDays: payrollItem.workingDays,
         presentDays: payrollItem.presentDays,
       },
-      netSalary: payrollItem.netSalary,
+      // Net Payable = Gross Earnings − Total Deductions, matching the reference
+      // payslip layout (Net = B20 − E20). Arrears are NOT part of this slip.
+      netSalary: grossTotal - deductionTotal,
     };
   }
 }

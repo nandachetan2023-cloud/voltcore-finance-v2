@@ -2,6 +2,14 @@ import { getDbForRequest } from '@/lib/db'
 import { superadminDb } from '@/lib/superadmin-db'
 import { NextRequest, NextResponse } from 'next/server'
 import { getHolidaysInRange, calculateWorkingDays } from '@/lib/services/holiday-service'
+import { annotateRequesterStage } from '@/lib/services/approval-stage'
+import {
+  callerMatchesOwnRoleScope,
+  resolveStepRecipients,
+} from '@/lib/services/approval-scope'
+import { runLeaveAutoApproval } from '@/lib/services/leave-auto-approval'
+import { resolveRejectionPosition, formatRejectionPosition } from '@/lib/services/rejection-position'
+import { resolveAdvance, informOptionalSteps, type ChainStepLike } from '@/lib/services/approval-flow'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,14 +29,18 @@ async function getLeaveApprovalChain(tenantId: string, requesterRoleId?: string 
   } catch { return null }
 }
 
-// ── Find TenantUsers with a given OrgRole ─────────────────────────
-async function findUsersForRole(tenantId: string, roleId: string): Promise<{ email: string }[]> {
-  try {
-    return await superadminDb.tenantUser.findMany({
-      where: { tenantId, orgRoleId: roleId, isActive: true },
-      select: { email: true },
-    })
-  } catch { return [] }
+// ── Find the approvers for a step, honouring the approver role's scope ──
+// A role scoped to a department/designation/site may only be notified about —
+// and may only act on — employees inside that scope. When nobody is in scope
+// the request escalates to the tenant admin rather than going nowhere.
+// See src/lib/services/approval-scope.ts.
+async function findScopedApprovers(
+  db: any,
+  tenantId: string,
+  roleId: string,
+  requesterEmployeeId: number,
+): Promise<{ recipients: { email: string }[]; escalated: boolean; note: string }> {
+  return await resolveStepRecipients(db, tenantId, roleId, requesterEmployeeId)
 }
 
 // GET: List all leave requests
@@ -36,6 +48,12 @@ export async function GET(request: NextRequest) {
   const db = getDbForRequest(request)
   const tenantId = getTenantId(request)
   try {
+    // Pass any step that has been pending over 24h before reading, so the list
+    // never shows a request as awaiting an approver whose window has expired.
+    // Self-guarded and idempotent; failures are swallowed so a sweep problem
+    // can never stop the list from loading.
+    await runLeaveAutoApproval(db, tenantId).catch(() => {})
+
     const { searchParams } = new URL(request.url)
     const employeeId = searchParams.get('employeeId')
     const status = searchParams.get('status')
@@ -142,38 +160,43 @@ export async function GET(request: NextRequest) {
             // Only show if caller is the approver for the CURRENT step
             const currentStepNum = (r as any).currentStep || 1
             const currentStepDef = steps.find((s: any) => s.stepNumber === currentStepNum)
-            return currentStepDef?.approverRoleId === callerOrgRoleId
+            if (currentStepDef?.approverRoleId !== callerOrgRoleId) return false
+
+            // Being the named approver for the current step IS the
+            // authorization. The role's scope describes who the approver is,
+            // not who they may act on, so it is not tested against the
+            // requester here — doing so hid every request from every scoped
+            // approver.
+            return true
           })
           .map(r => ({ ...r, canApprove: true }))
 
       } else if (callerIsAdmin) {
-        // Admin sees ALL leaves (full visibility), can only approve level-1 ones
-        const requesterEmpIds2 = [...new Set(leaveRequests.map(r => r.employeeId))]
-        const requesterUsers2 = await superadminDb.tenantUser.findMany({
-          where: { tenantId, employeeId: { in: requesterEmpIds2 }, isActive: true },
-          select: { employeeId: true, orgRoleId: true },
-        }).catch(() => [])
-        const roleIds2 = [...new Set(requesterUsers2.map(u => u.orgRoleId).filter(Boolean))] as string[]
-        const roles2 = roleIds2.length > 0
-          ? await superadminDb.orgRole.findMany({ where: { id: { in: roleIds2 } }, select: { id: true, level: true } }).catch(() => [])
-          : []
-        const roleLevelMap2 = new Map<string, number>(roles2.map(r => [r.id, r.level] as [string, number]))
-        const empRoleLevelMap2 = new Map<number, number>(
-          requesterUsers2.map(u => [u.employeeId as number, u.orgRoleId ? (roleLevelMap2.get(u.orgRoleId) ?? 0) : 0] as [number, number])
-        )
+        // Full admin sees ALL leaves and can finalize any of them (top authority).
         enriched = leaveRequests
           .filter(r => r.employeeId !== callerEmployeeId)
-          .map(r => ({ ...r, canApprove: (empRoleLevelMap2.get(r.employeeId) ?? 0) <= 1 }))
+          .map(r => ({ ...r, canApprove: true }))
       } else {
         enriched = []
       }
+    } else if (tenantId && employeeId) {
+      // Requester's own view — annotate each pending leave with its stage.
+      enriched = await annotateRequesterStage(tenantId, parseInt(employeeId), leaveRequests)
     }
 
-    return NextResponse.json({
-      success: true,
-      data: enriched,
-      pagination: { total, limit, offset, hasMore: offset + limit < total },
-    })
+    // no-store: these lists change the moment an approver acts, and a cached
+    // response would show an already-approved request as still pending, with
+    // its Approve/Reject buttons live. force-dynamic governs Next's own cache
+    // and does NOT emit a Cache-Control header, so the browser is free to
+    // reuse the stale body without it.
+    return NextResponse.json(
+      {
+        success: true,
+        data: enriched,
+        pagination: { total, limit, offset, hasMore: offset + limit < total },
+      },
+      { headers: { 'Cache-Control': 'no-store, must-revalidate' } },
+    )
   } catch (error) {
     console.error('Error fetching leave requests:', error)
     return NextResponse.json(
@@ -195,6 +218,7 @@ export async function POST(request: NextRequest) {
       toDate,
       days,
       reason,
+      supportingDocument,
     } = body
 
     if (!employeeId || !leaveType || !fromDate || !toDate) {
@@ -228,18 +252,22 @@ export async function POST(request: NextRequest) {
         isActive: true,
         OR: [
           { applicableTo: 'all' },
-          { 
+          {
             applicableTo: 'department',
-            departmentId: employee.departmentId 
+            departmentId: employee.departmentId
           },
-          { 
+          {
             applicableTo: 'designation',
-            designationId: employee.designationId 
+            designationId: employee.designationId
           },
-          { 
+          {
             applicableTo: 'both',
             departmentId: employee.departmentId,
-            designationId: employee.designationId 
+            designationId: employee.designationId
+          },
+          {
+            applicableTo: 'employee',
+            employeeId: employee.id
           }
         ]
       }
@@ -250,6 +278,14 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'This leave type is not applicable to your role or department' },
         { status: 400 }
       )
+    }
+
+    // ── Document requirement check ────────────────────────────────
+    if (policy.requiresDocument && !supportingDocument) {
+      return NextResponse.json({
+        success: false,
+        error: `${policy.name} requires a supporting document (e.g. medical certificate). Please attach one before submitting.`,
+      }, { status: 400 })
     }
 
     // ── Policy restriction checks ─────────────────────────────────
@@ -414,8 +450,12 @@ export async function POST(request: NextRequest) {
         toDate: new Date(toDate),
         days: leaveDays,
         reason: reason || '',
+        supportingDocument: supportingDocument || undefined,
         status: 'pending',
         currentStep: 1,
+        // Starts the 24h auto-approval window for step 1.
+        // See src/lib/services/leave-auto-approval.ts
+        stepEnteredAt: new Date(),
         appliedDate: new Date(),
         updatedAt: new Date(),
       },
@@ -426,6 +466,9 @@ export async function POST(request: NextRequest) {
             employeeCode: true,
             firstName: true,
             lastName: true,
+            // Needed to tell the requester when a fully-optional chain approves
+            // their request outright at submission time.
+            email: true,
           },
         },
       },
@@ -459,20 +502,64 @@ export async function POST(request: NextRequest) {
       } else {
         // Non-level-1 → chain is guaranteed to exist (pre-checked above)
         const chain = await getLeaveApprovalChain(tenantId, requesterUser?.orgRoleId)
-        const step1 = chain!.steps[0]
-        const approvers = await findUsersForRole(tenantId, step1.approverRoleId)
-        if (approvers.length > 0) {
-          for (const approver of approvers) {
+        // A leading step whose "Approval required" box is unticked is skipped:
+        // the request starts at the first step that actually needs a decision.
+        const start = resolveAdvance(chain!.steps as ChainStepLike[], 1, true)
+
+        // Everything before that first required step is informational.
+        await informOptionalSteps(
+          db, tenantId, start.informed, leaveRequest.employeeId, leaveRequest.id, notifMsg,
+        )
+
+        if (start.fullyApproved) {
+          // No step in the chain requires anyone's approval, so there is nobody
+          // to wait for — approving is the honest outcome of that configuration.
+          await db.leaveRequest.update({
+            where: { id: leaveRequest.id },
+            data: { status: 'approved', approvedDate: new Date() },
+          }).catch(() => {})
+          await db.notification.create({
+            data: { userId: 0, userEmail: leaveRequest.Employee?.email || '',
+              title: 'Leave Approved ✓',
+              message: `Your leave request was approved automatically — its approval chain has no steps requiring approval.`,
+              type: 'success', link: '', entityType: 'leave', entityId: leaveRequest.id },
+          }).catch(() => {})
+          return NextResponse.json({
+            success: true,
+            data: { ...leaveRequest, status: 'approved' },
+            message: 'Leave request approved — no approval steps were required.',
+          }, { status: 201 })
+        }
+
+        // Park the request on the first required step rather than assuming 1.
+        if (start.nextStep && start.nextStep !== 1) {
+          await db.leaveRequest.update({
+            where: { id: leaveRequest.id },
+            data: { currentStep: start.nextStep },
+          }).catch(() => {})
+        }
+
+        const step1 = chain!.steps.find(s => s.stepNumber === start.nextStep) || chain!.steps[0]
+        // Scoped fan-out: only approvers whose role scope covers this employee.
+        const { recipients, escalated, note } = await findScopedApprovers(
+          db, tenantId, step1.approverRoleId, leaveRequest.employeeId,
+        )
+        if (recipients.length > 0) {
+          for (const approver of recipients) {
             await db.notification.create({
               data: { userId: 0, userEmail: approver.email,
-                title: 'New Leave Request — Approval Needed', message: notifMsg,
-                type: 'info', link: '', entityType: 'leave', entityId: leaveRequest.id },
+                title: escalated
+                  ? 'New Leave Request — Admin Approval Required'
+                  : 'New Leave Request — Approval Needed',
+                message: notifMsg + note,
+                type: escalated ? 'warning' : 'info',
+                link: '', entityType: 'leave', entityId: leaveRequest.id },
             }).catch(() => {})
           }
         } else {
           await db.notification.create({
             data: { userId: 0, userEmail: '__admin_broadcast__',
-              title: 'New Leave Request — No Approver Found', message: notifMsg,
+              title: 'New Leave Request — No Approver Found', message: notifMsg + note,
               type: 'warning', link: '', entityType: 'leave', entityId: leaveRequest.id },
           }).catch(() => {})
         }
@@ -543,49 +630,65 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // ── Self-approval guard + current-step check ──────────────────
+    // ── Caller identity + self-approval + current-step guard ──────
     const callerEmail = request.cookies.get('erp_user_email')?.value
-    if (callerEmail && tenantId) {
-      const callerUser = await superadminDb.tenantUser.findFirst({
-        where: { tenantId, email: callerEmail, isActive: true },
-        select: { employeeId: true, orgRoleId: true },
-      }).catch(() => null)
+    const callerRole = request.cookies.get('erp_user_role')?.value
+    const callerUser = (callerEmail && tenantId)
+      ? await superadminDb.tenantUser.findFirst({
+          where: { tenantId, email: callerEmail, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => null)
+      : null
+    // Full admin (role 'admin' with no org-role) is the top authority: it may
+    // finalize any leave, overriding remaining chain steps.
+    const isFullAdmin = callerRole === 'admin' && !callerUser?.orgRoleId
 
-      if (callerUser?.employeeId && callerUser.employeeId === existing.employeeId) {
+    if (callerUser?.employeeId && callerUser.employeeId === existing.employeeId) {
+      return NextResponse.json(
+        { success: false, error: 'You cannot approve or reject your own leave request.' },
+        { status: 403 }
+      )
+    }
+
+    // Chain approvers may act ONLY on their current step. The full admin bypasses this.
+    if (!isFullAdmin && callerUser?.orgRoleId) {
+      // Confirm the caller really is the person their role describes — the
+      // scope identifies the approver, it is NOT a filter on the requester.
+      // Testing the requester here rejected every approver whose own
+      // department/designation/site differed from the person they approve for.
+      if (!(await callerMatchesOwnRoleScope(db, callerUser.orgRoleId, callerUser.employeeId))) {
         return NextResponse.json(
-          { success: false, error: 'You cannot approve or reject your own leave request.' },
+          { success: false, error: 'Your account does not match the department/designation/site of your assigned role. Contact your administrator.' },
           { status: 403 }
         )
       }
 
-      if (callerUser?.orgRoleId) {
-        const requesterUser = await superadminDb.tenantUser.findFirst({
-          where: { tenantId, employeeId: existing.employeeId, isActive: true },
-          select: { orgRoleId: true },
-        }).catch(() => null)
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId: tenantId!, employeeId: existing.employeeId, isActive: true },
+        select: { orgRoleId: true },
+      }).catch(() => null)
 
-        const requesterRole = requesterUser?.orgRoleId
-          ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
-          : null
+      const requesterRole = requesterUser?.orgRoleId
+        ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+        : null
 
-        const isLevel1Requester = !requesterRole || requesterRole.level === 1
+      const isLevel1Requester = !requesterRole || requesterRole.level === 1
 
-        if (!isLevel1Requester) {
-          const chain = await getLeaveApprovalChain(tenantId, requesterUser?.orgRoleId)
-          // Must be the approver for the CURRENT step specifically
-          const currentStepDef = chain?.steps.find(s => s.stepNumber === ((existing as any).currentStep || 1))
-          if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
-            return NextResponse.json(
-              { success: false, error: 'It is not your turn to approve this leave request. Please wait for the previous step to be completed.' },
-              { status: 403 }
-            )
-          }
-        } else {
+      if (!isLevel1Requester) {
+        const chain = await getLeaveApprovalChain(tenantId!, requesterUser?.orgRoleId)
+        // Must be the approver for the CURRENT step specifically
+        const currentStepDef = chain?.steps.find(s => s.stepNumber === ((existing as any).currentStep || 1))
+        if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
           return NextResponse.json(
-            { success: false, error: 'Level-1 leave requests require admin approval.' },
+            { success: false, error: 'It is not your turn to approve this leave request. Please wait for the previous step to be completed.' },
             { status: 403 }
           )
         }
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Level-1 leave requests require admin approval.' },
+          { status: 403 }
+        )
       }
     }
 
@@ -595,13 +698,30 @@ export async function PATCH(request: NextRequest) {
 
     // ── REJECT ────────────────────────────────────────────────────
     if (status.toLowerCase() === 'rejected') {
+      // Record WHERE the rejection happened. Resolved now rather than on read
+      // because the chain can be edited later, and re-resolving would then name
+      // whoever holds the step today instead of who actually rejected.
+      // Optional remark, trimmed and capped — the textarea caps at 500 too, but
+      // the API is the boundary that actually has to hold.
+      const remark = typeof rejectionReason === 'string'
+        ? rejectionReason.trim().slice(0, 500)
+        : ''
+
+      const pos = await resolveRejectionPosition(
+        tenantId, existing.employeeId, (existing as any).currentStep, isFullAdmin,
+      )
+      const { step: rejectedAtStep, roleName: rejectedByRoleName } = pos
+      const positionText = formatRejectionPosition(pos.step, pos.roleName, pos.totalSteps)
+
       const leaveRequest = await db.leaveRequest.update({
         where: { id: leaveId },
         data: {
           status: 'rejected',
           rejectedDate: new Date(),
           ...(rejectedBy ? { rejectedBy: parseInt(rejectedBy) } : {}),
-          ...(rejectionReason ? { rejectionReason } : {}),
+          ...(remark ? { rejectionReason: remark } : {}),
+          ...(rejectedAtStep !== null ? { rejectedAtStep } : {}),
+          ...(rejectedByRoleName ? { rejectedByRoleName } : {}),
         },
       })
       await db.notification.create({
@@ -609,7 +729,7 @@ export async function PATCH(request: NextRequest) {
           userId: 0,
           userEmail: existing.Employee.email,
           title: 'Leave Rejected',
-          message: `Your ${existing.leaveType} leave (${fromStr} – ${toStr}) was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
+          message: `Your ${existing.leaveType} leave (${fromStr} – ${toStr}) was rejected${positionText}.${remark ? ` Reason: ${remark}` : ''}`,
           type: 'error',
           link: '',
           entityType: 'leave',
@@ -638,7 +758,18 @@ export async function PATCH(request: NextRequest) {
 
     const currentStep = (existing as any).currentStep || 1
     const totalSteps = chain?.steps.length || 1
-    const isLastStep = !chain || currentStep >= totalSteps
+
+    // Where does this go once the current step is satisfied? Steps whose
+    // "Approval required" box is unticked are informational: their approvers
+    // are told, but the request does not wait for them.
+    // See src/lib/services/approval-flow.ts
+    const advance = chain
+      ? resolveAdvance(chain.steps as ChainStepLike[], currentStep, false)
+      : { nextStep: null, informed: [] as ChainStepLike[], fullyApproved: true }
+
+    // Full admin finalizes immediately (top authority); otherwise final once no
+    // required step remains.
+    const isLastStep = !chain || advance.fullyApproved || isFullAdmin
 
     if (isLastStep) {
       // Final approval
@@ -662,18 +793,41 @@ export async function PATCH(request: NextRequest) {
           entityId: leaveId,
         },
       }).catch(() => {})
+
+      // Optional steps between here and the end of the chain never got to act,
+      // so tell them for information. Skipped when an admin overrode the chain:
+      // the chain was not walked, so nothing was "passed through".
+      if (chain && tenantId && !isFullAdmin) {
+        await informOptionalSteps(
+          db, tenantId, advance.informed, existing.employeeId, leaveId,
+          `${empName}'s ${existing.leaveType} leave (${fromStr} – ${toStr}) has been fully approved.`,
+        )
+      }
       return NextResponse.json({ success: true, data: leaveRequest, fullyApproved: true })
     }
 
-    // Intermediate step — advance to next
-    const nextStep = currentStep + 1
+    // Intermediate step — advance to the next REQUIRED step, stepping over any
+    // informational ones in between.
+    const nextStep = advance.nextStep ?? currentStep + 1
     const leaveRequest = await db.leaveRequest.update({
       where: { id: leaveId },
       data: {
         currentStep: nextStep,
+        // Restart the 24h window so the NEXT approver gets a full day, rather
+        // than inheriting however much of it the previous approver used.
+        stepEnteredAt: new Date(),
         ...(approvedBy ? { approvedBy: parseInt(approvedBy) } : {}),
       },
     })
+
+    // Optional steps between the one just approved and the next required one
+    // are informed, not awaited.
+    if (chain && tenantId) {
+      await informOptionalSteps(
+        db, tenantId, advance.informed, existing.employeeId, leaveId,
+        `${empName}'s ${existing.leaveType} leave (${fromStr} – ${toStr}) passed step ${currentStep}.`,
+      )
+    }
 
     // Notify employee of partial approval
     await db.notification.create({
@@ -693,15 +847,20 @@ export async function PATCH(request: NextRequest) {
     if (chain && tenantId) {
       const nextStepDef = chain.steps.find(s => s.stepNumber === nextStep)
       if (nextStepDef) {
-        const nextApprovers = await findUsersForRole(tenantId, nextStepDef.approverRoleId)
+        // Scoped fan-out for the next step — same boundary as step 1.
+        const { recipients: nextApprovers, escalated, note } = await findScopedApprovers(
+          db, tenantId, nextStepDef.approverRoleId, existing.employeeId,
+        )
         for (const approver of nextApprovers) {
           await db.notification.create({
             data: {
               userId: 0,
               userEmail: approver.email,
-              title: `Leave Request — Step ${nextStep} Approval Needed`,
-              message: `${empName}'s ${existing.leaveType} leave (${fromStr} – ${toStr}) passed step ${currentStep} and now requires your approval.`,
-              type: 'info',
+              title: escalated
+                ? `Leave Escalated — Step ${nextStep}`
+                : `Leave Request — Step ${nextStep} Approval Needed`,
+              message: `${empName}'s ${existing.leaveType} leave (${fromStr} – ${toStr}) passed step ${currentStep} and now requires your approval.${note}`,
+              type: escalated ? 'warning' : 'info',
               link: '',
               entityType: 'leave',
               entityId: leaveId,
@@ -715,7 +874,7 @@ export async function PATCH(request: NextRequest) {
               userId: 0,
               userEmail: '__admin_broadcast__',
               title: `Leave Escalated — Step ${nextStep}`,
-              message: `${empName}'s ${existing.leaveType} leave needs step ${nextStep} approval. No users found for the required role.`,
+              message: `${empName}'s ${existing.leaveType} leave needs step ${nextStep} approval. No users found for the required role.${note}`,
               type: 'warning',
               link: '',
               entityType: 'leave',

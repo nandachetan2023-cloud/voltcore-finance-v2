@@ -43,6 +43,8 @@ export async function GET(request: NextRequest) {
       permanentPincode: true,
       departmentId: true,
       designationId: true,
+      subDesignationId: true,
+      SubDesignation: { select: { id: true, name: true } },
       natureOfDesignation: true,
       branchId: true,
       gradeId: true,
@@ -50,10 +52,12 @@ export async function GET(request: NextRequest) {
       dateOfJoining: true,
       confirmationDate: true,
       employmentType: true,
+      otType: true,
       employmentStatus: true,
       probationMonths: true,
       noticePeriodDays: true,
       monthlyGrossSalary: true,
+      dailyWage: true,
       panNumber: true,
       aadharNumber: true,
       uanNumber: true,
@@ -64,11 +68,11 @@ export async function GET(request: NextRequest) {
       emergencyContactName: true,
       emergencyContactRelation: true,
       emergencyContactPhone: true,
+      nomineeName: true,
+      nomineeRelation: true,
+      nomineeAddress: true,
       isActive: true,
       isDeleted: true,
-      employmentType: true,
-      employmentStatus: true,
-      dateOfJoining: true,
       Department: {
         select: {
           id: true,
@@ -98,7 +102,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (include === 'attendance') {
-      selectBase.attendanceLogs = {
+      selectBase.AttendanceLog = {
         select: {
           id: true,
           logDate: true,
@@ -114,7 +118,9 @@ export async function GET(request: NextRequest) {
     const employees = await db.employee.findMany({
       where,
       select: selectBase,
-      orderBy: { createdAt: 'desc' },
+      // Serial order by employee code (UA0001, UA0002, …) — this endpoint feeds
+      // the employee tables and dropdowns across every module.
+      orderBy: { employeeCode: 'asc' },
       take: limit,
       skip: offset,
     })
@@ -132,8 +138,9 @@ export async function GET(request: NextRequest) {
 // POST: Create employee
 export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
+  let body: any = {}
   try {
-    const body = await request.json()
+    body = await request.json()
     const {
       employeeCode,
       firstName,
@@ -151,6 +158,7 @@ export async function POST(request: NextRequest) {
       branchId,
       dateOfJoining,
       employmentType,
+      otType,
       employmentStatus,
     } = body
 
@@ -218,6 +226,7 @@ export async function POST(request: NextRequest) {
         permanentPincode: body.permanentPincode || null,
         departmentId: parseInt(departmentId),
         designationId: parseInt(designationId),
+        subDesignationId: body.subDesignationId ? parseInt(body.subDesignationId) : null,
         natureOfDesignation: body.natureOfDesignation || null,
         branchId: parseInt(branchId),
         gradeId: body.gradeId ? parseInt(body.gradeId) : null,
@@ -225,10 +234,12 @@ export async function POST(request: NextRequest) {
         dateOfJoining: new Date(dateOfJoining),
         confirmationDate: body.confirmationDate ? new Date(body.confirmationDate) : null,
         employmentType: employmentType || null,
+        otType: typeof otType === 'number' ? otType : 1,
         employmentStatus: employmentStatus || 'active',
         probationMonths: body.probationMonths ? parseInt(body.probationMonths) : 6,
         noticePeriodDays: body.noticePeriodDays ? parseInt(body.noticePeriodDays) : 30,
         monthlyGrossSalary: body.monthlyGrossSalary ? parseFloat(body.monthlyGrossSalary) : null,
+        dailyWage: body.dailyWage ? parseFloat(body.dailyWage) : null,
         panNumber: body.panNumber || null,
         aadharNumber: body.aadharNumber || null,
         uanNumber: body.uanNumber || null,
@@ -239,6 +250,9 @@ export async function POST(request: NextRequest) {
         emergencyContactName: body.emergencyContactName || null,
         emergencyContactRelation: body.emergencyContactRelation || null,
         emergencyContactPhone: body.emergencyContactPhone || null,
+        nomineeName: body.nomineeName || null,
+        nomineeRelation: body.nomineeRelation || null,
+        nomineeAddress: body.nomineeAddress || null,
         isActive: true,
         updatedAt: new Date(),
       },
@@ -379,12 +393,15 @@ export async function PUT(request: NextRequest) {
     if (updateData.confirmationDate) updateData.confirmationDate = new Date(updateData.confirmationDate)
     if (updateData.departmentId) updateData.departmentId = parseInt(updateData.departmentId)
     if (updateData.designationId) updateData.designationId = parseInt(updateData.designationId)
+    if (updateData.subDesignationId !== undefined) updateData.subDesignationId = updateData.subDesignationId ? parseInt(updateData.subDesignationId) : null
     if (updateData.branchId) updateData.branchId = parseInt(updateData.branchId)
     if (updateData.gradeId !== undefined) updateData.gradeId = updateData.gradeId ? parseInt(updateData.gradeId) : null
     if (updateData.reportingManagerId !== undefined) updateData.reportingManagerId = updateData.reportingManagerId ? parseInt(updateData.reportingManagerId) : null
     if (updateData.probationMonths !== undefined) updateData.probationMonths = parseInt(updateData.probationMonths) || 6
+    if (updateData.otType !== undefined) updateData.otType = parseInt(updateData.otType) || 1
     if (updateData.noticePeriodDays !== undefined) updateData.noticePeriodDays = parseInt(updateData.noticePeriodDays) || 30
     if (updateData.monthlyGrossSalary !== undefined) updateData.monthlyGrossSalary = updateData.monthlyGrossSalary ? parseFloat(updateData.monthlyGrossSalary) : null
+    if (updateData.dailyWage !== undefined) updateData.dailyWage = updateData.dailyWage ? parseFloat(updateData.dailyWage) : null
     updateData.updatedAt = new Date()
 
     const employee = await db.employee.update({
@@ -416,6 +433,108 @@ export async function PUT(request: NextRequest) {
     console.error('Error updating employee:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to update employee' },
+      { status: 500 }
+    )
+  }
+}
+
+// PATCH: Bulk-edit the Organisation & Employment fields of many employees at once.
+// Body: { ids: number[], changes: { <field>: value, ... } }
+// Only the whitelisted Org/Employment fields are ever written, and only the keys
+// present in `changes` are applied — so unspecified fields are never touched.
+export async function PATCH(request: NextRequest) {
+  const db = getDbForRequest(request)
+  try {
+    const body = await request.json()
+    const { ids, changes } = body as { ids?: unknown; changes?: Record<string, unknown> }
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'ids must be a non-empty array' },
+        { status: 400 }
+      )
+    }
+    if (!changes || typeof changes !== 'object' || Object.keys(changes).length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'changes must be a non-empty object' },
+        { status: 400 }
+      )
+    }
+
+    const employeeIds = ids
+      .map((v) => parseInt(String(v)))
+      .filter((n) => Number.isInteger(n) && !Number.isNaN(n))
+    if (employeeIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No valid employee ids provided' },
+        { status: 400 }
+      )
+    }
+
+    // Only these Organisation & Employment fields may be bulk-edited. Anything
+    // else in `changes` (employeeCode, email, names, statutory, bank, …) is
+    // ignored — bulk edit is for setting shared org/employment values only.
+    const ALLOWED = new Set([
+      // Organisation
+      'departmentId', 'designationId', 'branchId', 'gradeId', 'reportingManagerId',
+      // Employment
+      'employmentType', 'otType', 'employmentStatus', 'natureOfDesignation',
+      'probationMonths', 'noticePeriodDays',
+    ])
+
+    // Build the update payload from ONLY the allowed keys the caller sent,
+    // reusing the same normalisation as the single-employee PUT.
+    const updateData: Record<string, unknown> = {}
+    for (const [key, rawVal] of Object.entries(changes)) {
+      if (!ALLOWED.has(key)) continue
+      switch (key) {
+        case 'departmentId':
+        case 'designationId':
+        case 'branchId':
+          if (rawVal) updateData[key] = parseInt(String(rawVal))
+          break
+        case 'gradeId':
+        case 'reportingManagerId':
+          updateData[key] = rawVal ? parseInt(String(rawVal)) : null
+          break
+        case 'otType':
+          updateData[key] = parseInt(String(rawVal)) || 1
+          break
+        case 'probationMonths':
+          updateData[key] = parseInt(String(rawVal)) || 6
+          break
+        case 'noticePeriodDays':
+          updateData[key] = parseInt(String(rawVal)) || 30
+          break
+        case 'employmentType':
+        case 'employmentStatus':
+        case 'natureOfDesignation':
+          updateData[key] = rawVal === '' ? null : String(rawVal)
+          break
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No editable Organisation/Employment fields in changes' },
+        { status: 400 }
+      )
+    }
+    updateData.updatedAt = new Date()
+
+    const result = await db.employee.updateMany({
+      where: { id: { in: employeeIds }, isDeleted: false },
+      data: updateData,
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: { updated: result.count, fields: Object.keys(updateData).filter((k) => k !== 'updatedAt') },
+    })
+  } catch (error) {
+    console.error('Error bulk-updating employees:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to bulk-update employees' },
       { status: 500 }
     )
   }
@@ -458,7 +577,29 @@ export async function DELETE(request: NextRequest) {
       },
     })
 
-    // 2. Deactivate the linked TenantUser in the superadmin DB (if any)
+    // 2. Remove shift assignments (attendance logs are kept for historical records)
+    await db.shiftAssignment.deleteMany({
+      where: { employeeId },
+    }).catch(() => {})
+
+    // 3. Remove salary structure assignments
+    await db.salaryStructureAssignment.deleteMany({
+      where: { employeeId },
+    }).catch(() => {})
+
+    // 4. Cancel pending leave requests
+    await db.leaveRequest.updateMany({
+      where: { employeeId, status: 'pending' },
+      data: { status: 'cancelled' },
+    }).catch(() => {})
+
+    // 5. Cancel pending tour requests
+    await db.tourRequest.updateMany({
+      where: { employeeId, status: 'pending' },
+      data: { status: 'cancelled' },
+    }).catch(() => {})
+
+    // 6. Deactivate the linked TenantUser in the superadmin DB (if any)
     if (tenantId) {
       try {
         const { superadminDb } = await import('@/lib/superadmin-db')
@@ -474,7 +615,7 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
-    // 3. Deactivate the linked User record in the tenant DB (if any)
+    // 7. Deactivate the linked User record in the tenant DB (if any)
     if (existing.userId) {
       await db.user.update({
         where: { id: existing.userId },
@@ -485,7 +626,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: { id: employeeId },
-      message: 'Employee deleted and linked user account deactivated. All records are preserved.',
+      message: 'Employee deleted. Shift assignments removed, attendance logs preserved.',
     })
   } catch (error) {
     console.error('Error deleting employee:', error)

@@ -9,6 +9,12 @@ export async function GET(request: NextRequest) {
   try {
     const designations = await db.designation.findMany({
       include: {
+        // Sub-designations travel with each designation so every consumer
+        // (employee form, filters, etc.) can build a dependent dropdown.
+        SubDesignation: {
+          select: { id: true, name: true, designationId: true },
+          orderBy: { name: 'asc' },
+        },
         _count: {
           select: {
             Employee: {
@@ -35,12 +41,19 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create designation
+// POST: Create designation, optionally with its sub-designations.
+//
+// `subDesignations` is an optional array of names. Sub-designations can only
+// exist under a parent, so before this the UI had to create the designation
+// first and add children afterwards from its card — which left the create
+// dialog with no sign that sub-designations existed at all. Accepting them
+// here lets both be set up in one step, in a single transaction so a bad
+// child name cannot leave a half-built designation behind.
 export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
     const body = await request.json()
-    const { name } = body
+    const { name, subDesignations } = body
 
     if (!name) {
       return NextResponse.json(
@@ -49,10 +62,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const designation = await db.designation.create({
-      data: {
-        name,
-      },
+    // Trim, drop blanks, and de-duplicate case-insensitively — the table has a
+    // unique index on (designationId, name), so sending "Senior" twice would
+    // otherwise fail the whole request.
+    const childNames: string[] = []
+    const seen = new Set<string>()
+    for (const raw of Array.isArray(subDesignations) ? subDesignations : []) {
+      const n = String(raw ?? '').trim()
+      if (!n) continue
+      const key = n.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      childNames.push(n)
+    }
+
+    const designation = await db.$transaction(async (tx: any) => {
+      const created = await tx.designation.create({ data: { name: String(name).trim() } })
+      if (childNames.length) {
+        await tx.subDesignation.createMany({
+          data: childNames.map(n => ({ name: n, designationId: created.id })),
+        })
+      }
+      return tx.designation.findUnique({
+        where: { id: created.id },
+        include: { SubDesignation: { select: { id: true, name: true, designationId: true }, orderBy: { name: 'asc' } } },
+      })
     })
 
     return NextResponse.json({ success: true, data: designation }, { status: 201 })

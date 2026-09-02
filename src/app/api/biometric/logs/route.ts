@@ -14,17 +14,25 @@ export async function GET(request: NextRequest) {
     const processed = searchParams.get('processed')
     const matched = searchParams.get('matched')
     const siteId = searchParams.get('siteId')
-    const limit = parseInt(searchParams.get('limit') || '100')
+    const date = searchParams.get('date') // YYYY-MM-DD — filter to a single day
+    const limit = parseInt(searchParams.get('limit') || '200') // higher default for grouping
 
     const where: any = {}
     if (empCode) where.empCode = empCode
-    if (processed !== null) where.processed = processed === 'true'
-    if (matched !== null) where.matched = matched === 'true'
+    if (processed !== null && processed !== '') where.processed = processed === 'true'
+    if (matched !== null && matched !== '') where.matched = matched === 'true'
     if (siteId) where.siteId = siteId
+    if (date) {
+      const dayStart = new Date(date)
+      dayStart.setHours(0, 0, 0, 0)
+      const dayEnd = new Date(date)
+      dayEnd.setHours(23, 59, 59, 999)
+      where.punchDate = { gte: dayStart, lte: dayEnd }
+    }
 
     const logs = await db.biometricRawLog.findMany({
       where,
-      orderBy: { punchDate: 'desc' },
+      orderBy: { punchDate: 'asc' }, // asc so first punch = index 0, last = index N-1
       take: limit,
     })
 

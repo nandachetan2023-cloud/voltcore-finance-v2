@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   IndianRupee, TrendingUp, Users, Download, FileSpreadsheet,
-  Plus, Eye, Loader2, AlertTriangle, CheckCircle2, Clock, Filter, Send
+  Plus, Eye, Loader2, AlertTriangle, CheckCircle2, Clock, Filter, Send, Trash2
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
 import SalaryNonComplianceBulkImport from './salary-non-compliance-bulk-import';
+import { SearchInput, matchesSearch } from './search-input';
 
 interface PayrollRun {
   id: number;
@@ -37,6 +38,8 @@ interface PayrollItem {
   basicSalary: number;
   hra: number;
   grossEarning: number;
+  grossEarnWages: number;
+  totalNonComplianceAmount: number;
   totalDeduction: number;
   netPay: number;
   status: string;
@@ -123,7 +126,14 @@ export default function PayrollNonCompliance() {
   const [searchPayslipOpen, setSearchPayslipOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
+  // Live search: `runSearch` filters the payroll-runs table; `itemSearch`
+  // filters the employee rows inside the run-detail view.
+  const [runSearch, setRunSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'draft'>('all');
+  const [itemSearch, setItemSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [deleteConfirmRun, setDeleteConfirmRun] = useState<PayrollRun | null>(null);
+  const [deleting, setDeleting] = useState(false);
   
   const [generateForm, setGenerateForm] = useState({
     mode: 'bulk' as 'single' | 'bulk',
@@ -182,13 +192,39 @@ export default function PayrollNonCompliance() {
   const stats = useMemo(() => {
     if (!payrollRuns.length) return { totalRuns: 0, totalEmployees: 0, totalGross: 0, totalNet: 0 };
     const completed = payrollRuns.filter(r => r.status === 'completed');
+    // "Total Gross" = sum of GROSS EARN WAGES (col Y in the generated sheet).
+    // "Total Net" = sum of TOTAL NON COMPLIANCE AMOUNT (the non-compliance total).
+    // Summed per-employee across all completed runs, not the run-level
+    // totalGross/totalNet (which track monthlyGrossSalary/nettPayable instead).
+    const sumItems = (r: PayrollRun, key: 'grossEarnWages' | 'totalNonComplianceAmount') =>
+      (r.PayrollItem || []).reduce((s, item) => s + Number(item[key] ?? 0), 0);
     return {
       totalRuns: payrollRuns.length,
       totalEmployees: completed.reduce((s, r) => s + r.totalEmployees, 0),
-      totalGross: completed.reduce((s, r) => s + Number(r.totalGross), 0),
-      totalNet: completed.reduce((s, r) => s + Number(r.totalNet), 0),
+      totalGross: completed.reduce((s, r) => s + sumItems(r, 'grossEarnWages'), 0),
+      totalNet: completed.reduce((s, r) => s + sumItems(r, 'totalNonComplianceAmount'), 0),
     };
   }, [payrollRuns]);
+
+  // Payroll runs filtered by the live search box + status filter.
+  const MONTH_LABEL = (m: number) => (MONTHS[m - 1]?.label || '');
+  const filteredRuns = useMemo(() => {
+    return payrollRuns.filter(run => {
+      if (statusFilter !== 'all' && run.status !== statusFilter) return false;
+      return matchesSearch(runSearch, [run.name, MONTH_LABEL(run.month), run.year, run.status]);
+    });
+  }, [payrollRuns, runSearch, statusFilter]);
+
+  // Employee rows inside the open run, filtered by the detail-view search box.
+  const filteredItems = useMemo(() => {
+    if (!selectedRun) return [];
+    return selectedRun.PayrollItem.filter(item => matchesSearch(itemSearch, [
+      item.Employee.employeeCode,
+      item.Employee.firstName,
+      item.Employee.lastName,
+      item.Employee.Department?.name,
+    ]));
+  }, [selectedRun, itemSearch]);
 
   // Get available months and years from payroll runs
   const availableMonthsYears = useMemo(() => {
@@ -446,6 +482,30 @@ export default function PayrollNonCompliance() {
     }
   };
 
+  const handleDeleteRun = async () => {
+    if (!deleteConfirmRun) return;
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/payroll', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deleteConfirmRun.id }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        toast.success(`Payroll run "${deleteConfirmRun.name}" deleted successfully.`);
+        setDeleteConfirmRun(null);
+        fetchData();
+      } else {
+        toast.error(json.error || 'Failed to delete payroll run');
+      }
+    } catch {
+      toast.error('Failed to delete payroll run');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -496,11 +556,23 @@ export default function PayrollNonCompliance() {
         <div className="vc-panel-header">
           <IndianRupee size={15} className="text-[#f5a623]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Non-Compliance Payroll Runs</span>
-          <span className="ml-auto text-[10px] text-[#5a6878]">{payrollRuns.length} runs</span>
+          <span className="ml-auto text-[10px] text-[#5a6878]">{filteredRuns.length} of {payrollRuns.length} runs</span>
           <SalaryNonComplianceBulkImport onImportComplete={fetchData} />
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={() => setSearchPayslipOpen(true)}>
             <Download size={13} /> Search & Download Payslips
           </button>
+        </div>
+
+        <div className="flex flex-wrap gap-2 items-center px-3 py-2 border-b border-[#252e3a]">
+          <SearchInput value={runSearch} onChange={setRunSearch} placeholder="Search by run name, month, year..." />
+          <div className="flex items-center gap-1">
+            {(['all', 'completed', 'draft'] as const).map(s => (
+              <button key={s} onClick={() => setStatusFilter(s)}
+                className={`px-2.5 py-[5px] rounded-md text-[10px] font-medium capitalize transition-colors border ${statusFilter === s ? 'bg-[#f5a623]/15 text-[#f5a623] border-[#f5a623]/40' : 'bg-[#141920] text-[#8899aa] border-[#2e3a48] hover:text-[#e2e8f0]'}`}>
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
         
         <div className="overflow-x-auto">
@@ -515,7 +587,9 @@ export default function PayrollNonCompliance() {
             <tbody>
               {payrollRuns.length === 0 ? (
                 <tr><td colSpan={7} className="py-8 text-center text-[#5a6878] text-[11px]">No payroll runs found. Click "Generate Payroll" to create one.</td></tr>
-              ) : payrollRuns.map(run => (
+              ) : filteredRuns.length === 0 ? (
+                <tr><td colSpan={7} className="py-8 text-center text-[#5a6878] text-[11px]">No runs match your search.</td></tr>
+              ) : filteredRuns.map(run => (
                 <tr key={run.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors group">
                   <td className="py-[10px] px-3 font-semibold text-[#e2e8f0]">{run.name}</td>
                   <td className="py-[10px] px-3 text-[#8899aa]">{MONTHS[run.month - 1].label} {run.year}</td>
@@ -527,7 +601,7 @@ export default function PayrollNonCompliance() {
                     <div className="flex items-center gap-2">
                       <button 
                         className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-medium bg-[#00d4ff]/10 text-[#00d4ff] hover:bg-[#00d4ff]/20 border border-[#00d4ff]/30 transition-colors"
-                        onClick={() => { setSelectedRun(run); setViewOpen(true); }}
+                        onClick={() => { setSelectedRun(run); setItemSearch(''); setViewOpen(true); }}
                         title="View Details"
                       >
                         <Eye size={14} />
@@ -572,6 +646,14 @@ export default function PayrollNonCompliance() {
                       >
                         <FileSpreadsheet size={14} />
                         Sheet
+                      </button>
+                      <button
+                        className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-medium bg-[#ff3d3d]/10 text-[#ff3d3d] hover:bg-[#ff3d3d]/20 border border-[#ff3d3d]/30 transition-colors"
+                        onClick={() => setDeleteConfirmRun(run)}
+                        title="Delete Payroll Run"
+                      >
+                        <Trash2 size={14} />
+                        Delete
                       </button>
                     </div>
                   </td>
@@ -786,6 +868,11 @@ export default function PayrollNonCompliance() {
                 </div>
               </div>
 
+              <div className="flex items-center gap-2 mb-2">
+                <SearchInput value={itemSearch} onChange={setItemSearch} placeholder="Search employee by name, code, department..." />
+                <span className="text-[10px] text-[#5a6878]">{filteredItems.length} of {selectedRun.PayrollItem.length}</span>
+              </div>
+
               <div className="w-full max-h-[calc(100vh-280px)] overflow-y-auto">
                 <table className="w-full text-[11px] min-w-full">
                   <thead className="sticky top-0 bg-[#161c24] z-10">
@@ -801,7 +888,9 @@ export default function PayrollNonCompliance() {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedRun.PayrollItem.map(item => (
+                    {filteredItems.length === 0 ? (
+                      <tr><td colSpan={8} className="py-6 text-center text-[#5a6878] text-[11px]">No employees match your search.</td></tr>
+                    ) : filteredItems.map(item => (
                       <tr key={item.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors">
                         <td className="py-3 px-3">
                           <div className="text-[#8899aa] font-mono">{item.Employee.employeeCode}</div>
@@ -833,6 +922,46 @@ export default function PayrollNonCompliance() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmRun} onOpenChange={open => { if (!open) setDeleteConfirmRun(null); }}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-[#ff3d3d] text-base flex items-center gap-2">
+              <Trash2 size={18} /> Delete Payroll Run
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="text-[12px] text-[#e2e8f0]">
+              Are you sure you want to delete{' '}
+              <span className="font-semibold text-[#f5a623]">{deleteConfirmRun?.name}</span>?
+            </p>
+            <p className="text-[11px] text-[#8899aa]">
+              This will permanently remove the payroll run and all {deleteConfirmRun?.totalEmployees} employee salary records for{' '}
+              {deleteConfirmRun ? `${MONTHS[deleteConfirmRun.month - 1].label} ${deleteConfirmRun.year}` : ''}. You can then generate a fresh run for this month. This action cannot be undone.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]"
+              onClick={() => setDeleteConfirmRun(null)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#ff3d3d] text-white hover:bg-[#e02d2d] font-semibold"
+              onClick={handleDeleteRun}
+              disabled={deleting}
+            >
+              {deleting
+                ? <><Loader2 size={14} className="animate-spin mr-1" />Deleting...</>
+                : <><Trash2 size={14} className="mr-1" />Delete</>}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

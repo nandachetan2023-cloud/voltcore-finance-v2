@@ -39,6 +39,8 @@ export async function POST(request: NextRequest) {
       breakMinutes,
       graceMinutes,
       otThresholdMin,
+      minPresentHours,
+      minHalfDayHours,
       weekOffDays,
     } = body
 
@@ -59,6 +61,8 @@ export async function POST(request: NextRequest) {
         breakMinutes: breakMinutes || 60,
         graceMinutes: graceMinutes || 10,
         otThresholdMin: otThresholdMin || 30,
+        minPresentHours: minPresentHours != null ? Number(minPresentHours) : 8,
+        minHalfDayHours: minHalfDayHours != null ? Number(minHalfDayHours) : 4,
         weekOffDays: weekOffDays || [],
         updatedAt: new Date(),
       },
@@ -95,6 +99,9 @@ export async function PUT(request: NextRequest) {
         { status: 404 }
       )
     }
+
+    if (data.minPresentHours !== undefined) data.minPresentHours = Number(data.minPresentHours) || 8
+    if (data.minHalfDayHours !== undefined) data.minHalfDayHours = Number(data.minHalfDayHours) || 4
 
     const shift = await db.shift.update({
       where: { id },

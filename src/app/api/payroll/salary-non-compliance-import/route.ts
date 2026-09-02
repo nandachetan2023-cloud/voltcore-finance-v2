@@ -1,4 +1,6 @@
-import { getDbForRequest } from '@/lib/db';
+import { getDbForRequest } from '@/lib/db'
+import { Prisma } from '@prisma/client';
+import { syncComplianceRunFromNonCompliance } from '@/lib/services/compliance-run';
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 
@@ -43,6 +45,7 @@ interface SalaryNonComplianceRow {
   pt: number;
   totalDeduction: number;
   nettPayable: number;
+  totalNonComplianceAmount: number;
   advance: number;
   arrears: number;
   monthlyBasicSalary: number;
@@ -53,6 +56,7 @@ interface SalaryNonComplianceRow {
   monthlyAttendanceAllow: number;
   totalSalary: number;
   tds: number;
+  leaveAmount: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -122,10 +126,13 @@ export async function POST(request: NextRequest) {
     let failed = 0;
     let skipped = 0;
 
-    // Get current month and year for payroll run
+    // Month/year of the data being imported. Use the period the user selected in
+    // the import dialog; fall back to the current month only if none was sent.
+    const monthRaw = formData.get('month');
+    const yearRaw = formData.get('year');
     const now = new Date();
-    const month = now.getMonth() + 1;
-    const year = now.getFullYear();
+    const month = monthRaw ? parseInt(String(monthRaw)) : now.getMonth() + 1;
+    const year = yearRaw ? parseInt(String(yearRaw)) : now.getFullYear();
 
     // Find or create payroll run for non-compliance
     let payrollRun = await db.payrollRun.findFirst({
@@ -161,6 +168,14 @@ export async function POST(request: NextRequest) {
       try {
         // Skip empty rows — col 0 = SL NO., col 1 = EMPLOYEE ID, col 3 = TOKEN NO (employee code), col 4 = NAME
         if (!row || row.length === 0 || (!row[1] && !row[3])) continue;
+
+        // Empty Excel cells come through as `undefined` OR as sparse-array HOLES,
+        // both of which Prisma rejects inside a Json array. Array.from() visits
+        // holes (unlike .map, which skips them) so every slot becomes an explicit
+        // value, then we normalise undefined/null → null.
+        const sanitizedRow: (string | number | boolean | null)[] =
+          Array.from({ length: (row as unknown[]).length },
+            (_, i) => { const v = (row as unknown[])[i]; return v === undefined || v === null ? null : v as string | number | boolean; });
 
         const employeeIdCol = String(row[1] || '').trim(); // EMPLOYEE ID (col 1)
         const tokenNo = String(row[3] || '').trim();       // TOKEN NO (col 3)
@@ -236,7 +251,8 @@ export async function POST(request: NextRequest) {
           pt: Number(row[38]) || 0,                      // col 38: PT
           totalDeduction: Number(row[39]) || 0,          // col 39: TOTAL DEDUCTION
           nettPayable: Number(row[40]) || 0,             // col 40: NETT PAYBLE
-          // cols 41-43 = signature/empty
+          // col 41 = signature/empty
+          totalNonComplianceAmount: Number(row[44]) || 0, // col 44: TOTAL NON COMPLIANCE AMOUNT
           advance: Number(row[45]) || 0,                 // col 45: ADVANCE
           arrears: Number(row[46]) || 0,                 // col 46: ARREARS
           // col 49 empty, col 50 LEAVE, col 51 BONUS, cols 52-54 empty
@@ -248,6 +264,7 @@ export async function POST(request: NextRequest) {
           monthlyAttendanceAllow: Number(row[63]) || 0,  // col 63: MonthlyAttendence Allow.
           totalSalary: Number(row[64]) || 0,             // col 64: TOTAL SALARY
           tds: Number(row[67]) || 0,                     // col 67: TDS
+          leaveAmount: Number(row[69]) || 0,             // col 70: LEAVE AMOUNT
         };
 
         // Check if payroll item already exists
@@ -269,27 +286,36 @@ export async function POST(request: NextRequest) {
               lopDays: salaryData.monthlyWorkingDays - salaryData.actualAttendance,
               otHours: salaryData.actualOtHrs,
               basicSalary: salaryData.monthlyBasicSalary,
+              basicWagesPerDay: salaryData.basicWagesPerDay,
               hra: salaryData.monthlyHRA,
               conveyanceAllowance: salaryData.monthlySiteAllow,
               medicalAllowance: salaryData.monthlyLTA,
               specialAllowance: salaryData.monthlySpecialAllow,
+              attendanceAllowance: salaryData.monthlyAttendanceAllow,
+              phAmount: salaryData.phAmount,
               otAmount: salaryData.actualOtAmount,
               grossEarning: salaryData.monthlyGrossSalary,
+              grossEarnWages: salaryData.grossEarnWages,
+              totalNonComplianceAmount: salaryData.totalNonComplianceAmount,
               pfDeduction: salaryData.epf,
               esiDeduction: salaryData.esic,
-              ptDeduction: salaryData.pt,
-              tdsDeduction: salaryData.tds,
+              ptDeduction: 0, // PT — not deducted by the company
+              tdsDeduction: 0, // TDS — not deducted by the company
               lopDeduction: 0,
               otherDeductions: salaryData.advance,
               totalDeduction: salaryData.totalDeduction,
               netPay: salaryData.nettPayable,
               status: 'pending',
-              details: { 
-                imported: true, 
-                importedAt: new Date().toISOString(), 
+              details: {
+                imported: true,
+                importedAt: new Date().toISOString(),
                 rawData: salaryData,
+                // Full uploaded row, verbatim — lets the salary-sheet download
+                // re-emit an identical sheet (Leave, Bonus, Nature of Designation
+                // and any column not mapped to a DB field are preserved here).
+                rawRow: sanitizedRow,
                 format: 'non-compliance',
-              },
+              } as unknown as Prisma.InputJsonValue,
             },
           });
         } else {
@@ -304,28 +330,37 @@ export async function POST(request: NextRequest) {
               lopDays: salaryData.monthlyWorkingDays - salaryData.actualAttendance,
               otHours: salaryData.actualOtHrs,
               basicSalary: salaryData.monthlyBasicSalary,
+              basicWagesPerDay: salaryData.basicWagesPerDay,
               hra: salaryData.monthlyHRA,
               conveyanceAllowance: salaryData.monthlySiteAllow,
               medicalAllowance: salaryData.monthlyLTA,
               specialAllowance: salaryData.monthlySpecialAllow,
+              attendanceAllowance: salaryData.monthlyAttendanceAllow,
+              phAmount: salaryData.phAmount,
               otAmount: salaryData.actualOtAmount,
               grossEarning: salaryData.monthlyGrossSalary,
+              grossEarnWages: salaryData.grossEarnWages,
+              totalNonComplianceAmount: salaryData.totalNonComplianceAmount,
               pfDeduction: salaryData.epf,
               esiDeduction: salaryData.esic,
-              ptDeduction: salaryData.pt,
-              tdsDeduction: salaryData.tds,
+              ptDeduction: 0, // PT — not deducted by the company
+              tdsDeduction: 0, // TDS — not deducted by the company
               lopDeduction: 0,
               otherDeductions: salaryData.advance,
               totalDeduction: salaryData.totalDeduction,
               netPay: salaryData.nettPayable,
               status: 'pending',
               payslipGenerated: false,
-              details: { 
-                imported: true, 
-                importedAt: new Date().toISOString(), 
+              details: {
+                imported: true,
+                importedAt: new Date().toISOString(),
                 rawData: salaryData,
+                // Full uploaded row, verbatim — lets the salary-sheet download
+                // re-emit an identical sheet (Leave, Bonus, Nature of Designation
+                // and any column not mapped to a DB field are preserved here).
+                rawRow: sanitizedRow,
                 format: 'non-compliance',
-              },
+              } as unknown as Prisma.InputJsonValue,
             },
           });
         }
@@ -359,8 +394,11 @@ export async function POST(request: NextRequest) {
       where: { payrollRunId: payrollRun.id },
     });
 
-    const totalGross = items.reduce((sum, item) => sum + Number(item.grossEarning), 0);
-    const totalNet = items.reduce((sum, item) => sum + Number(item.netPay), 0);
+    // Run totals reflect the non-compliance sheet's own columns:
+    //   Total Gross = Σ GROSS EARN WAGES (sheet col 24)
+    //   Total Net   = Σ TOTAL NON COMPLIANCE AMOUNT (sheet col AQ / 44)
+    const totalGross = items.reduce((sum, item) => sum + Number(item.grossEarnWages), 0);
+    const totalNet = items.reduce((sum, item) => sum + Number(item.totalNonComplianceAmount), 0);
 
     await db.payrollRun.update({
       where: { id: payrollRun.id },
@@ -372,6 +410,13 @@ export async function POST(request: NextRequest) {
         processedAt: new Date(),
       },
     });
+
+    // Auto-generate the matching compliance run so it appears in the Compliance view
+    try {
+      await syncComplianceRunFromNonCompliance(db, payrollRun.id, month, year);
+    } catch (e) {
+      console.error('Failed to auto-generate compliance run:', e);
+    }
 
     return NextResponse.json({
       success: true,

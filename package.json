@@ -19,6 +19,8 @@
     "cleanup:deleted": "tsx scripts/cleanup-deleted-records.ts",
     "cleanup:deleted:dry-run": "tsx scripts/cleanup-deleted-records.ts",
     "biometric:sync": "tsx scripts/biometric-sync-cron.ts",
+    "biometric:backfill": "tsx scripts/biometric-backfill.ts",
+    "biometric:reprocess": "tsx scripts/biometric-reprocess.ts",
     "biometric:scheduler": "tsx scripts/biometric-sync-scheduler.ts",
     "biometric:test": "curl -X POST http://localhost:3000/api/biometric/sync"
   },

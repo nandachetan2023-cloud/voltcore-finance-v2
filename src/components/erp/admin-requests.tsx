@@ -50,7 +50,7 @@ export default function AdminRequests() {
   const fetchRequests = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/employee-requests');
+      const res = await fetch('/api/employee-requests', { cache: 'no-store' });
       const data = await res.json();
       if (data.success) setRequests(data.data);
     } catch { toast.error('Failed to load requests'); }
@@ -259,13 +259,15 @@ export default function AdminRequests() {
                     </div>
                   </div>
 
-                  {r.status === 'pending' && (
+                  {r.status === 'pending' && r.canApprove !== false && (
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button onClick={() => {
                           setActionTarget({ request: r, action: 'approve' });
-                          // Pre-fill approved amount with requested amount for advance payments
-                          if (r.requestType === 'advance_payment' && r.amount) {
-                            setApprovedAmount(String(Number(r.amount)));
+                          // Pre-fill approved amount: use previously adjusted amount if set,
+                          // otherwise fall back to the original requested amount
+                          if (r.requestType === 'advance_payment') {
+                            const prefill = r.approvedAmount ?? r.amount;
+                            setApprovedAmount(prefill ? String(Number(prefill)) : '');
                           } else {
                             setApprovedAmount('');
                           }

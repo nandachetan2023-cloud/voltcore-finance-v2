@@ -5,14 +5,15 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { superadminDb } from '@/lib/superadmin-db'
-import { PrismaClient } from '@prisma/client'
+import { getClientForUrl } from '@/lib/db'
+import type { PrismaClient } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
 async function getTenantDb(tenantId: string): Promise<PrismaClient | null> {
   const tenant = await superadminDb.tenant.findUnique({ where: { id: tenantId } })
   if (!tenant) return null
-  return new PrismaClient({ datasources: { db: { url: tenant.dbUrl } } })
+  return getClientForUrl(tenant.dbUrl)
 }
 
 // GET: fetch deleted items of a given type from a tenant's DB
@@ -71,8 +72,6 @@ export async function GET(request: NextRequest) {
   } catch (e) {
     console.error('Trash GET error:', e)
     return NextResponse.json({ success: false, error: 'Failed to fetch deleted items' }, { status: 500 })
-  } finally {
-    await db.$disconnect()
   }
 }
 
@@ -112,8 +111,6 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error('Trash POST error:', e)
     return NextResponse.json({ success: false, error: 'Failed to restore item' }, { status: 500 })
-  } finally {
-    await db.$disconnect()
   }
 }
 
@@ -152,7 +149,5 @@ export async function DELETE(request: NextRequest) {
   } catch (e) {
     console.error('Trash DELETE error:', e)
     return NextResponse.json({ success: false, error: 'Failed to permanently delete item' }, { status: 500 })
-  } finally {
-    await db.$disconnect()
   }
 }

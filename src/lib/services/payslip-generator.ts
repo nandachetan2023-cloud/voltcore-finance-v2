@@ -11,6 +11,7 @@ export interface PayslipData {
     name: string;
     address: string;
     principalEmployer: string;
+    logo?: string | null; // base64 data URL of the tenant logo (optional)
   };
   employee: {
     code: string;
@@ -89,15 +90,38 @@ export class PayslipGenerator {
     const contentWidth = pageWidth - (margin * 2);
     let yPos = 15;
 
+    // Company logo — pinned to the very top-left corner, drawn before the table.
+    // Track its bottom edge so the table starts below it (never overlaps/hides it).
+    let logoBottom = 0;
+    if (data.company.logo) {
+      try {
+        const props = doc.getImageProperties(data.company.logo);
+        const maxW = 22;
+        const maxH = 16;
+        let w = maxW;
+        let h = (props.height / props.width) * w;
+        if (h > maxH) {
+          h = maxH;
+          w = (props.width / props.height) * h;
+        }
+        const logoX = margin;
+        const logoY = 6;
+        doc.addImage(data.company.logo, props.fileType || 'PNG', logoX, logoY, w, h);
+        logoBottom = logoY + h;
+      } catch {
+        /* invalid/unsupported logo — skip silently */
+      }
+    }
+
     // Company Header Title (Row 1)
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text(data.company.name, pageWidth / 2, yPos, { align: 'center' });
     yPos += 5;
 
-    // Generate Single Unified Table
+    // Generate Single Unified Table — start below the logo so it isn't hidden
     autoTable(doc, {
-      startY: yPos,
+      startY: Math.max(yPos, logoBottom + 2),
       body: [
         // Row 2: Company Address
         [{ content: data.company.address, colSpan: 6, styles: { fontStyle: 'bold', halign: 'center', fontSize: 9 } }],
@@ -175,8 +199,8 @@ export class PayslipGenerator {
         [
           { content: 'Site Allowances' },
           { content: this.formatCurrency(data.earnings.siteAllowance), colSpan: 2 },
-          { content: 'PT' },
-          { content: this.formatCurrency(data.deductions.pt), colSpan: 2 }
+          { content: '' },
+          { content: '', colSpan: 2 }
         ],
         // Row 15
         [

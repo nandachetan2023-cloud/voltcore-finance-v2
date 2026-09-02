@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   HardHat, Search, Plus, Eye, Pencil, Trash2, Users, MapPin,
-  UserPlus, UserMinus, ChevronDown, X, AlertTriangle
+  UserPlus, UserMinus, ChevronDown, X, AlertTriangle, Layers
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -25,6 +25,7 @@ interface Employee {
   dateOfBirth: string;
   gender: string;
   employmentType: string;
+  otType: number;
   employmentStatus: string;
   dateOfJoining: string;
   Department?: {
@@ -40,9 +41,16 @@ interface Employee {
     id: number;
     name: string;
   };
+  monthlyGrossSalary?: number | string | null;
+  dailyWage?: number | string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+// Statuses that count as "currently working". Notice-period employees are still
+// on the job (they're only auto-marked inactive once offboarding completes / the
+// separation date passes), so they belong under Active — not Inactive/Separated.
+const ACTIVE_STATUSES = ['active', 'notice_period'];
 
 interface EmployeeFormData {
   // Identity
@@ -74,6 +82,7 @@ interface EmployeeFormData {
   // Organisation
   departmentId: string;
   designationId: string;
+  subDesignationId: string;
   natureOfDesignation: string;
   branchId: string;
   gradeId: string;
@@ -82,11 +91,13 @@ interface EmployeeFormData {
   dateOfJoining: string;
   confirmationDate: string;
   employmentType: string;
+  otType: number;
   employmentStatus: string;
   probationMonths: string;
   noticePeriodDays: string;
   // Salary
   monthlyGrossSalary: string;
+  dailyWage: string;
   // Statutory
   panNumber: string;
   aadharNumber: string;
@@ -100,6 +111,10 @@ interface EmployeeFormData {
   emergencyContactName: string;
   emergencyContactRelation: string;
   emergencyContactPhone: string;
+  // Nominee
+  nomineeName: string;
+  nomineeRelation: string;
+  nomineeAddress: string;
   // Onboarding (only used when creating with onboarding mode)
   onboardMode: boolean;
   password: string;
@@ -113,14 +128,15 @@ const emptyForm: EmployeeFormData = {
   fatherName: '',
   currentAddress: '', currentCity: '', currentState: '', currentPincode: '',
   permanentAddress: '', permanentCity: '', permanentState: '', permanentPincode: '',
-  departmentId: '', designationId: '', natureOfDesignation: '', branchId: '', gradeId: '', reportingManagerId: '',
+  departmentId: '', designationId: '', subDesignationId: '', natureOfDesignation: '', branchId: '', gradeId: '', reportingManagerId: '',
   dateOfJoining: '', confirmationDate: '',
-  employmentType: '', employmentStatus: 'active',
+  employmentType: 'non_fixed', otType: 1, employmentStatus: 'active',
   probationMonths: '6', noticePeriodDays: '30',
-  monthlyGrossSalary: '',
+  monthlyGrossSalary: '', dailyWage: '',
   panNumber: '', aadharNumber: '', uanNumber: '', esicNumber: '',
   bankName: '', bankAccount: '', bankIfsc: '',
   emergencyContactName: '', emergencyContactRelation: '', emergencyContactPhone: '',
+  nomineeName: '', nomineeRelation: '', nomineeAddress: '',
   onboardMode: false, password: '', orgRoleId: '',
 };
 
@@ -144,14 +160,14 @@ function getFullName(emp: Employee): string {
   return parts.join(' ') || 'Unknown';
 }
 
-// Validate / normalize the Employee ID (must equal the biometric Enrolled ID prefixed "UA").
-// Returns an error string ('' when valid). Accepts a bare number (auto-formats to UA + 8 digits).
+// Validate / normalize the Employee ID (must equal the biometric Enrolled ID last 4 digits prefixed "UA").
+// Returns an error string ('' when valid). Accepts a bare number (auto-formats to UA + 4 digits).
 function validateEmpIdFormat(raw: string): string {
   const value = (raw || '').trim().toUpperCase();
   if (!value) return 'Employee ID is required';
-  const normalized = /^\d{1,8}$/.test(value) ? `UA${value.padStart(8, '0')}` : value;
-  if (!/^UA\d{8}$/.test(normalized)) {
-    return 'Format: UA + 8 digits (e.g. UA00000001). Type just the number to auto-format.';
+  const normalized = /^\d{1,4}$/.test(value) ? `UA${value.padStart(4, '0')}` : value;
+  if (!/^UA\d{4}$/.test(normalized)) {
+    return 'Format: UA + 4 digits (e.g. UA0001, UA0023). Type just the number to auto-format.';
   }
   return '';
 }
@@ -267,15 +283,25 @@ export default function EmployeesModule() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewEmp, setViewEmp] = useState<Employee | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<EmployeeFormData>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formTab, setFormTab] = useState<'identity' | 'personal' | 'address' | 'org' | 'employment' | 'statutory' | 'bank' | 'emergency'>('identity');
+
+  // Bulk edit — set of selected employee ids + dialog state.
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  // For each bulk-editable field: whether it's enabled ("apply this") + its value.
+  const [bulkFields, setBulkFields] = useState<Record<string, { on: boolean; value: string }>>({});
+
   const { triggerCreate } = useERPStore();
 
   // Fetch designations for dropdown
-  const [designations, setDesignations] = useState<Array<{ id: number; name: string }>>([]);
+  const [designations, setDesignations] = useState<Array<{ id: number; name: string; SubDesignation?: Array<{ id: number; name: string; designationId: number }> }>>([]);
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
   const [branches, setBranches] = useState<Array<{ id: number; name: string }>>([]);
   const [orgRoles, setOrgRoles] = useState<Array<{ id: string; name: string; level: number; moduleAccess: string }>>([]);
@@ -341,15 +367,99 @@ export default function EmployeesModule() {
     }
     if (siteFilter !== 'all') list = list.filter(e => e.Branch?.name === siteFilter);
     if (tradeFilter !== 'all') list = list.filter(e => e.Department?.name === tradeFilter);
-    if (statusFilter !== 'all') list = list.filter(e => e.employmentStatus === statusFilter.toLowerCase().replace(' ', '_'));
+    if (statusFilter !== 'all') {
+      const target = statusFilter.toLowerCase().replace(' ', '_');
+      // "Active" surfaces notice-period employees too (still working).
+      if (target === 'active') list = list.filter(e => ACTIVE_STATUSES.includes(e.employmentStatus));
+      else list = list.filter(e => e.employmentStatus === target);
+    }
     return list;
   }, [employees, search, siteFilter, tradeFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const paged = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
+  // ── Bulk selection helpers ──────────────────────────────────────────────
+  // "Select all" operates on the FILTERED set (across pages), so a user can
+  // filter to a site and bulk-edit everyone there in one action.
+  const filteredIds = useMemo(() => filtered.map(e => e.id), [filtered]);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
+  const someFilteredSelected = filteredIds.some(id => selectedIds.has(id));
+
+  const toggleOne = (id: number) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleAllFiltered = () => setSelectedIds(prev => {
+    if (allFilteredSelected) return new Set([...prev].filter(id => !filteredIds.includes(id)));
+    return new Set([...prev, ...filteredIds]);
+  });
+  const clearSelection = () => setSelectedIds(new Set());
+
+  // Fields the bulk editor exposes, grouped like the employee form's Org/Employment tabs.
+  const BULK_FIELDS = useMemo(() => ([
+    { group: 'Organisation', key: 'departmentId', label: 'Department', type: 'select',
+      options: departments.map(d => ({ value: String(d.id), label: d.name })) },
+    { group: 'Organisation', key: 'designationId', label: 'Designation', type: 'select',
+      options: designations.map(d => ({ value: String(d.id), label: d.name })) },
+    { group: 'Organisation', key: 'branchId', label: 'Branch / Site', type: 'select',
+      options: branches.map(b => ({ value: String(b.id), label: b.name })) },
+    { group: 'Organisation', key: 'gradeId', label: 'Grade / Level', type: 'text' },
+    { group: 'Organisation', key: 'reportingManagerId', label: 'Reporting Manager', type: 'select',
+      options: [{ value: '', label: 'None' }, ...employees.map(e => ({ value: String(e.id), label: `${e.employeeCode} — ${getFullName(e)}` }))] },
+    { group: 'Employment', key: 'employmentType', label: 'Employment Type', type: 'select',
+      options: [{ value: 'fixed', label: 'Fixed' }, { value: 'non_fixed', label: 'Non-Fixed' }] },
+    { group: 'Employment', key: 'otType', label: 'OT Type', type: 'select',
+      options: [{ value: '1', label: '1× OT (single rate)' }, { value: '2', label: '2× OT (double rate)' }] },
+    { group: 'Employment', key: 'employmentStatus', label: 'Employment Status', type: 'select',
+      options: [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'notice_period', label: 'Notice Period' }, { value: 'separated', label: 'Separated' }] },
+    { group: 'Employment', key: 'natureOfDesignation', label: 'Nature of Designation', type: 'select',
+      options: [{ value: 'Skilled', label: 'Skilled' }, { value: 'Semi-skilled', label: 'Semi-skilled' }, { value: 'Unskilled', label: 'Unskilled' }, { value: 'Highly Skilled', label: 'Highly Skilled' }] },
+    { group: 'Employment', key: 'probationMonths', label: 'Probation Months', type: 'number' },
+    { group: 'Employment', key: 'noticePeriodDays', label: 'Notice Period Days', type: 'number' },
+  ] as const), [departments, designations, branches, employees]);
+
+  const openBulk = () => {
+    // Reset the dialog: nothing enabled, values blank.
+    const init: Record<string, { on: boolean; value: string }> = {};
+    BULK_FIELDS.forEach(f => { init[f.key] = { on: false, value: '' }; });
+    setBulkFields(init);
+    setBulkOpen(true);
+  };
+
+  const submitBulk = async () => {
+    const changes: Record<string, string> = {};
+    BULK_FIELDS.forEach(f => {
+      const st = bulkFields[f.key];
+      if (st?.on) changes[f.key] = st.value; // include even blank → clears optional fields
+    });
+    if (Object.keys(changes).length === 0) {
+      setError('Enable at least one field to apply.');
+      return;
+    }
+    setBulkSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/employees', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds], changes }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Bulk update failed');
+      setBulkOpen(false);
+      clearSelection();
+      await fetchData();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Bulk update failed');
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
   const totalEmployees = employees.length;
-  const activeCount = employees.filter(e => e.employmentStatus === 'active').length;
+  const activeCount = employees.filter(e => ACTIVE_STATUSES.includes(e.employmentStatus)).length;
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0];
   const newJoiners = employees.filter(e => e.dateOfJoining >= thirtyDaysAgo).length;
@@ -393,17 +503,20 @@ export default function EmployeesModule() {
       permanentPincode: emp.permanentPincode || '',
       departmentId: emp.departmentId?.toString() || emp.Department?.id?.toString() || '',
       designationId: emp.designationId?.toString() || emp.Designation?.id?.toString() || '',
+      subDesignationId: (emp as any).subDesignationId?.toString() || (emp as any).SubDesignation?.id?.toString() || '',
       natureOfDesignation: emp.natureOfDesignation || '',
       branchId: emp.branchId?.toString() || emp.Branch?.id?.toString() || '',
       gradeId: emp.gradeId?.toString() || '',
       reportingManagerId: emp.reportingManagerId?.toString() || '',
       dateOfJoining: emp.dateOfJoining ? emp.dateOfJoining.split('T')[0] : '',
       confirmationDate: emp.confirmationDate ? emp.confirmationDate.split('T')[0] : '',
-      employmentType: emp.employmentType || 'permanent',
+      employmentType: emp.employmentType || 'non_fixed',
+      otType: emp.otType ?? 1,
       employmentStatus: emp.employmentStatus || 'active',
       probationMonths: emp.probationMonths?.toString() || '6',
       noticePeriodDays: emp.noticePeriodDays?.toString() || '30',
       monthlyGrossSalary: emp.monthlyGrossSalary?.toString() || '',
+      dailyWage: emp.dailyWage?.toString() || '',
       panNumber: emp.panNumber || '',
       aadharNumber: emp.aadharNumber || '',
       uanNumber: emp.uanNumber || '',
@@ -414,6 +527,9 @@ export default function EmployeesModule() {
       emergencyContactName: emp.emergencyContactName || '',
       emergencyContactRelation: emp.emergencyContactRelation || '',
       emergencyContactPhone: emp.emergencyContactPhone || '',
+      nomineeName: emp.nomineeName || '',
+      nomineeRelation: emp.nomineeRelation || '',
+      nomineeAddress: emp.nomineeAddress || '',
     });
     setSelectedId(emp.id.toString());
     setFormTab('identity');
@@ -421,6 +537,7 @@ export default function EmployeesModule() {
     setEditOpen(true);
   };
   const openDelete = (id: number) => { setSelectedId(id.toString()); setDeleteOpen(true); };
+  const openView = (emp: Employee) => { setViewEmp(emp); setViewOpen(true); };
 
   const handleSubmit = async (mode: 'create' | 'edit') => {
     setSubmitting(true);
@@ -432,7 +549,6 @@ export default function EmployeesModule() {
         const errors = validateFields([
           { field: 'empId', value: form.empId, label: 'Employee ID' },
           { field: 'firstName', value: form.firstName, label: 'First Name' },
-          { field: 'lastName', value: form.lastName, label: 'Last Name' },
           { field: 'departmentId', value: form.departmentId, label: 'Department' },
           { field: 'designationId', value: form.designationId, label: 'Designation' },
           { field: 'branchId', value: form.branchId, label: 'Branch' },
@@ -447,7 +563,7 @@ export default function EmployeesModule() {
             setFormTab('identity');
           } else {
             const tabMap: Record<string, string[]> = {
-              identity: ['empId', 'firstName', 'lastName', 'email'],
+              identity: ['empId', 'firstName', 'email'],
               org: ['departmentId', 'designationId', 'branchId'],
               employment: ['dateOfJoining'],
             };
@@ -474,16 +590,19 @@ export default function EmployeesModule() {
         const onboardBody = {
           employeeCode,
           firstName: form.firstName.trim(),
-          lastName: form.lastName.trim(),
+          lastName: form.lastName.trim() || '',
           email: form.email.trim(),
           departmentId: parseInt(form.departmentId),
           designationId: parseInt(form.designationId),
+          subDesignationId: form.subDesignationId ? parseInt(form.subDesignationId) : null,
           branchId: parseInt(form.branchId),
           dateOfJoining: new Date(form.dateOfJoining).toISOString(),
           employmentType: form.employmentType,
+          otType: form.otType,
           natureOfDesignation: form.natureOfDesignation.trim() || null,
           gradeLabel: form.gradeId.trim() || null,
           monthlyGrossSalary: form.monthlyGrossSalary || null,
+          dailyWage: form.dailyWage || null,
           password: form.password,
           orgRoleId: form.orgRoleId,
         };
@@ -524,7 +643,6 @@ export default function EmployeesModule() {
       const errors = validateFields([
         { field: 'empId', value: form.empId, label: 'Employee ID' },
         { field: 'firstName', value: form.firstName, label: 'First Name' },
-        { field: 'lastName', value: form.lastName, label: 'Last Name' },
         { field: 'dateOfBirth', value: form.dateOfBirth, label: 'Date of Birth' },
         { field: 'currentAddress', value: form.currentAddress, label: 'Current Address' },
         { field: 'currentCity', value: form.currentCity, label: 'Current City' },
@@ -540,7 +658,7 @@ export default function EmployeesModule() {
       if (!isValid(errors)) {
         // Navigate to the first tab that has an error so the user can see it
         const tabFieldMap: Record<string, string[]> = {
-          identity: ['empId', 'firstName', 'lastName', 'email', 'phone'],
+          identity: ['empId', 'firstName', 'email', 'phone'],
           personal: ['dateOfBirth'],
           address: ['currentAddress', 'currentCity', 'currentState', 'currentPincode'],
           org: ['departmentId', 'designationId', 'branchId'],
@@ -559,16 +677,16 @@ export default function EmployeesModule() {
       }
 
       let employeeCode = form.empId.trim().toUpperCase();
-      // Employee code must equal the device Enrolled ID (EmpcardNo) prefixed with "UA".
-      // EmpcardNo is 8-digit zero-padded, so the code is "UA" + 8 digits.
-      // Auto-format: if the user typed just digits, prepend UA and zero-pad to 8.
+      // Employee code must equal the last 4 digits of the device Enrolled ID (EmpcardNo) prefixed with "UA".
+      // EmpcardNo is 8-digit zero-padded (e.g. "00000005"), we use last 4 → code "UA0005".
+      // Auto-format: if the user typed just digits (1-4), prepend UA and zero-pad to 4.
       if (mode === 'create') {
-        if (/^\d{1,8}$/.test(employeeCode)) {
-          employeeCode = `UA${employeeCode.padStart(8, '0')}`;
+        if (/^\d{1,4}$/.test(employeeCode)) {
+          employeeCode = `UA${employeeCode.padStart(4, '0')}`;
         }
-        if (!/^UA\d{8}$/.test(employeeCode)) {
-          toast.error('Employee ID must be UA + 8 digits matching the biometric Enrolled ID (e.g. UA00000001). You can also type just the number and it will be auto-formatted.');
-          setFieldErrors(fe => ({ ...fe, empId: 'Format: UA + 8 digits (e.g. UA00000001)' }));
+        if (!/^UA\d{4}$/.test(employeeCode)) {
+          toast.error('Employee ID must be UA + last 4 digits of biometric Enrolled ID (e.g. UA0001, UA0005). Type just the number to auto-format.');
+          setFieldErrors(fe => ({ ...fe, empId: 'Format: UA + 4 digits (e.g. UA0005)' }));
           setFormTab('identity');
           setSubmitting(false);
           return;
@@ -581,7 +699,7 @@ export default function EmployeesModule() {
         workmenSlNo: form.workmenSlNo.trim() || null,
         firstName: form.firstName.trim(),
         middleName: form.middleName.trim() || null,
-        lastName: form.lastName.trim(),
+        lastName: form.lastName.trim() || '',
         email: form.email.trim(),
         phone: form.phone.trim(),
         alternatePhone: form.alternatePhone.trim() || null,
@@ -601,6 +719,7 @@ export default function EmployeesModule() {
         permanentPincode: form.permanentPincode.trim() || null,
         departmentId: parseInt(form.departmentId),
         designationId: parseInt(form.designationId),
+        subDesignationId: form.subDesignationId ? parseInt(form.subDesignationId) : null,
         natureOfDesignation: form.gradeId.trim() || form.natureOfDesignation.trim() || null,
         branchId: parseInt(form.branchId),
         gradeId: null, // Grade FK not used — grade is entered as free text in natureOfDesignation
@@ -608,10 +727,12 @@ export default function EmployeesModule() {
         dateOfJoining: new Date(form.dateOfJoining).toISOString(),
         confirmationDate: form.confirmationDate ? new Date(form.confirmationDate).toISOString() : null,
         employmentType: form.employmentType,
+        otType: form.otType,
         employmentStatus: form.employmentStatus,
         probationMonths: parseInt(form.probationMonths) || 6,
         noticePeriodDays: parseInt(form.noticePeriodDays) || 30,
         monthlyGrossSalary: form.monthlyGrossSalary ? parseFloat(form.monthlyGrossSalary) : null,
+        dailyWage: form.dailyWage ? parseFloat(form.dailyWage) : null,
         panNumber: form.panNumber.trim() || null,
         aadharNumber: form.aadharNumber.trim() || null,
         uanNumber: form.uanNumber.trim() || null,
@@ -622,6 +743,9 @@ export default function EmployeesModule() {
         emergencyContactName: form.emergencyContactName.trim() || null,
         emergencyContactRelation: form.emergencyContactRelation.trim() || null,
         emergencyContactPhone: form.emergencyContactPhone.trim() || null,
+        nomineeName: form.nomineeName.trim() || null,
+        nomineeRelation: form.nomineeRelation.trim() || null,
+        nomineeAddress: form.nomineeAddress.trim() || null,
       };
 
       const body = mode === 'edit' ? { id: parseInt(selectedId || '0'), ...apiBody } : apiBody;
@@ -700,6 +824,7 @@ export default function EmployeesModule() {
     { id: 'statutory', label: 'Statutory' },
     { id: 'bank', label: 'Bank' },
     { id: 'emergency', label: 'Emergency' },
+    { id: 'nominee', label: 'Nominee' },
   ] as const;
 
   const dialogContent = () => (
@@ -754,12 +879,12 @@ export default function EmployeesModule() {
       <div className="grid grid-cols-2 gap-3 pr-1">
         {/* ── Identity ── */}
         {formTab === 'identity' && <>
-          <F label="Employee ID (Enrolled ID)" req><input className={`${inp} ${fieldBorderError(fieldErrors.empId)}`} value={form.empId} onChange={e => { setForm(f => ({ ...f, empId: e.target.value.toUpperCase() })); setFieldErrors(fe => ({ ...fe, empId: '' })); }} onBlur={e => { const err = validateEmpIdFormat(e.target.value); setFieldErrors(fe => ({ ...fe, empId: err })); }} placeholder="UA + biometric Enrolled ID, e.g. UA00000001" maxLength={10} /><FieldError message={fieldErrors.empId} /><p className="text-[10px] text-[#5a6878] mt-1">Must match the device Enrolled ID. Type the number to auto-format to UA + 8 digits.</p></F>
+          <F label="Employee ID (Enrolled ID)" req><input className={`${inp} ${fieldBorderError(fieldErrors.empId)}`} value={form.empId} onChange={e => { setForm(f => ({ ...f, empId: e.target.value.toUpperCase() })); setFieldErrors(fe => ({ ...fe, empId: '' })); }} onBlur={e => { const err = validateEmpIdFormat(e.target.value); setFieldErrors(fe => ({ ...fe, empId: err })); }} placeholder="UA + last 4 digits of Enrolled ID, e.g. UA0005" maxLength={6} /><FieldError message={fieldErrors.empId} /><p className="text-[10px] text-[#5a6878] mt-1">Must match the LAST 4 DIGITS of the biometric device Enrolled ID. Type just the number to auto-format (e.g. "5" → "UA0005").</p></F>
           <F label="Token Number"><input className={inp} value={form.tokenNumber} onChange={e => setForm(f => ({ ...f, tokenNumber: e.target.value.toUpperCase() }))} placeholder="TKN001" /></F>
           <F label="Workmen Sl. No."><input className={inp} value={form.workmenSlNo} onChange={e => setForm(f => ({ ...f, workmenSlNo: e.target.value.toUpperCase() }))} placeholder="WM001" /></F>
           <F label="First Name" req><input className={`${inp} ${fieldBorderError(fieldErrors.firstName)}`} value={form.firstName} onChange={e => { setForm(f => ({ ...f, firstName: e.target.value })); setFieldErrors(fe => ({ ...fe, firstName: '' })); }} placeholder="Rajesh" /><FieldError message={fieldErrors.firstName} /></F>
           <F label="Middle Name"><input className={inp} value={form.middleName} onChange={e => setForm(f => ({ ...f, middleName: e.target.value }))} placeholder="Kumar" /></F>
-          <F label="Last Name" req><input className={`${inp} ${fieldBorderError(fieldErrors.lastName)}`} value={form.lastName} onChange={e => { setForm(f => ({ ...f, lastName: e.target.value })); setFieldErrors(fe => ({ ...fe, lastName: '' })); }} placeholder="Sharma" /><FieldError message={fieldErrors.lastName} /></F>
+          <F label="Last Name"><input className={inp} value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} placeholder="Sharma (optional)" /></F>
           <F label="Work Email"><input className={inp} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="rajesh@company.com (optional)" /></F>
           <F label="Personal Email"><input className={inp} type="email" value={form.personalEmail} onChange={e => setForm(f => ({ ...f, personalEmail: e.target.value }))} placeholder="rajesh@gmail.com" /></F>
           <F label="Phone"><input className={inp} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 98765 43210 (optional)" /></F>
@@ -819,12 +944,24 @@ export default function EmployeesModule() {
             <FieldError message={fieldErrors.departmentId} />
           </F>
           <F label="Designation" req>
-            <select className={`${sel} ${fieldBorderError(fieldErrors.designationId)}`} value={form.designationId} onChange={e => { setForm(f => ({ ...f, designationId: e.target.value })); setFieldErrors(fe => ({ ...fe, designationId: '' })); }}>
+            <select className={`${sel} ${fieldBorderError(fieldErrors.designationId)}`} value={form.designationId} onChange={e => { const v = e.target.value; setForm(f => ({ ...f, designationId: v, subDesignationId: '' })); setFieldErrors(fe => ({ ...fe, designationId: '' })); }}>
               <option value="">Select designation...</option>
               {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
             <FieldError message={fieldErrors.designationId} />
           </F>
+          {(() => {
+            const subs = designations.find(d => String(d.id) === form.designationId)?.SubDesignation || [];
+            if (!form.designationId || subs.length === 0) return null;
+            return (
+              <F label="Sub-Designation">
+                <select className={sel} value={form.subDesignationId} onChange={e => setForm(f => ({ ...f, subDesignationId: e.target.value }))}>
+                  <option value="">None</option>
+                  {subs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </F>
+            );
+          })()}
           <F label="Branch / Site" req>
             <select className={`${sel} ${fieldBorderError(fieldErrors.branchId)}`} value={form.branchId} onChange={e => { setForm(f => ({ ...f, branchId: e.target.value })); setFieldErrors(fe => ({ ...fe, branchId: '' })); }}>
               <option value="">Select site...</option>
@@ -852,13 +989,18 @@ export default function EmployeesModule() {
           <F label="Employment Type">
             <select className={sel} value={form.employmentType} onChange={e => setForm(f => ({ ...f, employmentType: e.target.value }))}>
               <option value="">Not specified</option>
-              <option value="permanent">Permanent</option>
-              <option value="contract">Contract</option>
-              <option value="probation">Probation</option>
-              <option value="intern">Intern</option>
-              <option value="part_time">Part Time</option>
+              <option value="fixed">Fixed</option>
+              <option value="non_fixed">Non-Fixed</option>
             </select>
           </F>
+          {form.employmentType === 'non_fixed' && (
+            <F label="OT Type">
+              <select className={sel} value={String(form.otType ?? 1)} onChange={e => setForm(f => ({ ...f, otType: Number(e.target.value) }))}>
+                <option value="1">1× OT (single rate)</option>
+                <option value="2">2× OT (double rate)</option>
+              </select>
+            </F>
+          )}
           <F label="Employment Status" req>
             <select className={sel} value={form.employmentStatus} onChange={e => setForm(f => ({ ...f, employmentStatus: e.target.value }))}>
               <option value="active">Active</option>
@@ -877,16 +1019,17 @@ export default function EmployeesModule() {
             </select>
           </F>
           <F label="Monthly Gross Salary"><input className={inp} type="number" min="0" step="0.01" value={form.monthlyGrossSalary} onChange={e => setForm(f => ({ ...f, monthlyGrossSalary: e.target.value }))} placeholder="15000.00" /></F>
+          <F label="Daily Wage (Compliance Rate)"><input className={inp} type="number" min="0" step="0.01" value={form.dailyWage} onChange={e => setForm(f => ({ ...f, dailyWage: e.target.value }))} placeholder="e.g. 439 (daily rate of wages)" /><p className="text-[10px] text-[#5a6878] mt-1">Fixed daily rate used in the compliance sheet (col K). Leave blank to auto-derive from gross ÷ working days.</p></F>
           <F label="Probation Months"><input className={inp} type="number" min="0" value={form.probationMonths} onChange={e => setForm(f => ({ ...f, probationMonths: e.target.value }))} /></F>
           <F label="Notice Period Days"><input className={inp} type="number" min="0" value={form.noticePeriodDays} onChange={e => setForm(f => ({ ...f, noticePeriodDays: e.target.value }))} /></F>
         </>}
 
         {/* ── Statutory ── */}
         {formTab === 'statutory' && <>
-          <F label="PAN Number"><input className={inp} value={form.panNumber} onChange={e => setForm(f => ({ ...f, panNumber: e.target.value.toUpperCase() }))} placeholder="ABCDE1234F" maxLength={10} /></F>
-          <F label="Aadhar Number"><input className={inp} value={form.aadharNumber} onChange={e => setForm(f => ({ ...f, aadharNumber: e.target.value }))} placeholder="1234 5678 9012" maxLength={14} /></F>
-          <F label="UAN Number"><input className={inp} value={form.uanNumber} onChange={e => setForm(f => ({ ...f, uanNumber: e.target.value }))} placeholder="100123456789" maxLength={12} /></F>
-          <F label="ESIC IP Number"><input className={inp} value={form.esicNumber} onChange={e => setForm(f => ({ ...f, esicNumber: e.target.value }))} placeholder="1234567890" /></F>
+          <F label="PAN Number"><input className={inp} value={form.panNumber} onChange={e => setForm(f => ({ ...f, panNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))} placeholder="ABCDE1234F" maxLength={10} /></F>
+          <F label="Aadhar Number"><input className={inp} value={form.aadharNumber} onChange={e => setForm(f => ({ ...f, aadharNumber: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="123456789012" maxLength={12} /></F>
+          <F label="UAN Number"><input className={inp} value={form.uanNumber} onChange={e => setForm(f => ({ ...f, uanNumber: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="100123456789" maxLength={12} /></F>
+          <F label="ESIC IP Number"><input className={inp} value={form.esicNumber} onChange={e => setForm(f => ({ ...f, esicNumber: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="1234567890" maxLength={10} /></F>
         </>}
 
         {/* ── Bank ── */}
@@ -901,6 +1044,27 @@ export default function EmployeesModule() {
           <F label="Contact Name" span2><input className={inp} value={form.emergencyContactName} onChange={e => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} placeholder="Spouse / Parent name" /></F>
           <F label="Relation"><input className={inp} value={form.emergencyContactRelation} onChange={e => setForm(f => ({ ...f, emergencyContactRelation: e.target.value }))} placeholder="Spouse / Father / Mother" /></F>
           <F label="Phone"><input className={inp} value={form.emergencyContactPhone} onChange={e => setForm(f => ({ ...f, emergencyContactPhone: e.target.value }))} placeholder="+91 98765 43210" /></F>
+        </>}
+
+        {/* ── Nominee ── */}
+        {formTab === 'nominee' && <>
+          <div className="col-span-2 text-[10px] text-[#8899aa] pb-1">Nomination (Form No. 25) — In the event of death, the balance of pay shall be paid to:</div>
+          <F label="Nominee Name" span2><input className={inp} value={form.nomineeName} onChange={e => setForm(f => ({ ...f, nomineeName: e.target.value }))} placeholder="Full name of nominee" /></F>
+          <F label="Relationship">
+            <select className={inp} value={form.nomineeRelation} onChange={e => setForm(f => ({ ...f, nomineeRelation: e.target.value }))}>
+              <option value="">Select</option>
+              <option value="Father">Father</option>
+              <option value="Mother">Mother</option>
+              <option value="Husband">Husband</option>
+              <option value="Wife">Wife</option>
+              <option value="Son">Son</option>
+              <option value="Daughter">Daughter</option>
+              <option value="Brother">Brother</option>
+              <option value="Sister">Sister</option>
+              <option value="Other">Other</option>
+            </select>
+          </F>
+          <F label="Nominee Address" span2><input className={inp} value={form.nomineeAddress} onChange={e => setForm(f => ({ ...f, nomineeAddress: e.target.value }))} placeholder="Full address of nominee" /></F>
         </>}
       </div>
 
@@ -965,11 +1129,31 @@ export default function EmployeesModule() {
             ))}
           </div>
 
+          {/* Bulk action bar — shown when at least one employee is selected */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-[#f5a623]/40 bg-[#f5a623]/10 px-3.5 py-2.5">
+              <div className="flex items-center gap-2 text-[12px] text-[#e2e8f0]">
+                <Layers size={14} className="text-[#f5a623]" />
+                <span className="font-semibold">{selectedIds.size}</span> selected
+                <button onClick={clearSelection} className="ml-2 text-[10px] text-[#8899aa] hover:text-[#e2e8f0] underline">Clear</button>
+              </div>
+              <button onClick={openBulk} className="vc-btn-primary text-[11px] px-3 py-1.5 flex items-center gap-1.5">
+                <Pencil size={12} /> Bulk Edit
+              </button>
+            </div>
+          )}
+
           {/* Table */}
           <div className="rounded-lg border border-[#252e3a] overflow-hidden">
             <div className="overflow-x-auto">
               <div className="max-h-[480px] overflow-y-auto min-w-[900px]">
-                <div className="grid grid-cols-[70px_1fr_110px_90px_90px_80px_130px_75px_60px] gap-2 px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-[#5a6878] bg-[#141920] border-b border-[#252e3a] sticky top-0 z-10">
+                <div className="grid grid-cols-[34px_70px_1fr_110px_90px_90px_80px_130px_75px_60px] gap-2 px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-[#5a6878] bg-[#141920] border-b border-[#252e3a] sticky top-0 z-10">
+                  <span className="flex items-center">
+                    <input type="checkbox" className="w-3.5 h-3.5 accent-[#f5a623] cursor-pointer"
+                      checked={allFilteredSelected}
+                      ref={el => { if (el) el.indeterminate = !allFilteredSelected && someFilteredSelected; }}
+                      onChange={toggleAllFiltered} title="Select all (filtered)" />
+                  </span>
                   <span>ID</span><span>Name</span><span className="hidden md:block">Trade/Role</span><span className="hidden lg:block">Site</span><span>Type</span><span className="hidden sm:block">Joined</span><span className="hidden xl:block">Certifications</span><span>Status</span><span className="text-right">Actions</span>
                 </div>
               {paged.length === 0 ? (
@@ -980,7 +1164,11 @@ export default function EmployeesModule() {
                 const st = getStatusStyle(emp.employmentStatus || 'active');
                 const initials = getInitials(emp);
                 return (
-                  <div key={emp.id} className="grid grid-cols-[70px_1fr_110px_90px_90px_80px_130px_75px_60px] gap-2 px-3 py-2.5 items-center border-b border-[#1e252e] last:border-0 hover:bg-[#1a2028] transition-colors group">
+                  <div key={emp.id} className={`grid grid-cols-[34px_70px_1fr_110px_90px_90px_80px_130px_75px_60px] gap-2 px-3 py-2.5 items-center border-b border-[#1e252e] last:border-0 hover:bg-[#1a2028] transition-colors group ${selectedIds.has(emp.id) ? 'bg-[#f5a623]/5' : ''}`}>
+                    <span className="flex items-center">
+                      <input type="checkbox" className="w-3.5 h-3.5 accent-[#f5a623] cursor-pointer"
+                        checked={selectedIds.has(emp.id)} onChange={() => toggleOne(emp.id)} />
+                    </span>
                     <span className="text-[10px] text-[#8899aa] font-medium truncate" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{emp.employeeCode}</span>
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[9px] font-bold ${avatar.bg} ${avatar.text}`}>{initials}</div>
@@ -988,15 +1176,16 @@ export default function EmployeesModule() {
                     </div>
                     <div className="hidden md:block min-w-0"><div className="text-[10px] text-[#e2e8f0] truncate">{emp.Designation?.name || '—'}</div><div className="text-[9px] text-[#5a6878] truncate">{emp.Department?.name || '—'}</div></div>
                     <span className="hidden lg:block text-[10px] text-[#8899aa] truncate">{emp.Branch?.name || '—'}</span>
-                    <span className={`vc-badge ${emp.employmentType === 'permanent' ? 'bg-[#00e676]/10 text-[#00e676]' : 'bg-[#ffab40]/10 text-[#ffab40]'}`}>{emp.employmentType || '—'}</span>
+                    <span className={`vc-badge truncate max-w-full ${emp.employmentType === 'fixed' ? 'bg-[#00e676]/10 text-[#00e676]' : 'bg-[#ffab40]/10 text-[#ffab40]'}`} title={emp.employmentType === 'non_fixed' ? `Non-Fixed · ${emp.otType ?? 1}× OT` : emp.employmentType === 'fixed' ? 'Fixed' : ''}>{emp.employmentType === 'fixed' ? 'Fixed' : emp.employmentType === 'non_fixed' ? `Non-Fixed ${emp.otType ?? 1}×` : '—'}</span>
                     <span className="hidden sm:block text-[9px] text-[#8899aa]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{formatDate(emp.dateOfJoining)}</span>
                     <div className="hidden xl:flex items-center gap-1 flex-wrap">
                       <span className="text-[9px] text-[#5a6878]">—</span>
                     </div>
                     <span className={`vc-badge ${st.bg} ${st.text}`} style={{ border: `1px solid ${st.border}` }}>{emp.employmentStatus}</span>
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#f5a623] hover:bg-[#f5a623]/10 transition-colors" onClick={() => openEdit(emp)}><Pencil size={12} /></button>
-                      <button className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-colors" onClick={() => openDelete(emp.id)}><Trash2 size={12} /></button>
+                      <button title="View details" className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10 transition-colors" onClick={() => openView(emp)}><Eye size={12} /></button>
+                      <button title="Edit" className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#f5a623] hover:bg-[#f5a623]/10 transition-colors" onClick={() => openEdit(emp)}><Pencil size={12} /></button>
+                      <button title="Delete" className="w-6 h-6 rounded flex items-center justify-center text-[#8899aa] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-colors" onClick={() => openDelete(emp.id)}><Trash2 size={12} /></button>
                     </div>
                   </div>
                 );
@@ -1075,6 +1264,151 @@ export default function EmployeesModule() {
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button className="bg-[#ff3d3d] text-white hover:bg-[#cc2020] font-semibold" disabled={submitting} onClick={handleDelete}>{submitting ? 'Deleting...' : 'Delete Employee'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Dialog — read-only employee details */}
+      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" aria-describedby="view-employee-description">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base">Employee Details</DialogTitle>
+          </DialogHeader>
+          {viewEmp && (() => {
+            const e = viewEmp as unknown as Record<string, any>;
+            const fullName = getFullName(viewEmp);
+            const avatar = getAvatarColor(fullName);
+            const st = getStatusStyle(viewEmp.employmentStatus || 'active');
+            const fmt = (v: any) => (v === null || v === undefined || v === '' ? '—' : String(v));
+            const fmtDt = (v: any) => (v ? formatDate(String(v)) : '—');
+            const typeLabel = viewEmp.employmentType === 'fixed'
+              ? 'Fixed'
+              : viewEmp.employmentType === 'non_fixed'
+                ? `Non-Fixed ${viewEmp.otType ?? 1}×`
+                : '—';
+            const Field = ({ label, value }: { label: string; value: any }) => (
+              <div className="min-w-0">
+                <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-0.5">{label}</div>
+                <div className="text-[12px] text-[#e2e8f0] truncate" title={String(value ?? '')}>{fmt(value)}</div>
+              </div>
+            );
+            const GroupTitle = ({ children }: { children: React.ReactNode }) => (
+              <div className="text-[10px] font-bold uppercase tracking-wider text-[#f5a623] mt-4 mb-2 border-b border-[#252e3a] pb-1">{children}</div>
+            );
+            return (
+              <div id="view-employee-description" className="flex-1 overflow-y-auto pr-1">
+                {/* Header card */}
+                <div className="flex items-center gap-3 bg-[#141920] border border-[#252e3a] rounded-lg p-3">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 text-[13px] font-bold ${avatar.bg} ${avatar.text}`}>{getInitials(viewEmp)}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[15px] font-bold text-[#e2e8f0] truncate">{fullName}</div>
+                    <div className="text-[10px] text-[#5a6878] font-mono">{viewEmp.employeeCode}</div>
+                  </div>
+                  <span className={`vc-badge ${st.bg} ${st.text}`} style={{ border: `1px solid ${st.border}` }}>{viewEmp.employmentStatus}</span>
+                </div>
+
+                <GroupTitle>Organisation</GroupTitle>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Field label="Department" value={viewEmp.Department?.name} />
+                  <Field label="Designation" value={viewEmp.Designation?.name} />
+                  <Field label="Sub-Designation" value={e.SubDesignation?.name} />
+                  <Field label="Site / Branch" value={viewEmp.Branch?.name} />
+                  <Field label="Grade / Level" value={e.gradeLabel ?? e.Grade?.name} />
+                  <Field label="Nature of Designation" value={e.natureOfDesignation} />
+                </div>
+
+                <GroupTitle>Employment</GroupTitle>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Field label="Type" value={typeLabel} />
+                  <Field label="Date of Joining" value={fmtDt(viewEmp.dateOfJoining)} />
+                  <Field label="Confirmation Date" value={fmtDt(e.confirmationDate)} />
+                  <Field label="Probation Months" value={e.probationMonths} />
+                  <Field label="Notice Period (days)" value={e.noticePeriodDays} />
+                  <Field label="Monthly Gross Salary" value={viewEmp.monthlyGrossSalary} />
+                  <Field label="Daily Wage" value={viewEmp.dailyWage} />
+                </div>
+
+                <GroupTitle>Contact</GroupTitle>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Field label="Work Email" value={viewEmp.email} />
+                  <Field label="Phone" value={viewEmp.phone} />
+                  <Field label="Date of Birth" value={fmtDt(viewEmp.dateOfBirth)} />
+                  <Field label="Gender" value={viewEmp.gender} />
+                  <Field label="Father's Name" value={e.fatherName} />
+                </div>
+
+                <GroupTitle>Statutory</GroupTitle>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Field label="PAN" value={e.panNumber} />
+                  <Field label="Aadhar" value={e.aadharNumber} />
+                  <Field label="UAN" value={e.uanNumber} />
+                  <Field label="ESIC IP No." value={e.esicNumber} />
+                </div>
+
+                <GroupTitle>Bank</GroupTitle>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <Field label="Bank Name" value={e.bankName} />
+                  <Field label="Account No." value={e.bankAccount} />
+                  <Field label="IFSC" value={e.bankIfsc} />
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter className="gap-2 pt-2 border-t border-[#252e3a]">
+            <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setViewOpen(false)}>Close</Button>
+            {viewEmp && <Button className="bg-[#f5a623] text-[#0f141a] hover:bg-[#e0961a] font-semibold" onClick={() => { setViewOpen(false); openEdit(viewEmp); }}>Edit</Button>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Edit Dialog */}
+      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-lg max-h-[90vh] flex flex-col overflow-hidden" aria-describedby="bulk-edit-description">
+          <DialogHeader>
+            <DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2">
+              <Layers size={16} className="text-[#f5a623]" /> Bulk Edit — {selectedIds.size} employee{selectedIds.size === 1 ? '' : 's'}
+            </DialogTitle>
+          </DialogHeader>
+          <div id="bulk-edit-description" className="flex-1 overflow-y-auto pr-1 space-y-4">
+            <p className="text-[11px] text-[#8899aa] leading-relaxed">
+              Toggle a field to apply its value to <span className="text-[#e2e8f0] font-semibold">all {selectedIds.size} selected</span> employees.
+              Fields you leave off are left unchanged for each employee.
+            </p>
+            {(['Organisation', 'Employment'] as const).map(group => (
+              <div key={group}>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#5a6878] mb-2">{group}</div>
+                <div className="space-y-2">
+                  {BULK_FIELDS.filter(f => f.group === group).map(f => {
+                    const st = bulkFields[f.key] || { on: false, value: '' };
+                    const setOn = (on: boolean) => setBulkFields(bf => ({ ...bf, [f.key]: { ...st, on } }));
+                    const setVal = (value: string) => setBulkFields(bf => ({ ...bf, [f.key]: { on: true, value } }));
+                    return (
+                      <div key={f.key} className={`flex items-center gap-2.5 rounded-md border px-2.5 py-2 transition-colors ${st.on ? 'border-[#f5a623]/40 bg-[#f5a623]/5' : 'border-[#252e3a] bg-[#141920]'}`}>
+                        <input type="checkbox" className="w-3.5 h-3.5 accent-[#f5a623] cursor-pointer shrink-0" checked={st.on} onChange={e => setOn(e.target.checked)} />
+                        <label className="text-[11px] text-[#c8d2dc] w-[130px] shrink-0 cursor-pointer" onClick={() => setOn(!st.on)}>{f.label}</label>
+                        {f.type === 'select' ? (
+                          <select disabled={!st.on} value={st.value} onChange={e => setVal(e.target.value)}
+                            className="flex-1 min-w-0 bg-[#0f141a] border border-[#2e3a48] rounded px-2 py-1 text-[11px] text-[#e2e8f0] disabled:opacity-40 disabled:cursor-not-allowed focus:border-[#f5a623] outline-none">
+                            <option value="">Select...</option>
+                            {'options' in f && f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        ) : (
+                          <input type={f.type === 'number' ? 'number' : 'text'} disabled={!st.on} value={st.value} onChange={e => setVal(e.target.value)}
+                            placeholder={f.type === 'number' ? '0' : '—'}
+                            className="flex-1 min-w-0 bg-[#0f141a] border border-[#2e3a48] rounded px-2 py-1 text-[11px] text-[#e2e8f0] disabled:opacity-40 disabled:cursor-not-allowed focus:border-[#f5a623] outline-none" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="gap-2 pt-2 border-t border-[#252e3a]">
+            <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setBulkOpen(false)}>Cancel</Button>
+            <Button className="bg-[#f5a623] text-[#0f141a] hover:bg-[#e0961a] font-semibold" disabled={bulkSubmitting} onClick={submitBulk}>
+              {bulkSubmitting ? 'Applying...' : `Apply to ${selectedIds.size}`}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

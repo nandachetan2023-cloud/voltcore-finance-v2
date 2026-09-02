@@ -1,6 +1,13 @@
 import { getDbForRequest } from '@/lib/db'
 import { superadminDb } from '@/lib/superadmin-db'
+import { annotateRequesterStage } from '@/lib/services/approval-stage'
+import {
+  callerMatchesOwnRoleScope,
+  resolveStepRecipients,
+} from '@/lib/services/approval-scope'
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveRejectionPosition, formatRejectionPosition } from '@/lib/services/rejection-position'
+import { resolveAdvance, informOptionalSteps, type ChainStepLike } from '@/lib/services/approval-flow'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,24 +30,22 @@ async function getChainForRole(tenantId: string, requesterRoleId: string | undef
   } catch { return null }
 }
 
+/**
+ * Resolve a step's approvers, honouring the approver role's scope.
+ *
+ * This previously returned every holder of the role tenant-wide with a note
+ * that scoping was "enforced at role definition level" — it was not enforced
+ * anywhere, so scoped approvers received (and could action) out-of-scope
+ * requests. Scope is now applied for real in approval-scope.ts, with an admin
+ * fallback when nobody is in scope.
+ */
 async function findApproversForRole(
+  db: any,
   tenantId: string,
   roleId: string,
-  scope: string,
-  employeeDeptName: string | null
-): Promise<{ email: string; name: string }[]> {
-  try {
-    const where: any = { tenantId, orgRoleId: roleId, isActive: true }
-    const users = await superadminDb.tenantUser.findMany({ where, select: { email: true, name: true } })
-
-    // If scope is same_department, filter by users whose linked employee is in the same dept
-    // We can't join across DBs, so we use the role's departments field as a proxy
-    // The role itself has a departments field — if it's set, only users in that dept qualify
-    // For now return all users with that role (dept scoping is enforced at role definition level)
-    return users
-  } catch {
-    return []
-  }
+  requesterEmployeeId: number,
+): Promise<{ recipients: { email: string; name?: string }[]; escalated: boolean; note: string }> {
+  return await resolveStepRecipients(db, tenantId, roleId, requesterEmployeeId)
 }
 
 // ── Create notifications for a list of approvers ─────────────────
@@ -188,38 +193,39 @@ export async function GET(request: NextRequest) {
             // Only show if caller is the approver for the CURRENT step
             const currentStepNum = r.currentStep || 1
             const currentStepDef = steps.find((s: any) => s.stepNumber === currentStepNum)
-            return currentStepDef?.approverRoleId === callerOrgRoleId
+            if (currentStepDef?.approverRoleId !== callerOrgRoleId) return false
+
+            // Being the named approver for the current step IS the
+            // authorization. The role's scope describes who the approver is,
+            // not who they may act on, so it is not tested against the
+            // requester here — doing so hid every request from every scoped
+            // approver.
+            return true
           })
           .map(r => ({ ...r, canApprove: true }))
 
       } else if (callerIsAdmin) {
-        // Admin sees ALL requests (full visibility for audit/management)
-        // but can only action level-1 ones
-        const requesterEmployeeIds = [...new Set(requests.map(r => r.employeeId))]
-        const requesterUsers = await superadminDb.tenantUser.findMany({
-          where: { tenantId: tenantId || '', employeeId: { in: requesterEmployeeIds }, isActive: true },
-          select: { employeeId: true, orgRoleId: true },
-        }).catch(() => [])
-
-        const roleIds = [...new Set(requesterUsers.map(u => u.orgRoleId).filter(Boolean))] as string[]
-        const roles = roleIds.length > 0
-          ? await superadminDb.orgRole.findMany({ where: { id: { in: roleIds } }, select: { id: true, level: true } }).catch(() => [])
-          : []
-        const roleLevelMap = new Map<string, number>(roles.map(r => [r.id, r.level] as [string, number]))
-        const empRoleLevelMap = new Map<number, number>(
-          requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ? (roleLevelMap.get(u.orgRoleId) ?? 0) : 0] as [number, number])
-        )
-
-        // Return all requests — canApprove only for level-1
+        // Full admin sees ALL requests and can finalize any of them (top authority).
         enriched = requests
           .filter(r => r.employeeId !== callerEmployeeId)
-          .map(r => ({ ...r, canApprove: (empRoleLevelMap.get(r.employeeId) ?? 0) <= 1 }))
+          .map(r => ({ ...r, canApprove: true }))
       } else {
         enriched = []
       }
+    } else if (tenantId) {
+      // Requester's own view — annotate each pending request with its stage.
+      enriched = await annotateRequesterStage(tenantId, parseInt(employeeId), requests)
     }
 
-    return NextResponse.json({ success: true, data: enriched })
+    // no-store: these lists change the moment an approver acts, and a cached
+    // response would show an already-approved request as still pending, with
+    // its Approve/Reject buttons live. force-dynamic governs Next's own cache
+    // and does NOT emit a Cache-Control header, so the browser is free to
+    // reuse the stale body without it.
+    return NextResponse.json(
+      { success: true, data: enriched },
+      { headers: { 'Cache-Control': 'no-store, must-revalidate' } },
+    )
   } catch (e) {
     console.error('GET employee-requests error:', e)
     return NextResponse.json({ success: false, error: 'Failed to fetch requests' }, { status: 500 })
@@ -284,6 +290,9 @@ export async function POST(request: NextRequest) {
         Employee: {
           select: {
             firstName: true, lastName: true,
+            // Needed to tell the requester when a fully-optional chain approves
+            // their request outright at submission time.
+            email: true,
             Department: { select: { name: true } },
           },
         },
@@ -313,23 +322,60 @@ export async function POST(request: NextRequest) {
           data: { userId: parseInt(employeeId), userEmail: '__admin_broadcast__',
             title: `New ${typeLabel} — Admin Approval Required`,
             message: `${empName} submitted: "${subject}"`,
-            type: 'info', link: '', entityType: 'request', entityId: req.id },
+            type: 'info', link: 'requests', entityType: 'request', entityId: req.id },
         }).catch(() => {})
       } else {
         // Non-level-1 → chain is guaranteed to exist (pre-checked above)
         const chain = await getChainForRole(tenantId, requesterUser?.orgRoleId)
-        const step1 = chain!.steps[0]
-        const approvers = await findApproversForRole(tenantId, step1.approverRoleId, step1.scope, deptName)
-        if (approvers.length > 0) {
-          await notifyUsers(db, approvers, `New ${typeLabel} — Step 1 Approval`,
-            `${empName} submitted: "${subject}"${deptName ? ` (${deptName})` : ''}`,
-            req.id, 'request', '')
+        // Skip any leading informational steps. See approval-flow.ts.
+        const start = resolveAdvance(chain!.steps as ChainStepLike[], 1, true)
+        await informOptionalSteps(
+          db, tenantId, start.informed, parseInt(employeeId), req.id,
+          `${empName} submitted: "${subject}"`, 'request',
+        )
+
+        if (start.fullyApproved) {
+          // Nobody's approval is required by this chain.
+          await db.employeeRequest.update({
+            where: { id: req.id },
+            data: { status: 'approved', approvedDate: new Date(), updatedAt: new Date() },
+          }).catch(() => {})
+          await db.notification.create({
+            data: { userId: parseInt(employeeId), userEmail: req.Employee.email || '',
+              title: 'Request Approved ✓',
+              message: `Your request "${subject}" was approved automatically — its approval chain has no steps requiring approval.`,
+              type: 'success', link: 'my-requests', entityType: 'request', entityId: req.id },
+          }).catch(() => {})
+          return NextResponse.json({
+            success: true,
+            data: { ...req, status: 'approved' },
+            message: 'Request approved — no approval steps were required.',
+          }, { status: 201 })
+        }
+
+        if (start.nextStep && start.nextStep !== 1) {
+          await db.employeeRequest.update({
+            where: { id: req.id },
+            data: { currentStep: start.nextStep, updatedAt: new Date() },
+          }).catch(() => {})
+        }
+
+        const step1 = chain!.steps.find(s => s.stepNumber === start.nextStep) || chain!.steps[0]
+        // Scoped fan-out: only approvers whose role scope covers this employee.
+        const { recipients, escalated, note } = await findApproversForRole(
+          db, tenantId, step1.approverRoleId, parseInt(employeeId),
+        )
+        if (recipients.length > 0) {
+          await notifyUsers(db, recipients,
+            escalated ? `New ${typeLabel} — Admin Approval Required` : `New ${typeLabel} — Step 1 Approval`,
+            `${empName} submitted: "${subject}"${deptName ? ` (${deptName})` : ''}${note}`,
+            req.id, 'request', 'requests')
         } else {
           await db.notification.create({
             data: { userId: parseInt(employeeId), userEmail: '__admin_broadcast__',
               title: `New ${typeLabel} — No Approver Found`,
-              message: `${empName} submitted: "${subject}". No users found for step-1 approver role.`,
-              type: 'warning', link: '', entityType: 'request', entityId: req.id },
+              message: `${empName} submitted: "${subject}". No users found for step-1 approver role.${note}`,
+              type: 'warning', link: 'requests', entityType: 'request', entityId: req.id },
           }).catch(() => {})
         }
       }
@@ -337,7 +383,7 @@ export async function POST(request: NextRequest) {
       await db.notification.create({
         data: { userId: parseInt(employeeId), userEmail: '__admin_broadcast__',
           title: `New ${typeLabel}`, message: `${empName} submitted: "${subject}"`,
-          type: 'info', link: '', entityType: 'request', entityId: req.id },
+          type: 'info', link: 'requests', entityType: 'request', entityId: req.id },
       }).catch(() => {})
     }
 
@@ -382,50 +428,66 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // ── Guard: caller must be the approver for the CURRENT step ──
+    // ── Caller identity ──────────────────────────────────────────
     const callerEmail = request.cookies.get('erp_user_email')?.value
-    if (callerEmail && tenantId) {
-      const callerUser = await superadminDb.tenantUser.findFirst({
-        where: { tenantId, email: callerEmail, isActive: true },
-        select: { employeeId: true, orgRoleId: true },
-      }).catch(() => null)
+    const callerRole = request.cookies.get('erp_user_role')?.value
+    const callerUser = (callerEmail && tenantId)
+      ? await superadminDb.tenantUser.findFirst({
+          where: { tenantId, email: callerEmail, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => null)
+      : null
+    // A full admin (role 'admin' with no org-role) is the top authority: it may
+    // finalize ANY request, overriding remaining chain steps.
+    const isFullAdmin = callerRole === 'admin' && !callerUser?.orgRoleId
 
-      // Block self-approval
-      if (callerUser?.employeeId && callerUser.employeeId === existing.employeeId) {
+    // Block self-approval
+    if (callerUser?.employeeId && callerUser.employeeId === existing.employeeId) {
+      return NextResponse.json(
+        { success: false, error: 'You cannot approve or reject your own request.' },
+        { status: 403 }
+      )
+    }
+
+    // Chain approvers may act ONLY on their current step. The full admin bypasses this.
+    if (!isFullAdmin && callerUser?.orgRoleId) {
+      // Confirm the caller really is the person their role describes — the
+      // scope identifies the approver, it is NOT a filter on the requester.
+      // Testing the requester here rejected every approver whose own
+      // department/designation/site differed from the person they approve for.
+      if (!(await callerMatchesOwnRoleScope(db, callerUser.orgRoleId, callerUser.employeeId))) {
         return NextResponse.json(
-          { success: false, error: 'You cannot approve or reject your own request.' },
+          { success: false, error: 'Your account does not match the department/designation/site of your assigned role. Contact your administrator.' },
           { status: 403 }
         )
       }
 
-      if (callerUser?.orgRoleId) {
-        const requesterUser = await superadminDb.tenantUser.findFirst({
-          where: { tenantId, employeeId: existing.employeeId, isActive: true },
-          select: { orgRoleId: true },
-        }).catch(() => null)
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId: tenantId!, employeeId: existing.employeeId, isActive: true },
+        select: { orgRoleId: true },
+      }).catch(() => null)
 
-        const requesterRole = requesterUser?.orgRoleId
-          ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
-          : null
+      const requesterRole = requesterUser?.orgRoleId
+        ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+        : null
 
-        const isLevel1Requester = !requesterRole || requesterRole.level === 1
+      const isLevel1Requester = !requesterRole || requesterRole.level === 1
 
-        if (!isLevel1Requester) {
-          const chain = await getChainForRole(tenantId, requesterUser?.orgRoleId)
-          // Check caller is the approver for the CURRENT step specifically
-          const currentStepDef = chain?.steps.find(s => s.stepNumber === (existing.currentStep || 1))
-          if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
-            return NextResponse.json(
-              { success: false, error: 'It is not your turn to approve this request. Please wait for the previous step to be completed.' },
-              { status: 403 }
-            )
-          }
-        } else {
+      if (!isLevel1Requester) {
+        const chain = await getChainForRole(tenantId!, requesterUser?.orgRoleId)
+        // Check caller is the approver for the CURRENT step specifically
+        const currentStepDef = chain?.steps.find(s => s.stepNumber === (existing.currentStep || 1))
+        if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
           return NextResponse.json(
-            { success: false, error: 'Level-1 requests require admin approval.' },
+            { success: false, error: 'It is not your turn to approve this request. Please wait for the previous step to be completed.' },
             { status: 403 }
           )
         }
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Level-1 requests require admin approval.' },
+          { status: 403 }
+        )
       }
     }
 
@@ -434,6 +496,12 @@ export async function PATCH(request: NextRequest) {
 
     // ── REJECT: always final ──────────────────────────────────────
     if (action === 'reject') {
+      // Snapshot the chain position — see src/lib/services/rejection-position.ts
+      const pos = await resolveRejectionPosition(
+        tenantId, existing.employeeId, (existing as any).currentStep, isFullAdmin,
+      )
+      const positionText = formatRejectionPosition(pos.step, pos.roleName, pos.totalSteps)
+
       const updated = await db.employeeRequest.update({
         where: { id: parseInt(id) },
         data: {
@@ -441,6 +509,8 @@ export async function PATCH(request: NextRequest) {
           rejectedBy: approvedBy ? parseInt(approvedBy) : null,
           rejectedDate: new Date(),
           rejectionNote: rejectionNote || '',
+          rejectedAtStep: pos.step,
+          rejectedByRoleName: pos.roleName,
           updatedAt: new Date(),
         },
       })
@@ -451,9 +521,9 @@ export async function PATCH(request: NextRequest) {
           userId: existing.employeeId,
           userEmail: existing.Employee.email,
           title: 'Request Rejected',
-          message: `Your request "${existing.subject}" was rejected.${rejectionNote ? ` Reason: ${rejectionNote}` : ''}`,
+          message: `Your request "${existing.subject}" was rejected${positionText}.${rejectionNote ? ` Reason: ${rejectionNote}` : ''}`,
           type: 'error',
-          link: '',
+          link: 'my-requests',
           entityType: 'request',
           entityId: existing.id,
         },
@@ -482,42 +552,15 @@ export async function PATCH(request: NextRequest) {
     const currentStep = existing.currentStep || 1
     const totalSteps = chain?.steps.length || 1
 
-    // ── Determine if this approval is final ───────────────────────
-    // Rule: Admin approval is only REQUIRED for level-1 employees.
-    // For employees at level 2+, the approval of their direct manager
-    // (the role one level above them) is sufficient — admin is optional.
-    //
-    // Implementation: after approving step N, check if the NEXT step's
-    // role is the highest-level role (admin). If the requester's own
-    // role level is > 1, skip the admin step and mark as fully approved.
+    // Steps with "Approval required" unticked are informational: their approvers
+    // are told but the request does not wait. See approval-flow.ts.
+    const advance = chain
+      ? resolveAdvance(chain.steps as ChainStepLike[], currentStep, false)
+      : { nextStep: null, informed: [] as ChainStepLike[], fullyApproved: true }
 
-    let skipAdminStep = false
-    if (chain && currentStep < totalSteps && tenantId) {
-      const nextStepDef = chain.steps.find(s => s.stepNumber === currentStep + 1)
-      if (nextStepDef) {
-        const requesterRoleLevel = requesterRoleId
-          ? (await superadminDb.orgRole.findUnique({ where: { id: requesterRoleId }, select: { level: true } }).catch(() => null))?.level ?? 1
-          : 1
-
-        const nextRole = await superadminDb.orgRole.findUnique({
-          where: { id: nextStepDef.approverRoleId },
-          select: { level: true },
-        }).catch(() => null)
-
-        const highestRole = await superadminDb.orgRole.findFirst({
-          where: { tenantId },
-          orderBy: { level: 'desc' },
-          select: { level: true },
-        }).catch(() => null)
-
-        const isNextStepAdmin = nextRole && highestRole && nextRole.level >= highestRole.level
-        if (isNextStepAdmin && requesterRoleLevel > 1) {
-          skipAdminStep = true
-        }
-      }
-    }
-
-    const isLastStep = !chain || currentStep >= totalSteps || skipAdminStep
+    // The full admin finalizes immediately (top authority — overrides the rest of
+    // the chain). Otherwise it's final once no required step remains.
+    const isLastStep = !chain || advance.fullyApproved || isFullAdmin
 
     if (isLastStep) {
       // Final approval — mark as approved, store approvedAmount if provided
@@ -538,6 +581,15 @@ export async function PATCH(request: NextRequest) {
         },
       })
 
+      // Optional steps after this point never got to act — tell them.
+      if (chain && tenantId && !isFullAdmin) {
+        await informOptionalSteps(
+          db, tenantId, advance.informed, existing.employeeId, parseInt(id),
+          `${empName}'s request "${existing.subject}" has been fully approved.`,
+          'request',
+        )
+      }
+
       // Build notification message — mention adjusted amount if different from requested
       let approvalMessage = `Your request "${existing.subject}" has been fully approved.`;
       if (existing.requestType === 'advance_payment' && approvedAmountValue !== null && existing.amount) {
@@ -557,7 +609,7 @@ export async function PATCH(request: NextRequest) {
           title: 'Request Approved ✓',
           message: approvalMessage,
           type: 'success',
-          link: '',
+          link: 'my-requests',
           entityType: 'request',
           entityId: existing.id,
         },
@@ -566,12 +618,28 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: true, data: updated, fullyApproved: true })
     }
 
-    // Intermediate approval — advance to next step
-    const nextStep = currentStep + 1
+    // Intermediate approval — advance to the next REQUIRED step.
+    const nextStep = advance.nextStep ?? currentStep + 1
+    if (chain && tenantId) {
+      await informOptionalSteps(
+        db, tenantId, advance.informed, existing.employeeId, parseInt(id),
+        `${empName}'s request "${existing.subject}" passed step ${currentStep}.`,
+        'request',
+      )
+    }
+
+    // Persist approvedAmount if the approver adjusted it, so the next
+    // approver sees the correct amount. Use null explicitly so existing
+    // approvedAmount is cleared if the approver removed it.
+    const approvedAmountValue = approvedAmount !== undefined && approvedAmount !== null && approvedAmount !== ''
+      ? parseFloat(String(approvedAmount))
+      : null;
+
     const updated = await db.employeeRequest.update({
       where: { id: parseInt(id) },
       data: {
         currentStep: nextStep,
+        ...(approvedAmountValue !== null && { approvedAmount: approvedAmountValue }),
         updatedAt: new Date(),
         // Keep status as 'pending' — still needs more approvals
       },
@@ -585,7 +653,7 @@ export async function PATCH(request: NextRequest) {
         title: `Request — Step ${currentStep} Approved`,
         message: `Your request "${existing.subject}" passed step ${currentStep} of ${totalSteps}. Awaiting step ${nextStep} approval.`,
         type: 'info',
-        link: '',
+        link: 'my-requests',
         entityType: 'request',
         entityId: existing.id,
       },
@@ -595,15 +663,22 @@ export async function PATCH(request: NextRequest) {
     if (chain) {
       const nextStepDef = chain.steps.find(s => s.stepNumber === nextStep)
       if (nextStepDef) {
-        const nextApprovers = await findApproversForRole(
-          tenantId!, nextStepDef.approverRoleId, nextStepDef.scope, deptName
+        // Scoped fan-out for the next step — same boundary as step 1.
+        const { recipients: nextApprovers, escalated, note } = await findApproversForRole(
+          db, tenantId!, nextStepDef.approverRoleId, existing.employeeId,
         )
         if (nextApprovers.length > 0) {
+          // Build amount context for advance payment requests
+          const amountMsg = existing.requestType === 'advance_payment' && existing.amount
+            ? ` Amount: ₹${Number(existing.amount).toLocaleString('en-IN')}${approvedAmountValue !== null && approvedAmountValue !== Number(existing.amount) ? ` (adjusted to ₹${approvedAmountValue.toLocaleString('en-IN')} at step ${currentStep})` : ''}.`
+            : '';
           await notifyUsers(
             db, nextApprovers,
-            `Request Needs Your Approval — Step ${nextStep}`,
-            `${empName}'s request "${existing.subject}" has been approved at step ${currentStep} and now requires your approval.${deptName ? ` (${deptName})` : ''}`,
-            existing.id, 'request', ''
+            escalated
+              ? `Request Escalated to Admin — Step ${nextStep}`
+              : `Request Needs Your Approval — Step ${nextStep}`,
+            `${empName}'s request "${existing.subject}" has been approved at step ${currentStep} and now requires your approval.${amountMsg}${deptName ? ` (${deptName})` : ''}${note}`,
+            existing.id, 'request', 'requests'
           )
         } else {
           // No users found for next role — fallback to admin broadcast
@@ -614,7 +689,7 @@ export async function PATCH(request: NextRequest) {
               title: `Request Escalated — Step ${nextStep}`,
               message: `${empName}'s request "${existing.subject}" needs step ${nextStep} approval. No users found for the required role.`,
               type: 'warning',
-              link: '',
+              link: 'requests',
               entityType: 'request',
               entityId: existing.id,
             },

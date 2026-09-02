@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     if (status) {
       where.onboardingStatus = status
     } else {
-      where.onboardingStatus = { in: ['pending', 'submitted', 'rejected'] }
+      where.onboardingStatus = { in: ['pending', 'submitted', 'rejected', 'approved'] }
     }
 
     const users = await superadminDb.tenantUser.findMany({
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
               message: `Your joining form was rejected. Admin remarks: "${rejectionReason.trim()}". Please log in and resubmit.`,
               type: 'warning',
               entityType: 'onboarding',
-              link: '',
+              link: 'onboarding',
               isRead: false,
               createdAt: new Date(),
             },
@@ -158,9 +158,20 @@ export async function POST(request: NextRequest) {
       if (formData.uanNumber) updateData.uanNumber = formData.uanNumber
       if (formData.esicNumber) updateData.esicNumber = formData.esicNumber
 
-      // Emergency contact (using nominee as a fallback)
-      if (formData.nomineeName) updateData.emergencyContactName = formData.nomineeName
-      if (formData.nomineeRelation) updateData.emergencyContactRelation = formData.nomineeRelation
+      // Nominee (Form No. 25)
+      if (formData.nomineeName) updateData.nomineeName = formData.nomineeName
+      if (formData.nomineeRelation) updateData.nomineeRelation = formData.nomineeRelation
+      if (formData.nomineeAddress) updateData.nomineeAddress = formData.nomineeAddress
+
+      // Emergency contact (from onboarding form; falls back to nominee if not provided)
+      if (formData.emergencyContactName) {
+        updateData.emergencyContactName = formData.emergencyContactName
+        updateData.emergencyContactRelation = formData.emergencyContactRelation || null
+        updateData.emergencyContactPhone = formData.emergencyContactPhone || null
+      } else if (formData.nomineeName) {
+        updateData.emergencyContactName = formData.nomineeName
+        updateData.emergencyContactRelation = formData.nomineeRelation || null
+      }
 
       await db.employee.update({
         where: { id: user.employeeId },
@@ -260,10 +271,9 @@ export async function POST(request: NextRequest) {
                 title: docTitle,
                 description: 'Uploaded during joining form',
                 assignedRole: 'hr',
-                requiresDocument: true,
-                documentNecessary: true,
-                order: 99,
-                updatedAt: new Date(),
+                    requiresDocument: true,
+                    documentNecessary: true,
+                    order: 99,
               },
             })
           }
@@ -310,7 +320,7 @@ export async function POST(request: NextRequest) {
               message: 'Your joining form has been approved. You now have full access to the system.',
               type: 'success',
               entityType: 'onboarding',
-              link: '',
+              link: 'onboarding',
               isRead: false,
               createdAt: new Date(),
             },

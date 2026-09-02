@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Users, UserX, CalendarOff, Clock, Plus, Pencil, Trash2,
-  AlertTriangle, Loader2, Search, Info, X
+  AlertTriangle, Loader2, Search, Info, X, ChevronDown
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
 import { calculateAttendanceStatus, getDisplayStatus, isFutureDate, isToday } from '@/lib/attendance-utils';
 
-interface EmployeeInfo { id: string; empId: string; name: string; shiftId?: number; }
+interface EmployeeInfo { id: string; empId: string; name: string; shiftId?: number; site?: string; isActive?: boolean; }
 
 interface ShiftInfo {
   id: number;
@@ -49,6 +49,37 @@ interface AttendanceFormData {
 }
 
 const STATUSES = ['Present', 'Absent', 'Late', 'On Leave', 'Half Day'];
+
+// Maps the backend's canonical status strings to the UI labels. Anything not
+// listed falls back to 'Present' (a punched-in record with an unknown status).
+const STATUS_LABELS: Record<string, string> = {
+  present: 'Present',
+  absent: 'Absent',
+  late: 'Late',
+  half_day: 'Half Day',
+  on_leave: 'On Leave',
+  leave: 'On Leave',
+};
+
+// Statuses that mean the employee physically worked/attended that day.
+const WORKED_STATUSES = new Set(['Present', 'Late', 'Half Day']);
+
+// Gross paid minutes of a shift ("HH:MM" start/end), net of the unpaid break.
+// Handles shifts that cross midnight (end <= start). Returns null if unknown.
+function shiftGrossMinutes(
+  startTime?: string | null,
+  endTime?: string | null,
+  crossesMidnight?: boolean | null,
+  breakMinutes?: number | null,
+): number | null {
+  if (!startTime || !endTime) return null;
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  if ([sh, sm, eh, em].some(n => Number.isNaN(n))) return null;
+  let mins = (eh * 60 + em) - (sh * 60 + sm);
+  if (mins <= 0 || crossesMidnight) mins += 24 * 60; // wrap past midnight
+  return Math.max(0, mins - (Number(breakMinutes) || 0));
+}
 
 const emptyForm: AttendanceFormData = {
   empId: '', site: '', date: '', timeIn: '', timeOut: '', otHours: 0, shift: '', status: 'Present',
@@ -99,7 +130,7 @@ const shiftColor = (s: string) => {
 };
 
 function StatCard({ icon: Icon, label, value, color }: {
-  icon: React.ElementType; label: string; value: number; color: string;
+  icon: React.ElementType; label: string; value: number | string; color: string;
 }) {
   return (
     <div className="vc-stat-card">
@@ -233,6 +264,16 @@ export default function AttendanceModule() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dateRangeMode, setDateRangeMode] = useState(false);
+  const [fromDate, setFromDate] = useState(() => {
+    const date = new Date();
+    date.setDate(1); // First day of current month
+    return date.toISOString().split('T')[0];
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [search, setSearch] = useState('');
+  const [siteFilter, setSiteFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [employeeList, setEmployeeList] = useState<EmployeeInfo[]>([]);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -250,7 +291,17 @@ export default function AttendanceModule() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/attendance');
+      // Push the active date filter to the server so it returns the whole window
+      // being viewed. Without this the API caps at the 100 most-recent rows, so
+      // older months (e.g. May) never reach the client on data-heavy servers.
+      const params = new URLSearchParams({ limit: '100000' });
+      if (dateRangeMode) {
+        if (fromDate) params.set('from', fromDate);
+        if (toDate) params.set('to', toDate);
+      } else if (dateFilter) {
+        params.set('date', dateFilter);
+      }
+      const res = await fetch(`/api/attendance?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch attendance');
       const json = await res.json();
       if (json.success) {
@@ -258,12 +309,27 @@ export default function AttendanceModule() {
         const mappedRecords = json.data.map((record: any) => {
           const punchIn = record.punchIn ? new Date(record.punchIn) : null;
           const punchOut = record.punchOut ? new Date(record.punchOut) : null;
-          
-          // Calculate OT hours (hours worked beyond 8 hours)
+
+          // Overtime = worked time beyond the assigned shift's paid duration,
+          // NOT a flat "hours − 8" (that invented OT for any shift ≠ 8h and
+          // ignored breaks). Worked minutes come from the punch timestamps
+          // (absolute instants, so cross-midnight is handled correctly); the
+          // shift's gross paid minutes and OT threshold come from the record.
           let otHours = 0;
           if (punchIn && punchOut) {
-            const hoursWorked = (punchOut.getTime() - punchIn.getTime()) / (1000 * 60 * 60);
-            otHours = Math.max(0, hoursWorked - 8);
+            // Elapsed clock time between punches. Employees don't punch out for
+            // their break, so this span INCLUDES the break — compare it against
+            // the shift's full in→out span (break included), not the paid net.
+            const workedMin = (punchOut.getTime() - punchIn.getTime()) / 60000;
+            const shiftSpanMin = shiftGrossMinutes(
+              record.shiftStartTime, record.shiftEndTime,
+              record.shiftCrossesMidnight, 0
+            );
+            // No shift info → fall back to an 8h (480 min) baseline.
+            const baseline = shiftSpanMin ?? 480;
+            const thresholdMin = Number(record.shiftOtThresholdMin) || 0;
+            const overMin = workedMin - baseline;
+            otHours = overMin > thresholdMin ? Math.max(0, overMin) / 60 : 0;
           }
           
           return {
@@ -275,7 +341,10 @@ export default function AttendanceModule() {
             timeOut: punchOut ? punchOut.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : null,
             otHours: Math.round(otHours * 10) / 10, // Round to 1 decimal
             shift: record.shiftName || null,
-            status: record.status === 'present' ? 'Present' : record.status === 'absent' ? 'Absent' : 'Present',
+            // Preserve the real classification instead of collapsing everything
+            // that isn't 'present'/'absent' into 'Present' (which hid Late,
+            // Half Day and On Leave and broke the stat counts).
+            status: STATUS_LABELS[String(record.status)] || 'Present',
             employee: {
               id: record.employeeId?.toString() || '',
               empId: record.Employee?.employeeCode || '',
@@ -288,7 +357,7 @@ export default function AttendanceModule() {
       else throw new Error(json.error || 'Unknown error');
     } catch (err) { setError(err instanceof Error ? err.message : 'Something went wrong'); }
     finally { setLoading(false); }
-  }, []);
+  }, [dateRangeMode, dateFilter, fromDate, toDate]);
 
   const fetchEmployees = useCallback(async () => {
     try {
@@ -299,6 +368,8 @@ export default function AttendanceModule() {
           id: e.id.toString(),
           empId: e.employeeCode,
           name: `${e.firstName} ${e.lastName}`,
+          site: e.Branch?.name || undefined,
+          isActive: e.isActive !== false,
         }));
         setEmployeeList(mappedEmployees);
       }
@@ -317,16 +388,8 @@ export default function AttendanceModule() {
     try {
       const res = await fetch('/api/biometric/sites-list');
       const json = await res.json();
-      console.log('🔍 Biometric sites API response:', json);
-      if (json.success) {
-        console.log('✅ Active biometric sites loaded:', json.data.length, json.data);
-        setBiometricSites(json.data);
-      } else {
-        console.error('❌ Failed to fetch biometric sites:', json.error);
-      }
-    } catch (error) {
-      console.error('❌ Error fetching biometric sites:', error);
-    }
+      if (json.success) setBiometricSites(json.data);
+    } catch { /* silent — biometric sites are optional */ }
   }, []);
 
   // When employee changes in the form, auto-populate their active shift assignment
@@ -350,62 +413,117 @@ export default function AttendanceModule() {
   useEffect(() => { fetchData(); fetchEmployees(); fetchShifts(); fetchBiometricSites(); }, [fetchData, fetchEmployees, fetchShifts, fetchBiometricSites]);
 
   const filteredRecords = useMemo(() => {
-    if (!dateFilter) return records;
-    
-    const filtered = records.filter(r => r.date === dateFilter);
-    
-    // For future dates, show all employees with "—" status
-    if (isFutureDate(dateFilter)) {
-      // Create attendance records for all employees with pending status
-      const employeeRecordsMap = new Map(filtered.map(r => [r.empId, r]));
-      
-      const allEmployeeRecords = employeeList.map(emp => {
-        const existingRecord = employeeRecordsMap.get(emp.id);
-        if (existingRecord) {
-          return existingRecord;
-        }
-        
-        // Create a placeholder record for employees without attendance
-        return {
-          id: `future-${emp.id}-${dateFilter}`,
-          empId: emp.id,
-          site: '—',
+    // 1) Narrow the real attendance records to the selected date window.
+    let dated = records;
+    if (dateRangeMode) {
+      dated = dated.filter(r => r.date >= fromDate && r.date <= toDate);
+    } else if (dateFilter) {
+      dated = dated.filter(r => r.date === dateFilter);
+    }
+
+    // 2) In SINGLE-date mode, append a synthesized row for every active
+    //    employee who has NO record that day — 'Absent' for a past/today date
+    //    (they didn't punch in) or 'pending' for a future date (not due yet).
+    //    Absent members are listed AFTER the ones who have records, so they can
+    //    be seen, filtered and exported. Absent has no biometric row of its own,
+    //    so this is the only place they can surface.
+    let combined = dated;
+    if (!dateRangeMode && dateFilter) {
+      const haveRecord = new Set(dated.map(r => r.employee.id));
+      const future = isFutureDate(dateFilter);
+      // Future date → 'pending' (not due yet). Today or a past date with no
+      // record → 'Absent' so they list after the present rows and the "Absent"
+      // status filter/stat can surface them. (For today the row badge still
+      // shows "—" via getDisplayStatus, since the day isn't over — the 'Absent'
+      // value drives filtering/counting, not the visible badge.)
+      const syntheticStatus = future ? 'pending' : 'Absent';
+      const synthetic = employeeList
+        .filter(emp => emp.isActive !== false && !haveRecord.has(emp.id))
+        .map(emp => ({
+          id: `${future ? 'pending' : 'absent'}-${emp.id}-${dateFilter}`,
+          empId: emp.empId,
+          site: emp.site || '—',
           date: dateFilter,
           timeIn: null,
           timeOut: null,
           otHours: 0,
           shift: null,
-          status: 'pending',
+          status: syntheticStatus,
           employee: emp,
-        } as AttendanceRecord;
-      });
-      
-      return allEmployeeRecords;
+        }) as AttendanceRecord);
+      combined = [...dated, ...synthetic]; // present first, absent/pending after
     }
-    
+
+    let filtered = combined;
+
+    // Search by name or employee code
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(r =>
+        r.employee.name.toLowerCase().includes(q) ||
+        r.employee.empId.toLowerCase().includes(q) ||
+        (r.empId || '').toLowerCase().includes(q)
+      );
+    }
+
+    // Site / branch filter
+    if (siteFilter !== 'all') {
+      filtered = filtered.filter(r => r.site === siteFilter);
+    }
+
+    // Status filter — runs AFTER synthetic absent rows are added, so selecting
+    // "Absent" returns the no-record employees (not the present ones). A record
+    // that has a punch-in but was rule-stamped 'Absent' (arrived past the
+    // absent-after cutoff) is treated as 'Present' here, so the filter stays
+    // consistent with the row badge and the Present/Absent stat counts.
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(r => {
+        const effective = (r.status === 'Absent' && r.timeIn) ? 'Present' : r.status;
+        return effective.toLowerCase() === statusFilter.toLowerCase();
+      });
+    }
+
     return filtered;
-  }, [records, dateFilter, employeeList]);
+  }, [records, dateFilter, dateRangeMode, fromDate, toDate, search, siteFilter, statusFilter, employeeList]);
 
   // Calculate statistics
   const stats = useMemo(() => {
-    const presentToday = filteredRecords.filter(r => r.status === 'Present').length;
+    // A physical punch-in means the person showed up. The attendance-rule engine
+    // can stamp a punched-in record 'absent' (arrived past the absent-after
+    // cutoff), but for the headcount they still attended, so anyone with a
+    // timeIn counts as present — matching the row badge, which also never shows
+    // Absent for a punched-in record. On Leave / Half Day are their own buckets.
+    const hasPunchIn = (r: AttendanceRecord) => Boolean(r.timeIn);
+
+    // Present = anyone who physically attended: has a punch-in, OR carries a
+    // worked status (present/late/half-day) even without a parsed timeIn.
+    const presentToday = filteredRecords.filter(
+      r => (hasPunchIn(r) || WORKED_STATUSES.has(r.status)) && r.status !== 'On Leave'
+    ).length;
     const onLeave = filteredRecords.filter(r => r.status === 'On Leave').length;
-    
-    // Calculate OT workers (worked more than 8 hours)
-    const otWorkers = filteredRecords.filter(r => {
-      if (!r.timeIn || !r.timeOut) return false;
-      const inTime = new Date(`2000-01-01 ${r.timeIn}`);
-      const outTime = new Date(`2000-01-01 ${r.timeOut}`);
-      const hoursWorked = (outTime.getTime() - inTime.getTime()) / (1000 * 60 * 60);
-      return hoursWorked > 8;
-    }).length;
-    
-    // Calculate absent: Total active employees - (Present + On Leave)
-    const totalActiveEmployees = employeeList.length;
-    const absent = Math.max(0, totalActiveEmployees - presentToday - onLeave);
-    
+
+    // OT workers: records carrying overtime hours (computed server-side against
+    // the shift). Falls back to the record's otHours field.
+    const otWorkers = filteredRecords.filter(r => Number(r.otHours) > 0).length;
+
+    // Absent is only meaningful for a single (non-future) day. Count 'Absent'
+    // rows — the synthetic no-record employees plus any rule-engine 'absent' —
+    // but exclude anyone who actually punched in (they're counted as present
+    // above, so counting them here too would double-count and mislead).
+    let absent = -1;
+    if (!dateRangeMode && dateFilter && !isFutureDate(dateFilter)) {
+      absent = filteredRecords.filter(r => r.status === 'Absent' && !hasPunchIn(r)).length;
+    }
+
     return { presentToday, absent, onLeave, otWorkers };
-  }, [filteredRecords, employeeList]);
+  }, [filteredRecords, dateFilter, dateRangeMode]);
+
+  // Dynamic filter options derived from loaded records
+  const siteOptions = useMemo(() =>
+    [...new Set(records.map(r => r.site).filter(s => s && s !== 'N/A' && s !== '—'))].sort(),
+  [records]);
+
+  const statusOptions = ['Present', 'Absent', 'Late', 'On Leave', 'Half Day'];
 
   const { presentToday, absent, onLeave, otWorkers } = stats;
 
@@ -727,7 +845,7 @@ export default function AttendanceModule() {
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Users} label="Present" value={presentToday} color="#00e676" />
-        <StatCard icon={UserX} label="Absent" value={absent} color="#ff3d3d" />
+        <StatCard icon={UserX} label="Absent" value={absent < 0 ? '—' : absent} color="#ff3d3d" />
         <StatCard icon={CalendarOff} label="On Leave" value={onLeave} color="#ffab40" />
         <StatCard icon={Clock} label="OT Workers" value={otWorkers} color="#00d4ff" />
       </div>
@@ -737,18 +855,107 @@ export default function AttendanceModule() {
           <Clock size={14} className="text-[#f5a623]" />
           <span className="text-[13px] font-semibold" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>ATTENDANCE LOG</span>
           <div className="ml-auto flex items-center gap-2">
-            <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-1">
-              <span className="text-[10px] text-[#5a6878]">Date:</span>
-              <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="bg-transparent border-none text-[#e2e8f0] outline-none text-[11px]" />
+            {/* Date filter mode toggle */}
+            <div className="flex items-center gap-1 bg-[#141920] border border-[#2e3a48] rounded-md p-0.5">
+              <button
+                onClick={() => setDateRangeMode(false)}
+                className={`px-2.5 py-1 rounded text-[9px] font-semibold uppercase tracking-wide transition-all ${
+                  !dateRangeMode
+                    ? 'bg-[#f5a623] text-black'
+                    : 'text-[#8899aa] hover:text-[#e2e8f0]'
+                }`}
+              >
+                Single Date
+              </button>
+              <button
+                onClick={() => setDateRangeMode(true)}
+                className={`px-2.5 py-1 rounded text-[9px] font-semibold uppercase tracking-wide transition-all ${
+                  dateRangeMode
+                    ? 'bg-[#f5a623] text-black'
+                    : 'text-[#8899aa] hover:text-[#e2e8f0]'
+                }`}
+              >
+                Date Range
+              </button>
             </div>
+            
+            {/* Date inputs */}
+            {dateRangeMode ? (
+              <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-1">
+                <span className="text-[10px] text-[#5a6878]">From:</span>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={e => setFromDate(e.target.value)}
+                  className="bg-transparent border-none text-[#e2e8f0] outline-none text-[11px] w-[110px]"
+                />
+                <span className="text-[10px] text-[#5a6878]">To:</span>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={e => setToDate(e.target.value)}
+                  className="bg-transparent border-none text-[#e2e8f0] outline-none text-[11px] w-[110px]"
+                />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-md px-3 py-1">
+                <span className="text-[10px] text-[#5a6878]">Date:</span>
+                <input
+                  type="date"
+                  value={dateFilter}
+                  onChange={e => setDateFilter(e.target.value)}
+                  className="bg-transparent border-none text-[#e2e8f0] outline-none text-[11px]"
+                />
+              </div>
+            )}
+            
             <span className="text-[10px] text-[#5a6878]">{filteredRecords.length} records</span>
           </div>
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={openCreate}><Plus size={13} /> New Record</button>
+        </div>
+        {/* ── Search & filter toolbar ── */}
+        <div className="px-4 py-3 border-b border-[#252e3a] flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-lg px-3 py-[6px] flex-1 min-w-[180px] max-w-[320px]">
+            <Search size={13} className="text-[#5a6878] shrink-0" />
+            <input
+              type="text"
+              placeholder="Search by name or emp ID…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="bg-transparent border-none text-[#e2e8f0] outline-none text-[12px] w-full placeholder:text-[#5a6878]"
+            />
+            {search && <button onClick={() => setSearch('')} className="text-[#5a6878] hover:text-[#e2e8f0]"><X size={12} /></button>}
+          </div>
+          {[
+            { value: siteFilter,   set: setSiteFilter,   label: 'All Sites',   options: siteOptions },
+            { value: statusFilter, set: setStatusFilter, label: 'All Status',  options: statusOptions },
+          ].map((f, i) => (
+            <div key={i} className="relative">
+              <select
+                value={f.value}
+                onChange={e => f.set(e.target.value)}
+                className="vc-input appearance-none pr-7 min-w-[130px] cursor-pointer text-[12px]"
+              >
+                <option value="all">{f.label}</option>
+                {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+              <ChevronDown size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#5a6878] pointer-events-none" />
+            </div>
+          ))}
+          {(search || siteFilter !== 'all' || statusFilter !== 'all') && (
+            <button
+              onClick={() => { setSearch(''); setSiteFilter('all'); setStatusFilter('all'); }}
+              className="text-[10px] text-[#5a6878] hover:text-[#ff3d3d] transition-colors"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
         <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 bg-[#161c24] z-10">
               <tr className="border-b border-[#252e3a]">
+                <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Date</th>
                 <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Emp ID</th>
                 <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Employee</th>
                 <th className="text-center py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">Site</th>
@@ -762,14 +969,34 @@ export default function AttendanceModule() {
             </thead>
             <tbody>
               {filteredRecords.length === 0 ? (
-                <tr><td colSpan={9} className="py-8 text-center text-[#5a6878] text-[11px]">No attendance records for this date.</td></tr>
+                <tr><td colSpan={10} className="py-8 text-center text-[#5a6878] text-[11px]">No attendance records for this {dateRangeMode ? 'date range' : 'date'}.</td></tr>
               ) : filteredRecords.map(r => {
                 const statusLabel = getStatusLabel(r);
                 const statusColorClass = statusColor(r);
                 const shouldShowStatus = statusLabel !== '—';
                 
+                // Format date for display (e.g., "15 Jan" or "15 Jan 2024" if not current year)
+                const recordDate = new Date(r.date);
+                const currentYear = new Date().getFullYear();
+                const dateDisplay = recordDate.toLocaleDateString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  ...(recordDate.getFullYear() !== currentYear ? { year: 'numeric' } : {})
+                });
+                
+                // Highlight today's date
+                const isDateToday = r.date === new Date().toISOString().split('T')[0];
+                
                 return (
                   <tr key={r.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors group">
+                    <td className="py-2.5 px-3 text-[10px] font-medium" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
+                      <span className={isDateToday ? 'text-[#00e676] font-semibold' : 'text-[#8899aa]'}>
+                        {dateDisplay}
+                      </span>
+                      {isDateToday && (
+                        <span className="ml-1 text-[8px] text-[#00e676] uppercase tracking-wider">Today</span>
+                      )}
+                    </td>
                     <td className="py-2.5 px-3 text-[10px] text-[#8899aa]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{r.employee.empId}</td>
                     <td className="py-2.5 px-3 text-[#e2e8f0] font-medium">{r.employee.name}</td>
                     <td className="py-2.5 px-3 text-[#8899aa] text-center">{r.site}</td>

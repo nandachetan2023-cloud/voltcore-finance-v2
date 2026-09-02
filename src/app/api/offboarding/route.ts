@@ -1,6 +1,13 @@
 import { getDbForRequest } from '@/lib/db'
 import { superadminDb } from '@/lib/superadmin-db'
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  getRoleScope,
+  isInScope,
+  isUniversalScope,
+  loadScopeSubject,
+  type RoleScope,
+} from '@/lib/services/approval-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +20,7 @@ async function getCurrentUserContext(request: NextRequest, db: any) {
 
   // superadmin / admin (all-access) role → treat as admin
   if (roleCookie === 'admin' || roleCookie === 'superadmin') {
-    return { isAdmin: true, deptName: null, employeeId: null }
+    return { isAdmin: true, deptName: null, employeeId: null, roleScope: null as RoleScope | null }
   }
 
   // Try to resolve department from linked employee record
@@ -33,6 +40,7 @@ async function getCurrentUserContext(request: NextRequest, db: any) {
 
   // Check OrgRole level via superadmin DB — level 1 = department-scoped approver
   let isLevel1 = false
+  let roleScope: RoleScope | null = null
   if (emailCookie && tenantId) {
     try {
       const tenantUser = await superadminDb.tenantUser.findFirst({
@@ -42,21 +50,28 @@ async function getCurrentUserContext(request: NextRequest, db: any) {
       if (tenantUser?.orgRoleId) {
         const orgRole = await superadminDb.orgRole.findUnique({
           where: { id: tenantUser.orgRoleId },
-          select: { level: true, departments: true },
+          select: { level: true, departments: true, designations: true, branches: true },
         })
         if (orgRole) {
           isLevel1 = orgRole.level === 1
-          // If OrgRole has explicit departments, use those to override
+          roleScope = {
+            departments: orgRole.departments,
+            designations: orgRole.designations,
+            branches: (orgRole as any).branches ?? '',
+          }
+          // Clearance rows are matched by department NAME, so a dept-scoped role
+          // still needs a single dept for that comparison. Site/designation
+          // scoping is applied separately against the resigning employee.
           if (orgRole.departments && orgRole.departments.trim()) {
-            const roleDepts = orgRole.departments.split(',').map((d: string) => d.toLowerCase().trim())
-            if (roleDepts.length > 0 && roleDepts[0]) deptName = roleDepts[0]
+            const roleDepts = orgRole.departments.split(',').map((d: string) => d.toLowerCase().trim()).filter(Boolean)
+            if (roleDepts.length > 0) deptName = roleDepts[0]
           }
         }
       }
     } catch {}
   }
 
-  return { isAdmin: false, deptName, employeeId, isLevel1 }
+  return { isAdmin: false, deptName, employeeId, isLevel1, roleScope }
 }
 
 // A non-admin user can approve a clearance only if:
@@ -69,6 +84,22 @@ function userCanApproveClearance(
   if (userCtx.isAdmin) return true
   if (!userCtx.deptName || !userCtx.isLevel1) return false
   return clearanceDept.toLowerCase().trim() === userCtx.deptName.toLowerCase().trim()
+}
+
+// Role scope identifies the APPROVER, not the people they may act on, so it
+// is checked against the caller's own record — never the resigning employee's.
+// (Clearance rows are still matched to the caller's department by
+// userCanApproveClearance above; that is a different, legitimate check.)
+async function callerMatchesTheirRoleScope(
+  db: any,
+  userCtx: { isAdmin: boolean; roleScope?: RoleScope | null; employeeId?: number | null },
+): Promise<boolean> {
+  if (userCtx.isAdmin) return true
+  if (isUniversalScope(userCtx.roleScope)) return true
+  if (!userCtx.employeeId) return true
+  const subject = await loadScopeSubject(db, userCtx.employeeId)
+  if (!subject) return true // unreadable — the explicit role assignment stands
+  return isInScope(userCtx.roleScope!, subject)
 }
 
 export async function GET(request: NextRequest) {
@@ -102,9 +133,19 @@ export async function GET(request: NextRequest) {
     // Resolve current user context to tell the UI what they can approve
     const userCtx = await getCurrentUserContext(request, db)
 
+    // The role scope describes the approver, so it is a property of the CALLER
+    // and identical for every row — evaluate it once. A caller who does not
+    // match their own role's scope sees no approval queue at all. Self-lookups
+    // (?employeeId=…) are the requester's own view and stay unfiltered.
+    let visible = resignations
+    if (!employeeId && !userCtx.isAdmin && !isUniversalScope(userCtx.roleScope)) {
+      const callerOk = await callerMatchesTheirRoleScope(db, userCtx)
+      visible = callerOk ? resignations : []
+    }
+
     return NextResponse.json({
       success: true,
-      data: resignations,
+      data: visible,
       currentUser: {
         isAdmin: userCtx.isAdmin,
         deptName: userCtx.deptName,
@@ -197,6 +238,19 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ success: false, error: reason }, { status: 403 })
       }
 
+      // Role scope gate — the resigning employee must be inside the approver's
+      // department/designation/site scope, not just the clearance department.
+      const parentResignation = await db.resignation.findUnique({
+        where: { id: existing.resignationId },
+        select: { employeeId: true },
+      })
+      if (parentResignation && !(await callerMatchesTheirRoleScope(db, userCtx))) {
+        return NextResponse.json(
+          { success: false, error: 'This resignation is outside your assigned department/designation/site scope.' },
+          { status: 403 }
+        )
+      }
+
       const clearance = await db.exitClearance.update({
         where: { id: parseInt(clearanceId) },
         data: {
@@ -222,6 +276,25 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (!id || !action) return NextResponse.json({ success: false, error: 'id and action required' }, { status: 400 })
+
+    // Role scope gate on resignation-level actions (manager/HR approve, reject).
+    // "withdraw" is the employee retracting their own resignation, so it is not
+    // an approver action and is left to the existing ownership rules.
+    if (action !== 'withdraw') {
+      const actionCtx = await getCurrentUserContext(request, db)
+      if (!actionCtx.isAdmin && !isUniversalScope(actionCtx.roleScope)) {
+        const target = await db.resignation.findUnique({
+          where: { id: parseInt(id) },
+          select: { employeeId: true },
+        })
+        if (!target || !(await callerMatchesTheirRoleScope(db, actionCtx))) {
+          return NextResponse.json(
+            { success: false, error: 'This resignation is outside your assigned department/designation/site scope.' },
+            { status: 403 }
+          )
+        }
+      }
+    }
 
     const updateData: any = { updatedAt: new Date() }
     if (action === 'approve_manager') { updateData.managerApprovedAt = new Date(); updateData.currentStep = 2 }

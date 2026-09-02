@@ -65,6 +65,8 @@ export default function OnboardingForm({ status, onSubmit, onLogout }: Onboardin
     docPhotograph: null as any, docFamilyPhoto: null as any,
     // Nomination
     nomineeName: '', nomineeRelation: '', nomineeAddress: '',
+    // Emergency Contact
+    emergencyContactName: '', emergencyContactRelation: '', emergencyContactPhone: '',
     // Declaration
     declarationAgreed: false,
   });
@@ -507,6 +509,24 @@ function FamilyStep({ form, update }: { form: any; update: (f: string, v: any) =
             </select>
           </Field>
           <Field label="Nominee Address" span2><input className={inp} value={form.nomineeAddress} onChange={e => update('nomineeAddress', e.target.value)} placeholder="Full address of nominee" /></Field>
+        </div>
+      </div>
+      <div className="border-t border-[#252e3a] pt-4">
+        <h3 className="text-[12px] font-semibold text-[#e2e8f0] mb-3">Emergency Contact</h3>
+        <p className="text-[10px] text-[#5a6878] mb-3">Person to be contacted in case of emergency at the workplace.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Contact Name"><input className={inp} value={form.emergencyContactName} onChange={e => update('emergencyContactName', e.target.value)} placeholder="Spouse / Parent name" /></Field>
+          <Field label="Relationship">
+            <select className={inp} value={form.emergencyContactRelation} onChange={e => update('emergencyContactRelation', e.target.value)}>
+              <option value="">Select</option>
+              <option value="Father">Father</option><option value="Mother">Mother</option>
+              <option value="Husband">Husband</option><option value="Wife">Wife</option>
+              <option value="Son">Son</option><option value="Daughter">Daughter</option>
+              <option value="Brother">Brother</option><option value="Sister">Sister</option>
+              <option value="Other">Other</option>
+            </select>
+          </Field>
+          <Field label="Phone" span2><input className={inp} value={form.emergencyContactPhone} onChange={e => update('emergencyContactPhone', e.target.value)} placeholder="+91 98765 43210" type="tel" /></Field>
         </div>
       </div>
     </div>

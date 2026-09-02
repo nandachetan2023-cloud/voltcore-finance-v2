@@ -35,12 +35,20 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({ success: true, user })
 
+    // Session cookies — no maxAge means they expire when browser is closed.
+    // Client-side inactivity timer handles the 30-minute auto-logout.
     const cookieOpts = {
       httpOnly: true,
       sameSite: 'lax' as const,
       path: '/',
-      maxAge: 60 * 60 * 24, // 24 hours
+      // No maxAge → session cookie → cleared on browser close
     }
+
+    // JS-readable session marker (NOT httpOnly). Like the others it's a session
+    // cookie, so a full browser close clears it. The client checks for it on load
+    // and, if it's gone while localStorage still holds the user, forces a logout —
+    // this is what actually sends a returning user back to the login screen.
+    response.cookies.set('erp_session', '1', { sameSite: 'lax', path: '/' })
 
     // Role cookie (superadmin | admin | demo)
     response.cookies.set('erp_user_role', user.role, cookieOpts)

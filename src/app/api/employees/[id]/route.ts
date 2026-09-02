@@ -28,6 +28,7 @@ export async function GET(
         dateOfBirth: true,
         gender: true,
         employmentType: true,
+        otType: true,
         employmentStatus: true,
         dateOfJoining: true,
         uanNumber: true,

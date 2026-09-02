@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Calendar, Plus, Edit2, Trash2, Building2, Globe } from 'lucide-react';
+import { Calendar, Plus, Edit2, Trash2, Building2, Globe, Check } from 'lucide-react';
+import { SearchInput, matchesSearch } from './search-input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -34,7 +35,11 @@ interface HolidayFormData {
   description: string;
   isRecurring: boolean;
   applicableTo: string;
+  /** Edit form only — one Holiday row targets exactly one site. */
   branchId: string;
+  /** Create form only — declare the holiday at several sites at once.
+   *  Empty means company-wide (a single row with branchId null). */
+  branchIds: number[];
 }
 
 const EMPTY_FORM: HolidayFormData = {
@@ -45,6 +50,7 @@ const EMPTY_FORM: HolidayFormData = {
   isRecurring: false,
   applicableTo: 'all',
   branchId: '',
+  branchIds: [],
 };
 
 function LoadingSkeleton() {
@@ -86,6 +92,7 @@ function getMonthName(dateStr: string): string {
 
 export default function HolidaysModule() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [search, setSearch] = useState('');
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
@@ -127,18 +134,24 @@ export default function HolidaysModule() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Group holidays by month
+  // Live search over holidays (name, type, description, branch, date).
+  const filteredHolidays = useMemo(
+    () => holidays.filter(h => matchesSearch(search, [h.name, h.type, h.description, h.Branch?.name, h.date])),
+    [holidays, search]
+  );
+
+  // Group the (filtered) holidays by month
   const holidaysByMonth = useMemo(() => {
     const grouped: Record<string, Holiday[]> = {};
-    holidays.forEach(holiday => {
+    filteredHolidays.forEach(holiday => {
       const month = getMonthName(holiday.date);
       if (!grouped[month]) grouped[month] = [];
       grouped[month].push(holiday);
     });
     return grouped;
-  }, [holidays]);
+  }, [filteredHolidays]);
 
-  const updateForm = (field: keyof HolidayFormData, value: string | boolean) => {
+  const updateForm = (field: keyof HolidayFormData, value: string | boolean | number[]) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
@@ -156,7 +169,9 @@ export default function HolidaysModule() {
         description: form.description || null,
         isRecurring: form.isRecurring,
         applicableTo: form.applicableTo,
-        branchId: form.branchId ? parseInt(form.branchId) : null,
+        // Empty selection = company-wide, which the API stores as a single row
+        // with branchId null. Otherwise one row is created per selected site.
+        branchIds: form.branchIds,
       };
       
       const res = await fetch('/api/holidays', {
@@ -167,7 +182,14 @@ export default function HolidaysModule() {
       const json = await res.json();
       
       if (json.success) {
-        toast.success('Holiday created successfully');
+        const n = typeof json.created === 'number' ? json.created : 1;
+        const skipped = typeof json.skipped === 'number' ? json.skipped : 0;
+        toast.success(
+          n > 1 ? `Holiday created for ${n} sites` : 'Holiday created successfully',
+          skipped > 0
+            ? { description: `${skipped} site${skipped > 1 ? 's' : ''} already had this holiday on that date.` }
+            : undefined
+        );
         setCreateOpen(false);
         setForm(EMPTY_FORM);
         await fetchData();
@@ -261,6 +283,7 @@ export default function HolidaysModule() {
       isRecurring: holiday.isRecurring,
       applicableTo: holiday.applicableTo,
       branchId: holiday.branchId?.toString() || '',
+      branchIds: [],
     });
     setEditOpen(true);
   };
@@ -341,8 +364,16 @@ export default function HolidaysModule() {
         </div>
       </div>
 
+      {/* Search */}
+      {holidays.length > 0 && (
+        <SearchInput value={search} onChange={setSearch} placeholder="Search holidays by name, type, branch..." />
+      )}
+
       {/* Holidays by Month */}
       <div className="space-y-6">
+        {holidays.length > 0 && filteredHolidays.length === 0 && (
+          <div className="text-center py-10 text-[#5a6878] text-[12px]">No holidays match &quot;{search}&quot;.</div>
+        )}
         {Object.entries(holidaysByMonth).map(([month, monthHolidays]) => (
           <div key={month}>
             <h3 className="text-[14px] font-semibold text-[#e2e8f0] mb-3">{month}</h3>
@@ -456,25 +487,73 @@ export default function HolidaysModule() {
             </div>
             <div>
               <Label className="text-[11px] text-[#8899aa]">Applicable To</Label>
-              <Select value={form.branchId || 'all'} onValueChange={(v) => updateForm('branchId', v === 'all' ? '' : v)}>
-                <SelectTrigger className="bg-[#141920] border-[#2e3a48] text-[#e2e8f0] mt-1">
-                  <SelectValue placeholder="All branches (company-wide)" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1a2332] border-[#2e3a48]">
-                  <SelectItem value="all" className="text-[#e2e8f0]">
-                    <span className="flex items-center gap-2"><Globe className="w-3 h-3 text-[#00e676]" /> All Branches (Company-wide)</span>
-                  </SelectItem>
-                  {branches.map(b => (
-                    <SelectItem key={b.id} value={b.id.toString()} className="text-[#e2e8f0]">
-                      <span className="flex items-center gap-2"><Building2 className="w-3 h-3 text-[#00d4ff]" /> {b.name}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Multi-select: one Holiday row is created per site chosen.
+                  Nothing selected = company-wide (a single row, branchId null). */}
+              <div className="mt-1 rounded-lg border border-[#2e3a48] bg-[#141920] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => updateForm('branchIds', [])}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] transition-colors border-b border-[#2e3a48] ${
+                    form.branchIds.length === 0
+                      ? 'bg-[#00e676]/10 text-[#00e676]'
+                      : 'text-[#8899aa] hover:bg-[#1a2332]'
+                  }`}
+                >
+                  <Globe className="w-3 h-3 shrink-0" />
+                  <span className="font-semibold">All Sites (Company-wide)</span>
+                  {form.branchIds.length === 0 && <Check className="w-3 h-3 ml-auto shrink-0" />}
+                </button>
+
+                <div className="max-h-[168px] overflow-y-auto">
+                  {branches.length === 0 ? (
+                    <p className="px-3 py-2 text-[10px] text-[#5a6878]">No sites configured.</p>
+                  ) : branches.map(b => {
+                    const checked = form.branchIds.includes(b.id);
+                    return (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => updateForm(
+                          'branchIds',
+                          checked
+                            ? form.branchIds.filter(id => id !== b.id)
+                            : [...form.branchIds, b.id]
+                        )}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] transition-colors ${
+                          checked ? 'bg-[#00d4ff]/10 text-[#e2e8f0]' : 'text-[#8899aa] hover:bg-[#1a2332]'
+                        }`}
+                      >
+                        <span className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center ${
+                          checked ? 'bg-[#00d4ff] border-[#00d4ff]' : 'border-[#3a4757]'
+                        }`}>
+                          {checked && <Check className="w-2.5 h-2.5 text-[#0d1117]" strokeWidth={3} />}
+                        </span>
+                        <Building2 className="w-3 h-3 shrink-0 text-[#00d4ff]" />
+                        <span className="truncate">{b.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {form.branchIds.length > 0 && (
+                  <div className="flex items-center justify-between px-3 py-1.5 border-t border-[#2e3a48] bg-[#11161d]">
+                    <span className="text-[9px] text-[#8899aa]">
+                      {form.branchIds.length} site{form.branchIds.length > 1 ? 's' : ''} selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => updateForm('branchIds', [])}
+                      className="text-[9px] text-[#5a6878] hover:text-[#ff3d3d] transition-colors"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
               <p className="text-[9px] text-[#5a6878] mt-1">
-                {form.branchId
-                  ? `Only employees at ${branches.find(b => b.id.toString() === form.branchId)?.name || 'this branch'} will observe this holiday.`
-                  : 'All employees across all branches will observe this holiday.'}
+                {form.branchIds.length === 0
+                  ? 'All employees across all sites will observe this holiday.'
+                  : `A separate holiday entry is created for each selected site, so each can be edited or removed on its own later.`}
               </p>
             </div>
             <div>

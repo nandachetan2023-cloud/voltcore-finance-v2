@@ -4,16 +4,17 @@ export type UserRole = 'superadmin' | 'admin' | 'demo';
 
 // All top-level modules and their sub-modules for access checking
 export const MODULE_TREE: Record<string, string[]> = {
-  organization: ['organization', 'departments', 'designations', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents'],
+  organization: ['organization', 'departments', 'designations', 'payroll-sites', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents', 'roles-access'],
   hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
-  procurement: ['procurement', 'procurement-pr', 'procurement-rfq', 'procurement-po-register', 'procurement-vendors', 'procurement-material-tracking', 'procurement-subcontracts', 'po-approval-stepper', 'rfq-comparison-matrix', 'grn-3way-match'],
+  procurement: ['procurement', 'purchases', 'expenses', 'procurement-pr', 'procurement-rfq', 'procurement-po-register', 'procurement-vendors', 'procurement-material-tracking', 'procurement-subcontracts', 'po-approval-stepper', 'rfq-comparison-matrix', 'grn-3way-match'],
+  finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
   sales: ['sales', 'sales-tax-invoices', 'sales-orders', 'sales-quotations', 'fin-credit-notes', 'sales-opportunity-pipeline', 'sales-tender-register', 'sales-revenue-forecast', 'sales-client-accounts'],
   projects: ['projects', 'project-list', 'project-hierarchy', 'budget', 'boq-entry', 'job-progress', 'sites', 'scrap-entry'],
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
   // A dedicated "self-service" group for employees
-  'self-service': ['my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
+  'self-service': ['my-dashboard', 'my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
   system: ['system', 'reports', 'settings', 'user-management', 'onboarding-approvals', 'requests', 'notice-board'],
-  reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
+  reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
   // Category groups (like HRMS / Organization)
   'login-role': ['fin-user-management'],
   'master-setup': ['fin-sites', 'fin-jobs', 'fin-parties', 'procurement-vendors', 'employees', 'chart-of-accounts'],
@@ -34,7 +35,15 @@ Object.entries(MODULE_TREE).forEach(([parent, children]) => {
 })
 
 // Check if a module is accessible given an allowedModules string
+// Modules every authenticated account can reach regardless of its grants.
+// A notification is addressed to one person, so withholding the screen would
+// only hide mail that is already theirs — and the module shows nothing but
+// their own rows. Admins in particular may hold no self-service grant yet are
+// the sole recipients of the broadcast inbox.
+export const UNIVERSAL_MODULES = ['notifications']
+
 export function isModuleAllowed(moduleId: string, allowedModules: string): boolean {
+  if (UNIVERSAL_MODULES.includes(moduleId)) return true
   if (!allowedModules || allowedModules === 'all') return true
   const allowed = allowedModules.split(',').map(s => s.trim()).filter(Boolean)
 
@@ -69,7 +78,7 @@ export type ModuleId =
   | 'reports' | 'settings'
   | 'report-manpower' | 'report-attendance' | 'report-payroll' | 'report-leave'
   | 'report-late-fine' | 'report-onboarding' | 'report-turnover' | 'report-training'
-  | 'report-notices' | 'report-dispatch'
+  | 'report-notices' | 'report-dispatch' | 'report-tour'
   // Analytics pages
   | 'employee-analytics'
   // Timesheet
@@ -96,7 +105,7 @@ export type ModuleId =
   | 'job-progress'
   // Organization sub-modules
   | 'departments' | 'designations' | 'holidays' | 'leave-policies' | 'attendance-rules'
-  | 'employee-documents'
+  | 'employee-documents' | 'roles-access' | 'payroll-sites'
   // Biometric
   | 'biometric'
   // Admin
@@ -105,12 +114,14 @@ export type ModuleId =
   | 'user-management'
   | 'onboarding-approvals'
   // Employee self-service
+  | 'my-dashboard'
   | 'my-attendance'
   | 'my-leave'
   | 'my-tours'
   | 'my-requests'
   | 'my-profile'
   | 'my-notices'
+  | 'notifications'
   | 'my-payslips'
   | 'my-documents'
   | 'my-shifts'
@@ -154,6 +165,8 @@ export const DEMO_ALLOWED_MODULES: Set<string> = new Set([
 export const MAIN_MODULES: NavItem[] = [
   { id: 'organization', icon: 'Building2', label: 'Organization' },
   { id: 'hrms', icon: 'Users', label: 'HRMS' },
+  { id: 'procurement', icon: 'ShoppingCart', label: 'Procurement' },
+  { id: 'finance', icon: 'CreditCard', label: 'Finance' },
   { id: 'login-role', icon: 'LogIn', label: 'Login & Role' },
   { id: 'master-setup', icon: 'Layers', label: 'Master Setup' },
   { id: 'purchase', icon: 'ShoppingCart', label: 'Purchase' },
@@ -166,17 +179,24 @@ export const MAIN_MODULES: NavItem[] = [
   { id: 'assets', icon: 'Wrench', label: 'Assets' },
   { id: 'system', icon: 'Settings', label: 'System' },
   { id: 'self-service', icon: 'UserCircle', label: 'My Portal' },
+  // Notifications is a personal inbox every account has, so it is a top-level
+  // page module rather than a child of My Portal — an admin whose grants do
+  // not include self-service must still be able to read their own
+  // notifications, and admins are the ones who receive the broadcast inbox.
+  { id: 'notifications', icon: 'Bell', label: 'Notifications' },
 ];
 
 export const SUB_MODULES: Record<string, NavItem[]> = {
   organization: [
     { id: 'departments', icon: 'Building2', label: 'Departments' },
     { id: 'designations', icon: 'Award', label: 'Designations' },
+    { id: 'payroll-sites', icon: 'Timer', label: 'Global OT Settings' },
     { id: 'holidays', icon: 'CalendarDays', label: 'Holidays' },
     { id: 'leave-policies', icon: 'FileText', label: 'Leave Policies' },
     { id: 'attendance-rules', icon: 'Shield', label: 'Attendance Rules' },
     { id: 'checklist-templates', icon: 'ClipboardList', label: 'Checklist Templates' },
     { id: 'employee-documents', icon: 'FolderOpen', label: 'Employee Documents' },
+    { id: 'roles-access', icon: 'UserCog', label: 'Roles & Access' },
   ],
   hrms: [
     { id: 'employee-analytics', icon: 'BarChart3', label: 'Employee Analytics', section: 'HRMS' },
@@ -195,12 +215,25 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'exit-management', icon: 'ArrowLeft', label: 'Exit Management', section: 'Lifecycle' },
   ],
   procurement: [
+    { id: 'purchases', icon: 'ShoppingBag', label: 'Purchase Orders', section: 'Procurement' },
+    { id: 'expenses', icon: 'Receipt', label: 'Expenses', badge: 3, section: 'Procurement' },
     { id: 'procurement-pr', icon: 'FileEdit', label: 'Purchase Requisition', section: 'Procurement' },
     { id: 'procurement-rfq', icon: 'ClipboardList', label: 'RFQ Management', section: 'Procurement' },
     { id: 'procurement-po-register', icon: 'ShoppingCart', label: 'PO Register', section: 'Procurement' },
     { id: 'procurement-vendors', icon: 'Users', label: 'Vendor Management', section: 'Procurement' },
     { id: 'procurement-material-tracking', icon: 'Package', label: 'Material Tracking', section: 'Procurement' },
     { id: 'procurement-subcontracts', icon: 'FileText', label: 'Subcontract Register', section: 'Procurement' },
+  ],
+  finance: [
+    { id: 'finance-dashboard', icon: 'BarChart3', label: 'Dashboard', section: 'Finance' },
+    { id: 'ledger', icon: 'BookOpen', label: 'Ledger Management', section: 'Finance' },
+    { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Accounts Payable', section: 'Finance' },
+    { id: 'accounts-receivable', icon: 'ArrowUpCircle', label: 'Accounts Receivable', section: 'Finance' },
+    { id: 'journal-entries', icon: 'FileEdit', label: 'Journal Entries', section: 'Finance' },
+    { id: 'bank-cash', icon: 'Landmark', label: 'Bank & Cash', section: 'Finance' },
+    { id: 'taxation', icon: 'Scale', label: 'Taxation & Compliance', section: 'Finance' },
+    { id: 'budget', icon: 'Target', label: 'Budget & Forecasting', section: 'Finance' },
+    { id: 'financial-reports', icon: 'PieChart', label: 'Financial Reports', section: 'Finance' },
   ],
   // Category modules (like HRMS / Organization)
   'login-role': [
@@ -319,6 +352,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'report-attendance', icon: 'ClipboardList',  label: 'Attendance',       section: 'Reports' },
     { id: 'report-payroll',    icon: 'IndianRupee',    label: 'Payroll',          section: 'Reports' },
     { id: 'report-leave',      icon: 'CalendarDays',   label: 'Leave',            section: 'Reports' },
+    { id: 'report-tour',       icon: 'Plane',          label: 'Tour Requests',    section: 'Reports' },
     { id: 'report-late-fine',  icon: 'AlertTriangle',  label: 'Late & Fines',     section: 'Reports' },
     { id: 'report-onboarding', icon: 'UserCheck',      label: 'Onboarding',       section: 'Reports' },
     { id: 'report-turnover',   icon: 'UserX',          label: 'Turnover / Exit',  section: 'Reports' },
@@ -327,6 +361,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'report-dispatch',   icon: 'Send',           label: 'Payslip Dispatch', section: 'Reports' },
   ],
   'self-service': [
+    { id: 'my-dashboard', icon: 'LayoutDashboard', label: 'My Dashboard', section: 'My Portal' },
     { id: 'my-attendance', icon: 'ClipboardList', label: 'My Attendance', section: 'My Portal' },
     { id: 'my-leave', icon: 'CalendarDays', label: 'Apply Leave', section: 'My Portal' },
     { id: 'my-tours', icon: 'Plane', label: 'My Tours', section: 'My Portal' },
@@ -458,6 +493,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'report-attendance': { title: 'Attendance Report',        breadcrumb: 'Reports › Attendance' },
   'report-payroll':    { title: 'Payroll Report',           breadcrumb: 'Reports › Payroll' },
   'report-leave':      { title: 'Leave Report',             breadcrumb: 'Reports › Leave' },
+  'report-tour':       { title: 'Tour Requests Report',     breadcrumb: 'Reports › Tour Requests' },
   'report-late-fine':  { title: 'Late & Fine Report',       breadcrumb: 'Reports › Late & Fines' },
   'report-onboarding': { title: 'Onboarding Status Report', breadcrumb: 'Reports › Onboarding' },
   'report-turnover':   { title: 'Turnover / Exit Report',   breadcrumb: 'Reports › Turnover' },
@@ -465,12 +501,15 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'report-notices':    { title: 'Notice Read Rate Report',  breadcrumb: 'Reports › Notices' },
   'report-dispatch':   { title: 'Payslip Dispatch Report',  breadcrumb: 'Reports › Dispatch' },
   settings: { title: 'Settings', breadcrumb: 'VoltCore ERP › System Settings' },
+  'payroll-sites': { title: 'Global OT Settings', breadcrumb: 'Organization › Global OT Settings' },
+  'roles-access': { title: 'Roles & Access', breadcrumb: 'Organization › Roles & Access' },
   trash: { title: 'Recycle Bin', breadcrumb: 'Admin › Deleted Items' },
   'user-management': { title: 'User Management', breadcrumb: 'System › User Management' },
   'fin-user-management': { title: 'Finance User Management', breadcrumb: 'System Settings › Finance User Management' },
   'onboarding-approvals': { title: 'Onboarding Approvals', breadcrumb: 'System › Onboarding Approvals' },
   'requests': { title: 'Employee Requests', breadcrumb: 'System › Employee Requests' },
   'self-service': { title: 'My Portal', breadcrumb: 'VoltCore ERP › My Portal' },
+  'my-dashboard': { title: 'My Dashboard', breadcrumb: 'My Portal › Dashboard' },
   'my-attendance': { title: 'My Attendance', breadcrumb: 'My Portal › Attendance' },
   'my-leave': { title: 'Apply for Leave', breadcrumb: 'My Portal › Leave Application' },
   'my-tours': { title: 'My Tour Requests', breadcrumb: 'My Portal › Tour Requests' },
@@ -481,13 +520,14 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'my-documents': { title: 'My Documents', breadcrumb: 'My Portal › Documents' },
   'my-shifts':    { title: 'My Shifts',    breadcrumb: 'My Portal › Shifts' },
   'notice-board': { title: 'Notice Board', breadcrumb: 'System › Notice Board' },
+  notifications: { title: 'Notifications', breadcrumb: 'My Portal › Notifications' },
 };
 
 // Modules with sub-modules (clicking them shows sub-nav instead of a page)
-export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'sales', 'projects', 'assets', 'system', 'self-service', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'finance-accounts', 'petty-cash', 'mis'];
+export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finance', 'sales', 'projects', 'assets', 'system', 'self-service', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'finance-accounts', 'petty-cash', 'mis'];
 
 // Main modules that have their own page (no sub-nav)
-export const PAGE_MODULES = ['dashboard'];
+export const PAGE_MODULES = ['dashboard', 'notifications'];
 
 // Reverse lookup: given a sub-module id, find its parent module
 const PARENT_MAP: Record<string, string> = {};
@@ -508,7 +548,7 @@ export function getModuleParents(moduleId: string): string[] {
 }
 
 // Expandable modules that show their own sub-module grid (instead of auto-redirecting to first child)
-export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance-accounts', 'sales', 'procurement', 'projects', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'petty-cash', 'mis'];
+export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'finance-accounts', 'sales', 'procurement', 'projects', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'petty-cash', 'mis'];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};

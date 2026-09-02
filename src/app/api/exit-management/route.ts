@@ -1,8 +1,31 @@
 import { getDbForRequest } from '@/lib/db'
 import { superadminDb } from '@/lib/superadmin-db'
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  isInScope,
+  isUniversalScope,
+  loadScopeSubject,
+  type RoleScope,
+} from '@/lib/services/approval-scope'
 
 export const dynamic = 'force-dynamic'
+
+// Role scope gate — the resigning employee behind a resignation must fall
+// inside the caller's department/designation/site scope. Admins bypass.
+async function resignationInCallerScope(
+  db: any,
+  userCtx: { isAdmin: boolean; roleScope?: RoleScope | null; employeeId?: number | null },
+  resignationId: number,
+): Promise<boolean> {
+  // Scope identifies the APPROVER. Test the caller's own record, not the
+  // resigning employee's — the latter rejected every legitimate reviewer.
+  if (userCtx.isAdmin) return true
+  if (isUniversalScope(userCtx.roleScope)) return true
+  if (!userCtx.employeeId) return true
+  const subject = await loadScopeSubject(db, userCtx.employeeId)
+  if (!subject) return true // unreadable — the explicit role assignment stands
+  return isInScope(userCtx.roleScope!, subject)
+}
 
 // ── Reuse same user context resolution as offboarding ────────────
 async function getCurrentUserContext(request: NextRequest, db: any) {
@@ -12,12 +35,13 @@ async function getCurrentUserContext(request: NextRequest, db: any) {
   const tenantId = request.cookies.get('erp_tenant_id')?.value
 
   if (roleCookie === 'admin' || roleCookie === 'superadmin') {
-    return { isAdmin: true, isLevel1: true, deptName: null, employeeId: null }
+    return { isAdmin: true, isLevel1: true, deptName: null, employeeId: null, roleScope: null as RoleScope | null }
   }
 
   let deptName: string | null = null
   let employeeId: number | null = null
   let isLevel1 = false
+  let roleScope: RoleScope | null = null
 
   if (employeeIdCookie) {
     employeeId = parseInt(employeeIdCookie)
@@ -39,20 +63,25 @@ async function getCurrentUserContext(request: NextRequest, db: any) {
       if (tenantUser?.orgRoleId) {
         const orgRole = await superadminDb.orgRole.findUnique({
           where: { id: tenantUser.orgRoleId },
-          select: { level: true, departments: true },
+          select: { level: true, departments: true, designations: true, branches: true },
         })
         if (orgRole) {
           isLevel1 = orgRole.level === 1
+          roleScope = {
+            departments: orgRole.departments,
+            designations: orgRole.designations,
+            branches: (orgRole as any).branches ?? '',
+          }
           if (orgRole.departments && orgRole.departments.trim()) {
-            const roleDepts = orgRole.departments.split(',').map((d: string) => d.toLowerCase().trim())
-            if (roleDepts.length > 0 && roleDepts[0]) deptName = roleDepts[0]
+            const roleDepts = orgRole.departments.split(',').map((d: string) => d.toLowerCase().trim()).filter(Boolean)
+            if (roleDepts.length > 0) deptName = roleDepts[0]
           }
         }
       }
     } catch {}
   }
 
-  return { isAdmin: false, isLevel1, deptName, employeeId }
+  return { isAdmin: false, isLevel1, deptName, employeeId, roleScope }
 }
 
 export async function GET(request: NextRequest) {
@@ -69,6 +98,15 @@ export async function GET(request: NextRequest) {
     const resignationId = searchParams.get('resignationId')
 
     if (resignationId) {
+      // Role scope gate — a scoped approver may only read exit interviews for
+      // employees inside their department/designation/site scope.
+      if (!(await resignationInCallerScope(db, userCtx, parseInt(resignationId)))) {
+        return NextResponse.json(
+          { success: false, error: 'This resignation is outside your assigned department/designation/site scope.' },
+          { status: 403 }
+        )
+      }
+
       const interview = await db.exitInterview.findUnique({
         where: { resignationId: parseInt(resignationId) },
         include: {
@@ -131,6 +169,15 @@ export async function POST(request: NextRequest) {
 
     const { resignationId, primaryReason, cultureFeedback, managementFeedback, suggestions, wouldRejoin, rating } = await request.json()
     if (!resignationId) return NextResponse.json({ success: false, error: 'resignationId required' }, { status: 400 })
+
+    // Role scope gate — mirrors the GET so a scoped user cannot write an exit
+    // interview for an employee they are not allowed to see.
+    if (!(await resignationInCallerScope(db, userCtx, parseInt(resignationId)))) {
+      return NextResponse.json(
+        { success: false, error: 'This resignation is outside your assigned department/designation/site scope.' },
+        { status: 403 }
+      )
+    }
 
     // Check if interview already exists
     const existing = await db.exitInterview.findUnique({

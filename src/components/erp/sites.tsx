@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { SearchInput, matchesSearch } from './search-input';
 import { MapPin, Globe, Users, Building2, User, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -73,6 +74,7 @@ const selectCls = "w-full bg-[#141920] border border-[#2e3a48] rounded-md px-3 p
 
 export default function SitesModule() {
   const [sites, setSites] = useState<Site[]>([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,6 +102,10 @@ export default function SitesModule() {
 
   const activeSites = sites.filter(s => s.status === 'Active' || s.status === 'HO').length;
   const uniqueStates = new Set(sites.map(s => s.state)).size;
+  const filteredSites = useMemo(
+    () => sites.filter(s => matchesSearch(search, [s.name, s.state, s.project, s.incharge, s.status])),
+    [sites, search]
+  );
   const totalManpower = sites.reduce((s, site) => s + site.manpower, 0);
 
   const openCreate = () => { setForm(emptyForm); setCreateOpen(true); };
@@ -210,8 +216,11 @@ export default function SitesModule() {
         <div className="vc-panel-header">
           <MapPin size={15} className="text-[#f5a623]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Site Overview</span>
-          <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{sites.length} Sites</span>
+          <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{filteredSites.length} / {sites.length} Sites</span>
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={openCreate}><Plus size={13} /> New Site</button>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-[#252e3a]">
+          <SearchInput value={search} onChange={setSearch} placeholder="Search sites by name, state, project, incharge..." />
         </div>
         <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
           <table className="w-full text-[11px]">
@@ -225,7 +234,9 @@ export default function SitesModule() {
             <tbody>
               {sites.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-8 text-[#5a6878] text-[11px]">No sites found</td></tr>
-              ) : sites.map(site => (
+              ) : filteredSites.length === 0 ? (
+                <tr><td colSpan={7} className="text-center py-8 text-[#5a6878] text-[11px]">No sites match your search.</td></tr>
+              ) : filteredSites.map(site => (
                 <tr key={site.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors group">
                   <td className="py-2.5 px-3"><div className="flex items-center gap-2"><MapPin size={12} className="text-[#f5a623] shrink-0" /><span className="text-[#e2e8f0] font-medium">{site.name}</span></div></td>
                   <td className="py-2.5 px-3 text-[#8899aa]">{site.state}</td>

@@ -18,13 +18,16 @@ export interface AttendanceRuleResult {
 }
 
 // ── Get the active shift for an employee on a given date ──────────
+// If multiple shifts are assigned, and a punchIn time is provided,
+// picks the shift whose startTime is closest to the actual punch-in.
 export async function getEmployeeShiftForDate(
   employeeId: number,
   date: Date,
-  dbClient?: DbClient
+  dbClient?: DbClient,
+  punchIn?: Date | null
 ) {
   const db = dbClient ?? defaultDb
-  const assignment = await db.shiftAssignment.findFirst({
+  const assignments = await db.shiftAssignment.findMany({
     where: {
       employeeId,
       effectiveFrom: { lte: date },
@@ -33,13 +36,56 @@ export async function getEmployeeShiftForDate(
     include: { Shift: true },
     orderBy: { effectiveFrom: 'desc' },
   })
-  return assignment?.Shift ?? null
+
+  if (assignments.length === 0) return null
+  if (assignments.length === 1) return assignments[0].Shift
+
+  // Multiple shifts assigned — pick closest to punchIn
+  if (punchIn) {
+    return pickClosestShift(assignments.map(a => a.Shift), punchIn, date)
+  }
+
+  // No punchIn available — return the most recently assigned shift
+  return assignments[0].Shift
+}
+
+// Helper: Given multiple shifts and a punch-in time, return the shift
+// whose startTime is closest to the actual punch-in on that day.
+function pickClosestShift(shifts: any[], punchIn: Date, logDate: Date): any {
+  let bestShift = shifts[0]
+  let bestDiff = Infinity
+
+  for (const shift of shifts) {
+    const [h, m] = shift.startTime.split(':').map(Number)
+    const shiftStart = new Date(logDate)
+    shiftStart.setHours(h, m, 0, 0)
+
+    // For cross-midnight shifts, if punchIn is in the evening, the shift start
+    // is today. If punchIn is early morning, the shift might have started yesterday.
+    let diff = Math.abs(punchIn.getTime() - shiftStart.getTime())
+
+    // Also check if the shift start should be considered as previous day (for night shifts)
+    if (shift.crossesMidnight) {
+      const shiftStartYesterday = new Date(shiftStart)
+      shiftStartYesterday.setDate(shiftStartYesterday.getDate() - 1)
+      const diffYesterday = Math.abs(punchIn.getTime() - shiftStartYesterday.getTime())
+      diff = Math.min(diff, diffYesterday)
+    }
+
+    if (diff < bestDiff) {
+      bestDiff = diff
+      bestShift = shift
+    }
+  }
+
+  return bestShift
 }
 
 export async function getApplicableRule(
   employeeId: number,
   ruleType: string = 'late',
-  dbClient?: DbClient
+  dbClient?: DbClient,
+  resolvedShiftId?: number | null
 ): Promise<any | null> {
   const db = dbClient ?? defaultDb
 
@@ -54,19 +100,26 @@ export async function getApplicableRule(
 
   if (!employee) return null;
 
-  // Get active shift assignment by date
-  const today = new Date()
-  const shiftAssignment = await db.shiftAssignment.findFirst({
-    where: {
-      employeeId,
-      effectiveFrom: { lte: today },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
-    },
-    select: { shiftId: true },
-    orderBy: { effectiveFrom: 'desc' },
-  })
+  // Use the already-resolved shift (picked as the closest match to the actual
+  // punch-in when an employee has multiple concurrent assignments) instead of
+  // re-querying by "most recently assigned" — that ignored punch-in entirely
+  // and could select a different shift than the one attendance was scored
+  // against, applying the wrong shift's fine/rule policy.
+  let shiftId = resolvedShiftId
+  if (shiftId === undefined) {
+    const today = new Date()
+    const shiftAssignment = await db.shiftAssignment.findFirst({
+      where: {
+        employeeId,
+        effectiveFrom: { lte: today },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+      },
+      select: { shiftId: true },
+      orderBy: { effectiveFrom: 'desc' },
+    })
+    shiftId = shiftAssignment?.shiftId ?? null
+  }
 
-  const shiftId = shiftAssignment?.shiftId;
   const departmentId = employee.departmentId;
   const branchId = employee.branchId;
 
@@ -110,20 +163,25 @@ export async function applyAttendanceRules(
   scheduledTime: Date,
   actualTime: Date,
   ruleType: string = 'late',
-  dbClient?: DbClient
+  dbClient?: DbClient,
+  shiftGraceMinutes: number = 0,
+  resolvedShiftId?: number | null,
 ): Promise<AttendanceRuleResult> {
-  const rule = await getApplicableRule(employeeId, ruleType, dbClient);
+  const rule = await getApplicableRule(employeeId, ruleType, dbClient, resolvedShiftId);
 
+  // No scoped AttendanceRule → fall back to the SHIFT as the primary source.
+  // The shift's grace period decides late status; the shift never fines (fine = 0).
   if (!rule) {
     const diffMs = actualTime.getTime() - scheduledTime.getTime();
     const diffMinutes = Math.floor(diffMs / 60000);
+    const effectiveLateness = Math.max(0, diffMinutes - shiftGraceMinutes);
     return {
-      isLate: diffMinutes > 0,
-      lateMinutes: Math.max(0, diffMinutes),
+      isLate: effectiveLateness > 0,
+      lateMinutes: effectiveLateness,
       isHalfDay: false,
       isAbsent: false,
       fineAmount: 0,
-      status: diffMinutes > 0 ? 'late' : 'present',
+      status: effectiveLateness > 0 ? 'late' : 'present',
     };
   }
 
@@ -134,8 +192,12 @@ export async function applyAttendanceRules(
   let status: 'present' | 'late' | 'half_day' | 'absent' = 'present';
   let isLate = false, isHalfDay = false, isAbsent = false;
 
+  // Policy: an employee who PUNCHED IN is never "absent" purely for lateness —
+  // at worst they are half-day. (Absent is reserved for no punch at all, or for
+  // working below the shift's minimum hours, handled by classifyAttendance.)
+  // So a late arrival past absentAfterMinutes is capped to half_day here.
   if (rule.absentAfterMinutes > 0 && effectiveLateness >= rule.absentAfterMinutes) {
-    status = 'absent'; isAbsent = true;
+    status = 'half_day'; isHalfDay = true;
   } else if (rule.halfDayAfterMinutes > 0 && effectiveLateness >= rule.halfDayAfterMinutes) {
     status = 'half_day'; isHalfDay = true;
   } else if (rule.lateMarkAfterMinutes > 0 && effectiveLateness >= rule.lateMarkAfterMinutes) {
@@ -174,17 +236,6 @@ export async function calculateFinesForPeriod(
       employeeId,
       logDate: { gte: startDate, lte: endDate },
     },
-    include: {
-      Employee: {
-        include: {
-          ShiftAssignment: {
-            where: { isActive: true },
-            include: { Shift: true },
-            take: 1,
-          },
-        },
-      },
-    },
     orderBy: { logDate: 'asc' },
   });
 
@@ -193,14 +244,16 @@ export async function calculateFinesForPeriod(
 
   for (const log of logs) {
     if (!log.punchIn) continue;
-    const shift = log.Employee.ShiftAssignment[0]?.Shift;
+    
+    // Get the shift closest to the punchIn time (handles multiple shifts)
+    const shift = await getEmployeeShiftForDate(employeeId, log.logDate, db, log.punchIn);
     if (!shift) continue;
 
     const [hours, minutes] = shift.startTime.split(':').map(Number);
     const scheduledTime = new Date(log.logDate);
     scheduledTime.setHours(hours, minutes, 0, 0);
 
-    const result = await applyAttendanceRules(employeeId, scheduledTime, log.punchIn, 'late', db);
+    const result = await applyAttendanceRules(employeeId, scheduledTime, log.punchIn, 'late', db, shift.graceMinutes ?? 0, shift.id);
     if (result.fineAmount > 0) {
       totalFine += result.fineAmount;
       details.push({
@@ -240,8 +293,8 @@ export async function classifyAttendance(
     return { status: 'absent', lateMinutes: 0, fineAmount: 0 }
   }
 
-  // Get the employee's shift for this date
-  const shift = await getEmployeeShiftForDate(employeeId, logDate, db)
+  // Get the employee's shift for this date (uses punchIn to pick closest shift if multiple assigned)
+  const shift = await getEmployeeShiftForDate(employeeId, logDate, db, punchIn)
 
   if (!shift) {
     // No shift assigned — just mark present, no rule to apply
@@ -253,28 +306,41 @@ export async function classifyAttendance(
   const scheduledPunchIn = new Date(logDate)
   scheduledPunchIn.setHours(shiftHour, shiftMin, 0, 0)
 
-  // Apply the rule
+  // Apply the rule. Pass the shift's grace period so that when NO scoped
+  // AttendanceRule exists, the shift's own grace drives late status. Also pass
+  // this shift's own id so rule-matching scopes to the SAME shift that was
+  // picked as closest to the punch-in, not whichever assignment is newest.
   const result = await applyAttendanceRules(
     employeeId,
     scheduledPunchIn,
     punchIn,
     'late',
-    db
+    db,
+    shift.graceMinutes ?? 0,
+    shift.id,
   )
 
-  // If punchOut is provided, also check early departure / half-day by hours worked
+  // If punchOut is provided, decide Present / Half Day / Absent by hours worked,
+  // using this shift's configurable thresholds (defaults: 8h present, 4h half-day):
+  //   worked ≥ minPresentHours              → Present (keep the rule result)
+  //   minHalfDayHours ≤ worked < minPresent → Half Day
+  //   worked < minHalfDayHours              → Absent
   if (punchOut && !result.isAbsent) {
-    const [endHour, endMin] = shift.endTime.split(':').map(Number)
-    const scheduledPunchOut = new Date(logDate)
-    scheduledPunchOut.setHours(endHour, endMin, 0, 0)
-    if (shift.crossesMidnight) scheduledPunchOut.setDate(scheduledPunchOut.getDate() + 1)
+    const workedHours = (punchOut.getTime() - punchIn.getTime()) / 3.6e6
+    const minPresent = shift.minPresentHours ?? 8
+    const minHalfDay = shift.minHalfDayHours ?? 4
 
-    const totalShiftMinutes = (scheduledPunchOut.getTime() - scheduledPunchIn.getTime()) / 60000
-    const workedMinutes = (punchOut.getTime() - punchIn.getTime()) / 60000
-    const halfDayThreshold = totalShiftMinutes / 2
-
-    // If worked less than half the shift and not already marked half_day/absent
-    if (workedMinutes < halfDayThreshold && result.status === 'present') {
+    if (workedHours < minHalfDay) {
+      return {
+        status: 'absent',
+        lateMinutes: result.lateMinutes,
+        fineAmount: result.fineAmount,
+        appliedRule: result.appliedRule,
+      }
+    }
+    // Below the present threshold but at/above the half-day floor → half day.
+    // Only downgrade a 'present' result; never upgrade a late/half_day rule result.
+    if (workedHours < minPresent && result.status === 'present') {
       return {
         status: 'half_day',
         lateMinutes: result.lateMinutes,
@@ -293,9 +359,10 @@ export async function classifyAttendance(
 }
 
 // ── Check if an employee has an active shift assignment ───────────
-// Returns the shift if assigned, null if not.
-// Used as a gate: employees without a shift are excluded from
+// Returns the first matching shift assignment if any exist, null if not.
+// Used as a gate: employees without ANY shift are excluded from
 // attendance, timesheet, and payroll processing.
+// When multiple shifts are active, returns the most recently assigned one.
 export async function getActiveShiftAssignment(
   employeeId: number,
   date: Date = new Date(),

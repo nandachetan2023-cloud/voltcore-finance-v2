@@ -3,6 +3,18 @@ import { startOfDay, format, parse, isValid } from 'date-fns';
 
 const prisma = new PrismaClient({});
 
+/**
+ * ⚠️ DEPRECATED / UNUSED — do NOT wire this up.
+ *
+ * The live biometric pipeline is `src/lib/biometric.ts` (a different class with
+ * the same name). This legacy stub is dead code and is unsafe to use because it:
+ *   - hardcodes status: 'present' (skips the late/half-day shift rules that
+ *     classifyAttendance applies), and
+ *   - uses its own non-tenant-aware PrismaClient (would write to the wrong DB
+ *     in this multi-tenant app).
+ *
+ * Kept only for reference. Use classifyAttendance + the biometric.ts service.
+ */
 export class BiometricService {
   /**
    * Process a punch from biometric device

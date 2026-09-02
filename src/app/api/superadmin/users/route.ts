@@ -14,10 +14,11 @@ export async function GET(request: NextRequest) {
       include: { tenant: { select: { name: true, slug: true } } },
       orderBy: { createdAt: 'desc' },
     })
-    // Never return password
+    // Never return password; drop the heavy onboardingData JSON blob too —
+    // the superadmin list doesn't render it and it bloated the response.
     return NextResponse.json({
       success: true,
-      data: users.map(({ password: _, ...u }) => u),
+      data: users.map(({ password: _pw, onboardingData: _od, ...u }) => u),
     })
   } catch (e) {
     return NextResponse.json({ success: false, error: 'Failed to fetch users' }, { status: 500 })

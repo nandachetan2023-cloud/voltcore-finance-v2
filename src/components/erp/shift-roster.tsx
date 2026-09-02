@@ -22,6 +22,8 @@ interface Shift {
   breakMinutes: number;
   graceMinutes: number;
   otThresholdMin: number;
+  minPresentHours: number;
+  minHalfDayHours: number;
   weekOffDays: number[];
   isActive: boolean;
 }
@@ -56,6 +58,8 @@ interface ShiftFormData {
   breakMinutes: number;
   graceMinutes: number;
   otThresholdMin: number;
+  minPresentHours: number;
+  minHalfDayHours: number;
   weekOffDays: number[];
 }
 
@@ -75,6 +79,8 @@ const EMPTY_SHIFT_FORM: ShiftFormData = {
   breakMinutes: 60,
   graceMinutes: 10,
   otThresholdMin: 30,
+  minPresentHours: 8,
+  minHalfDayHours: 4,
   weekOffDays: [0], // Sunday
 };
 
@@ -129,7 +135,7 @@ export default function ShiftRosterModule() {
   const [selectedShiftId, setSelectedShiftId] = useState<number | null>(null);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<number | null>(null);
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
-  const [bulkShiftId, setBulkShiftId] = useState<string>('');
+  const [bulkShiftIds, setBulkShiftIds] = useState<number[]>([]);
   const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState(new Date().toISOString().split('T')[0]);
   const [shiftFieldErrors, setShiftFieldErrors] = useState<FieldErrors>({});
   const [bulkFieldErrors, setBulkFieldErrors] = useState<FieldErrors>({});
@@ -217,13 +223,13 @@ export default function ShiftRosterModule() {
     return { totalShifts, dayShifts, nightShifts, totalAssignments };
   }, [shifts, assignments]);
 
-  // Map: employeeId → current active assignment (for UI indicators)
+  // Map: employeeId → current active assignments (supports multiple shifts per employee)
   const currentAssignmentMap = useMemo(() => {
     const map = new Map<number, ShiftAssignment>();
     const now = new Date();
     assignments.forEach(a => {
       if (!a.effectiveTo || new Date(a.effectiveTo) > now) {
-        // Keep the most recent one per employee
+        // Keep the most recent one per employee (for display in employee list)
         const existing = map.get(a.employeeId);
         if (!existing || new Date(a.effectiveFrom) > new Date(existing.effectiveFrom)) {
           map.set(a.employeeId, a);
@@ -233,19 +239,37 @@ export default function ShiftRosterModule() {
     return map;
   }, [assignments]);
 
-  // For bulk assign: employees who will be reshuffled (already have a different shift)
+  // Map: employeeId → all active shift IDs (to detect duplicates)
+  const employeeShiftIds = useMemo(() => {
+    const map = new Map<number, Set<number>>();
+    const now = new Date();
+    assignments.forEach(a => {
+      if (!a.effectiveTo || new Date(a.effectiveTo) > now) {
+        if (!map.has(a.employeeId)) map.set(a.employeeId, new Set());
+        map.get(a.employeeId)!.add(a.Shift.id);
+      }
+    });
+    return map;
+  }, [assignments]);
+
+  // For bulk assign: employees who already have ALL the selected shifts (will be skipped as duplicate)
   const reshufflePreview = useMemo(() => {
-    if (!bulkShiftId) return [];
+    if (bulkShiftIds.length === 0) return [];
     return selectedEmployees
       .map(empId => {
+        const currentShiftIds = employeeShiftIds.get(empId);
+        if (!currentShiftIds) return null;
+        // Check if employee already has ALL the selected shifts
+        const allAlreadyAssigned = bulkShiftIds.every(id => currentShiftIds.has(id));
+        if (allAlreadyAssigned) return null;
+        // Has some shifts — will get additional ones
         const current = currentAssignmentMap.get(empId);
         if (!current) return null;
-        if (current.Shift.id === parseInt(bulkShiftId)) return null; // same shift, no change
         const emp = employees.find(e => e.id === empId);
         return { empId, empName: emp?.name || '', fromShift: current.Shift.name };
       })
       .filter(Boolean) as { empId: number; empName: string; fromShift: string }[];
-  }, [selectedEmployees, bulkShiftId, currentAssignmentMap, employees]);
+  }, [selectedEmployees, bulkShiftIds, employeeShiftIds, currentAssignmentMap, employees]);
 
   const handleCreateShift = async () => {
     setSubmitting(true);
@@ -350,6 +374,8 @@ export default function ShiftRosterModule() {
       breakMinutes: shift.breakMinutes,
       graceMinutes: shift.graceMinutes,
       otThresholdMin: shift.otThresholdMin,
+      minPresentHours: shift.minPresentHours ?? 8,
+      minHalfDayHours: shift.minHalfDayHours ?? 4,
       weekOffDays: shift.weekOffDays,
     });
     setSelectedShiftId(shift.id);
@@ -382,43 +408,48 @@ export default function ShiftRosterModule() {
   const handleBulkAssign = async () => {
     const errors: FieldErrors = {};
     if (selectedEmployees.length === 0) errors.employees = 'Please select at least one employee';
-    if (!bulkShiftId) errors.bulkShiftId = 'Please select a shift';
+    if (bulkShiftIds.length === 0) errors.bulkShiftId = 'Please select at least one shift';
     if (!bulkEffectiveFrom) errors.bulkEffectiveFrom = 'Effective From date is required';
     setBulkFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
     setSubmitting(true);
     try {
-      const promises = selectedEmployees.map(employeeId =>
-        fetch('/api/shift-assignments', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            employeeId,
-            shiftId: parseInt(bulkShiftId),
-            effectiveFrom: bulkEffectiveFrom,
-          }),
-        })
+      // Create assignments for each employee × each shift combination
+      const promises = selectedEmployees.flatMap(employeeId =>
+        bulkShiftIds.map(shiftId =>
+          fetch('/api/shift-assignments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              employeeId,
+              shiftId,
+              effectiveFrom: bulkEffectiveFrom,
+            }),
+          })
+        )
       );
 
       const results = await Promise.all(promises);
       const jsons = await Promise.all(results.map(r => r.json()));
       const failed = jsons.filter(j => !j.success);
+      const succeeded = jsons.filter(j => j.success);
 
       if (failed.length === 0) {
-        const reshuffled = reshufflePreview.length;
-        const newAssigned = selectedEmployees.length - reshuffled;
-        const parts: string[] = [];
-        if (newAssigned > 0) parts.push(`${newAssigned} newly assigned`);
-        if (reshuffled > 0) parts.push(`${reshuffled} reshuffled`);
-        toast.success(`Shift updated — ${parts.join(', ')}`);
+        toast.success(`Assigned ${bulkShiftIds.length} shift(s) to ${selectedEmployees.length} employee(s)`);
         setBulkAssignOpen(false);
         setSelectedEmployees([]);
-        setBulkShiftId('');
+        setBulkShiftIds([]);
         setBulkFieldErrors({});
         await fetchData();
+      } else if (succeeded.length > 0) {
+        toast.success(`${succeeded.length} assignment(s) created, ${failed.length} skipped (already assigned or failed)`);
+        setBulkAssignOpen(false);
+        setSelectedEmployees([]);
+        setBulkShiftIds([]);
+        await fetchData();
       } else {
-        toast.error(`${failed.length} assignment(s) failed. ${failed[0]?.error || ''}`);
+        toast.error(`All assignments failed. ${failed[0]?.error || ''}`);
       }
     } catch (error) {
       toast.error('Failed to assign shifts');
@@ -508,7 +539,7 @@ export default function ShiftRosterModule() {
           value={shiftForm.graceMinutes}
           onChange={e => setShiftForm(f => ({ ...f, graceMinutes: parseInt(e.target.value) || 0 }))}
         />
-        <p className="text-[9px] text-[#5a6878] mt-1">Late arrival grace period</p>
+        <p className="text-[9px] text-[#5a6878] mt-1">Late arrival grace period — drives Late status unless an Attendance Rule overrides it</p>
       </div>
 
       <div>
@@ -559,7 +590,37 @@ export default function ShiftRosterModule() {
           value={shiftForm.otThresholdMin}
           onChange={e => setShiftForm(f => ({ ...f, otThresholdMin: parseInt(e.target.value) || 0 }))}
         />
-        <p className="text-[9px] text-[#5a6878] mt-1">Minimum minutes for OT</p>
+        <p className="text-[9px] text-[#5a6878] mt-1">Extra minutes beyond shift hours before OT starts counting (0 = count all extra time)</p>
+      </div>
+
+      <div>
+        <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">
+          Min Hours for Present
+        </label>
+        <input
+          type="number"
+          step="0.5"
+          min="0"
+          className={inputCls}
+          value={shiftForm.minPresentHours}
+          onChange={e => setShiftForm(f => ({ ...f, minPresentHours: parseFloat(e.target.value) || 0 }))}
+        />
+        <p className="text-[9px] text-[#5a6878] mt-1">Hours worked at or above this ⇒ full-day Present (default 8 = full shift)</p>
+      </div>
+
+      <div>
+        <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">
+          Min Hours for Half Day
+        </label>
+        <input
+          type="number"
+          step="0.5"
+          min="0"
+          className={inputCls}
+          value={shiftForm.minHalfDayHours}
+          onChange={e => setShiftForm(f => ({ ...f, minHalfDayHours: parseFloat(e.target.value) || 0 }))}
+        />
+        <p className="text-[9px] text-[#5a6878] mt-1">At or above this (but under full-day) ⇒ Half Day; below ⇒ Absent (default 4)</p>
       </div>
 
       <div className="md:col-span-2">
@@ -618,9 +679,9 @@ export default function ShiftRosterModule() {
         </button>
         <button 
           className="vc-btn-ghost flex items-center gap-1 border border-[#2e3a48]" 
-          onClick={() => { setSelectedEmployees([]); setBulkShiftId(''); setBulkFieldErrors({}); setBulkAssignOpen(true); }}
+          onClick={() => { setSelectedEmployees([]); setBulkShiftIds([]); setBulkFieldErrors({}); setBulkAssignOpen(true); }}
         >
-          <ArrowRightLeft size={13} /> Assign / Reshuffle
+          <ArrowRightLeft size={13} /> Assign Shifts
         </button>
       </div>
 
@@ -816,30 +877,43 @@ export default function ShiftRosterModule() {
         <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-3xl" aria-describedby="bulk-assign-description">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2">
-              <ArrowRightLeft size={15} className="text-[#f5a623]" /> Assign / Reshuffle Shifts
+              <ArrowRightLeft size={15} className="text-[#f5a623]" /> Assign Shifts
             </DialogTitle>
             <p id="bulk-assign-description" className="text-[11px] text-[#5a6878] mt-1">
-              Select employees and a target shift. Employees already on a different shift will be automatically moved.
+              Select employees and a shift to assign. Multiple shifts can be assigned to the same employee — the system will auto-detect the correct one based on punch-in time.
             </p>
           </DialogHeader>
           <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] text-[#8899aa] font-semibold uppercase tracking-wider mb-1.5">
-                  Target Shift <span className="text-[#ff3d3d]">*</span>
+                  Select Shifts <span className="text-[#ff3d3d]">*</span>
+                  <span className="text-[#5a6878] ml-1 normal-case font-normal">(pick multiple)</span>
                 </label>
-                <select
-                  className={`${selectCls} ${fieldBorderError(bulkFieldErrors.bulkShiftId)}`}
-                  value={bulkShiftId}
-                  onChange={e => { setBulkShiftId(e.target.value); setBulkFieldErrors(fe => ({ ...fe, bulkShiftId: '' })); }}
-                >
-                  <option value="">Select shift...</option>
+                <div className={`bg-[#141920] border rounded-md p-2 max-h-[120px] overflow-y-auto space-y-1 ${bulkFieldErrors.bulkShiftId ? 'border-[#ff3d3d]' : 'border-[#2e3a48]'}`}>
                   {shifts.filter(s => s.isActive).map(shift => (
-                    <option key={shift.id} value={shift.id}>
-                      {shift.name} ({shift.startTime} - {shift.endTime})
-                    </option>
+                    <label key={shift.id} className={`flex items-center gap-2 p-1.5 rounded cursor-pointer transition-colors ${bulkShiftIds.includes(shift.id) ? 'bg-[#f5a623]/10 border border-[#f5a623]/40' : 'hover:bg-[#1e252e]'}`}>
+                      <input
+                        type="checkbox"
+                        checked={bulkShiftIds.includes(shift.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setBulkShiftIds(prev => [...prev, shift.id]);
+                          } else {
+                            setBulkShiftIds(prev => prev.filter(id => id !== shift.id));
+                          }
+                          setBulkFieldErrors(fe => ({ ...fe, bulkShiftId: '' }));
+                        }}
+                        className="w-3.5 h-3.5 rounded border-[#2e3a48] bg-[#0d1117] text-[#f5a623] focus:ring-[#f5a623]"
+                      />
+                      <span className="text-[11px] text-[#e2e8f0] font-medium">{shift.name}</span>
+                      <span className="text-[9px] text-[#5a6878] ml-auto">{shift.startTime}–{shift.endTime}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
+                {bulkShiftIds.length > 0 && (
+                  <p className="text-[9px] text-[#00e676] mt-1">{bulkShiftIds.length} shift(s) selected</p>
+                )}
                 <FieldError message={bulkFieldErrors.bulkShiftId} />
               </div>
               <div>
@@ -856,13 +930,13 @@ export default function ShiftRosterModule() {
               </div>
             </div>
 
-            {/* Reshuffle preview — shown when some selected employees already have a different shift */}
-            {reshufflePreview.length > 0 && bulkShiftId && (
+            {/* Additional shift preview — shown when some selected employees already have other shifts */}
+            {reshufflePreview.length > 0 && bulkShiftIds.length > 0 && (
               <div className="rounded-lg border border-[#f5a623]/30 bg-[#f5a623]/5 p-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <ArrowRightLeft size={12} className="text-[#f5a623]" />
                   <span className="text-[10px] font-bold text-[#f5a623] uppercase tracking-wider">
-                    {reshufflePreview.length} employee{reshufflePreview.length !== 1 ? 's' : ''} will be reshuffled
+                    {reshufflePreview.length} employee{reshufflePreview.length !== 1 ? 's' : ''} will get an additional shift
                   </span>
                 </div>
                 <div className="space-y-1 max-h-[100px] overflow-y-auto">
@@ -870,14 +944,14 @@ export default function ShiftRosterModule() {
                     <div key={r.empId} className="flex items-center gap-2 text-[10px]">
                       <span className="text-[#e2e8f0] font-medium min-w-[120px] truncate">{r.empName}</span>
                       <span className="text-[#8899aa] bg-[#1a2332] px-1.5 py-0.5 rounded font-mono">{r.fromShift}</span>
-                      <ArrowRightLeft size={9} className="text-[#f5a623] shrink-0" />
+                      <span className="text-[#5a6878]">+</span>
                       <span className="text-[#f5a623] font-semibold">
-                        {shifts.find(s => s.id === parseInt(bulkShiftId))?.name || ''}
+                        {bulkShiftIds.map(id => shifts.find(s => s.id === id)?.name).filter(Boolean).join(', ')}
                       </span>
                     </div>
                   ))}
                 </div>
-                <p className="text-[9px] text-[#8899aa] mt-2">Their previous assignment will be ended automatically.</p>
+                <p className="text-[9px] text-[#8899aa] mt-2">Existing shifts are kept. New shifts will be added alongside them.</p>
               </div>
             )}
 
@@ -908,16 +982,16 @@ export default function ShiftRosterModule() {
                   {employees.map(emp => {
                     const current = currentAssignmentMap.get(emp.id);
                     const isSelected = selectedEmployees.includes(emp.id);
-                    const willReshuffle = isSelected && current && bulkShiftId && current.Shift.id !== parseInt(bulkShiftId);
-                    const isSameShift = isSelected && current && bulkShiftId && current.Shift.id === parseInt(bulkShiftId);
+                    const willGetAdditional = isSelected && current && bulkShiftIds.length > 0 && !bulkShiftIds.every(id => employeeShiftIds.get(emp.id)?.has(id));
+                    const allSameShift = isSelected && current && bulkShiftIds.length > 0 && bulkShiftIds.every(id => employeeShiftIds.get(emp.id)?.has(id));
                     return (
                       <label
                         key={emp.id}
                         className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
                           isSelected
-                            ? willReshuffle
+                            ? willGetAdditional
                               ? 'bg-[#f5a623]/10 border border-[#f5a623]/40'
-                              : isSameShift
+                              : allSameShift
                               ? 'bg-[#5a6878]/10 border border-[#5a6878]/30'
                               : 'bg-[#00e676]/8 border border-[#00e676]/20'
                             : 'hover:bg-[#141920] border border-transparent'
@@ -935,11 +1009,11 @@ export default function ShiftRosterModule() {
                             <span className="text-[9px] text-[#5a6878] font-mono">{emp.employeeCode}</span>
                             {current ? (
                               <span className={`text-[8px] font-bold px-1 py-0.5 rounded ${
-                                willReshuffle
+                                willGetAdditional
                                   ? 'bg-[#f5a623]/20 text-[#f5a623]'
                                   : 'bg-[#00d4ff]/15 text-[#00d4ff]'
                               }`}>
-                                {willReshuffle && <ArrowRightLeft size={7} className="inline mr-0.5" />}
+                                {willGetAdditional && <span className="inline mr-0.5">+</span>}
                                 {current.Shift.name}
                               </span>
                             ) : (
@@ -963,7 +1037,7 @@ export default function ShiftRosterModule() {
                 <span className="text-[9px] text-[#5a6878]">{selectedEmployees.length} selected</span>
                 {reshufflePreview.length > 0 && (
                   <span className="text-[9px] text-[#f5a623] font-semibold flex items-center gap-1">
-                    <ArrowRightLeft size={8} /> {reshufflePreview.length} reshuffle{reshufflePreview.length !== 1 ? 's' : ''}
+                    <ArrowRightLeft size={8} /> {reshufflePreview.length} additional
                   </span>
                 )}
                 {selectedEmployees.length - reshufflePreview.length > 0 && (
@@ -985,12 +1059,10 @@ export default function ShiftRosterModule() {
             </Button>
             <Button 
               className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" 
-              disabled={submitting || selectedEmployees.length === 0 || !bulkShiftId} 
+              disabled={submitting || selectedEmployees.length === 0 || bulkShiftIds.length === 0} 
               onClick={handleBulkAssign}
             >
-              {submitting ? 'Applying...' : reshufflePreview.length > 0
-                ? `Apply (${reshufflePreview.length} reshuffle${reshufflePreview.length !== 1 ? 's' : ''}, ${selectedEmployees.length - reshufflePreview.length} new)`
-                : `Assign ${selectedEmployees.length} Employee${selectedEmployees.length !== 1 ? 's' : ''}`}
+              {submitting ? 'Applying...' : `Assign ${bulkShiftIds.length} Shift(s) to ${selectedEmployees.length} Employee(s)`}
             </Button>
           </DialogFooter>
         </DialogContent>

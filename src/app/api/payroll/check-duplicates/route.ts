@@ -70,11 +70,13 @@ export async function POST(request: NextRequest) {
     // Skip header row
     const dataRows = rawData.slice(1);
 
-    // Extract month and year from first valid row
-    // Assuming current month/year for now - you can enhance this to read from Excel
+    // Month/year of the data being imported. Use the period the user selected in
+    // the import dialog; fall back to the current month only if none was sent.
+    const monthRaw = formData.get('month');
+    const yearRaw = formData.get('year');
     const now = new Date();
-    const month = now.getMonth() + 1;
-    const year = now.getFullYear();
+    const month = monthRaw ? parseInt(String(monthRaw)) : now.getMonth() + 1;
+    const year = yearRaw ? parseInt(String(yearRaw)) : now.getFullYear();
 
     const duplicates: DuplicateRecord[] = [];
     const sessionData: any[] = [];

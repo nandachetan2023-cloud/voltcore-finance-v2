@@ -1,6 +1,13 @@
 import { getDbForRequest } from '@/lib/db'
 import { superadminDb } from '@/lib/superadmin-db'
+import { annotateRequesterStage } from '@/lib/services/approval-stage'
+import {
+  callerMatchesOwnRoleScope,
+  resolveStepRecipients,
+} from '@/lib/services/approval-scope'
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveRejectionPosition, formatRejectionPosition } from '@/lib/services/rejection-position'
+import { resolveAdvance, informOptionalSteps, type ChainStepLike } from '@/lib/services/approval-flow'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,8 +30,10 @@ export async function GET(request: NextRequest) {
     if (employeeId) where.employeeId = parseInt(employeeId)
     if (status) where.status = status.toLowerCase()
 
-    // Resolve caller's role level for canApprove tagging
+    // Resolve caller identity for approver filtering / self-exclusion
+    let callerEmployeeId: number | null = null
     let callerRoleLevel: number | null = null
+    let callerOrgRoleId: string | null = null
     let callerIsAdmin = false
     const callerEmail = request.cookies.get('erp_user_email')?.value
     const callerRole = request.cookies.get('erp_user_role')?.value
@@ -35,7 +44,9 @@ export async function GET(request: NextRequest) {
         select: { employeeId: true, orgRoleId: true },
       }).catch(() => null)
 
+      if (callerUser?.employeeId) callerEmployeeId = callerUser.employeeId
       if (callerUser?.orgRoleId) {
+        callerOrgRoleId = callerUser.orgRoleId
         const role = await superadminDb.orgRole.findUnique({
           where: { id: callerUser.orgRoleId },
           select: { level: true },
@@ -45,6 +56,11 @@ export async function GET(request: NextRequest) {
       callerIsAdmin = callerRole === 'admin' && !callerUser?.orgRoleId
     } else if (!employeeId && callerRole === 'admin') {
       callerIsAdmin = true
+    }
+
+    // Exclude the caller's own requests from the approver view
+    if (callerEmployeeId && !employeeId) {
+      where.employeeId = { not: callerEmployeeId }
     }
 
     const [tourRequests, total] = await Promise.all([
@@ -68,17 +84,81 @@ export async function GET(request: NextRequest) {
       db.tourRequest.count({ where }),
     ])
 
-    // Enrich with canApprove
-    const enriched = tourRequests.map((tr: any) => ({
-      ...tr,
-      canApprove: tr.status === 'pending' && (callerIsAdmin || (callerRoleLevel !== null && callerRoleLevel > 1)),
-    }))
+    // Approver view: only surface a tour to the approver whose turn it is (parity
+    // with leave/employee-requests). The "my tours" view (?employeeId=) is raw.
+    let enriched: any[] = tourRequests
+    if (!employeeId) {
+      if (tenantId && callerRoleLevel !== null) {
+        // Chain approver — show only tours where they are the CURRENT-step approver
+        const requesterEmpIds = [...new Set(tourRequests.map(r => r.employeeId))]
+        const requesterUsers = await superadminDb.tenantUser.findMany({
+          where: { tenantId, employeeId: { in: requesterEmpIds }, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => [])
 
-    return NextResponse.json({
-      success: true,
-      data: enriched,
-      pagination: { total, limit, offset, hasMore: offset + limit < total },
-    })
+        const roleIds = [...new Set(requesterUsers.map(u => u.orgRoleId).filter(Boolean))] as string[]
+        const roles = roleIds.length > 0
+          ? await superadminDb.orgRole.findMany({ where: { id: { in: roleIds } }, select: { id: true, level: true } }).catch(() => [])
+          : []
+        const roleLevelMap = new Map<string, number>(roles.map(r => [r.id, r.level] as [string, number]))
+        const empRoleLevelMap = new Map<number, number>(
+          requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ? (roleLevelMap.get(u.orgRoleId) ?? 0) : 0] as [number, number])
+        )
+        const empOrgRoleMap = new Map<number, string | null>(
+          requesterUsers.map(u => [u.employeeId as number, u.orgRoleId ?? null] as [number, string | null])
+        )
+
+        const chainStepsMap = new Map<string, any[]>()
+        for (const roleId of roleIds) {
+          const chain = await getTourApprovalChain(tenantId, roleId)
+          chainStepsMap.set(roleId, chain?.steps || [])
+        }
+
+        enriched = tourRequests
+          .filter(r => {
+            const reqOrgRoleId = empOrgRoleMap.get(r.employeeId)
+            const reqLevel = empRoleLevelMap.get(r.employeeId) ?? 0
+            if (reqLevel <= 1) return false
+            if (!reqOrgRoleId) return false
+            const steps = chainStepsMap.get(reqOrgRoleId) || []
+            const currentStepNum = (r as any).currentStep || 1
+            const currentStepDef = steps.find((s: any) => s.stepNumber === currentStepNum)
+            if (currentStepDef?.approverRoleId !== callerOrgRoleId) return false
+
+            // Being the named approver for the current step IS the
+            // authorization. The role's scope describes who the approver is,
+            // not who they may act on, so it is not tested against the
+            // requester here — doing so hid every request from every scoped
+            // approver.
+            return true
+          })
+          .map(r => ({ ...r, canApprove: true }))
+      } else if (callerIsAdmin) {
+        // Full admin sees all tours and can finalize any of them (top authority)
+        enriched = tourRequests
+          .filter(r => r.employeeId !== callerEmployeeId)
+          .map(r => ({ ...r, canApprove: true }))
+      } else {
+        enriched = []
+      }
+    } else if (tenantId && employeeId) {
+      // Requester's own view — annotate each pending tour with its stage.
+      enriched = await annotateRequesterStage(tenantId, parseInt(employeeId), tourRequests)
+    }
+
+    // no-store: these lists change the moment an approver acts, and a cached
+    // response would show an already-approved request as still pending, with
+    // its Approve/Reject buttons live. force-dynamic governs Next's own cache
+    // and does NOT emit a Cache-Control header, so the browser is free to
+    // reuse the stale body without it.
+    return NextResponse.json(
+      {
+        success: true,
+        data: enriched,
+        pagination: { total, limit, offset, hasMore: offset + limit < total },
+      },
+      { headers: { 'Cache-Control': 'no-store, must-revalidate' } },
+    )
   } catch (error) {
     console.error('Error fetching tour requests:', error)
     return NextResponse.json(
@@ -99,13 +179,16 @@ async function getTourApprovalChain(tenantId: string, requesterRoleId?: string |
   } catch { return null }
 }
 
-async function findUsersForRole(tenantId: string, roleId: string): Promise<{ email: string }[]> {
-  try {
-    return await superadminDb.tenantUser.findMany({
-      where: { tenantId, orgRoleId: roleId, isActive: true },
-      select: { email: true },
-    })
-  } catch { return [] }
+// Scope-aware approver lookup — a dept/designation/site-scoped role is only
+// notified about employees inside its scope, else the request goes to admin.
+// See src/lib/services/approval-scope.ts.
+async function findScopedApprovers(
+  db: any,
+  tenantId: string,
+  roleId: string,
+  requesterEmployeeId: number,
+): Promise<{ recipients: { email: string }[]; escalated: boolean; note: string }> {
+  return await resolveStepRecipients(db, tenantId, roleId, requesterEmployeeId)
 }
 
 // POST: Create tour request
@@ -146,7 +229,7 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       },
       include: {
-        Employee: { select: { employeeCode: true, firstName: true, lastName: true } },
+        Employee: { select: { employeeCode: true, firstName: true, lastName: true, email: true } },
       },
     })
 
@@ -177,20 +260,60 @@ export async function POST(request: NextRequest) {
       } else {
         const chain = await getTourApprovalChain(tenantId, requesterUser?.orgRoleId)
         if (chain && chain.steps.length > 0) {
-          const step1 = chain.steps[0]
-          const approvers = await findUsersForRole(tenantId, step1.approverRoleId)
-          if (approvers.length > 0) {
-            for (const approver of approvers) {
+          // Skip any leading informational steps — start at the first step that
+          // actually needs a decision. See approval-flow.ts.
+          const start = resolveAdvance(chain.steps as ChainStepLike[], 1, true)
+          await informOptionalSteps(
+            db, tenantId, start.informed, tourRequest.employeeId, tourRequest.id, notifMsg, 'tour',
+          )
+
+          if (start.fullyApproved) {
+            // Nobody's approval is required by this chain.
+            await db.tourRequest.update({
+              where: { id: tourRequest.id },
+              data: { status: 'approved', approvedDate: new Date(), updatedAt: new Date() },
+            }).catch(() => {})
+            await db.notification.create({
+              data: { userId: 0, userEmail: tourRequest.Employee.email || '',
+                title: 'Tour Request Approved ✓',
+                message: `Your tour to ${destination} (${fromStr} – ${toStr}) was approved automatically — its approval chain has no steps requiring approval.`,
+                type: 'success', link: '', entityType: 'tour', entityId: tourRequest.id },
+            }).catch(() => {})
+            return NextResponse.json({
+              success: true,
+              data: { ...tourRequest, status: 'approved' },
+              message: 'Tour request approved — no approval steps were required.',
+            }, { status: 201 })
+          }
+
+          if (start.nextStep && start.nextStep !== 1) {
+            await db.tourRequest.update({
+              where: { id: tourRequest.id },
+              data: { currentStep: start.nextStep, updatedAt: new Date() },
+            }).catch(() => {})
+          }
+
+          const step1 = chain.steps.find(s => s.stepNumber === start.nextStep) || chain.steps[0]
+          // Scoped fan-out: only approvers whose role scope covers this employee.
+          const { recipients, escalated, note } = await findScopedApprovers(
+            db, tenantId, step1.approverRoleId, tourRequest.employeeId,
+          )
+          if (recipients.length > 0) {
+            for (const approver of recipients) {
               await db.notification.create({
                 data: { userId: 0, userEmail: approver.email,
-                  title: 'New Tour Request — Approval Needed', message: notifMsg,
-                  type: 'info', link: '', entityType: 'tour', entityId: tourRequest.id },
+                  title: escalated
+                    ? 'New Tour Request — Admin Approval Required'
+                    : 'New Tour Request — Approval Needed',
+                  message: notifMsg + note,
+                  type: escalated ? 'warning' : 'info',
+                  link: '', entityType: 'tour', entityId: tourRequest.id },
               }).catch(() => {})
             }
           } else {
             await db.notification.create({
               data: { userId: 0, userEmail: '__admin_broadcast__',
-                title: 'New Tour Request — No Approver Found', message: notifMsg,
+                title: 'New Tour Request — No Approver Found', message: notifMsg + note,
                 type: 'warning', link: '', entityType: 'tour', entityId: tourRequest.id },
             }).catch(() => {})
           }
@@ -236,14 +359,68 @@ export async function PATCH(request: NextRequest) {
     if (!tourRequest) return NextResponse.json({ success: false, error: 'Tour request not found' }, { status: 404 })
     if (tourRequest.status !== 'pending') return NextResponse.json({ success: false, error: 'Tour request is not pending' }, { status: 400 })
 
+    // ── Caller identity + guards ──────────────────────────────────
     let approverEmployeeId: number | null = null
     const callerEmail = request.cookies.get('erp_user_email')?.value
-    if (callerEmail && tenantId) {
-      const callerUser = await superadminDb.tenantUser.findFirst({
-        where: { tenantId, email: callerEmail, isActive: true },
-        select: { employeeId: true },
+    const callerRole = request.cookies.get('erp_user_role')?.value
+    const callerUser = (callerEmail && tenantId)
+      ? await superadminDb.tenantUser.findFirst({
+          where: { tenantId, email: callerEmail, isActive: true },
+          select: { employeeId: true, orgRoleId: true },
+        }).catch(() => null)
+      : null
+    if (callerUser?.employeeId) approverEmployeeId = callerUser.employeeId
+    // Full admin (role 'admin' with no org-role) is the top authority: it may
+    // finalize any tour, overriding remaining chain steps.
+    const isFullAdmin = callerRole === 'admin' && !callerUser?.orgRoleId
+
+    // Block self-approval
+    if (callerUser?.employeeId && callerUser.employeeId === tourRequest.employeeId) {
+      return NextResponse.json(
+        { success: false, error: 'You cannot approve or reject your own tour request.' },
+        { status: 403 }
+      )
+    }
+
+    // Chain approvers may act ONLY on their current step. The full admin bypasses this.
+    if (!isFullAdmin && callerUser?.orgRoleId && tenantId) {
+      // Confirm the caller really is the person their role describes — the
+      // scope identifies the approver, it is NOT a filter on the requester.
+      // Testing the requester here rejected every approver whose own
+      // department/designation/site differed from the person they approve for.
+      if (!(await callerMatchesOwnRoleScope(db, callerUser.orgRoleId, callerUser.employeeId))) {
+        return NextResponse.json(
+          { success: false, error: 'Your account does not match the department/designation/site of your assigned role. Contact your administrator.' },
+          { status: 403 }
+        )
+      }
+
+      const requesterUser = await superadminDb.tenantUser.findFirst({
+        where: { tenantId, employeeId: tourRequest.employeeId, isActive: true },
+        select: { orgRoleId: true },
       }).catch(() => null)
-      if (callerUser?.employeeId) approverEmployeeId = callerUser.employeeId
+
+      const requesterRole = requesterUser?.orgRoleId
+        ? await superadminDb.orgRole.findUnique({ where: { id: requesterUser.orgRoleId }, select: { level: true } }).catch(() => null)
+        : null
+
+      const isLevel1Requester = !requesterRole || requesterRole.level === 1
+
+      if (!isLevel1Requester) {
+        const chain = await getTourApprovalChain(tenantId, requesterUser?.orgRoleId)
+        const currentStepDef = chain?.steps.find(s => s.stepNumber === (tourRequest.currentStep || 1))
+        if (!currentStepDef || currentStepDef.approverRoleId !== callerUser.orgRoleId) {
+          return NextResponse.json(
+            { success: false, error: 'It is not your turn to approve this tour request. Please wait for the previous step to be completed.' },
+            { status: 403 }
+          )
+        }
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Level-1 tour requests require admin approval.' },
+          { status: 403 }
+        )
+      }
     }
 
     const empName = `${tourRequest.Employee.firstName} ${tourRequest.Employee.lastName}`
@@ -252,14 +429,23 @@ export async function PATCH(request: NextRequest) {
 
     // ── REJECT ──
     if (action === 'reject') {
+      // Snapshot the chain position — see src/lib/services/rejection-position.ts
+      const pos = await resolveRejectionPosition(
+        tenantId, tourRequest.employeeId, (tourRequest as any).currentStep, isFullAdmin,
+      )
+      const positionText = formatRejectionPosition(pos.step, pos.roleName, pos.totalSteps)
+
       await db.tourRequest.update({
         where: { id: parseInt(id) },
-        data: { status: 'rejected', rejectedBy: approverEmployeeId, rejectedDate: new Date(), rejectionReason: rejectionReason || null, updatedAt: new Date() },
+        data: { status: 'rejected', rejectedBy: approverEmployeeId, rejectedDate: new Date(),
+          rejectionReason: rejectionReason || null,
+          rejectedAtStep: pos.step, rejectedByRoleName: pos.roleName,
+          updatedAt: new Date() },
       })
       await db.notification.create({
         data: { userId: 0, userEmail: tourRequest.Employee.email || '',
           title: 'Tour Request Rejected',
-          message: `Your tour to ${tourRequest.destination} (${fromStr} – ${toStr}) was rejected.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
+          message: `Your tour to ${tourRequest.destination} (${fromStr} – ${toStr}) was rejected${positionText}.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
           type: 'error', link: '', entityType: 'tour', entityId: parseInt(id) },
       }).catch(() => {})
       return NextResponse.json({ success: true, message: 'Tour request rejected' })
@@ -280,7 +466,14 @@ export async function PATCH(request: NextRequest) {
 
     const currentStep = tourRequest.currentStep || 1
     const totalSteps = chain?.steps.length || 1
-    const isLastStep = !chain || currentStep >= totalSteps
+    // Steps with "Approval required" unticked are informational: their approvers
+    // are told but the request does not wait. See approval-flow.ts.
+    const advance = chain
+      ? resolveAdvance(chain.steps as ChainStepLike[], currentStep, false)
+      : { nextStep: null, informed: [] as ChainStepLike[], fullyApproved: true }
+    // Full admin finalizes immediately (top authority); otherwise final once no
+    // required step remains.
+    const isLastStep = !chain || advance.fullyApproved || isFullAdmin
 
     if (isLastStep) {
       // Final approval
@@ -294,15 +487,29 @@ export async function PATCH(request: NextRequest) {
           message: `Your tour to ${tourRequest.destination} (${fromStr} – ${toStr}) has been approved. These days will count as paid attendance.`,
           type: 'success', link: '', entityType: 'tour', entityId: parseInt(id) },
       }).catch(() => {})
+      if (chain && tenantId && !isFullAdmin) {
+        await informOptionalSteps(
+          db, tenantId, advance.informed, tourRequest.employeeId, parseInt(id),
+          `${empName}'s tour to ${tourRequest.destination} (${fromStr} – ${toStr}) has been approved.`,
+          'tour',
+        )
+      }
       return NextResponse.json({ success: true, message: 'Tour request approved', fullyApproved: true })
     }
 
-    // Intermediate step — advance to next
-    const nextStep = currentStep + 1
+    // Intermediate step — advance to the next REQUIRED step.
+    const nextStep = advance.nextStep ?? currentStep + 1
     await db.tourRequest.update({
       where: { id: parseInt(id) },
       data: { currentStep: nextStep, approvedBy: approverEmployeeId, updatedAt: new Date() },
     })
+    if (chain && tenantId) {
+      await informOptionalSteps(
+        db, tenantId, advance.informed, tourRequest.employeeId, parseInt(id),
+        `${empName}'s tour to ${tourRequest.destination} (${fromStr} – ${toStr}) passed step ${currentStep}.`,
+        'tour',
+      )
+    }
 
     // Notify employee of partial approval
     await db.notification.create({
@@ -316,20 +523,25 @@ export async function PATCH(request: NextRequest) {
     if (chain && tenantId) {
       const nextStepDef = chain.steps.find(s => s.stepNumber === nextStep)
       if (nextStepDef) {
-        const nextApprovers = await findUsersForRole(tenantId, nextStepDef.approverRoleId)
+        // Scoped fan-out for the next step — same boundary as step 1.
+        const { recipients: nextApprovers, escalated, note } = await findScopedApprovers(
+          db, tenantId, nextStepDef.approverRoleId, tourRequest.employeeId,
+        )
         for (const approver of nextApprovers) {
           await db.notification.create({
             data: { userId: 0, userEmail: approver.email,
-              title: `Tour Request — Step ${nextStep} Approval Needed`,
-              message: `${empName}'s tour to ${tourRequest.destination} (${fromStr} – ${toStr}) passed step ${currentStep} and now requires your approval.`,
-              type: 'info', link: '', entityType: 'tour', entityId: parseInt(id) },
+              title: escalated
+                ? `Tour Escalated — Step ${nextStep}`
+                : `Tour Request — Step ${nextStep} Approval Needed`,
+              message: `${empName}'s tour to ${tourRequest.destination} (${fromStr} – ${toStr}) passed step ${currentStep} and now requires your approval.${note}`,
+              type: escalated ? 'warning' : 'info', link: '', entityType: 'tour', entityId: parseInt(id) },
           }).catch(() => {})
         }
         if (nextApprovers.length === 0) {
           await db.notification.create({
             data: { userId: 0, userEmail: '__admin_broadcast__',
               title: `Tour Escalated — Step ${nextStep}`,
-              message: `${empName}'s tour needs step ${nextStep} approval. No users found for the required role.`,
+              message: `${empName}'s tour needs step ${nextStep} approval. No users found for the required role.${note}`,
               type: 'warning', link: '', entityType: 'tour', entityId: parseInt(id) },
           }).catch(() => {})
         }

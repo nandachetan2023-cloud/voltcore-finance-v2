@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { superadminDb } from '@/lib/superadmin-db'
+import { getDbForRequest } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
           message: `${user.name} (${user.email}) has submitted their joining form and is awaiting your approval.`,
           type: 'info',
           entityType: 'onboarding',
-          link: '',
+          link: 'onboarding-approvals',
           isRead: false,
           createdAt: new Date(),
         },
@@ -130,6 +131,8 @@ export async function PUT(request: NextRequest) {
     }
 
     if (action === 'approve') {
+      const formData: any = (user as any).onboardingData || {}
+
       await superadminDb.tenantUser.update({
         where: { id: userId },
         data: {
@@ -137,6 +140,120 @@ export async function PUT(request: NextRequest) {
           onboardingApprovedAt: new Date(),
         } as any,
       })
+
+      // Transfer uploaded documents to OnboardingTask so they appear in
+      // Employee Documents and My Documents (same logic as onboarding-approvals)
+      if ((user as any).employeeId && formData) {
+        try {
+          const db = getDbForRequest(request)
+          const docFields: Record<string, string> = {
+            docPanCard: 'PAN Card',
+            docAadhar: 'Aadhar Card',
+            docPassport: 'Passport',
+            docVoterId: 'Voter ID / Driving License',
+            docVaccineCert: 'Vaccine Certificate',
+            docEducationCert: 'Education Certificate',
+            docPrevEmployment: 'Previous Employment Proof',
+            docResume: 'Resume / CV',
+            docBankProof: 'Bank Account Proof',
+            docPhotograph: 'Passport Size Photograph',
+            docFamilyPhoto: 'Family Photo (ESI)',
+          }
+
+          const uploadedDocs = Object.entries(docFields).filter(([field]) => {
+            const f = formData[field]
+            return f && f.data && f.data.includes(',')
+          })
+
+          if (uploadedDocs.length > 0) {
+            let template = await db.checklistTemplate.findFirst({
+              where: { name: 'Joining Documents' },
+              select: { id: true },
+            })
+            if (!template) {
+              template = await db.checklistTemplate.create({
+                data: {
+                  name: 'Joining Documents',
+                  description: 'Documents uploaded during employee onboarding joining form',
+                  isActive: true,
+                  updatedAt: new Date(),
+                },
+              })
+            }
+
+            let checklist = await db.onboardingChecklist.findFirst({
+              where: { employeeId: (user as any).employeeId, templateId: template.id },
+            })
+            if (!checklist) {
+              checklist = await db.onboardingChecklist.create({
+                data: {
+                  employeeId: (user as any).employeeId,
+                  templateId: template.id,
+                  status: 'completed',
+                  startedAt: new Date(),
+                  completedAt: new Date(),
+                  updatedAt: new Date(),
+                },
+              })
+            }
+
+            for (const [field, docTitle] of uploadedDocs) {
+              const fileData = formData[field]
+              const base64 = fileData.data.split(',')[1]
+              if (!base64) continue
+              const buffer = Buffer.from(base64, 'base64')
+
+              let templateTask = await db.checklistTemplateTask.findFirst({
+                where: { templateId: template.id, title: docTitle },
+              })
+              if (!templateTask) {
+                templateTask = await db.checklistTemplateTask.create({
+                  data: {
+                    templateId: template.id,
+                    title: docTitle,
+                    description: 'Uploaded during joining form',
+                    assignedRole: 'hr',
+                    requiresDocument: true,
+                    documentNecessary: true,
+                    order: 99,
+                  },
+                })
+              }
+
+              const existingTask = await db.onboardingTask.findFirst({
+                where: { checklistId: checklist.id, templateTaskId: templateTask.id },
+              })
+              if (existingTask) {
+                await db.onboardingTask.update({
+                  where: { id: existingTask.id },
+                  data: {
+                    status: 'completed',
+                    documentPath: fileData.name,
+                    documentData: buffer,
+                    documentMimeType: fileData.type || 'application/octet-stream',
+                    completedAt: new Date(),
+                  },
+                })
+              } else {
+                await db.onboardingTask.create({
+                  data: {
+                    checklistId: checklist.id,
+                    templateTaskId: templateTask.id,
+                    status: 'completed',
+                    documentPath: fileData.name,
+                    documentData: buffer,
+                    documentMimeType: fileData.type || 'application/octet-stream',
+                    completedAt: new Date(),
+                  },
+                })
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Document transfer failed during onboarding approval:', e)
+        }
+      }
+
       return NextResponse.json({ success: true, message: 'Onboarding approved' })
     } else if (action === 'reject') {
       // Reset to pending so user can re-fill

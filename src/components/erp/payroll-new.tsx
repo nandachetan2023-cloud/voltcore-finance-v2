@@ -3,14 +3,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   IndianRupee, TrendingUp, Users, Download, FileSpreadsheet,
-  Plus, Eye, Loader2, AlertTriangle, CheckCircle2, Clock, Filter
+  Plus, Eye, Loader2, AlertTriangle, CheckCircle2, Clock, Filter, Trash2
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
-import SalaryComplianceBulkImport from './salary-compliance-bulk-import';
 
 interface PayrollRun {
   id: number;
@@ -130,7 +129,27 @@ export default function PayrollModule() {
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [calculating, setCalculating] = useState(false);
   const templateFileInputRef = useRef<HTMLInputElement>(null);
-  
+
+  const [deleteConfirmRun, setDeleteConfirmRun] = useState<PayrollRun | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Restore previously uploaded template file after page refresh
+  useEffect(() => {
+    const saved = localStorage.getItem('payroll_nc_template');
+    if (saved) {
+      try {
+        const { name, type, data } = JSON.parse(saved);
+        const byteString = atob(data.split(',')[1]);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        setTemplateFile(new File([new Blob([ab], { type })], name, { type }));
+      } catch {
+        localStorage.removeItem('payroll_nc_template');
+      }
+    }
+  }, []);
+
   const [generateForm, setGenerateForm] = useState({
     mode: 'bulk' as 'single' | 'bulk',
     month: new Date().getMonth() + 1,
@@ -147,6 +166,11 @@ export default function PayrollModule() {
 
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
   const [employees, setEmployees] = useState<Array<{ id: number; employeeCode: string; firstName: string; lastName: string }>>([]);
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [yearFilter, setYearFilter] = useState<number | ''>('');
+  const [monthFilter, setMonthFilter] = useState<number | ''>('');
 
   const { triggerCreate } = useERPStore();
 
@@ -195,6 +219,25 @@ export default function PayrollModule() {
       totalNet: completed.reduce((s, r) => s + Number(r.totalNet), 0),
     };
   }, [payrollRuns]);
+
+  // Filtered payroll runs based on search & filters
+  const filteredRuns = useMemo(() => {
+    let list = payrollRuns;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(run => run.name.toLowerCase().includes(q));
+    }
+    if (statusFilter !== 'all') {
+      list = list.filter(run => run.status === statusFilter);
+    }
+    if (yearFilter !== '') {
+      list = list.filter(run => run.year === yearFilter);
+    }
+    if (monthFilter !== '') {
+      list = list.filter(run => run.month === monthFilter);
+    }
+    return list;
+  }, [payrollRuns, searchQuery, statusFilter, yearFilter, monthFilter]);
 
   // Get available months and years from payroll runs
   const availableMonthsYears = useMemo(() => {
@@ -496,6 +539,13 @@ export default function PayrollModule() {
     const file = e.target.files?.[0];
     if (file) {
       setTemplateFile(file);
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          localStorage.setItem('payroll_nc_template', JSON.stringify({ name: file.name, type: file.type, data: reader.result }));
+        } catch { /* storage full — ignore */ }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -528,33 +578,54 @@ export default function PayrollModule() {
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        
+
         const calculatedRows = res.headers.get('X-Calculated-Rows') || '0';
+        const errCount = res.headers.get('X-Calculation-Errors');
+        const errDetails: string[] = errCount
+          ? JSON.parse(res.headers.get('X-Calculation-Error-Details') || '[]')
+          : [];
+
         toast.success(
           <div>
             <div className="font-semibold">Calculation Complete!</div>
             <div className="text-xs mt-1">{calculatedRows} employees processed. Upload this file to "Non-Compliance Bulk Import" to save to database.</div>
+            {errCount && (
+              <div className="text-xs mt-2 text-yellow-400">
+                <div className="font-semibold">⚠ {errCount} row(s) skipped (missing required fields):</div>
+                {errDetails.slice(0, 3).map((e, i) => <div key={i}>• {e}</div>)}
+                {errDetails.length > 3 && <div>... and {errDetails.length - 3} more</div>}
+              </div>
+            )}
           </div>,
-          { duration: 6000 }
+          { duration: errCount ? 10000 : 6000 }
         );
-        
+
         setUploadCalculateOpen(false);
         setTemplateFile(null);
+        localStorage.removeItem('payroll_nc_template');
         if (templateFileInputRef.current) {
           templateFileInputRef.current.value = '';
         }
       } else {
-        const json = await res.json();
+        let errorMsg = 'Unknown error';
+        let details: string[] = [];
+        try {
+          const json = await res.json();
+          errorMsg = json.error || errorMsg;
+          details = json.details || [];
+        } catch {
+          errorMsg = `Server error (HTTP ${res.status})`;
+        }
         toast.error(
           <div>
             <div className="font-semibold">Calculation Failed</div>
-            <div className="text-xs mt-1">{json.error || 'Unknown error'}</div>
-            {json.details && json.details.length > 0 && (
+            <div className="text-xs mt-1">{errorMsg}</div>
+            {details.length > 0 && (
               <div className="text-xs mt-2 max-h-32 overflow-y-auto">
-                {json.details.slice(0, 5).map((err: string, idx: number) => (
+                {details.slice(0, 5).map((err: string, idx: number) => (
                   <div key={idx}>• {err}</div>
                 ))}
-                {json.details.length > 5 && <div>... and {json.details.length - 5} more errors</div>}
+                {details.length > 5 && <div>... and {details.length - 5} more errors</div>}
               </div>
             )}
           </div>,
@@ -562,10 +633,34 @@ export default function PayrollModule() {
         );
       }
     } catch (error) {
-      toast.error('Failed to calculate payroll');
+      toast.error(`Failed to calculate payroll: ${error instanceof Error ? error.message : 'Unknown error'}`);
       console.error(error);
     } finally {
       setCalculating(false);
+    }
+  };
+
+  const handleDeleteRun = async () => {
+    if (!deleteConfirmRun) return;
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/payroll', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deleteConfirmRun.id }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        toast.success(`Payroll run "${deleteConfirmRun.name}" deleted successfully.`);
+        setDeleteConfirmRun(null);
+        fetchData();
+      } else {
+        toast.error(json.error || 'Failed to delete payroll run');
+      }
+    } catch {
+      toast.error('Failed to delete payroll run');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -603,16 +698,82 @@ export default function PayrollModule() {
         <div className="vc-panel-header">
           <IndianRupee size={15} className="text-[#f5a623]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Payroll Runs</span>
-          <span className="ml-auto text-[10px] text-[#5a6878]">{payrollRuns.length} runs</span>
-          <SalaryComplianceBulkImport onImportComplete={fetchData} />
+          <span className="ml-auto text-[10px] text-[#5a6878]">{filteredRuns.length}{filteredRuns.length !== payrollRuns.length ? ` / ${payrollRuns.length}` : ''} runs</span>
           <button className="vc-btn-secondary ml-2 flex items-center gap-1" onClick={() => setGenerateOpen(true)}>
             <Plus size={13} /> Generate Payroll Excel
+          </button>
+          <button className="vc-btn-secondary ml-2 flex items-center gap-1" onClick={() => setUploadCalculateOpen(true)}>
+            <FileSpreadsheet size={13} /> Upload & Calculate
           </button>
           <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={() => setSearchPayslipOpen(true)}>
             <Download size={13} /> Search & Download Payslips
           </button>
         </div>
         
+        {/* Search & Filter Toolbar */}
+        <div className="flex flex-wrap gap-3 items-center px-4 py-3 border-b border-[#252e3a]">
+          <div className="flex items-center gap-2 bg-[#141920] border border-[#2e3a48] rounded-lg px-3 py-[6px] flex-1 min-w-[200px] max-w-[320px]">
+            <Filter size={13} className="text-[#5a6878] shrink-0" />
+            <input
+              type="text"
+              placeholder="Search by run name..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="bg-transparent border-none text-[12px] text-[#e2e8f0] outline-none w-full placeholder:text-[#5a6878]"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="text-[#5a6878] hover:text-[#e2e8f0]">
+                ✕
+              </button>
+            )}
+          </div>
+          <div className="relative">
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="vc-input appearance-none pr-7 min-w-[120px] text-[11px] cursor-pointer"
+            >
+              <option value="all">All Status</option>
+              <option value="completed">Completed</option>
+              <option value="processing">Processing</option>
+              <option value="draft">Draft</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+          <div className="relative">
+            <select
+              value={yearFilter}
+              onChange={e => setYearFilter(e.target.value ? parseInt(e.target.value) : '')}
+              className="vc-input appearance-none pr-7 min-w-[100px] text-[11px] cursor-pointer"
+            >
+              <option value="">All Years</option>
+              {YEARS.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          <div className="relative">
+            <select
+              value={monthFilter}
+              onChange={e => setMonthFilter(e.target.value ? parseInt(e.target.value) : '')}
+              className="vc-input appearance-none pr-7 min-w-[120px] text-[11px] cursor-pointer"
+            >
+              <option value="">All Months</option>
+              {MONTHS.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          {(searchQuery || statusFilter !== 'all' || yearFilter !== '' || monthFilter !== '') && (
+            <button
+              onClick={() => { setSearchQuery(''); setStatusFilter('all'); setYearFilter(''); setMonthFilter(''); }}
+              className="text-[10px] text-[#f5a623] hover:text-[#e8891a] font-semibold uppercase tracking-wider"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 bg-[#161c24] z-10">
@@ -623,9 +784,9 @@ export default function PayrollModule() {
               </tr>
             </thead>
             <tbody>
-              {payrollRuns.length === 0 ? (
-                <tr><td colSpan={7} className="py-8 text-center text-[#5a6878] text-[11px]">No payroll runs found. Click "Generate Payroll" to create one.</td></tr>
-              ) : payrollRuns.map(run => (
+              {filteredRuns.length === 0 ? (
+                <tr><td colSpan={7} className="py-8 text-center text-[#5a6878] text-[11px]">{payrollRuns.length === 0 ? 'No payroll runs found. Click "Generate Payroll" to create one.' : 'No runs match your filters.'}</td></tr>
+              ) : filteredRuns.map(run => (
                 <tr key={run.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors group">
                   <td className="py-[10px] px-3 font-semibold text-[#e2e8f0]">{run.name}</td>
                   <td className="py-[10px] px-3 text-[#8899aa]">{MONTHS[run.month - 1].label} {run.year}</td>
@@ -651,13 +812,21 @@ export default function PayrollModule() {
                         <Download size={14} />
                         Payslips
                       </button>
-                      <button 
+                      <button
                         className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-medium bg-[#00e676]/10 text-[#00e676] hover:bg-[#00e676]/20 border border-[#00e676]/30 transition-colors"
                         onClick={() => handleDownloadSalarySheet(run.id, run.month, run.year)}
                         title="Download Salary Sheet (Excel)"
                       >
                         <FileSpreadsheet size={14} />
                         Sheet
+                      </button>
+                      <button
+                        className="px-3 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-medium bg-[#ff3d3d]/10 text-[#ff3d3d] hover:bg-[#ff3d3d]/20 border border-[#ff3d3d]/30 transition-colors"
+                        onClick={() => setDeleteConfirmRun(run)}
+                        title="Delete Payroll Run"
+                      >
+                        <Trash2 size={14} />
+                        Delete
                       </button>
                     </div>
                   </td>
@@ -920,6 +1089,7 @@ export default function PayrollModule() {
               onClick={() => {
                 setUploadCalculateOpen(false);
                 setTemplateFile(null);
+                localStorage.removeItem('payroll_nc_template');
                 if (templateFileInputRef.current) {
                   templateFileInputRef.current.value = '';
                 }
@@ -1012,6 +1182,43 @@ export default function PayrollModule() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmRun} onOpenChange={open => { if (!open) setDeleteConfirmRun(null); }}>
+        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-[#ff3d3d] text-base flex items-center gap-2">
+              <Trash2 size={18} /> Delete Payroll Run
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <p className="text-[12px] text-[#e2e8f0]">
+              Are you sure you want to delete <span className="font-semibold text-[#f5a623]">{deleteConfirmRun?.name}</span>?
+            </p>
+            <p className="text-[11px] text-[#8899aa]">
+              This will permanently remove the payroll run and all {deleteConfirmRun?.totalEmployees} employee salary records for{' '}
+              {deleteConfirmRun ? `${MONTHS[deleteConfirmRun.month - 1].label} ${deleteConfirmRun.year}` : ''}. This action cannot be undone.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]"
+              onClick={() => setDeleteConfirmRun(null)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#ff3d3d] text-white hover:bg-[#cc2222] font-semibold"
+              onClick={handleDeleteRun}
+              disabled={deleting}
+            >
+              {deleting ? <><Loader2 size={14} className="animate-spin mr-1" />Deleting...</> : <><Trash2 size={14} className="mr-1" />Delete</>}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

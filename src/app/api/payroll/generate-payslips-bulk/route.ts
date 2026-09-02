@@ -2,6 +2,7 @@ import { getDbForRequest } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { PayslipGenerator } from '@/lib/services/payslip-generator';
 import { PayrollCalculator } from '@/lib/services/payroll-calculator';
+import { getTenantLogo } from '@/lib/tenant-branding';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,11 +26,13 @@ export async function POST(request: NextRequest) {
     const generator = new PayslipGenerator();
     const calculator = new PayrollCalculator();
 
-    // Company info (should come from settings)
+    // Company info (logo comes from the superadmin-managed tenant branding)
+    const logo = await getTenantLogo(request);
     const companyInfo = {
       name: 'Upasana Associate',
-      address: 'Flat No. G+1/3, Vinayakpuram, In front of MME Ground, Jharsuguda, Odisha-768201',
+      address: 'UPASANA VILLA, KHATA NO-747/5139, PLOT NO-666/11857,\nINFRONT OF MAMTA MARBLE, BRUNDABAN COLONY,\nJHARSUGUDA, Jharsuguda, Odisha, 768203',
       principalEmployer: 'Hindalco Industries Ltd., Lapanga, Sambalpur-768212',
+      logo,
     };
 
     // Get all payroll items for the run
@@ -45,6 +48,7 @@ export async function POST(request: NextRequest) {
         },
         PayrollRun: true,
       },
+      orderBy: { Employee: { employeeCode: 'asc' } },
     });
 
     if (payrollItems.length === 0) {
@@ -65,12 +69,14 @@ export async function POST(request: NextRequest) {
           presentDays: item.presentDays || 0,
           paidLeaveDays: item.paidLeaveDays || 0,
           lopDays: item.lopDays || 0,
-          otHours: item.otHours || 0,
+          otHours: Number(item.otHours) || 0,
           basicSalary: Number(item.basicSalary) || 0,
           hra: Number(item.hra) || 0,
           conveyanceAllowance: Number(item.conveyanceAllowance) || 0,
           medicalAllowance: Number(item.medicalAllowance) || 0,
           specialAllowance: Number(item.specialAllowance) || 0,
+          attendanceAllowance: Number(item.attendanceAllowance) || 0,
+          phAmount: Number(item.phAmount) || 0,
           otAmount: Number(item.otAmount) || 0,
           grossEarnings: Number(item.grossEarning),
           pfDeduction: Number(item.pfDeduction) || 0,

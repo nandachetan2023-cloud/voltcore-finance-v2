@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
     const body = await request.json()
-    const { name, description, departmentId, designationId, tasks = [] } = body
+    const { name, description, departmentId, designationId, subDesignationId, tasks = [] } = body
     if (!name) return NextResponse.json({ success: false, error: 'Name is required' }, { status: 400 })
 
     const template = await db.checklistTemplate.create({
@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
         name, description,
         departmentId: departmentId ? parseInt(departmentId) : null,
         designationId: designationId ? parseInt(designationId) : null,
+        subDesignationId: subDesignationId ? parseInt(subDesignationId) : null,
         updatedAt: new Date(),
         tasks: tasks.length ? {
           create: tasks.map((t: any, i: number) => ({
@@ -64,6 +65,7 @@ export async function PUT(request: NextRequest) {
 
     if (data.departmentId) data.departmentId = parseInt(data.departmentId)
     if (data.designationId) data.designationId = parseInt(data.designationId)
+    if (data.subDesignationId !== undefined) data.subDesignationId = data.subDesignationId ? parseInt(data.subDesignationId) : null
 
     await db.checklistTemplate.update({ where: { id: parseInt(id) }, data: { ...data, updatedAt: new Date() } })
 

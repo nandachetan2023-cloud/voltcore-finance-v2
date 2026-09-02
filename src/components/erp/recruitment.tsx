@@ -5,6 +5,7 @@ import {
   Briefcase, Users, Send, UserCheck, Plus, Pencil,
   Trash2, Loader2, AlertTriangle, Zap, CheckCircle2, Info,
 } from 'lucide-react';
+import { SubDesignationSelect } from './sub-designation-select';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -21,6 +22,7 @@ interface JobOpening {
   id: string;
   position: string;
   designationId?: number | null;
+  subDesignationId?: number | null;
   site: string;
   openings: number;
   applications: number;
@@ -37,6 +39,7 @@ interface Designation {
 interface JobFormData {
   position: string;
   designationId: number | null;
+  subDesignationId: number | null;
   site: string;
   openings: number;
   priority: string;
@@ -44,7 +47,7 @@ interface JobFormData {
 }
 
 const EMPTY_FORM: JobFormData = {
-  position: '', designationId: null, site: '', openings: 1, priority: 'Medium', status: 'Open',
+  position: '', designationId: null, subDesignationId: null, site: '', openings: 1, priority: 'Medium', status: 'Open',
 };
 
 const PRIORITY_OPTIONS = ['Urgent', 'High', 'Medium', 'Low'];
@@ -186,7 +189,7 @@ export default function Recruitment() {
   const hired = openings.filter(o => o.status === 'Filled').reduce((s, o) => s + o.openings, 0);
 
   /* ── Form helpers ── */
-  const updateForm = (field: keyof JobFormData, value: string | number) => {
+  const updateForm = (field: keyof JobFormData, value: string | number | null) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
@@ -278,7 +281,7 @@ export default function Recruitment() {
   const openEditDialog = (job: JobOpening) => {
     setEditTarget(job);
     setForm({
-      position: job.position, designationId: job.designationId || null, site: job.site, openings: job.openings,
+      position: job.position, designationId: job.designationId || null, subDesignationId: job.subDesignationId || null, site: job.site, openings: job.openings,
       priority: job.priority, status: job.status,
     });
     // Detect if stored site matches a biometric site or is a custom value
@@ -381,11 +384,20 @@ export default function Recruitment() {
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Designation</label>
-              <select value={form.designationId || ''} onChange={e => updateForm('designationId', e.target.value ? Number(e.target.value) : null)} className="vc-input appearance-none">
+              <select value={form.designationId || ''} onChange={e => { const v = e.target.value ? Number(e.target.value) : null; updateForm('designationId', v); updateForm('subDesignationId', null); }} className="vc-input appearance-none">
                 <option value="">Select designation (optional)...</option>
                 {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
+            <SubDesignationSelect
+              designations={designations}
+              designationId={form.designationId}
+              value={form.subDesignationId}
+              onChange={v => updateForm('subDesignationId', v ? Number(v) : null)}
+              className="vc-input appearance-none"
+              label="Sub-Designation"
+              labelClassName="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block"
+            />
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
               <div className="space-y-2">
@@ -473,11 +485,20 @@ export default function Recruitment() {
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Designation</label>
-              <select value={form.designationId || ''} onChange={e => updateForm('designationId', e.target.value ? Number(e.target.value) : null)} className="vc-input appearance-none">
+              <select value={form.designationId || ''} onChange={e => { const v = e.target.value ? Number(e.target.value) : null; updateForm('designationId', v); updateForm('subDesignationId', null); }} className="vc-input appearance-none">
                 <option value="">Select designation (optional)...</option>
                 {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
+            <SubDesignationSelect
+              designations={designations}
+              designationId={form.designationId}
+              value={form.subDesignationId}
+              onChange={v => updateForm('subDesignationId', v ? Number(v) : null)}
+              className="vc-input appearance-none"
+              label="Sub-Designation"
+              labelClassName="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block"
+            />
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
               <div className="space-y-2">

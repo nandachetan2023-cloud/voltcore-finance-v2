@@ -71,11 +71,13 @@ export async function GET(request: NextRequest) {
 }
 
 // POST: Create shift assignment → activates employee
+// Supports multiple overlapping shifts — the system picks the closest
+// shift to the actual punch-in time during attendance processing.
 export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
   try {
     const body = await request.json()
-    const { employeeId, shiftId, effectiveFrom, effectiveTo } = body
+    const { employeeId, shiftId, effectiveFrom, effectiveTo, replaceExisting } = body
 
     if (!employeeId || !shiftId || !effectiveFrom) {
       return NextResponse.json(
@@ -90,14 +92,33 @@ export async function POST(request: NextRequest) {
     const shift = await db.shift.findUnique({ where: { id: parseInt(shiftId) } })
     if (!shift) return NextResponse.json({ success: false, error: 'Shift not found' }, { status: 400 })
 
-    // End any existing active assignments
-    await db.shiftAssignment.updateMany({
+    // Only end existing assignments if explicitly requested (replaceExisting=true).
+    // By default, multiple shifts can coexist for the same employee.
+    if (replaceExisting) {
+      await db.shiftAssignment.updateMany({
+        where: {
+          employeeId: parseInt(employeeId),
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date(effectiveFrom) } }],
+        },
+        data: { effectiveTo: new Date(effectiveFrom), updatedAt: new Date() },
+      })
+    }
+
+    // Check if this exact shift is already assigned and active
+    const existingDuplicate = await db.shiftAssignment.findFirst({
       where: {
         employeeId: parseInt(employeeId),
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date(effectiveFrom) } }],
+        shiftId: parseInt(shiftId),
+        effectiveFrom: { lte: new Date() },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
       },
-      data: { effectiveTo: new Date(effectiveFrom), updatedAt: new Date() },
     })
+    if (existingDuplicate) {
+      return NextResponse.json(
+        { success: false, error: `This shift ("${shift.name}") is already assigned to this employee` },
+        { status: 409 }
+      )
+    }
 
     const assignment = await db.shiftAssignment.create({
       data: {

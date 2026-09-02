@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { FieldError, fieldBorderError } from '@/components/ui/field-error';
 import { validateFields, isValid, type FieldErrors } from '@/lib/form-validation';
+import { rejectionPositionLabel } from '@/lib/rejection-position-format';
 
 const TYPE_CONFIG = {
   general:         { label: 'General Request',  color: '#00d4ff', icon: FileText },
@@ -51,7 +52,7 @@ export default function MyRequests() {
   const fetchRequests = useCallback(async (empId: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/employee-requests?employeeId=${empId}`);
+      const res = await fetch(`/api/employee-requests?employeeId=${empId}`, { cache: 'no-store' });
       const data = await res.json();
       if (data.success) setRequests(data.data);
     } catch { toast.error('Failed to load requests'); }
@@ -217,6 +218,12 @@ export default function MyRequests() {
                           {typeCfg?.label}
                         </span>
                         <span className={`vc-badge ${statusCfg.cls}`}>{statusCfg.label}</span>
+                        {r.status === 'pending' && r.approvalStage && (
+                          <span className="text-[9px] font-bold px-2 py-[2px] rounded-full bg-[#00d4ff]/10 text-[#00d4ff]">
+                            Awaiting {r.approvalStage.approverRole}
+                            {r.approvalStage.totalSteps > 1 ? ` · Step ${r.approvalStage.currentStep} of ${r.approvalStage.totalSteps}` : ''}
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-[#8899aa] mt-1 line-clamp-2">{r.description}</p>
                       {r.amount && (
@@ -243,9 +250,14 @@ export default function MyRequests() {
                           )}
                         </div>
                       )}
-                      {r.status === 'rejected' && r.rejectionNote && (
+                      {r.status === 'rejected' && (r.rejectionNote || rejectionPositionLabel((r as any).rejectedAtStep, (r as any).rejectedByRoleName)) && (
                         <div className="mt-1.5 px-2 py-1 bg-[#ff3d3d]/10 border border-[#ff3d3d]/20 rounded-md text-[10px] text-[#ff3d3d]">
-                          Reason: {r.rejectionNote}
+                          {rejectionPositionLabel((r as any).rejectedAtStep, (r as any).rejectedByRoleName) && (
+                            <div className="font-semibold">
+                              Rejected at {rejectionPositionLabel((r as any).rejectedAtStep, (r as any).rejectedByRoleName)}
+                            </div>
+                          )}
+                          {r.rejectionNote && <div>Reason: {r.rejectionNote}</div>}
                         </div>
                       )}
                       <div className="text-[10px] text-[#5a6878] mt-1">Submitted {fmtDate(r.createdAt)}</div>

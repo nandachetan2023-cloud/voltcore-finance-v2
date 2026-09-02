@@ -48,10 +48,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!tenantId) {
-      return NextResponse.json(
-        { success: false, error: 'Tenant ID not found in session' },
-        { status: 401 }
-      )
+      return NextResponse.json({ success: true, data: [] })
     }
 
     // Fetch biometric sites from superadmin database

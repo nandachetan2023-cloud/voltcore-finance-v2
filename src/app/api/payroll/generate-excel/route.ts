@@ -57,7 +57,6 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: [
-        { Department: { name: 'asc' } },
         { employeeCode: 'asc' },
       ],
     });
@@ -163,7 +162,7 @@ export async function GET(request: NextRequest) {
         'E.P.F in Rs',
         'E.S.I in Rs',
         'House rent in Rs',
-        'Other deduction in Rs(PT)',
+        'Other deduction in Rs',
         'Total deduction in Rs',
         'Net amount paid in Rs',
         'Time&date of payment',
@@ -211,7 +210,7 @@ export async function GET(request: NextRequest) {
         // Deductions (simplified - can be enhanced)
         const pfDeduction = basicSalary * 0.12; // 12% of basic
         const esiDeduction = totalWagesForESI * 0.0075; // 0.75% of gross
-        const ptDeduction = 200; // Fixed PT
+        const ptDeduction = 0; // PT — not deducted by the company
         const totalDeduction = pfDeduction + esiDeduction + ptDeduction;
         const netPay = totalWagesForESI - totalDeduction;
 
@@ -235,7 +234,7 @@ export async function GET(request: NextRequest) {
           Math.round(pfDeduction * 100) / 100,
           Math.round(esiDeduction * 100) / 100,
           hra,
-          ptDeduction,
+          '', // Other deduction (PT) — removed (blank)
           Math.round(totalDeduction * 100) / 100,
           Math.round(netPay * 100) / 100,
           '',
@@ -257,7 +256,7 @@ export async function GET(request: NextRequest) {
         'BANK NAME',
         'ACCOUNT NO.',
         'IFSC CODE NO.',
-        '',
+        'SITE',
         'UAN NO.',
         'ESIC IP NO',
         'DESIGNATION',
@@ -284,7 +283,7 @@ export async function GET(request: NextRequest) {
         'TOTAL NETT PAYBLE',
         'EPF',
         'ESIC',
-        'PT',
+        '', // PT — removed
         'TOTAL DEDUCTION',
         'NETT PAYBLE',
         'EMPLOYEE SIGNATURE/THUMB IMPRESSION ',
@@ -313,7 +312,7 @@ export async function GET(request: NextRequest) {
         'TOTAL SALARY',
         'EPF',
         'ESIC',
-        'TDS',
+        '', // TDS — removed
         'ADVANCE',
       ]);
 
@@ -352,8 +351,8 @@ export async function GET(request: NextRequest) {
         // Deductions
         const pfDeduction = basicSalary * 0.12;
         const esiDeduction = grossEarnings * 0.0075;
-        const ptDeduction = 200;
-        const tdsDeduction = 0;
+        const ptDeduction = 0; // PT — not deducted by the company
+        const tdsDeduction = 0; // TDS — not deducted by the company
         const totalDeduction = pfDeduction + esiDeduction + ptDeduction + tdsDeduction;
         const netPay = grossEarnings - totalDeduction;
         const advance = advanceMap.get(employee.id) || 0;
@@ -376,7 +375,7 @@ export async function GET(request: NextRequest) {
           employee.bankName || 'BANDHAN BANK',
           employee.bankAccount || '',
           employee.bankIfsc || 'BDBL0001747',
-          '',
+          employee.Branch?.name || '',
           employee.uanNumber || '',
           employee.esicNumber || '',
           employee.Designation?.name || '',
@@ -403,7 +402,7 @@ export async function GET(request: NextRequest) {
           Math.round(totalNettPayable * 100) / 100,
           Math.round(pfDeduction * 100) / 100,
           Math.round(esiDeduction * 100) / 100,
-          ptDeduction,
+          '', // PT — removed (blank)
           Math.round(totalDeduction * 100) / 100,
           Math.round(nettPayableAfterDeduction * 100) / 100,
           '',
@@ -432,7 +431,7 @@ export async function GET(request: NextRequest) {
           Math.round(grossEarnings * 100) / 100,
           Math.round(pfDeduction * 100) / 100,
           Math.round(esiDeduction * 100) / 100,
-          tdsDeduction,
+          '', // TDS — removed (blank)
           advance,
         ]);
       });

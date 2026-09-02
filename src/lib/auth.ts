@@ -1,5 +1,6 @@
 import { superadminDb } from '@/lib/superadmin-db'
 import bcrypt from 'bcryptjs'
+import { intersectAccess } from '@/lib/module-access'
 
 export type UserRole = 'superadmin' | 'admin' | 'demo'
 
@@ -87,17 +88,22 @@ export async function authenticateUser(email: string, password: string): Promise
           }
         }
 
+        // 3. Apply the tenant-wide module cap set by the superadmin. This is an
+        //    absolute ceiling — even full-admin users only get what the tenant
+        //    is licensed for. effective = intersection(role access, tenant cap).
+        const tenantCap = (tenantUser.tenant as any).enabledModules || 'all'
+        modules = intersectAccess(modules, tenantCap)
+
         // Fetch employee code if linked
         let employeeCode: string | undefined
         if (tenantUser.employeeId && tenantUser.tenant.dbUrl) {
           try {
-            const { PrismaClient } = await import('@prisma/client')
-            const tenantDb = new PrismaClient({ datasources: { db: { url: tenantUser.tenant.dbUrl } } })
+            const { getClientForUrl } = await import('@/lib/db')
+            const tenantDb = getClientForUrl(tenantUser.tenant.dbUrl)
             const emp = await tenantDb.employee.findUnique({
               where: { id: tenantUser.employeeId },
               select: { employeeCode: true },
             }).catch(() => null)
-            await tenantDb.$disconnect()
             if (emp) employeeCode = emp.employeeCode
           } catch {}
         }
