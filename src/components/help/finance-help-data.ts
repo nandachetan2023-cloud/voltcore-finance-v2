@@ -122,8 +122,10 @@ The **Finance** module (open it from the main sidebar) groups these areas:
 - Profit & Loss — P&L statement
 - Financial Reports — Balance Sheet, ageing, cash flow
 
-**🔗 Sync / Integration**
-- Tally Sync, Sync Config
+  **🔗 Sync / Integration**
+- **Tally Sync (CA-Grade)** — ERP ↔ Tally Prime, FY-locked, GST/TDS, cost-centre, bill-wise, 3 triggers (Manual/Scheduled/On-Approve), Trial Balance reconcile
+- **Notifications Ultra** — Purchase & Sales FY/site-scoped P0/P1/P2, in-app+email, digest, SSE live, snooze/escalate
+- Sync Config — per-module auto-sync settings
 
 Click any module name in the sidebar (under **Finance**) to open it.`,
     links: [
@@ -1077,6 +1079,113 @@ site/job cost sheet.`,
       { label: "Purchase Requisitions", moduleId: "procurement-pr" },
       { label: "Purchase Orders", moduleId: "fin-purchase-orders" },
       { label: "Payment Advices", moduleId: "fin-payment-advices" },
+    ],
+  },
+
+  // ── Tally Sync (CA-Grade) ──────────────────────────────────────
+  {
+    id: "tally-sync",
+    title: "Tally Sync — CA-Grade (ERP ↔ Tally Prime)",
+    relatedModule: "tally-sync",
+    popular: true,
+    keywords: [
+      "tally", "tally sync", "tally prime", "erp9", "port 9000", "xml", "export to tally", "push to tally",
+      "tally export", "tally auto", "scheduled sync", "on approve", "manual push", "dry run", "fy", "financial year",
+      "gst", "tds", "cost centre", "bill wise", "idempotent", "alterid", "created altered rejected", "trial balance",
+      "reconcile", "reconciliation", "gapless", "voucher series", "tally company", "tally ttl",
+    ],
+    summary: "Push ERP vouchers to Tally Prime — FY-locked, GST/TDS, cost-centre, bill-wise, idempotent, 3 triggers + Trial Balance reconcile.",
+    body: `### Tally Sync — CA-Grade
+
+**Where:** Finance → Tally Sync (4 tabs)
+
+| Tab | What it does |
+|---|---|
+| **Export** | Choose masters (Debtors/Creditors) + vouchers (Sales/Purchase/Payment/Journal/GRN/Credit Note), pick FY (e.g. 2025-26) + Company + Since date, **DryRun** preview XML, then **Push to Tally** (port 9000). |
+| **Auto** | **Manual** (button) + **Scheduled** (cron \`GET /api/fin/tally-auto?trigger=scheduled\`, reads SyncConfig autoSync) + **On Approve** (Journal Posted → auto via tally-sync-engine). Toggle Enabled/AutoSync in Sync Config. |
+| **History** | FinTallySync log: direction, trigger, company, FY, voucherType, rows, status Completed/Failed, actor, AlterID, duration. |
+| **Reconcile** | **Trial Balance ERP (Σ FinJournalLine by FinAccount) vs Tally Trial Balance** (EXPORTDATA Trial Balance). Shows diffs per ledger, blocks FY close if diff ≠0. |
+
+**CA guarantees**
+- **FY is law:** finYear derived Apr-Mar, voucher numbers gapless per FY+type via FinVoucherSeries (INV/25-26/0001).
+- **Double-entry or nothing:** tally-xml validates Σ debit==credit (incl. CGST/SGST/IGST/Cess/TDS/Retention/RoundOff) or throws.
+- **GST:** per-line HSN/SAC, CGST/SGST vs IGST by state, Output/Input CGST/SGST/IGST/Cess ledgers.
+- **TDS:** 194C/194J via FinParty.tdsSection/Rate → TDS Payable/Receivable.
+- **Cost centre:** every ledger line → COSTCENTREALLOCATIONS (jobCode/costCentre).
+- **Bill-wise:** BILLALLOCATIONS New Ref/Agst Ref for ageing.
+- **Idempotent:** hash + FinTallyVoucher (company+fy+type+no unique, AlterID) → re-push = ALTERED not duplicate.
+- **RBAC:** GL_CREATE/AR_CREATE required; Auditor readOnly dryRun only.
+
+**APIs**
+- \`POST /api/fin/tally-export {companyName, finYear, actions, dryRun, trigger}\` — hardened manual
+- \`GET /api/fin/tally-auto?dryRun=1&trigger=manual\` — scheduled (SyncConfig tally-export)
+- \`GET /api/fin/tally-reconcile?finYear=2025-26&company=VoltCore\` — diff, FY/company
+
+**Tips**
+- Test with **DryRun** first, check XML preview (GSTIN/INCOMETAXNUMBER/LEDSTATENAME correct).
+- Keep Tally company FY open; closed FY → 409 FY Locked.
+- After push, open Reconcile — 0 diffs = TB clean for CA sign-off.`,
+    links: [
+      { label: "Tally Sync", moduleId: "tally-sync" },
+      { label: "Financial Reports", moduleId: "financial-reports" },
+    ],
+  },
+
+  // ── Notifications Ultra ────────────────────────────────────────
+  {
+    id: "notifications-ultra",
+    title: "Notifications Ultra — Finance Purchase & Sales",
+    relatedModule: "notifications-ultra",
+    popular: true,
+    keywords: [
+      "notification", "notifications ultra", "alert", "bell", "inbox", "unread", "p0", "p1", "p2", "priority",
+      "digest", "realtime", "hourly", "daily", "snooze", "escalate", "archive", "actioned", "sse", "live",
+      "purchase", "sales", "invoice", "ap", "ar", "grn", "mrs", "tally", "journal", "fy", "site", "cost centre",
+      "channel", "email", "whatsapp", "push",
+    ],
+    summary: "Your finance inbox — P0/P1/P2 alerts for invoices, AP, payments, POs, approvals, overdue items and Tally failures, with live updates.",
+    body: `### Notifications Ultra
+
+**Where:** Finance & Accounts → Notifications Ultra. The header bell shows a **Finance alerts** row with the unread count.
+
+| Tab | What it does |
+|---|---|
+| **Inbox** | P0 red / P1 amber / P2 green. Filter by **status** (unread, read, actioned, snoozed, archived), priority, site and FY. Bulk **Read / Unread / Actioned / Snooze 1h / Archive**. **Open** jumps to the related screen. Live updates. |
+| **Digest** | Realtime / Hourly / Daily / Off. **Off** stops new P1/P2 alerts for you; P0 always comes through. Hourly/Daily are stored for the email digest (email not connected yet). |
+| **Preferences** | In-App / Email / WhatsApp toggles, saved per user. Turning In-App off stops P1/P2 alerts. Email & WhatsApp delivery are not connected yet. |
+
+**Who gets what** (roles from Finance Access Control; users scoped to a site get that site's alerts, all-site users get every site)
+| Event | Priority | Sent to |
+|---|---|---|
+| Invoice created | P1 | Finance Head + Finance Executive |
+| Invoice overdue (daily) | P1, P0 at 45+ days | Finance Head + Finance Executive |
+| Credit note issued | P1 | Finance Head + Finance Executive |
+| AP bill created | P2, P1 if due within 7 days | Finance Head + Finance Executive |
+| AP bill paid / payment made | P2 | Finance Head + Finance Executive |
+| AP bill overdue (daily) | P1, P0 at 45+ days (MSME) | Finance Head + Finance Executive |
+| Purchase order / expense claim created | P2 | Finance Head + Finance Executive |
+| Journal submitted | P1 | Finance Head |
+| Journal approved / rejected | P2 / P1 | The submitter |
+| Petty cash or site expense submitted | P1 | Site Manager + Finance Executive + Finance Head |
+| Petty cash or site expense approved / rejected | P2 / P1 | The submitter |
+| Tally auto-push failed | P0 | Finance Head |
+
+You never get an alert for your own action.
+
+**Setup**
+- Assign people to roles in **Finance Access Control** — no role, no alerts.
+- Optional: \`npx tsx scripts/seed-fin-notification-templates.ts\` creates editable wording templates (FinNotificationTemplate).
+- Optional: call \`/api/cron/fin-overdue\` daily with the \`x-cron-key\` header. Overdue checks also run hourly when someone opens the inbox.
+
+**APIs** (always the signed-in user's inbox)
+- \`GET /api/notifications/ultra?status=unread&priority=P0&siteCode=SITE-004&finYear=2025-26\`
+- \`POST /api/notifications/ultra {action: read|unread|actioned|snooze|escalate|archive, ids:[]}\`
+- \`GET/PUT /api/notifications/ultra/preferences\`
+- \`GET /api/notifications/stream\` — live updates`,
+    links: [
+      { label: "Notifications Ultra", moduleId: "notifications-ultra" },
+      { label: "Tally Sync", moduleId: "tally-sync" },
+      { label: "Financial Reports", moduleId: "financial-reports" },
     ],
   },
 
