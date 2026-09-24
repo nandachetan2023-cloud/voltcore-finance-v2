@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,26 @@ export async function POST(request: NextRequest) {
       const count = (await pdb.finPurchaseOrder.count()) + 1
       body.poNo = `PO/${year}/${String(count).padStart(3, '0')}`
     }
-    const record = await pdb.finPurchaseOrder.create({ data: body })
+    const { actor, ...createData } = body
+    const record = await pdb.finPurchaseOrder.create({ data: createData })
+    const site = await pdb.finSite.findUnique({ where: { id: Number(record.siteId) } }).catch(() => null)
+    notifyFinance(pdb, {
+      entityType: 'FinPurchaseOrder',
+      entityId: String(record.id),
+      templateCode: 'PO_CREATED',
+      vars: { poNo: record.poNo, vendor: record.vendorName, amount: inr(record.totalAmount), siteCode: site?.siteCode || '' },
+      title: `New Purchase Order ${record.poNo}`,
+      message: `${record.vendorName} — ${inr(record.totalAmount)}${site?.siteCode ? ` • ${site.siteCode}` : ''}`,
+      type: 'info',
+      priority: 'P2',
+      siteCode: site?.siteCode || null,
+      jobCode: record.jobCode || null,
+      finYear: deriveFinYear(record.date),
+      amount: record.totalAmount,
+      link: 'fin-purchase-orders',
+      actorEmail: actor || request.headers.get('x-actor-email') || null,
+      recipients: FIN_TEAM(site?.siteCode),
+    })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating:', error)

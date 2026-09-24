@@ -1,6 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { notifyFinance, deriveFinYear, SITE_APPROVERS, inr } from '@/lib/notification-bus'
+
+function notifyPC(pdb: any, v: any, siteCode: string | null, actor: string | undefined, kind: 'submit' | 'approve' | 'reject', comments?: string) {
+  const submitter = (v.submittedBy || v.custodian || '').trim()
+  const base = {
+    entityType: 'FinPettyCash',
+    entityId: String(v.id),
+    siteCode,
+    finYear: deriveFinYear(v.date),
+    amount: v.amount,
+    jobCode: v.jobCode || null,
+    actorEmail: actor || null,
+    vars: { voucherNo: v.voucherNo, amount: inr(v.amount), siteCode: siteCode || '', actor: actor || '', reason: comments || '' },
+  }
+  if (kind === 'submit') {
+    notifyFinance(pdb, { ...base, templateCode: 'PETTY_CASH_APPROVAL_REQUIRED', title: `Approval Required: Petty Cash ${v.voucherNo}`,
+      message: `${inr(v.amount)} • ${v.description}${siteCode ? ` • ${siteCode}` : ''}`,
+      type: 'warning', priority: 'P1', link: 'fin-petty-cash-approval-queue', recipients: SITE_APPROVERS(siteCode) })
+  } else if (submitter) {
+    const ok = kind === 'approve'
+    notifyFinance(pdb, { ...base, templateCode: ok ? 'PETTY_CASH_APPROVED' : 'PETTY_CASH_REJECTED',
+      title: ok ? `Your Petty Cash ${v.voucherNo} was approved` : `Your Petty Cash ${v.voucherNo} was rejected`,
+      message: ok ? `${inr(v.amount)} approved by ${actor || 'approver'}` : `Reason: ${comments || '—'}`,
+      type: ok ? 'success' : 'error', priority: ok ? 'P2' : 'P1', link: 'fin-petty-cash', recipients: [submitter] })
+  }
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -48,6 +74,7 @@ export async function POST(request: NextRequest) {
           data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Pending', action: 'Submit', makerId: actor || null, comments: comments || null, finPettyCashId: voucher.id },
         }),
       ])
+      notifyPC(pdb, record, siteCode, actor, 'submit')
       return NextResponse.json({ success: true, data: record })
     }
 
@@ -73,6 +100,7 @@ export async function POST(request: NextRequest) {
           data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Approved', action: 'Approve', checkerId: actor || null, comments: comments || null, finPettyCashId: voucher.id },
         }),
       ])
+      notifyPC(pdb, record, siteCode, actor, 'approve')
       return NextResponse.json({ success: true, data: record })
     }
 
@@ -115,6 +143,7 @@ export async function POST(request: NextRequest) {
           data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Rejected', action: 'Reject', checkerId: actor || null, comments, finPettyCashId: voucher.id },
         }),
       ])
+      notifyPC(pdb, record, siteCode, actor, 'reject', comments)
       return NextResponse.json({ success: true, data: record })
     }
 

@@ -1,20 +1,22 @@
 import { NextRequest } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { getInboxOwner } from '@/lib/notification-bus'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const actor = request.headers.get('x-actor-email')?.trim() || searchParams.get('actor')?.trim() || ''
-
+  // Always the signed-in user — see getInboxOwner.
+  const actor = getInboxOwner(request)
   if (!actor) {
-    return new Response('actor required', { status: 400 })
+    return new Response('Not signed in', { status: 401 })
   }
+  const me = { equals: actor, mode: 'insensitive' as const }
 
   const pdb = getDbForRequest(request)
 
   const encoder = new TextEncoder()
   let interval: any
+  let lastId = 0
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -23,18 +25,22 @@ export async function GET(request: NextRequest) {
       }
       // Initial burst: last 10 unread
       try {
-        const rows = await pdb.finNotification.findMany({ where: { userEmail: actor, status: 'unread' }, orderBy: { createdAt: 'desc' }, take: 10 })
+        const rows = await pdb.finNotification.findMany({ where: { userEmail: me, status: 'unread' }, orderBy: { createdAt: 'desc' }, take: 10 })
+        lastId = rows.reduce((m: number, r: any) => Math.max(m, r.id), 0)
         send({ type: 'init', notifications: rows })
       } catch {}
 
       // Heartbeat + poll every 15s
       interval = setInterval(async () => {
         try {
-          const count = await pdb.finNotification.count({ where: { userEmail: actor, status: 'unread' } })
+          const count = await pdb.finNotification.count({ where: { userEmail: me, status: 'unread' } })
           send({ type: 'heartbeat', unreadCount: count, at: new Date().toISOString() })
           // Also push any new unread since last poll
-          const recent = await pdb.finNotification.findMany({ where: { userEmail: actor, status: 'unread' }, orderBy: { createdAt: 'desc' }, take: 5 })
-          if (recent.length > 0) send({ type: 'update', notifications: recent })
+          const recent = await pdb.finNotification.findMany({ where: { userEmail: me, status: 'unread', id: { gt: lastId } }, orderBy: { createdAt: 'desc' }, take: 5 })
+          if (recent.length > 0) {
+            lastId = Math.max(lastId, ...recent.map((r: any) => r.id))
+            send({ type: 'update', notifications: recent })
+          }
         } catch {}
       }, 15000)
 

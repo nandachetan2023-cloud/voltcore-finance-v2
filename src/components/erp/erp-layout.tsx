@@ -407,6 +407,10 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
   const config = MODULE_CONFIG[activeModule];
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
+  // Finance alerts live in their own inbox (Notifications Ultra); the bell
+  // shows how many are unread and links there.
+  const [finUnread, setFinUnread] = useState(0);
+  const canSeeFinInbox = isModuleAllowed('notifications-ultra', allowedModules);
 
   // Fetch notifications on mount and poll every 30s
   useEffect(() => {
@@ -429,6 +433,10 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
       const data = await response.json();
       if (data.success) {
         setNotifications(data.data.notifications || []);
+      }
+      if (canSeeFinInbox) {
+        const fin = await fetch('/api/notifications/ultra?status=unread&take=1').then(r => r.json()).catch(() => null);
+        setFinUnread(fin?.success ? fin.data.unreadCount : 0);
       }
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
@@ -494,6 +502,7 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
   }, [showNotifications]);
 
   const hasNotifications = notifications.length > 0;
+  const showFinRow = canSeeFinInbox && finUnread > 0;
 
   return (
     <header className="h-[60px] vc-glass border-b border-[#252e3a] flex items-center gap-3 px-6 shrink-0 relative z-30">
@@ -512,7 +521,7 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
             className="relative text-[#8899aa] hover:text-[#e2e8f0] transition-colors"
           >
             <Bell size={16} />
-            {hasNotifications && (
+            {(hasNotifications || showFinRow) && (
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#ff3d3d] rounded-full" />
             )}
           </button>
@@ -531,8 +540,17 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
                   </div>
                 )}
               </div>
+              {showFinRow && (
+                <button
+                  onClick={() => { setShowNotifications(false); setActiveModule('notifications-ultra' as any); }}
+                  className="w-full p-3 border-b border-[#252e3a] border-l-[3px] border-l-[#f5a623] flex items-center justify-between hover:bg-[#141920] transition-colors text-left"
+                >
+                  <span className="text-[11px] font-semibold text-[#e2e8f0]">Finance alerts</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#f5a623]/15 text-[#f5a623]">{finUnread} unread →</span>
+                </button>
+              )}
               <div className="max-h-[400px] overflow-y-auto">
-                {notifications.length === 0 ? (
+                {notifications.length === 0 && !showFinRow ? (
                   <div className="p-6 text-center">
                     <Bell size={32} className="mx-auto text-[#5a6878] mb-2" />
                     <p className="text-[11px] text-[#5a6878]">No new notifications</p>

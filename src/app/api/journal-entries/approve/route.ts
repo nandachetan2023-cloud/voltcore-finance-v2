@@ -1,6 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { notifyFinance, deriveFinYear, FIN_APPROVERS, inr } from '@/lib/notification-bus'
+
+function notifyJE(pdb: any, entry: any, actor: string | undefined, kind: 'submit' | 'approve' | 'reject', comments?: string) {
+  const submitter = (entry.submittedBy || entry.createdBy || '').trim()
+  const base = {
+    entityType: 'FinJournalEntry',
+    entityId: String(entry.id),
+    finYear: deriveFinYear(entry.entryDate),
+    amount: entry.totalDebit,
+    jobCode: entry.jobCode || null,
+    link: 'journal-entries',
+    actorEmail: actor || null,
+    vars: { entryNo: entry.entryNo, amount: inr(entry.totalDebit), actor: actor || '', reason: comments || '' },
+  }
+  if (kind === 'submit') {
+    notifyFinance(pdb, { ...base, templateCode: 'JE_APPROVAL_REQUIRED', title: `Approval Required: Journal ${entry.entryNo}`,
+      message: `${inr(entry.totalDebit)} • ${entry.description || entry.voucherType || 'Journal voucher'} • submitted by ${actor || 'unknown'}`,
+      type: 'warning', priority: 'P1', recipients: FIN_APPROVERS() })
+  } else if (submitter) {
+    const ok = kind === 'approve'
+    notifyFinance(pdb, { ...base, templateCode: ok ? 'JE_APPROVED' : 'JE_REJECTED',
+      title: ok ? `Your Journal ${entry.entryNo} was approved` : `Your Journal ${entry.entryNo} was rejected`,
+      message: ok ? `Posted by ${actor || 'approver'} • ${inr(entry.totalDebit)}` : `Reason: ${comments || '—'}`,
+      type: ok ? 'success' : 'error', priority: ok ? 'P2' : 'P1', recipients: [submitter] })
+  }
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -72,6 +98,7 @@ export async function POST(request: NextRequest) {
           data: { entityType: 'FinJournalEntry', entityId: String(entry.id), status: 'Pending', action: 'Submit', makerId: actor || null, comments: comments || null, finJournalEntryId: entry.id },
         }),
       ])
+      notifyJE(pdb, updated, actor, 'submit')
       return NextResponse.json({ success: true, data: flatten(updated) })
     }
 
@@ -97,6 +124,7 @@ export async function POST(request: NextRequest) {
           data: { entityType: 'FinJournalEntry', entityId: String(entry.id), status: 'Posted', action: 'Approve', checkerId: actor || null, comments: comments || null, finJournalEntryId: entry.id },
         }),
       ])
+      notifyJE(pdb, updated, actor, 'approve')
       // Tally auto-push onApprove (best-effort, never blocks approval)
       try {
         const { autoPushSingle } = await import('@/lib/tally-sync-engine')
@@ -123,6 +151,7 @@ export async function POST(request: NextRequest) {
           data: { entityType: 'FinJournalEntry', entityId: String(entry.id), status: 'Rejected', action: 'Reject', checkerId: actor || null, comments, finJournalEntryId: entry.id },
         }),
       ])
+      notifyJE(pdb, updated, actor, 'reject', comments)
       return NextResponse.json({ success: true, data: flatten(updated) })
     }
 

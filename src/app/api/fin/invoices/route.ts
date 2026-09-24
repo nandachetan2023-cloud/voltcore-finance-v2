@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { postJournalEntry, GL_ACCOUNTS } from '@/lib/gl-posting'
 import { assertPermission } from '@/lib/fin-rbac'
-import { emitNotification, deriveFinYear } from '@/lib/notification-bus'
+import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,24 +60,23 @@ export async function POST(request: NextRequest) {
     })
 
     // Ultra notification - Sales Invoice created
-    try {
-      await emitNotification(pdb, {
-        entityType: 'FinInvoice',
-        entityId: String(record.id),
-        title: `New Invoice ${record.invoiceNo}`,
-        message: `${record.client || 'Client'} — ₹${record.grandTotal.toLocaleString('en-IN')} • Due ${record.dueDate ? new Date(record.dueDate).toLocaleDateString() : ''} • ${site?.siteCode || ''}`,
-        type: 'success',
-        priority: 'P1',
-        channel: 'inapp',
-        siteCode: site?.siteCode || null,
-        jobCode: record.jobCode || null,
-        finYear: deriveFinYear(record.invoiceDate),
-        amount: record.grandTotal,
-        link: `/finance?module=fin-invoices&id=${record.id}`,
-        actorEmail: body.actor || null,
-        recipients: `role:FINANCE_MGR:site:${site?.siteCode || ''}`,
-      })
-    } catch {}
+    notifyFinance(pdb, {
+      entityType: 'FinInvoice',
+      entityId: String(record.id),
+      templateCode: 'INVOICE_CREATED',
+      vars: { invoiceNo: record.invoiceNo, client: record.client || 'Client', amount: inr(record.grandTotal), siteCode: site?.siteCode || '' },
+      title: `New Invoice ${record.invoiceNo}`,
+      message: `${record.client || 'Client'} — ${inr(record.grandTotal)} • Due ${record.dueDate ? new Date(record.dueDate).toLocaleDateString('en-IN') : '—'} • ${site?.siteCode || ''}`,
+      type: 'success',
+      priority: 'P1',
+      siteCode: site?.siteCode || null,
+      jobCode: record.jobCode || null,
+      finYear: deriveFinYear(record.invoiceDate),
+      amount: record.grandTotal,
+      link: 'fin-invoices',
+      actorEmail: body.actor || null,
+      recipients: FIN_TEAM(site?.siteCode),
+    })
 
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { postJournalEntry, GL_ACCOUNTS } from '@/lib/gl-posting'
 import { assertPermission } from '@/lib/fin-rbac'
+import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,25 @@ export async function POST(request: NextRequest) {
       ],
     })
 
+    const daysToDue = Math.ceil((new Date(record.dueDate).getTime() - Date.now()) / 86400000)
+    notifyFinance(pdb, {
+      entityType: 'AccountsPayable',
+      entityId: String(record.id),
+      templateCode: daysToDue <= 7 ? 'AP_BILL_DUE_SOON' : 'AP_BILL_CREATED',
+      vars: { billNo: record.billNo, vendor: record.vendor, amount: inr(record.totalAmount), siteCode: site?.siteCode || '' },
+      title: `New AP Bill ${record.billNo}`,
+      message: `${record.vendor} — ${inr(record.totalAmount)} • Due ${new Date(record.dueDate).toLocaleDateString('en-IN')}${site?.siteCode ? ` • ${site.siteCode}` : ''}`,
+      type: daysToDue <= 7 ? 'warning' : 'info',
+      priority: daysToDue <= 7 ? 'P1' : 'P2',
+      siteCode: site?.siteCode || null,
+      jobCode: record.jobCode || null,
+      finYear: deriveFinYear(record.dueDate),
+      amount: record.totalAmount,
+      link: 'accounts-payable',
+      actorEmail: body.actor || null,
+      recipients: FIN_TEAM(site?.siteCode),
+    })
+
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating AP record:', error)
@@ -74,7 +94,26 @@ export async function PUT(request: NextRequest) {
     const denied = await assertPermission(pdb, body.actor || '', 'AP_EDIT', { request, module: 'AP', entityId: String(id), siteCode: site?.siteCode ?? null })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit AP bills' }, { status: 403 })
     const { actor: _actor, ...updateData } = data
+    const before = await pdb.accountsPayable.findUnique({ where: { id }, select: { status: true } })
     const record = await pdb.accountsPayable.update({ where: { id }, data: updateData })
+    if (record.status === 'Paid' && before?.status !== 'Paid') {
+      notifyFinance(pdb, {
+        entityType: 'AccountsPayable',
+        entityId: String(record.id),
+        templateCode: 'AP_BILL_PAID',
+        vars: { billNo: record.billNo, vendor: record.vendor, amount: inr(record.totalAmount) },
+        title: `AP Bill ${record.billNo} marked Paid`,
+        message: `${record.vendor} — ${inr(record.totalAmount)}${record.paymentRef ? ` • Ref ${record.paymentRef}` : ''}`,
+        type: 'success',
+        priority: 'P2',
+        siteCode: site?.siteCode || null,
+        finYear: deriveFinYear(record.dueDate),
+        amount: record.totalAmount,
+        link: 'accounts-payable',
+        actorEmail: body.actor || null,
+        recipients: FIN_TEAM(site?.siteCode),
+      })
+    }
     return NextResponse.json({ success: true, data: record })
   } catch (error) {
     console.error('Error updating AP record:', error)

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,10 +33,28 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const missing = ['siteId', 'jobCode', 'poId', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
-    const { items, ...data } = body
+    const { items, actor, ...data } = body
     const pdb = getDbForRequest(request)
     const record = await pdb.finExpenseClaim.create({
       data: { ...data, items: items?.length ? { create: items } : undefined },
+    })
+    const site = await pdb.finSite.findUnique({ where: { id: Number(record.siteId) } }).catch(() => null)
+    notifyFinance(pdb, {
+      entityType: 'FinExpenseClaim',
+      entityId: String(record.id),
+      templateCode: 'EXPENSE_CLAIM_CREATED',
+      vars: { claimNo: record.claimNo, submittedBy: record.submittedBy, amount: inr(record.totalAmount) },
+      title: `New Expense Claim ${record.claimNo}`,
+      message: `${record.submittedBy} — ${record.expenseType} ${inr(record.totalAmount)}${site?.siteCode ? ` • ${site.siteCode}` : ''}`,
+      type: 'info',
+      priority: 'P2',
+      siteCode: site?.siteCode || null,
+      jobCode: record.jobCode || null,
+      finYear: deriveFinYear(record.date),
+      amount: record.totalAmount,
+      link: 'fin-expense-claims',
+      actorEmail: actor || request.headers.get('x-actor-email') || null,
+      recipients: FIN_TEAM(site?.siteCode),
     })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {

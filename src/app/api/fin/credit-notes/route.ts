@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,23 @@ export async function POST(request: NextRequest) {
     }
     const { actor: _actor, ...createData } = body
     const record = await pdb.finCreditNote.create({ data: createData })
+    notifyFinance(pdb, {
+      entityType: 'FinCreditNote',
+      entityId: String(record.id),
+      templateCode: 'CREDIT_NOTE_CREATED',
+      vars: { creditNoteNo: record.creditNoteNo, client: record.client || 'Client', amount: inr(record.amount) },
+      title: `Credit Note ${record.creditNoteNo} issued`,
+      message: `${record.client || 'Client'} — ${inr(record.amount)}${record.creditNoteAgainstInvoiceNo ? ` against ${record.creditNoteAgainstInvoiceNo}` : ''}${record.reason ? ` • ${record.reason}` : ''}`,
+      type: 'warning',
+      priority: 'P1',
+      siteCode: site?.siteCode || null,
+      jobCode: record.jobCode || null,
+      finYear: deriveFinYear(record.date),
+      amount: record.amount,
+      link: 'fin-credit-notes',
+      actorEmail: body.actor || null,
+      recipients: FIN_TEAM(site?.siteCode),
+    })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating:', error)

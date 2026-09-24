@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
 import { postJournalEntry, GL_ACCOUNTS } from '@/lib/gl-posting'
 
 export const dynamic = 'force-dynamic'
@@ -180,6 +181,24 @@ export async function POST(request: NextRequest) {
         { accountCode: GL_ACCOUNTS.VENDOR_PAYABLE, debit: payAmount, credit: 0 },
         { accountCode: paymentMethod === 'Cash' ? GL_ACCOUNTS.CASH : GL_ACCOUNTS.BANK, debit: 0, credit: payAmount },
       ],
+    })
+
+    notifyFinance(pdb, {
+      entityType: 'FinPayment',
+      entityId: String(result.txn.id),
+      templateCode: 'PAYMENT_MADE',
+      vars: { payee, amount: inr(payAmount), billNo: bill?.billNo || '', bank: account.accountName || '' },
+      title: `Payment of ${inr(payAmount)} to ${payee}`,
+      message: `${bill ? `Bill ${bill.billNo} • ${result.updatedBill?.status} • ` : ''}${paymentMethod || 'Bank'}${reference ? ` ref ${reference}` : ''} • Bank balance ${inr(newBalance)}`,
+      type: 'success',
+      priority: 'P2',
+      siteCode: site?.siteCode || null,
+      jobCode: jobCode || null,
+      finYear: deriveFinYear(paymentDate),
+      amount: payAmount,
+      link: 'fin-payments',
+      actorEmail: actorEmail || null,
+      recipients: FIN_TEAM(site?.siteCode),
     })
 
     return NextResponse.json({ success: true, data: result }, { status: 201 })

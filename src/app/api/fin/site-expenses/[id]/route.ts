@@ -1,5 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { notifyFinance, deriveFinYear, SITE_APPROVERS, inr } from '@/lib/notification-bus'
+
+function notifySE(pdb: any, claim: any, actor: string | null, kind: 'submit' | 'approved' | 'rejected', comments?: string) {
+  const siteCode = claim.site?.siteCode ?? null
+  const base = {
+    entityType: 'FinExpenseClaim',
+    entityId: String(claim.id),
+    siteCode,
+    finYear: deriveFinYear(claim.date),
+    amount: claim.totalAmount,
+    jobCode: claim.jobCode || null,
+    link: 'fin-site-expenses',
+    actorEmail: actor,
+    vars: { claimNo: claim.claimNo, amount: inr(claim.totalAmount), siteCode: siteCode || '', reason: comments || '' },
+  }
+  if (kind === 'submit') {
+    notifyFinance(pdb, { ...base, templateCode: 'SITE_EXPENSE_APPROVAL_REQUIRED', title: `Approval Required: Site Expense ${claim.claimNo}`,
+      message: `${claim.submittedBy} — ${claim.expenseType} ${inr(claim.totalAmount)}${siteCode ? ` • ${siteCode}` : ''}`,
+      type: 'warning', priority: 'P1', recipients: SITE_APPROVERS(siteCode) })
+  } else {
+    const ok = kind === 'approved'
+    // submittedBy is free text on older claims; only notify it when it is an email.
+    const recipients = [claim.submittedBy].filter((e: string) => e && e.includes('@'))
+    if (!recipients.length) return
+    notifyFinance(pdb, { ...base, templateCode: ok ? 'SITE_EXPENSE_APPROVED' : 'SITE_EXPENSE_REJECTED',
+      title: ok ? `Your Site Expense ${claim.claimNo} was approved` : `Your Site Expense ${claim.claimNo} was rejected`,
+      message: ok ? `${inr(claim.totalAmount)} fully approved` : `Reason: ${comments || '—'}`,
+      type: ok ? 'success' : 'error', priority: ok ? 'P2' : 'P1', recipients })
+  }
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +83,7 @@ export async function PUT(request: NextRequest, { params }: any) {
         where: { id: Number(id) },
         include: { site: true, items: true, approvals: { orderBy: { createdAt: 'asc' } } },
       })
+      if (updated) notifySE(pdb, updated, request.headers.get('x-actor-email') || body.actor || null, 'submit')
       return NextResponse.json({ success: true, data: updated })
     }
 
@@ -105,6 +136,7 @@ export async function PUT(request: NextRequest, { params }: any) {
           where: { id: Number(id) },
           include: { site: true, items: true, approvals: { orderBy: { createdAt: 'asc' } } },
         })
+        if (updated) notifySE(pdb, updated, request.headers.get('x-actor-email') || body.actor || null, 'rejected', body.comments)
         return NextResponse.json({ success: true, data: updated })
       }
 
@@ -156,6 +188,7 @@ export async function PUT(request: NextRequest, { params }: any) {
           where: { id: Number(id) },
           include: { site: true, items: true, approvals: { orderBy: { createdAt: 'asc' } } },
         })
+        if (updated) notifySE(pdb, updated, request.headers.get('x-actor-email') || body.actor || null, 'approved')
         return NextResponse.json({ success: true, data: updated })
       }
 

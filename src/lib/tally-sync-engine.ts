@@ -125,8 +125,29 @@ export async function autoPushSingle(
       }
     }).catch(()=>{})
 
+    if (!result.success) await notifyTallyFailure(pdb, refType, refId, voucher.voucherNumber, finYear, result.message)
     return { success: result.success, message: result.message }
   } catch (e: any) {
+    await notifyTallyFailure(pdb, refType, refId, String(refId), null, e.message || 'autoPush failed')
     return { success: false, message: e.message || 'autoPush failed' }
   }
+}
+
+async function notifyTallyFailure(pdb: any, refType: string, refId: number | string, voucherNo: string, finYear: string | null, reason: string) {
+  const { emitNotification, FIN_APPROVERS } = await import('@/lib/notification-bus')
+  await emitNotification(pdb, {
+    entityType: refType,
+    entityId: String(refId),
+    templateCode: 'TALLY_FAILED',
+    vars: { refType, voucherNo, reason },
+    title: `Tally sync failed: ${refType} ${voucherNo}`,
+    message: reason || 'Tally rejected the voucher or was unreachable',
+    type: 'error',
+    priority: 'P0',
+    finYear,
+    link: 'tally-sync',
+    // Same failure reported at most once per hour per voucher.
+    dedupeKey: `TALLY_FAILED:${refType}:${refId}:${Math.floor(Date.now() / 3600000)}`,
+    recipients: FIN_APPROVERS(),
+  }).catch(() => 0)
 }
