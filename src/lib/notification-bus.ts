@@ -61,6 +61,17 @@ async function resolveOne(pdb: any, spec: string, siteCode?: string | null): Pro
     const rows = await pdb.finUserRole.findMany({ where: { isActive: true } }).catch(() => [])
     return rows.map((a: any) => a.userEmail)
   }
+  // 'site:SITE-004' (anything but the literal 'site:ALL' above) — every
+  // active finance user assigned to that site, plus all-site holders.
+  // Used for admin broadcasts targeting "everyone at this site" regardless
+  // of role, distinct from 'role:X:site:Y' which narrows to one role.
+  if (spec.startsWith('site:')) {
+    const site = spec.slice(5)
+    const rows = await pdb.finUserRole.findMany({
+      where: { isActive: true, OR: [{ siteCode: site }, { siteCode: null }] },
+    }).catch(() => [])
+    return rows.map((a: any) => a.userEmail)
+  }
   if (spec.startsWith('role:')) {
     const parts = spec.split(':')
     const role = parts[1]
@@ -171,7 +182,7 @@ export const SITE_APPROVERS = (siteCode?: string | null) =>
 export const inr = (n: number | null | undefined) => `₹${Number(n || 0).toLocaleString('en-IN')}`
 
 // Helper: derive FY from date
-export function deriveFinYear(d: Date | string | null | undefined): string {
+export function deriveFinYear(d?: Date | string | null): string {
   const dt = d ? new Date(d) : new Date()
   const y = dt.getFullYear()
   const m = dt.getMonth()

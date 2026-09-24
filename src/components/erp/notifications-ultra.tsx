@@ -1,8 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, CheckCircle2, Clock, Filter, RefreshCw, Archive, Eye, EyeOff, Settings, Calendar, ExternalLink } from 'lucide-react';
+import { Bell, CheckCircle2, Clock, Filter, RefreshCw, Archive, Eye, EyeOff, Settings, Calendar, ExternalLink, Megaphone, Send } from 'lucide-react';
 import { toast } from 'sonner';
-import { useERPStore, isModuleAllowed, MODULE_CONFIG } from '@/store/erp-store';
+import { useERPStore, isModuleAllowed, MODULE_CONFIG, SUB_MODULES } from '@/store/erp-store';
+import { getCurrentUserEmail } from '@/lib/current-user';
 
 interface FinNotification {
   id: number; title: string; message: string; type: string; priority: string; status: string;
@@ -10,7 +11,19 @@ interface FinNotification {
   link?: string; createdAt: string; isRead: boolean;
 }
 
+interface FinRole { id: number; code: string; name: string; isActive: boolean }
+interface FinSiteRow { id: number; siteCode: string; name: string }
+interface Broadcast {
+  entityId: string; title: string; message: string; type: string; priority: string;
+  siteCode: string | null; createdAt: string; recipientCount: number;
+}
+
 type Channels = { inapp: boolean; email: boolean; whatsapp: boolean };
+type AudienceKind = 'all' | 'role' | 'site' | 'emails';
+
+// Screens worth linking a broadcast to — the same set the sidebar shows
+// under Finance & Accounts.
+const LINK_OPTIONS = SUB_MODULES['finance-accounts'] || [];
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Active (not archived)' },
@@ -24,7 +37,7 @@ const STATUS_OPTIONS = [
 
 export default function NotificationsUltra() {
   const { setActiveModule, allowedModules } = useERPStore();
-  const [activeTab, setActiveTab] = useState<'inbox'|'digest'|'prefs'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox'|'digest'|'prefs'|'admin'>('inbox');
   const [notifications, setNotifications] = useState<FinNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -38,6 +51,17 @@ export default function NotificationsUltra() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [digest, setDigest] = useState<string>('realtime');
   const [channels, setChannels] = useState<Channels>({ inapp: true, email: true, whatsapp: false });
+
+  // Admin broadcast — sending finance-wide alerts/info, gated server-side by ADMIN_CREATE.
+  const [canBroadcast, setCanBroadcast] = useState(false);
+  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
+  const [roles, setRoles] = useState<FinRole[]>([]);
+  const [bcSites, setBcSites] = useState<FinSiteRow[]>([]);
+  const [sending, setSending] = useState(false);
+  const [bcForm, setBcForm] = useState({
+    title: '', message: '', type: 'info', priority: 'P2',
+    audienceKind: 'all' as AudienceKind, role: '', siteCode: '', emails: '', link: '',
+  });
 
   // The server identifies the inbox owner from the login cookie — no email is sent from here.
   const fetchInbox = useCallback(async () => {
@@ -67,6 +91,49 @@ export default function NotificationsUltra() {
       .then(j => { if (j.success) { setDigest(j.data.digest); setChannels(j.data.channels); } })
       .catch(() => {});
   }, []);
+
+  const fetchBroadcasts = useCallback(async () => {
+    const j = await fetch('/api/notifications/ultra/broadcast').then(r => r.json()).catch(() => null);
+    if (j?.success) { setCanBroadcast(j.data.canBroadcast); setBroadcasts(j.data.broadcasts || []); }
+  }, []);
+
+  useEffect(() => { fetchBroadcasts(); }, [fetchBroadcasts]);
+
+  // Role/site pickers for the audience selector — same admin endpoints
+  // Finance Access Control uses, gated the same way (ADMIN_VIEW / public).
+  useEffect(() => {
+    if (!canBroadcast) return;
+    const email = getCurrentUserEmail();
+    fetch('/api/fin/rbac/roles', { headers: email ? { 'x-actor-email': email } : {} })
+      .then(r => r.json()).then(j => { if (j.success) setRoles(j.data.filter((r: FinRole) => r.isActive)); }).catch(() => {});
+    fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success) setBcSites(j.data); }).catch(() => {});
+  }, [canBroadcast]);
+
+  const sendBroadcast = async () => {
+    if (!bcForm.title.trim() || !bcForm.message.trim()) { toast.error('Title and message are required'); return; }
+    const audience =
+      bcForm.audienceKind === 'all' ? { kind: 'all' } :
+      bcForm.audienceKind === 'role' ? { kind: 'role', role: bcForm.role, siteCode: bcForm.siteCode || null } :
+      bcForm.audienceKind === 'site' ? { kind: 'site', siteCode: bcForm.siteCode } :
+      { kind: 'emails', emails: bcForm.emails.split(/[,\n]/).map(e => e.trim()).filter(Boolean) };
+    if (bcForm.audienceKind === 'role' && !bcForm.role) { toast.error('Pick a role'); return; }
+    if (bcForm.audienceKind === 'site' && !bcForm.siteCode) { toast.error('Pick a site'); return; }
+    if (bcForm.audienceKind === 'emails' && !(audience as any).emails.length) { toast.error('Enter at least one email'); return; }
+
+    setSending(true);
+    try {
+      const res = await fetch('/api/notifications/ultra/broadcast', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: bcForm.title.trim(), message: bcForm.message.trim(), type: bcForm.type, priority: bcForm.priority, link: bcForm.link || null, audience }),
+      });
+      const j = await res.json();
+      if (j.success) {
+        toast.success(`Sent to ${j.sent} recipient${j.sent === 1 ? '' : 's'}`);
+        setBcForm({ title: '', message: '', type: 'info', priority: 'P2', audienceKind: 'all', role: '', siteCode: '', emails: '', link: '' });
+        fetchBroadcasts();
+      } else toast.error(j.error || 'Could not send');
+    } finally { setSending(false); }
+  };
 
   // SSE live
   useEffect(()=>{
@@ -132,8 +199,11 @@ export default function NotificationsUltra() {
       </div>
 
       <div className="flex gap-2 border-b border-[#252e3a] pb-2">
-        {(['inbox','digest','prefs'] as const).map(t=> (
-          <button key={t} onClick={()=>setActiveTab(t)} className={`px-3 py-1.5 rounded text-[11px] font-semibold capitalize ${activeTab===t?'bg-[#f5a623] text-black':'bg-[#252e3a] text-[#8899aa]'}`}>{t === 'prefs' ? 'Preferences' : t}</button>
+        {(['inbox','digest','prefs', ...(canBroadcast ? ['admin' as const] : [])] as const).map(t=> (
+          <button key={t} onClick={()=>setActiveTab(t)} className={`px-3 py-1.5 rounded text-[11px] font-semibold capitalize flex items-center gap-1 ${activeTab===t?'bg-[#f5a623] text-black':'bg-[#252e3a] text-[#8899aa]'}`}>
+            {t === 'admin' && <Megaphone size={12} />}
+            {t === 'prefs' ? 'Preferences' : t === 'admin' ? 'Send Alert' : t}
+          </button>
         ))}
       </div>
 
@@ -232,6 +302,88 @@ export default function NotificationsUltra() {
             ))}
           </div>
           <div className="text-[10px] text-[#5a6878]">Turning In-App off stops new P1/P2 finance notifications for you. P0 alerts are always delivered.</div>
+        </div>
+      )}
+
+      {activeTab==='admin' && canBroadcast && (
+        <div className="space-y-4">
+          <div className="vc-panel p-4 space-y-3">
+            <div className="text-[11px] font-bold text-[#f5a623] flex items-center gap-2"><Megaphone size={14} /> Send a Finance Notification</div>
+            <p className="text-[10px] text-[#5a6878]">Use this for things the automatic alerts don't cover — a Tally maintenance window, a policy change, a filing-deadline reminder. You won't receive a copy yourself.</p>
+
+            <input value={bcForm.title} onChange={e=>setBcForm({...bcForm, title: e.target.value})} placeholder="Title, e.g. GST filing deadline — Friday" className="vc-input text-[12px] w-full" maxLength={120} />
+            <textarea value={bcForm.message} onChange={e=>setBcForm({...bcForm, message: e.target.value})} placeholder="Message" rows={3} className="vc-input text-[12px] w-full resize-none" maxLength={1000} />
+
+            <div className="flex flex-wrap gap-2">
+              <select value={bcForm.type} onChange={e=>setBcForm({...bcForm, type: e.target.value})} className="vc-input text-[11px] py-1">
+                <option value="info">Info</option>
+                <option value="success">Success</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
+              </select>
+              <select value={bcForm.priority} onChange={e=>setBcForm({...bcForm, priority: e.target.value})} className="vc-input text-[11px] py-1">
+                <option value="P2">P2 — Digest</option>
+                <option value="P1">P1 — Today</option>
+                <option value="P0">P0 — Immediate (bypasses mute)</option>
+              </select>
+              <select value={bcForm.link} onChange={e=>setBcForm({...bcForm, link: e.target.value})} className="vc-input text-[11px] py-1">
+                <option value="">No linked screen</option>
+                {LINK_OPTIONS.map((m: any) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {([['all','Everyone'],['role','By Role'],['site','By Site'],['emails','Specific Emails']] as const).map(([k,label]) => (
+                  <button key={k} onClick={()=>setBcForm({...bcForm, audienceKind: k})} className={`px-2.5 py-1 rounded text-[10px] font-semibold ${bcForm.audienceKind===k?'bg-[#00d4ff] text-black':'bg-[#0a0d12] text-[#8899aa] border border-[#252e3a]'}`}>{label}</button>
+                ))}
+              </div>
+              {bcForm.audienceKind === 'role' && (
+                <div className="flex flex-wrap gap-2">
+                  <select value={bcForm.role} onChange={e=>setBcForm({...bcForm, role: e.target.value})} className="vc-input text-[11px] py-1">
+                    <option value="">Pick a role…</option>
+                    {roles.map(r => <option key={r.id} value={r.code}>{r.name}</option>)}
+                  </select>
+                  <select value={bcForm.siteCode} onChange={e=>setBcForm({...bcForm, siteCode: e.target.value})} className="vc-input text-[11px] py-1">
+                    <option value="">All sites</option>
+                    {bcSites.map(s => <option key={s.id} value={s.siteCode}>{s.siteCode} — {s.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {bcForm.audienceKind === 'site' && (
+                <select value={bcForm.siteCode} onChange={e=>setBcForm({...bcForm, siteCode: e.target.value})} className="vc-input text-[11px] py-1">
+                  <option value="">Pick a site…</option>
+                  {bcSites.map(s => <option key={s.id} value={s.siteCode}>{s.siteCode} — {s.name}</option>)}
+                </select>
+              )}
+              {bcForm.audienceKind === 'emails' && (
+                <textarea value={bcForm.emails} onChange={e=>setBcForm({...bcForm, emails: e.target.value})} placeholder="One email per line or comma-separated" rows={2} className="vc-input text-[11px] w-full resize-none" />
+              )}
+            </div>
+
+            <button onClick={sendBroadcast} disabled={sending} className="vc-btn-primary flex items-center gap-1.5 text-[11px] disabled:opacity-50">
+              <Send size={13} /> {sending ? 'Sending…' : 'Send'}
+            </button>
+          </div>
+
+          <div className="vc-panel">
+            <div className="p-3 border-b border-[#1a2028] text-[11px] font-semibold text-[#e2e8f0]">Recently sent</div>
+            <div className="max-h-[320px] overflow-y-auto divide-y divide-[#1a2028]">
+              {broadcasts.map(b => (
+                <div key={b.entityId} className="p-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`vc-badge text-[10px] border ${priorityColor(b.priority)}`}>{b.priority}</span>
+                    {b.siteCode && <span className="text-[10px] font-mono text-[#00d4ff] bg-[#00d4ff]/10 px-1.5 py-0.5 rounded">{b.siteCode}</span>}
+                    <span className="text-[10px] text-[#5a6878]">{b.recipientCount} recipient{b.recipientCount === 1 ? '' : 's'}</span>
+                    <span className="text-[10px] text-[#5a6878] ml-auto">{new Date(b.createdAt).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="text-[12px] font-semibold text-[#e2e8f0] mt-1">{b.title}</div>
+                  <div className="text-[11px] text-[#8899aa] line-clamp-2">{b.message}</div>
+                </div>
+              ))}
+              {broadcasts.length === 0 && <div className="py-8 text-center text-[#5a6878] text-[11px]">Nothing sent yet</div>}
+            </div>
+          </div>
         </div>
       )}
     </div>
