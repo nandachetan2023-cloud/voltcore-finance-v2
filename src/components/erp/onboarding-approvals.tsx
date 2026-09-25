@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, X, RefreshCw, FileCheck, Clock, AlertCircle, ChevronDown, ChevronUp, User, MapPin, CreditCard, Heart, Building2, Eye, FileText, Shield, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -23,6 +24,18 @@ const inp = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 te
 // ── Full Form Viewer ─────────────────────────────────────────────
 function FormViewer({ user, onClose }: { user: OnboardingUser; onClose: () => void }) {
   const d = user.onboardingData || {};
+
+  // Rendered in place, this overlay sits inside the module wrapper's `relative
+  // z-10` stacking context, which is BELOW the app header (z-30) — so the top of
+  // the form (its title bar) painted under the header. Portal to <body> to escape
+  // that context; Esc closes it as well.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const Field = ({ label, value }: { label: string; value?: string | null | boolean }) => {
     if (value === undefined || value === null || value === '') return null;
@@ -59,8 +72,10 @@ function FormViewer({ user, onClose }: { user: OnboardingUser; onClose: () => vo
     </div>
   );
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center overflow-y-auto p-4">
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[200] bg-black/70 flex items-start justify-center overflow-y-auto p-4">
       <div className="w-full max-w-4xl my-4">
         {/* Header */}
         <div className="bg-[#161c24] border border-[#252e3a] rounded-t-xl px-6 py-4 flex items-center justify-between sticky top-0 z-10">
@@ -350,7 +365,8 @@ function FormViewer({ user, onClose }: { user: OnboardingUser; onClose: () => vo
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
