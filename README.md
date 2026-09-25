@@ -114,8 +114,8 @@ old_erp/
 
 After seeding the database:
 
-- Email: `admin@voltcore.com`
-- Password: `admin123`
+- Email: `admin@voltcore.in`
+- Password: `<ADMIN_PASSWORD>`
 
 ## Features
 

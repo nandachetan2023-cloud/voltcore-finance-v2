@@ -186,60 +186,60 @@ INSERT INTO Permission (id, name, code, module, description) VALUES
 INSERT INTO User (id, userId, name, email, phone, roleId, department, designation, status, lastLogin) VALUES
 -- usr_001 → Rajesh Mehta (emp_0001, VC-001) | Senior Engineer, Engineering | Admin
 ('user_001', 'usr_001', 'Rajesh Mehta',
- 'rajesh.mehta@voltcore.com', '+91 98200 12345',
+ 'rajesh.mehta@voltcore.in', '+91 98200 12345',
  'role_001', 'ENG', 'Senior Engineer', 'Active',
  '2025-06-18 09:15:00.000'),
 
 -- usr_002 → Sanjay Kumar Singh (emp_0002, VC-002) | Site Supervisor, Operations | Supervisor
 ('user_002', 'usr_002', 'Sanjay Kumar Singh',
- 'sanjay.singh@voltcore.com', '+91 98310 23456',
+ 'sanjay.singh@voltcore.in', '+91 98310 23456',
  'role_004', 'OPS', 'Site Supervisor', 'Active',
  '2025-06-18 08:30:00.000'),
 
 -- usr_003 → Vikram Pandey (emp_0003, VC-003) | Site Incharge, Operations | Manager
 ('user_003', 'usr_003', 'Vikram Pandey',
- 'vikram.pandey@voltcore.com', '+91 98420 34567',
+ 'vikram.pandey@voltcore.in', '+91 98420 34567',
  'role_002', 'OPS', 'Site Incharge', 'Active',
  '2025-06-18 09:00:00.000'),
 
 -- usr_004 → Nagarjuna Reddy (emp_0004, VC-004) | Planning Engineer, Maintenance Planning | Engineer
 ('user_004', 'usr_004', 'Nagarjuna Reddy',
- 'nagarjuna.reddy@voltcore.com', '+91 98530 45678',
+ 'nagarjuna.reddy@voltcore.in', '+91 98530 45678',
  'role_003', 'MP', 'Planning Engineer', 'Active',
  '2025-06-17 17:45:00.000'),
 
 -- usr_005 → Arun Sharma (emp_0005, VC-005) | Project Engineer, Engineering | Engineer
 ('user_005', 'usr_005', 'Arun Sharma',
- 'arun.sharma@voltcore.com', '+91 98640 56789',
+ 'arun.sharma@voltcore.in', '+91 98640 56789',
  'role_003', 'ENG', 'Project Engineer', 'Active',
  '2025-06-18 10:20:00.000'),
 
 -- usr_006 → Pradeep Rao (emp_0006, VC-006) | Site Supervisor, Operations | Supervisor
 ('user_006', 'usr_006', 'Pradeep Rao',
- 'pradeep.rao@voltcore.com', '+91 98750 67890',
+ 'pradeep.rao@voltcore.in', '+91 98750 67890',
  'role_004', 'OPS', 'Site Supervisor', 'Active',
  '2025-06-17 18:00:00.000'),
 
 -- usr_007 → Amit Joshi (emp_0007, VC-007) | Engineer, Engineering | Engineer
 ('user_007', 'usr_007', 'Amit Joshi',
- 'amit.joshi@voltcore.com', '+91 98860 78901',
+ 'amit.joshi@voltcore.in', '+91 98860 78901',
  'role_003', 'ENG', 'Engineer', 'Active',
  '2025-06-18 08:45:00.000'),
 
 -- usr_008 → Suresh Patel (emp_0008, VC-008) | Engineer, Engineering | Technician
 ('user_008', 'usr_008', 'Suresh Patel',
- 'suresh.patel@voltcore.com', '+91 98970 89012',
+ 'suresh.patel@voltcore.in', '+91 98970 89012',
  'role_005', 'ENG', 'Engineer', 'Active',
  '2025-06-16 09:30:00.000'),
 
 -- usr_009 → Deepak Verma (emp_0009, VC-009) | Safety Officer, Safety & HSE | Technician
 ('user_009', 'usr_009', 'Deepak Verma',
- 'deepak.verma@voltcore.com', '+91 99080 90123',
+ 'deepak.verma@voltcore.in', '+91 99080 90123',
  'role_005', 'HSE', 'Safety Officer', 'Active',
  '2025-06-18 07:30:00.000'),
 
 -- usr_010 → Mahesh Kumar (emp_0010, VC-010) | Supervisor, Operations | HR_Finance
 ('user_010', 'usr_010', 'Mahesh Kumar',
- 'mahesh.kumar@voltcore.com', '+91 99190 01234',
+ 'mahesh.kumar@voltcore.in', '+91 99190 01234',
  'role_006', 'OPS', 'Supervisor', 'Active',
  '2025-06-17 14:10:00.000')

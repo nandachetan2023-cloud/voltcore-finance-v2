@@ -258,7 +258,7 @@ bun run db:seed
 You should see:
 ```
 ✅ SuperAdmin account created
-   Email:    superadmin@voltcore.com
+   Email:    superadmin@voltcore.in
    Password: superadmin@123
 
 📋 Next steps:

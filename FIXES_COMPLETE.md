@@ -43,8 +43,8 @@ npm run dev
 ```
 
 Open http://localhost:3000 and login with:
-- Email: `admin@voltcore.com`
-- Password: `admin123`
+- Email: `admin@voltcore.in`
+- Password: `<ADMIN_PASSWORD>`
 
 ## What Works
 

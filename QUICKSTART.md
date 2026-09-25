@@ -60,8 +60,8 @@ bun run db:seed
 ```
 
 This creates an admin user:
-- Email: `admin@voltcore.com`
-- Password: `admin123`
+- Email: `admin@voltcore.in`
+- Password: `<ADMIN_PASSWORD>`
 
 ## Step 6: Start Development Server
 
@@ -76,8 +76,8 @@ bun run dev
 Navigate to: `http://localhost:3000`
 
 Login with:
-- Email: `admin@voltcore.com`
-- Password: `admin123`
+- Email: `admin@voltcore.in`
+- Password: `<ADMIN_PASSWORD>`
 
 ## That's It! 🎉
 

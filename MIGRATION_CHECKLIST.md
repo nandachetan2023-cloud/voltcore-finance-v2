@@ -98,7 +98,7 @@ npm run dev
 
 ### Test 6: Login
 - [ ] Can access login page
-- [ ] Can login with admin@voltcore.com / admin123
+- [ ] Can login with admin@voltcore.in / <ADMIN_PASSWORD>
 - [ ] Dashboard loads correctly
 
 ### Test 7: Module Navigation
@@ -177,7 +177,7 @@ Once all checks pass, old_erp is ready for:
 
 - The only external dependency is PostgreSQL database
 - Configure DATABASE_URL in .env before running
-- Default admin credentials: admin@voltcore.com / admin123
+- Default admin credentials: admin@voltcore.in / <ADMIN_PASSWORD>
 - Development server runs on port 3000 by default
 
 ## ✅ Final Verification

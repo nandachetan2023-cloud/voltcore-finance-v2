@@ -80,7 +80,7 @@ export default function SuperAdminPage() {
               <label className="block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1.5">Email</label>
               <input
                 type="email" required value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="superadmin@voltcore.com"
+                placeholder="superadmin@voltcore.in"
                 className="w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2.5 text-[13px] text-[#e2e8f0] outline-none focus:border-[#ff3d3d]/60 transition-colors"
               />
             </div>

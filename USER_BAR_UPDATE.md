@@ -72,8 +72,8 @@ Updated the bottom left user bar in the sidebar to display correct user informat
 - Converts to uppercase
 
 ## Default Admin Credentials
-- Email: `admin@voltcore.com`
-- Password: `admin123`
+- Email: `admin@voltcore.in`
+- Password: `<ADMIN_PASSWORD>`
 - Name: `Admin User`
 - Role: `Administrator`
 
