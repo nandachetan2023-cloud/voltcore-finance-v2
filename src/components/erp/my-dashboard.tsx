@@ -17,7 +17,7 @@ interface DashboardData {
   };
   attendance: { present: number; late: number; absent: number; halfDay: number; totalFines: number; totalLateMinutes: number; markedDays: number; attendanceRate: number };
   today: { status: string | null; punchIn: string | null; punchOut: string | null; isWeekOff: boolean };
-  leave: { balance: { type: string; allocated: number; used: number; remaining: number }[]; totalRemaining: number; totalAllocated: number; pending: number };
+  leave: { balance: { type: string; name: string; allocated: number; used: number; remaining: number }[]; totalRemaining: number; totalAllocated: number; pending: number };
   pending: { requests: number; tours: number; leaves: number };
   notices: { unread: number };
   payslip: { netPay: number; grossEarning: number; totalDeduction: number; month: number | null; year: number | null } | null;
@@ -242,7 +242,7 @@ export default function MyDashboard() {
               return (
                 <div key={l.type}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-semibold" style={{ color }}>{l.type}</span>
+                    <span className="text-[11px] font-semibold" style={{ color }}>{l.name || l.type}</span>
                     <span className="text-[10px] text-[#8899aa]"><span className="font-bold text-[#e2e8f0]">{l.remaining}</span> / {l.allocated} left</span>
                   </div>
                   <div className="h-1.5 bg-[#0d1117] rounded-full overflow-hidden">

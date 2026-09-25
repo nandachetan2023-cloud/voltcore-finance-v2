@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       // Leave policies → total entitlement by type
       db.leavePolicy.findMany({
         where: { isActive: true },
-        select: { leaveType: true, annualQuota: true },
+        select: { name: true, code: true, annualQuota: true },
       }),
       // Approved leave days taken this year
       db.leaveRequest.findMany({
@@ -141,10 +141,12 @@ export async function GET(request: NextRequest) {
     for (const l of approvedLeavesThisYear) {
       takenByType[l.leaveType] = (takenByType[l.leaveType] || 0) + Number(l.days || 0)
     }
+    // Requests store the policy CODE as their leaveType (EL, SL, …); the
+    // policy's own leaveType is only its paid/unpaid category.
     const leaveBalance = leavePolicies.map(p => {
       const allocated = Number(p.annualQuota || 0)
-      const used = takenByType[p.leaveType] || 0
-      return { type: p.leaveType, allocated, used, remaining: Math.max(0, allocated - used) }
+      const used = takenByType[p.code] || 0
+      return { type: p.code, name: p.name, allocated, used, remaining: Math.max(0, allocated - used) }
     })
     const totalLeaveRemaining = leaveBalance.reduce((s, l) => s + l.remaining, 0)
     const totalLeaveAllocated = leaveBalance.reduce((s, l) => s + l.allocated, 0)
