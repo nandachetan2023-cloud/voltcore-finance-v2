@@ -176,12 +176,60 @@ function BalanceCard({ label, allocated, used, color }: {
    LEAVE LEDGER COMPONENT
    Shows per-employee leave balance summary with expandable
    rows to view individual leave request logs.
+   Fetches its own data from /api/leave/ledger, which only
+   returns the caller and employees below them in the role
+   hierarchy.
    ════════════════════════════════════════════════════════ */
-function LeaveLedger({ records, employees, leavePolicies }: {
-  records: LeaveRequest[];
-  employees: Employee[];
+function LeaveLedger({ leavePolicies, refreshKey }: {
   leavePolicies: any[];
+  refreshKey: number;
 }) {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [records, setRecords] = useState<LeaveRequest[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/leave/ledger', { cache: 'no-store' });
+        const json = await res.json();
+        if (cancelled || !json.success) return;
+        const mappedEmployees: Employee[] = json.data.employees.map((e: any) => ({
+          id: e.id.toString(),
+          empId: e.employeeCode,
+          name: `${e.firstName} ${e.lastName}`,
+          role: e.Designation?.name || 'N/A',
+          site: e.Branch?.name || 'N/A',
+          departmentId: e.departmentId,
+          designationId: e.designationId,
+        }));
+        const byId = new Map(mappedEmployees.map(e => [e.id, e]));
+        setEmployees(mappedEmployees);
+        setRecords(json.data.records.map((r: any) => {
+          const emp = byId.get(r.employeeId.toString());
+          return {
+            id: r.id.toString(),
+            empId: emp?.empId || '',
+            site: emp?.site || 'N/A',
+            type: r.leaveType,
+            fromDate: r.fromDate,
+            toDate: r.toDate,
+            days: r.days,
+            reason: r.reason || '',
+            status: r.status.charAt(0).toUpperCase() + r.status.slice(1),
+            appliedDate: r.appliedDate || r.createdAt,
+            createdAt: r.createdAt,
+            updatedAt: r.createdAt,
+            employee: emp!,
+          };
+        }));
+      } catch (error) {
+        console.error('Error fetching leave ledger:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -395,6 +443,7 @@ export default function LeaveModule() {
   const [tableSearch, setTableSearch] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [myEmployeeId, setMyEmployeeId] = useState<number | null>(null);
+  const [ledgerVersion, setLedgerVersion] = useState(0);
 
   // Get current user's employeeId to prevent self-approval
   useEffect(() => {
@@ -502,6 +551,7 @@ export default function LeaveModule() {
       toast.error('Failed to fetch leave data');
     } finally {
       setLoading(false);
+      setLedgerVersion(v => v + 1);
     }
   }, []);
 
@@ -927,7 +977,7 @@ export default function LeaveModule() {
       </div>
 
       {/* Leave Ledger Panel — below approval table */}
-      <LeaveLedger records={records} employees={employees} leavePolicies={leavePolicies} />
+      <LeaveLedger leavePolicies={leavePolicies} refreshKey={ledgerVersion} />
 
       {/* Create Leave Dialog */}
       <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) { setForm(EMPTY_FORM); setFieldErrors({}); } }}>
