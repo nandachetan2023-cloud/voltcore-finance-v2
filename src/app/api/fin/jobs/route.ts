@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { getAssignedSiteScope, isTenantAdmin } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
+
+    // Site-scoped users only get their own sites' jobs (same rule as
+    // /api/fin/sites); all-sites and non-finance accounts are unaffected.
+    let where: any = {}
+    if (!isTenantAdmin(request)) {
+      const scope = await getAssignedSiteScope(pdb, request.cookies.get('erp_user_email')?.value || '')
+      if (scope.scoped) where = { site: { siteCode: { in: scope.siteCodes } } }
+    }
+
     const records = await pdb.finJob.findMany({
+      where,
       orderBy: { jobCode: 'desc' },
       include: {
         site: { select: { id: true, name: true, siteCode: true } },

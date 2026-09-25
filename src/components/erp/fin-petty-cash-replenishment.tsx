@@ -7,14 +7,17 @@ import { getCurrentUserEmail } from '@/lib/current-user';
 interface Site { id: number; name: string; siteCode: string; responsiblePerson: string | null; pettyCashLimit: number | null; }
 interface PettyCashRecord { id: number; voucherNo: string; date: string; amount: number; siteId: number | null; approvalStatus: string; site: { name: string } | null; }
 interface RbacAssignment { id: number; siteCode: string | null; role: { code: string; name: string; level: number } | null; }
+interface JobOption { id: number; jobCode: string; description: string | null; siteId: number | null; status: string; }
 
 function fmt(n: number) { return '₹' + (n ?? 0).toLocaleString('en-IN'); }
 
 export default function FinPettyCashReplenishment() {
   const [sites, setSites] = useState<Site[]>([]);
+  const [jobs, setJobs] = useState<JobOption[]>([]);
   const [recent, setRecent] = useState<PettyCashRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [siteId, setSiteId] = useState('');
+  const [jobCode, setJobCode] = useState('');
   const [amount, setAmount] = useState(0);
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -24,14 +27,17 @@ export default function FinPettyCashReplenishment() {
     setLoading(true);
     try {
       const email = getCurrentUserEmail();
-      const [sitesRes, pcRes, rbacRes] = await Promise.all([
+      const [sitesRes, pcRes, jobsRes, rbacRes] = await Promise.all([
         fetch('/api/fin/sites'),
         fetch('/api/fin/petty-cash'),
+        fetch('/api/fin/jobs'),
         email ? fetch(`/api/fin/rbac/assignments?email=${encodeURIComponent(email)}`) : Promise.resolve(null),
       ]);
       const sitesJson = await sitesRes.json();
       const pcJson = await pcRes.json();
+      const jobsJson = await jobsRes.json();
       if (sitesJson.success) setSites(sitesJson.data);
+      if (jobsJson.success) setJobs((jobsJson.data ?? []).map((j: any) => ({ id: j.id, jobCode: j.jobCode, description: j.description ?? null, siteId: j.siteId ?? null, status: j.status })));
       if (pcJson.success) setRecent(pcJson.data.filter((r: any) => r.category === 'Replenishment').slice(0, 15));
       if (rbacRes) { const rbacJson = await rbacRes.json(); if (rbacJson.success) setAssignments(rbacJson.data ?? []); }
     } catch { toast.error('Failed to load'); }
@@ -40,6 +46,11 @@ export default function FinPettyCashReplenishment() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const selectedSite = sites.find(s => String(s.id) === siteId) || null;
+  // Cash is requested against a job code of the chosen site — never another
+  // site's job, so the list is filtered by the selected site.
+  const siteJobs = selectedSite
+    ? jobs.filter(j => j.siteId === selectedSite.id && j.status !== 'Closed')
+    : [];
 
   // Anyone holding an approve-capable role (level >= 2, not Custodian) for the selected site
   // (or all-sites) can push cash directly instead of filing a request.
@@ -50,6 +61,7 @@ export default function FinPettyCashReplenishment() {
 
   const handleSubmit = async () => {
     if (!siteId) { toast.error('Select a site'); return; }
+    if (siteJobs.length > 0 && !jobCode) { toast.error('Select the job code this cash is for'); return; }
     if (!amount || amount <= 0) { toast.error('Enter a requested amount'); return; }
     setSubmitting(true);
     try {
@@ -61,6 +73,7 @@ export default function FinPettyCashReplenishment() {
           date: new Date().toISOString().split('T')[0],
           description: reason ? `Replenishment request: ${reason}` : 'Replenishment request',
           amount, type: 'Credit', category: 'Replenishment', siteId: Number(siteId),
+          jobCode: jobCode || null,
           custodian: selectedSite?.responsiblePerson || null,
           authorizedBy: getCurrentUserEmail() || selectedSite?.responsiblePerson || null,
           remarks: reason || null,
@@ -100,7 +113,7 @@ export default function FinPettyCashReplenishment() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
-                <select value={siteId} onChange={e => setSiteId(e.target.value)} className="vc-input appearance-none">
+                <select value={siteId} onChange={e => { setSiteId(e.target.value); setJobCode(''); }} className="vc-input appearance-none">
                   <option value="">— Select Site —</option>
                   {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
@@ -109,6 +122,14 @@ export default function FinPettyCashReplenishment() {
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Custodian</label>
                 <input value={selectedSite?.responsiblePerson || ''} readOnly className="vc-input opacity-60" placeholder="Auto-filled from site" />
               </div>
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Job Code {siteJobs.length > 0 ? '*' : ''}</label>
+              <select value={jobCode} onChange={e => setJobCode(e.target.value)} disabled={!selectedSite} className="vc-input appearance-none disabled:opacity-50">
+                <option value="">{!selectedSite ? '— Select a site first —' : siteJobs.length === 0 ? '— No active jobs for this site —' : '— Select Job —'}</option>
+                {siteJobs.map(j => <option key={j.id} value={j.jobCode}>{j.jobCode} — {j.description || 'Untitled'}</option>)}
+              </select>
+              <p className="text-[9px] text-[#5a6878] mt-1">The float is requested against this job, so the spend lands on the right cost centre.</p>
             </div>
             {selectedSite?.pettyCashLimit ? (
               <div className="text-[10px] text-[#5a6878]">Sanctioned fund limit for this site: <span className="text-[#e2e8f0] font-mono">{fmt(selectedSite.pettyCashLimit)}</span></div>
