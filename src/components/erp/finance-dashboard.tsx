@@ -175,10 +175,10 @@ export default function FinancialHome() {
         </div>
         <div className="relative h-full flex items-center px-8">
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-[#f5a623] tracking-wide" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+            <h1 className="text-3xl font-bold text-white tracking-wide" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
               FINANCIAL OVERVIEW
             </h1>
-            <p className="text-[#8899aa] text-sm tracking-wider">
+            <p className="text-white text-sm tracking-wider">
               VoltCore Engineering Pvt Ltd &bull; Period: FY {(() => { const y = new Date().getFullYear(); const m = new Date().getMonth(); return m >= 3 ? `${y}-${(y + 1) % 100}` : `${y - 1}-${y % 100}`; })()}
             </p>
           </div>
