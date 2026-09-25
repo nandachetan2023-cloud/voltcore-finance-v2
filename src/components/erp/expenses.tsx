@@ -23,29 +23,55 @@ interface Employee {
   site: string;
 }
 
+/** The view shape this screen renders — mapped from a FinExpenseClaim row. */
 interface Expense {
   id: string;
   claimNo: string;
-  empId: string;
-  employee: { id: string; empId: string; name: string; role: string; site: string };
+  employeeName: string;
+  department: string;
+  siteName: string;
   category: string;
   amount: number;
   project: string;
   date: string;
   status: string;
-  createdAt: string;
+}
+
+interface Site { id: number; name: string; siteCode: string; }
+interface JobOption { id: number; jobCode: string; description: string | null; siteId: number | null; status: string; }
+
+/**
+ * /api/fin/expense-claims returns FinExpenseClaim rows, which carry expenseType /
+ * totalAmount / submittedBy / jobCode — not category / amount / employee /
+ * project. Reading the latter straight off the response left every one of them
+ * undefined, and `undefined.toLowerCase()` in categoryIcon crashed the screen.
+ */
+function toExpense(r: any): Expense {
+  return {
+    id: String(r.id),
+    claimNo: r.claimNo ?? '—',
+    employeeName: r.submittedBy || 'Unknown',
+    department: r.department || '',
+    siteName: r.site?.name || '',
+    category: r.expenseType || 'Misc',
+    amount: Number(r.totalAmount) || 0,
+    project: r.jobCode || r.costCenter || '',
+    date: typeof r.date === 'string' ? r.date.split('T')[0] : '',
+    status: r.approvalStatus || r.status || 'Draft',
+  };
 }
 
 interface ExpenseFormData {
-  empId: string;
+  siteId: string;
   category: string;
   amount: number;
-  project: string;
+  jobCode: string;
+  submittedBy: string;
   date: string;
 }
 
 const EMPTY_FORM: ExpenseFormData = {
-  empId: '', category: 'Travel & Accommodation', amount: 0, project: '', date: '',
+  siteId: '', category: 'Travel & Accommodation', amount: 0, jobCode: '', submittedBy: '', date: '',
 };
 
 const CATEGORIES = [
@@ -58,17 +84,17 @@ const CATEGORIES = [
 ];
 
 /* ── Helpers ──────────────────────────────────────── */
-function statusBadge(s: string) {
+function statusBadge(s?: string | null) {
   const m: Record<string, string> = {
     Pending: 'bg-[#ffab40]/15 text-[#ffab40]',
     Approved: 'bg-[#00e676]/15 text-[#00e676]',
     Rejected: 'bg-[#ff3d3d]/15 text-[#ff3d3d]',
   };
-  return m[s] || 'bg-[#5a6878]/15 text-[#5a6878]';
+  return m[s ?? ''] || 'bg-[#5a6878]/15 text-[#5a6878]';
 }
 
-function categoryIcon(cat: string) {
-  if (cat.toLowerCase().includes('travel')) return <Plane size={12} className="text-[#00d4ff]" />;
+function categoryIcon(cat?: string | null) {
+  if ((cat ?? '').toLowerCase().includes('travel')) return <Plane size={12} className="text-[#00d4ff]" />;
   return <Receipt size={12} className="text-[#8899aa]" />;
 }
 
@@ -122,6 +148,8 @@ function StatCard({ icon: Icon, label, value, color }: {
 export default function Expenses() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [jobs, setJobs] = useState<JobOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -139,14 +167,20 @@ export default function Expenses() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [expRes, empRes] = await Promise.all([
+      const [expRes, empRes, siteRes, jobRes] = await Promise.all([
         fetch('/api/fin/expense-claims'),
         fetch('/api/employees'),
+        fetch('/api/fin/sites'),
+        fetch('/api/fin/jobs'),
       ]);
       const expJson = await expRes.json();
       const empJson = await empRes.json();
-      if (expJson.success) setExpenses(expJson.data);
-      if (empJson.success) setEmployees(empJson.data);
+      const siteJson = await siteRes.json();
+      const jobJson = await jobRes.json();
+      if (expJson.success) setExpenses((expJson.data ?? []).map(toExpense));
+      if (empJson.success) setEmployees(empJson.data ?? []);
+      if (siteJson.success) setSites(siteJson.data ?? []);
+      if (jobJson.success) setJobs((jobJson.data ?? []).map((j: any) => ({ id: j.id, jobCode: j.jobCode, description: j.description ?? null, siteId: j.siteId ?? null, status: j.status })));
     } catch {
       toast.error('Failed to fetch expense data');
     } finally {
@@ -158,9 +192,14 @@ export default function Expenses() {
 
   /* ── Stats ── */
   const pendingCount = expenses.filter(e => e.status === 'Pending').length;
-  const approvedMTD = expenses.filter(e => e.status === 'Approved').reduce((s, e) => s + e.amount, 0);
-  const totalAmount = expenses.reduce((s, e) => s + e.amount, 0);
+  const approvedMTD = expenses.filter(e => e.status === 'Approved').reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const totalAmount = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   const rejectedCount = expenses.filter(e => e.status === 'Rejected').length;
+
+  // Jobs belong to a site, so the picker follows the site chosen in the form.
+  const formSiteJobs = form.siteId
+    ? jobs.filter(j => String(j.siteId) === form.siteId && j.status !== 'Closed')
+    : [];
 
   /* ── Form helpers ── */
   const updateForm = (field: keyof ExpenseFormData, value: string | number) => {
@@ -168,8 +207,8 @@ export default function Expenses() {
   };
 
   const handleCreate = async () => {
-    if (!form.empId || !form.amount || !form.project || !form.date) {
-      toast.error('Please fill in all required fields');
+    if (!form.siteId || !form.amount || !form.date) {
+      toast.error('Site, amount and date are required');
       return;
     }
     try {
@@ -177,7 +216,16 @@ export default function Expenses() {
       const res = await fetch('/api/fin/expense-claims', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          siteId: Number(form.siteId),
+          expenseType: form.category,
+          totalAmount: form.amount,
+          jobCode: form.jobCode || null,
+          submittedBy: form.submittedBy || null,
+          date: form.date,
+          approvalStatus: 'Pending',
+          status: 'Submitted',
+        }),
       });
       const json = await res.json();
       if (json.success) {
@@ -202,7 +250,7 @@ export default function Expenses() {
       const res = await fetch('/api/fin/expense-claims', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status }),
+        body: JSON.stringify({ id: Number(id), approvalStatus: status, status }),
       });
       const json = await res.json();
       if (json.success) {
@@ -222,11 +270,7 @@ export default function Expenses() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const res = await fetch('/api/fin/expense-claims', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: deleteTarget.id }),
-      });
+      const res = await fetch(`/api/fin/expense-claims?id=${deleteTarget.id}`, { method: 'DELETE' });
       const json = await res.json();
       if (json.success) {
         toast.success('Expense deleted');
@@ -287,16 +331,16 @@ export default function Expenses() {
                     <tr key={exp.id} className="hover:bg-[#141920] transition-colors">
                       <td className="py-2.5 px-3 text-[#f5a623] font-medium">{exp.claimNo}</td>
                       <td className="py-2.5 px-3">
-                        <div className="text-[#e2e8f0] font-medium">{exp.employee?.name || 'Unknown'}</div>
-                        <div className="text-[#5a6878] text-[9px]">{exp.employee?.role || ''}</div>
+                        <div className="text-[#e2e8f0] font-medium">{exp.employeeName}</div>
+                        <div className="text-[#5a6878] text-[9px]">{[exp.department, exp.siteName].filter(Boolean).join(' · ')}</div>
                       </td>
                       <td className="py-2.5 px-3">
                         <div className="flex items-center gap-1.5 text-[#8899aa]">
-                          {categoryIcon(exp.category)} {exp.category}
+                          {categoryIcon(exp.category)} {exp.category || '—'}
                         </div>
                       </td>
                       <td className="py-2.5 px-3 text-[#e2e8f0] font-medium">₹{(exp.amount ?? 0).toLocaleString('en-IN')}</td>
-                      <td className="py-2.5 px-3 text-[#8899aa]">{exp.project}</td>
+                      <td className="py-2.5 px-3 text-[#8899aa]">{exp.project || '—'}</td>
                       <td className="py-2.5 px-3 text-[#5a6878]">{exp.date}</td>
                       <td className="py-2.5 px-3">
                         <span className={`vc-badge ${statusBadge(exp.status)}`}>{exp.status}</span>
@@ -341,11 +385,18 @@ export default function Expenses() {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Employee *</label>
-              <select value={form.empId} onChange={e => updateForm('empId', e.target.value)} className="vc-input appearance-none">
-                <option value="">Select employee...</option>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Site *</label>
+              <select value={form.siteId} onChange={e => { updateForm('siteId', e.target.value); updateForm('jobCode', ''); }} className="vc-input appearance-none">
+                <option value="">Select site...</option>
+                {sites.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Submitted By</label>
+              <select value={form.submittedBy} onChange={e => updateForm('submittedBy', e.target.value)} className="vc-input appearance-none">
+                <option value="">Me (from session)</option>
                 {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.empId} - {emp.name}</option>
+                  <option key={emp.id} value={emp.name}>{emp.empId} - {emp.name}</option>
                 ))}
               </select>
             </div>
@@ -361,9 +412,11 @@ export default function Expenses() {
                 placeholder="0" className="vc-input" min="0" step="0.01" />
             </div>
             <div>
-              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Project *</label>
-              <input type="text" value={form.project} onChange={e => updateForm('project', e.target.value)}
-                placeholder="Project name" className="vc-input" />
+              <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Job Code</label>
+              <select value={form.jobCode} onChange={e => updateForm('jobCode', e.target.value)} disabled={!form.siteId} className="vc-input appearance-none disabled:opacity-50">
+                <option value="">{!form.siteId ? '— Select a site first —' : formSiteJobs.length === 0 ? '— No active jobs for this site —' : '— Select Job —'}</option>
+                {formSiteJobs.map(j => <option key={j.id} value={j.jobCode}>{j.jobCode} — {j.description || 'Untitled'}</option>)}
+              </select>
             </div>
             <div>
               <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Date *</label>
@@ -389,7 +442,7 @@ export default function Expenses() {
               <AlertTriangle size={16} /> Delete Expense Claim
             </AlertDialogTitle>
             <AlertDialogDescription className="text-[#8899aa]">
-              Are you sure you want to delete claim <strong className="text-[#f5a623]">{deleteTarget?.claimNo}</strong> for <strong className="text-[#e2e8f0]">{deleteTarget?.employee?.name}</strong>? This action cannot be undone.
+              Are you sure you want to delete claim <strong className="text-[#f5a623]">{deleteTarget?.claimNo}</strong> for <strong className="text-[#e2e8f0]">{deleteTarget?.employeeName}</strong>? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
