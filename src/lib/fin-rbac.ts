@@ -11,6 +11,28 @@ export interface RbacDecision {
   reason?: string
 }
 
+/**
+ * A real ERP tenant admin/superadmin (from the `erp_user_role` httpOnly
+ * session cookie set at login — never a client-supplied header) may always
+ * manage the Finance RBAC system itself: view/create/edit/delete roles,
+ * assignments, SoD rules, and read the audit log.
+ *
+ * Without this, a fresh tenant has nobody who can open Finance Access
+ * Control at all — ADMIN_* permissions live only in FinRolePermission,
+ * which nobody holds until someone with ADMIN_CREATE grants it, and nobody
+ * has ADMIN_CREATE until this bootstrap exists. (The demo `finance_admin@`
+ * assignment in scripts/seed-fin-rbac.ts papers over this in dev only.)
+ *
+ * This does NOT extend to money-movement permissions (AP_CREATE,
+ * GL_APPROVE, PETTYCASH_APPROVE, …) — those still require an explicit
+ * FinUserRole grant, preserving Segregation of Duties for actual finance
+ * actions. It only unlocks the 'Admin' module (RBAC administration).
+ */
+export function isTenantAdmin(request?: NextRequest): boolean {
+  const role = request?.cookies.get('erp_user_role')?.value
+  return role === 'admin' || role === 'superadmin'
+}
+
 /** All roles a user holds (across sites). */
 export async function getUserRoles(
   db: PrismaClient,
@@ -71,6 +93,61 @@ export async function hasPermission(
     return { allowed: false, reason: 'Read-only role cannot perform this action' }
   }
   return { allowed: true }
+}
+
+/**
+ * Which sites a user may see for a given permission.
+ *
+ *   { allSites: true }                  → holds the permission at an all-sites
+ *                                         assignment (Finance Head, Director, …)
+ *   { allSites: false, siteCodes: [..] } → site-scoped: only those siteCodes
+ *   { allSites: false, siteCodes: [] }   → does not hold the permission at all
+ *
+ * Use this to filter LIST endpoints. `hasPermission` answers "may I touch this
+ * one record?"; this answers "which records may I even see?" — a site custodian
+ * must not read another site's vouchers.
+ */
+export async function getPermittedSiteScope(
+  db: PrismaClient,
+  email: string,
+  permissionCode: string,
+): Promise<{ allSites: boolean; siteCodes: string[] }> {
+  if (!email) return { allSites: false, siteCodes: [] }
+  const permRows = await db.finRolePermission.findMany({
+    where: { permission: { code: permissionCode }, role: { isActive: true } },
+    select: { roleId: true },
+  })
+  const permittedRoleIds = permRows.map((r) => r.roleId)
+  if (permittedRoleIds.length === 0) return { allSites: false, siteCodes: [] }
+
+  const rows = await db.finUserRole.findMany({
+    where: { userEmail: email, isActive: true, roleId: { in: permittedRoleIds } },
+    select: { siteCode: true },
+  })
+  if (rows.some((r) => r.siteCode === null)) return { allSites: true, siteCodes: [] }
+  const siteCodes = [...new Set(rows.map((r) => r.siteCode).filter((c): c is string => !!c))]
+  return { allSites: false, siteCodes }
+}
+
+/**
+ * Every site the user is assigned to, across all their roles and regardless of
+ * permission — i.e. "the sites this account belongs to".
+ *
+ * `scoped` is false when the account holds no site-scoped finance assignment at
+ * all (no assignments, or only all-sites ones). Callers use that to leave
+ * non-finance users' lists untouched instead of emptying them.
+ */
+export async function getAssignedSiteScope(
+  db: PrismaClient,
+  email: string,
+): Promise<{ scoped: boolean; siteCodes: string[] }> {
+  if (!email) return { scoped: false, siteCodes: [] }
+  const rows = await db.finUserRole.findMany({
+    where: { userEmail: email, isActive: true },
+    select: { siteCode: true },
+  })
+  if (rows.length === 0 || rows.some((r) => r.siteCode === null)) return { scoped: false, siteCodes: [] }
+  return { scoped: true, siteCodes: [...new Set(rows.map((r) => r.siteCode as string))] }
 }
 
 /** Checkes whether granting `roleCode` would violate a SoD rule for `email`. */
@@ -157,10 +234,17 @@ export async function assertPermission(
   ctx: { request?: NextRequest; module?: string; entityId?: string; siteCode?: string | null },
 ): Promise<RbacDecision> {
   const moduleName = ctx.module ?? (permissionCode.split('_')[0] || 'Unknown')
-  const decision = await hasPermission(db, email, permissionCode, ctx.siteCode)
+  const bypass = moduleName === 'Admin' && isTenantAdmin(ctx.request)
+  const decision = bypass
+    ? { allowed: true }
+    : await hasPermission(db, email, permissionCode, ctx.siteCode)
+  // The session cookie is the trustworthy identity for a bypass grant — the
+  // `email` param comes from a client-supplied header/body field elsewhere in
+  // this codebase, so prefer the cookie for the audit trail when it applies.
+  const auditEmail = (bypass && ctx.request?.cookies.get('erp_user_email')?.value) || email || '(none)'
   await db.finAccessAuditLog.create({
     data: {
-      userEmail: email || '(none)',
+      userEmail: auditEmail,
       module: moduleName,
       permissionCode,
       action: (permissionCode.split('_').pop() || 'ACCESS'),

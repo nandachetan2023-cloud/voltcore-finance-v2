@@ -1,13 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
-import { assertPermission } from '@/lib/fin-rbac'
+import { assertPermission, getPermittedSiteScope, isTenantAdmin } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
+
+    // Site scoping: a custodian/site manager must only ever see their own site's
+    // vouchers. The identity comes from the httpOnly session cookie set at login
+    // — never from a client-supplied header, which the caller could forge.
+    // Tenant admins/superadmins keep the full cross-site view (read-only listing;
+    // posting and approving still need an explicit FinUserRole grant).
+    const email = request.cookies.get('erp_user_email')?.value || ''
+    let where: any = {}
+    if (!isTenantAdmin(request)) {
+      const scope = await getPermittedSiteScope(pdb, email, 'PETTYCASH_VIEW')
+      if (!scope.allSites) {
+        if (scope.siteCodes.length === 0) {
+          return NextResponse.json(
+            { success: false, error: 'Not allowed to view petty cash vouchers' },
+            { status: 403 },
+          )
+        }
+        where = { site: { siteCode: { in: scope.siteCodes } } }
+      }
+    }
+
     const records = await pdb.finPettyCash.findMany({
+      where,
       orderBy: { date: 'desc' },
       include: {
         party: { select: { id: true, name: true, code: true } },
@@ -34,14 +56,17 @@ export async function POST(request: NextRequest) {
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
 
     const site = body.siteId ? await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } }) : null
-    const denied = await assertPermission(pdb, body.actor || '', 'PETTYCASH_CREATE', { request, module: 'PettyCash', siteCode: site?.siteCode ?? null })
+    // The session cookie is the identity the gate is checked against — `body.actor`
+    // is client-supplied and could name someone with wider site access.
+    const actorEmail = request.cookies.get('erp_user_email')?.value || body.actor || ''
+    const denied = await assertPermission(pdb, actorEmail, 'PETTYCASH_CREATE', { request, module: 'PettyCash', siteCode: site?.siteCode ?? null })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create petty cash vouchers' }, { status: 403 })
 
     // Requester supplies description/amount/category/jobCode; everything costing-related is derived automatically.
     if (!body.costCenter) body.costCenter = site?.siteCode ? `CC-${site.siteCode}` : null
     if (!body.department) body.department = 'Site Operations'
     if (!body.projectManager) body.projectManager = site?.responsiblePerson || null
-    if (!body.authorizedBy) body.authorizedBy = body.actor || null
+    if (!body.authorizedBy) body.authorizedBy = actorEmail || body.actor || null
     if (!body.type) body.type = 'Debit'
     if (!body.paymentMode) body.paymentMode = 'Cash'
     if (!body.linkedType) body.linkedType = body.poId ? 'PO' : body.expenseClaimId ? 'ExpenseClaim' : 'Direct'
@@ -107,8 +132,22 @@ export async function PUT(request: NextRequest) {
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
 
     const site = body.siteId ? await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } }) : null
-    const denied = await assertPermission(pdb, body.actor || '', 'PETTYCASH_EDIT', { request, module: 'PettyCash', entityId: String(id), siteCode: site?.siteCode ?? null })
+    const actorEmail = request.cookies.get('erp_user_email')?.value || body.actor || ''
+    const denied = await assertPermission(pdb, actorEmail, 'PETTYCASH_EDIT', { request, module: 'PettyCash', entityId: String(id), siteCode: site?.siteCode ?? null })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit petty cash vouchers' }, { status: 403 })
+
+    // Also gate on the voucher's CURRENT site: without this a site-scoped user
+    // could edit (and re-home) another site's voucher just by posting their own
+    // siteId in the body.
+    const existing = await pdb.finPettyCash.findUnique({
+      where: { id: Number(id) },
+      select: { site: { select: { siteCode: true } } },
+    })
+    if (!existing) return NextResponse.json({ success: false, error: 'Voucher not found' }, { status: 404 })
+    if (existing.site?.siteCode && existing.site.siteCode !== site?.siteCode) {
+      const deniedAtSource = await assertPermission(pdb, actorEmail, 'PETTYCASH_EDIT', { request, module: 'PettyCash', entityId: String(id), siteCode: existing.site.siteCode })
+      if (!deniedAtSource.allowed) return NextResponse.json({ success: false, error: `Not allowed to edit vouchers of site ${existing.site.siteCode}` }, { status: 403 })
+    }
 
     if (!data.costCenter) data.costCenter = site?.siteCode ? `CC-${site.siteCode}` : data.costCenter
     if (!data.department) data.department = data.department || 'Site Operations'
@@ -160,21 +199,34 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const pdb = getDbForRequest(request)
 
-    const actor = request.headers.get('x-actor-email') || ''
+    const actor = request.cookies.get('erp_user_email')?.value || request.headers.get('x-actor-email') || ''
     const denied = await assertPermission(pdb, actor, 'PETTYCASH_DELETE', { request, module: 'PettyCash' })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to delete petty cash vouchers' }, { status: 403 })
+
+    // Site scope of the caller — a site-scoped user may only delete their own
+    // site's vouchers, never another site's.
+    const scope = isTenantAdmin(request)
+      ? { allSites: true, siteCodes: [] as string[] }
+      : await getPermittedSiteScope(pdb, actor, 'PETTYCASH_DELETE')
+    const siteGuard: any = scope.allSites ? {} : { site: { siteCode: { in: scope.siteCodes } } }
 
     const idsParam = searchParams.get('ids')
     if (idsParam) {
       const ids = idsParam.split(',').map(Number).filter((n) => !isNaN(n))
       if (ids.length === 0) return NextResponse.json({ success: false, error: 'No valid ids provided' }, { status: 400 })
-      const result = await pdb.finPettyCash.deleteMany({ where: { id: { in: ids } } })
+      const result = await pdb.finPettyCash.deleteMany({ where: { id: { in: ids }, ...siteGuard } })
+      if (result.count < ids.length) {
+        return NextResponse.json(
+          { success: true, deleted: result.count, warning: 'Some vouchers belong to sites you cannot delete in and were skipped' },
+        )
+      }
       return NextResponse.json({ success: true, deleted: result.count })
     }
 
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
-    await pdb.finPettyCash.delete({ where: { id: Number(id) } })
+    const removed = await pdb.finPettyCash.deleteMany({ where: { id: Number(id), ...siteGuard } })
+    if (removed.count === 0) return NextResponse.json({ success: false, error: 'Voucher not found in your site scope' }, { status: 403 })
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting:', error)

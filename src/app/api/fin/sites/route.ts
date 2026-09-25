@@ -1,12 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { getAssignedSiteScope, isTenantAdmin } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
-    const records = await pdb.finSite.findMany({ orderBy: { name: 'asc' }, include: { customer: { select: { id: true, name: true } } } })
+
+    // Site-scoped finance users (a site custodian, a site manager) only get the
+    // sites they are assigned to, so every site dropdown built from this list —
+    // petty cash vouchers, replenishment, custodian dashboard — is limited to
+    // their own site. Tenant admins and accounts with an all-sites assignment
+    // (Finance Head, Director) are unaffected, and so are accounts with no
+    // finance assignment at all (HR-side screens keep the full list).
+    let where: any = {}
+    if (!isTenantAdmin(request)) {
+      const email = request.cookies.get('erp_user_email')?.value || ''
+      const scope = await getAssignedSiteScope(pdb, email)
+      if (scope.scoped) where = { siteCode: { in: scope.siteCodes } }
+    }
+
+    const records = await pdb.finSite.findMany({ where, orderBy: { name: 'asc' }, include: { customer: { select: { id: true, name: true } } } })
     return NextResponse.json({ success: true, data: records })
   } catch (error) {
     console.error('Error fetching:', error)
