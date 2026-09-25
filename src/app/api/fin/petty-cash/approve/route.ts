@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { recomputePettyCashBalances } from '@/lib/petty-cash-balance'
 import { notifyFinance, deriveFinYear, SITE_APPROVERS, inr } from '@/lib/notification-bus'
 
 function notifyPC(pdb: any, v: any, siteCode: string | null, actor: string | undefined, kind: 'submit' | 'approve' | 'reject', comments?: string) {
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
           data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Pending', action: 'Submit', makerId: actor || null, comments: comments || null, finPettyCashId: voucher.id },
         }),
       ])
+      await recomputePettyCashBalances(pdb)
       notifyPC(pdb, record, siteCode, actor, 'submit')
       return NextResponse.json({ success: true, data: record })
     }
@@ -100,6 +102,7 @@ export async function POST(request: NextRequest) {
           data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Approved', action: 'Approve', checkerId: actor || null, comments: comments || null, finPettyCashId: voucher.id },
         }),
       ])
+      await recomputePettyCashBalances(pdb)
       notifyPC(pdb, record, siteCode, actor, 'approve')
       return NextResponse.json({ success: true, data: record })
     }
@@ -123,6 +126,7 @@ export async function POST(request: NextRequest) {
           data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Approved', action: 'Allocate', makerId: actor || null, checkerId: actor || null, comments: comments || null, finPettyCashId: voucher.id },
         }),
       ])
+      await recomputePettyCashBalances(pdb)
       return NextResponse.json({ success: true, data: record })
     }
 
@@ -143,6 +147,7 @@ export async function POST(request: NextRequest) {
           data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Rejected', action: 'Reject', checkerId: actor || null, comments, finPettyCashId: voucher.id },
         }),
       ])
+      await recomputePettyCashBalances(pdb)
       notifyPC(pdb, record, siteCode, actor, 'reject', comments)
       return NextResponse.json({ success: true, data: record })
     }

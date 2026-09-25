@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission, getPermittedSiteScope, isTenantAdmin } from '@/lib/fin-rbac'
+import { nextSiteBalance, recomputePettyCashBalances } from '@/lib/petty-cash-balance'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,9 +78,13 @@ export async function POST(request: NextRequest) {
       body.voucherNo = `PV/${yr}/${String(count).padStart(4, '0')}`
     }
 
-    const last = await pdb.finPettyCash.findFirst({ orderBy: { id: 'desc' } })
-    const lastBalance = last?.balance ?? 0
-    const delta = body.type === 'Credit' ? Number(body.amount) || 0 : -(Number(body.amount) || 0)
+    // Running balance is per SITE and counts approved vouchers only — a global
+    // sequence made one site's ledger show another site's cumulative figure.
+    const balance = await nextSiteBalance(pdb, body.siteId ? Number(body.siteId) : null, {
+      type: body.type || 'Debit',
+      amount: Number(body.amount) || 0,
+      approvalStatus: body.approvalStatus ?? null,
+    })
 
     const record = await pdb.finPettyCash.create({
       data: {
@@ -96,7 +101,7 @@ export async function POST(request: NextRequest) {
         linkedType: body.linkedType || 'Direct',
         authorizedBy: body.authorizedBy || null,
         paymentMode: body.paymentMode || 'Cash',
-        balance: lastBalance + delta,
+        balance,
         referenceNo: body.referenceNo || null,
         remarks: body.remarks || null,
         billAttachmentPath: body.billAttachmentPath || null,
@@ -187,7 +192,18 @@ export async function PUT(request: NextRequest) {
         expenseClaim: { select: { id: true, claimNo: true, totalAmount: true } },
       },
     })
-    return NextResponse.json({ success: true, data: record })
+    // Amount/type/site may all have changed — re-walk every affected ledger.
+    await recomputePettyCashBalances(pdb)
+    const refreshed = await pdb.finPettyCash.findUnique({
+      where: { id: record.id },
+      include: {
+        party: { select: { id: true, name: true, code: true } },
+        site: { select: { id: true, name: true, siteCode: true } },
+        po: { select: { id: true, poNo: true, totalAmount: true } },
+        expenseClaim: { select: { id: true, claimNo: true, totalAmount: true } },
+      },
+    })
+    return NextResponse.json({ success: true, data: refreshed ?? record })
   } catch (error) {
     console.error('Error updating:', error)
     return NextResponse.json({ success: false, error: 'Failed to update record' }, { status: 500 })
@@ -215,6 +231,7 @@ export async function DELETE(request: NextRequest) {
       const ids = idsParam.split(',').map(Number).filter((n) => !isNaN(n))
       if (ids.length === 0) return NextResponse.json({ success: false, error: 'No valid ids provided' }, { status: 400 })
       const result = await pdb.finPettyCash.deleteMany({ where: { id: { in: ids }, ...siteGuard } })
+      if (result.count > 0) await recomputePettyCashBalances(pdb)
       if (result.count < ids.length) {
         return NextResponse.json(
           { success: true, deleted: result.count, warning: 'Some vouchers belong to sites you cannot delete in and were skipped' },
@@ -227,6 +244,7 @@ export async function DELETE(request: NextRequest) {
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const removed = await pdb.finPettyCash.deleteMany({ where: { id: Number(id), ...siteGuard } })
     if (removed.count === 0) return NextResponse.json({ success: false, error: 'Voucher not found in your site scope' }, { status: 403 })
+    await recomputePettyCashBalances(pdb)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting:', error)

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { recomputePettyCashBalances } from '@/lib/petty-cash-balance'
 import { getDbForRequest } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -38,10 +39,10 @@ export async function POST(request: NextRequest) {
     let created = 0, updated = 0, skipped = 0, errors = 0
     const errorRows: { row: number; message: string }[] = []
 
-    // New rows extend the running cash balance; corrections to existing
-    // vouchers (upsert-update) leave the stored balance untouched.
-    const last = await pdb.finPettyCash.findFirst({ orderBy: { id: 'desc' } })
-    let runningBalance = last?.balance ?? 0
+    // Balances are recomputed per site once the batch lands (see below), so rows
+    // are created at 0 unless the imported file states a balance explicitly —
+    // an explicit value is the source of truth for that row and is preserved.
+    let explicitSeen = false
 
     for (let i = 0; i < records.length; i++) {
       const r = records[i]
@@ -71,8 +72,8 @@ export async function POST(request: NextRequest) {
         const existing = await pdb.finPettyCash.findFirst({ where: { voucherNo: r.voucherNo } })
         if (existing) { await pdb.finPettyCash.update({ where: { id: existing.id }, data }); updated++ }
         else {
-          runningBalance = explicitBalance !== undefined ? explicitBalance : runningBalance + (type === 'Credit' ? amount : -amount)
-          await pdb.finPettyCash.create({ data: { ...data, balance: runningBalance } })
+          if (explicitBalance !== undefined) explicitSeen = true
+          await pdb.finPettyCash.create({ data: { ...data, balance: explicitBalance ?? 0 } })
           created++
         }
       } catch (e) {
@@ -80,6 +81,10 @@ export async function POST(request: NextRequest) {
         errorRows.push({ row: i + 1, message: (e as Error).message })
       }
     }
+
+    // Rebuild the per-site running balance for the rows just imported, unless the
+    // file carried its own balances (then they are taken as authoritative).
+    if (created > 0 && !explicitSeen) await recomputePettyCashBalances(pdb)
 
     return NextResponse.json({
       success: true,

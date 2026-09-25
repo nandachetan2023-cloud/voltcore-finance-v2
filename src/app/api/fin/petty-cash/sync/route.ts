@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { nextSiteBalance } from '@/lib/petty-cash-balance'
 import { getDbForRequest } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -48,9 +49,9 @@ export async function POST(request: NextRequest) {
       siteId = claim.siteId
     }
 
-    const last = await pdb.finPettyCash.findFirst({ orderBy: { id: 'desc' } })
-    const lastBalance = last?.balance ?? 0
-    const delta = -amount
+    // Per-site running balance; a freshly synced voucher is not approved yet, so
+    // it carries the site's current balance without moving it.
+    const balance = await nextSiteBalance(pdb, siteId ?? null, { type: 'Debit', amount, approvalStatus: null })
 
     const count = (await pdb.finPettyCash.count()) + 1
     const prefix = linkedType === 'PO' ? 'PO' : 'EX'
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
         linkedType,
         authorizedBy: authorizedBy || null,
         paymentMode: paymentMode || 'Bank Transfer',
-        balance: lastBalance + delta,
+        balance,
       },
       include: {
         party: { select: { id: true, name: true, code: true } },
