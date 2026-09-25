@@ -35,6 +35,11 @@ export async function POST(request: NextRequest) {
       body.invoiceNo = `INV-${year}-${String(count).padStart(3, '0')}`
     }
     const { actor: _actor, ...createData } = body
+    // Prisma expects Date objects, but JSON sends strings - coerce
+    if (createData.invoiceDate) createData.invoiceDate = new Date(createData.invoiceDate)
+    if (createData.dueDate) createData.dueDate = new Date(createData.dueDate)
+    if (createData.eInvoiceDate) createData.eInvoiceDate = new Date(createData.eInvoiceDate)
+    if (createData.receivedDate) createData.receivedDate = new Date(createData.receivedDate)
     const record = await pdb.finInvoice.create({ data: createData })
 
     // Auto-post the GL entry for this invoice: Dr Accounts Receivable / Cr
@@ -85,13 +90,17 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function PUT(request: NextRequest) {
+  export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
     const { id, actor, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const missing = ['siteId', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => data[k] === undefined || data[k] === null || data[k] === '')
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
+    if (data.invoiceDate) data.invoiceDate = new Date(data.invoiceDate)
+    if (data.dueDate) data.dueDate = new Date(data.dueDate)
+    if (data.eInvoiceDate) data.eInvoiceDate = new Date(data.eInvoiceDate)
+    if (data.receivedDate) data.receivedDate = new Date(data.receivedDate)
     const pdb = getDbForRequest(request)
     const site = data.siteId ? await pdb.finSite.findUnique({ where: { id: Number(data.siteId) } }) : null
     const denied = await assertPermission(pdb, actor || '', 'AR_EDIT', { request, module: 'AR', entityId: String(id), siteCode: site?.siteCode ?? null })
