@@ -462,12 +462,24 @@ export default function FinPettyCash() {
   };
 
   const pendingApprovalCount = records.filter(r => r.approvalStatus === 'Pending').length;
+  const pendingApprovalAmount = records
+    .filter(r => r.approvalStatus === 'Pending')
+    .reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
-  const totalDebit = records.filter(r => r.type === 'Debit').reduce((s, r) => s + r.amount, 0);
-  const totalCredit = records.filter(r => r.type === 'Credit').reduce((s, r) => s + r.amount, 0);
-  const poLinked = records.filter(r => r.linkedType === 'PO').reduce((s, r) => s + r.amount, 0);
-  const expenseLinked = records.filter(r => r.linkedType === 'ExpenseClaim').reduce((s, r) => s + r.amount, 0);
-  const latestBalance = records.length > 0 ? records[0].balance : 0;
+  // Only APPROVED vouchers are money that actually moved — a Pending
+  // replenishment or a Draft/Rejected voucher is not cash in hand.
+  const approved = records.filter(r => r.approvalStatus === 'Approved');
+  const sum = (rows: PettyCash[]) => rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+
+  const totalDebit = sum(approved.filter(r => r.type === 'Debit'));
+  const totalCredit = sum(approved.filter(r => r.type === 'Credit'));
+  const poLinked = sum(approved.filter(r => r.linkedType === 'PO'));
+  const expenseLinked = sum(approved.filter(r => r.linkedType === 'ExpenseClaim'));
+  // Derive the balance from the rows on screen instead of reading the stored
+  // `balance` column: that column is a running total written across ALL sites at
+  // insert time, so on a site-scoped list it showed another site's ledger and
+  // never reconciled with Cash In − Cash Out.
+  const latestBalance = totalCredit - totalDebit;
 
   const TabBar = (
     <div className="flex items-center gap-1.5 flex-wrap border-b border-[#252e3a] pb-3">
@@ -505,12 +517,12 @@ export default function FinPettyCash() {
     <div className="space-y-4 p-6">
       {TabBar}
       <div className="grid grid-cols-6 gap-3">
-        <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#f5a623]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Balance</div><div className="text-[20px] font-bold text-[#f5a623]" style={{fontFamily:"'Barlow Condensed',sans-serif"}}>₹{(latestBalance ?? 0).toLocaleString('en-IN')}</div></div>
+        <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#f5a623]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Balance (Approved)</div><div className="text-[20px] font-bold text-[#f5a623]" style={{fontFamily:"'Barlow Condensed',sans-serif"}}>₹{(latestBalance ?? 0).toLocaleString('en-IN')}</div></div>
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00e676]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Cash In</div><div className="text-[20px] font-bold text-[#00e676]" style={{fontFamily:"'Barlow Condensed',sans-serif"}}>₹{(totalCredit ?? 0).toLocaleString('en-IN')}</div></div>
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#ff3d3d]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Cash Out</div><div className="text-[20px] font-bold text-[#ff3d3d]" style={{fontFamily:"'Barlow Condensed',sans-serif"}}>₹{(totalDebit ?? 0).toLocaleString('en-IN')}</div></div>
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00d4ff]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">PO Payments</div><div className="text-[20px] font-bold text-[#00d4ff]" style={{fontFamily:"'Barlow Condensed',sans-serif"}}>₹{(poLinked ?? 0).toLocaleString('en-IN')}</div></div>
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#a855f7]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Expense Claims</div><div className="text-[20px] font-bold text-[#a855f7]" style={{fontFamily:"'Barlow Condensed',sans-serif"}}>₹{(expenseLinked ?? 0).toLocaleString('en-IN')}</div></div>
-        <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#ffab40]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Pending Approval</div><div className="text-[20px] font-bold text-[#ffab40]" style={{fontFamily:"'Barlow Condensed',sans-serif"}}>{pendingApprovalCount}</div></div>
+        <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#ffab40]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Pending Approval</div><div className="text-[20px] font-bold text-[#ffab40]" style={{fontFamily:"'Barlow Condensed',sans-serif"}}>{pendingApprovalCount}</div>{pendingApprovalCount > 0 && <div className="text-[9px] text-[#8899aa] mt-0.5">₹{pendingApprovalAmount.toLocaleString('en-IN')} awaiting approval</div>}</div>
       </div>
 
       <div className="vc-panel"><div className="vc-panel-header"><Wallet size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Petty Cash Vouchers</span><div className="ml-auto"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search vouchers..." /></div><div className="flex items-center gap-2 ml-2">
