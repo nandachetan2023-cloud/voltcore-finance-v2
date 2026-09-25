@@ -33,9 +33,11 @@ import {
 } from './finance-help-data';
 
 // ── Finance module ids (where the widget is visible) ────────────
-// Sourced from MODULE_TREE.finance in src/store/erp-store.ts.
+// Sourced from MODULE_TREE['finance-accounts'] in src/store/erp-store.ts.
 const FINANCE_MODULE_IDS = new Set<string>([
-  'finance',
+  'finance-accounts',
+  'tally-sync',
+  'notifications-ultra',
   'finance-dashboard',
   'ledger',
   'accounts-receivable',

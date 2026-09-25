@@ -121,12 +121,13 @@ export default function TabbedDashboard() {
   const [activeCategory, setActiveCategory] = useState(CATEGORIES[0].id);
   const [activeScreen, setActiveScreen] = useState<string | null>(null);
 
-  // Filter categories and their screens by access, but always keep Dashboard.
+  // Filter categories and their screens by access. The Finance Dashboard tab
+  // used to be exempt ("always keep Dashboard"), which kept Finance figures on
+  // the home screen even after Finance was hidden for the role/tenant — it now
+  // follows the same access rules as every other screen.
   const visibleCategories = CATEGORIES
     .map((cat) => {
-      const screens = cat.screens.filter((s) =>
-        s.key === 'finance-dashboard' || isModuleAllowed(s.key, allowedModules)
-      );
+      const screens = cat.screens.filter((s) => isModuleAllowed(s.key, allowedModules));
       return { ...cat, screens };
     })
     .filter((cat) => cat.screens.length > 0);

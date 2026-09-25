@@ -1,6 +1,6 @@
 'use client';
 
-import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed, getModuleParents } from '@/store/erp-store';
+import { useERPStore, MAIN_MODULES, HIDDEN_MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed, getModuleParents } from '@/store/erp-store';
 import { resolveNotificationTarget as resolveTarget, TYPE_COLOR } from '@/lib/notification-routing';
 import React, { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
@@ -97,7 +97,8 @@ const ModuleRendererWrapper = React.memo(function ModuleRendererWrapper({ module
 function ModuleGrid() {
   const { setActiveModule, userRole, allowedModules } = useERPStore();
   const visibleModules = MAIN_MODULES.filter(mod =>
-    allowedModules === 'all' || isModuleAllowed(mod.id, allowedModules)
+    !HIDDEN_MAIN_MODULES.includes(mod.id) &&
+    (allowedModules === 'all' || isModuleAllowed(mod.id, allowedModules))
   );
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 p-6">

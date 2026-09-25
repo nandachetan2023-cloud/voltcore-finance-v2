@@ -7,7 +7,9 @@ export const MODULE_TREE: Record<string, string[]> = {
   organization: ['organization', 'departments', 'designations', 'payroll-sites', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents', 'roles-access'],
   hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
   procurement: ['procurement', 'purchases', 'expenses', 'procurement-pr', 'procurement-rfq', 'procurement-po-register', 'procurement-vendors', 'procurement-material-tracking', 'procurement-subcontracts', 'po-approval-stepper', 'rfq-comparison-matrix', 'grn-3way-match'],
-  finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
+  // Legacy alias: the old "Finance" menu was merged into "Finance & Accounts".
+  // Kept so accounts whose saved grants still say 'finance' keep their access.
+  finance: ['finance', 'finance-accounts', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'fin-bank-reconciliation', 'taxation', 'budget', 'fin-profit-loss', 'financial-reports', 'tally-sync', 'notifications-ultra'],
   sales: ['sales', 'sales-tax-invoices', 'sales-orders', 'sales-quotations', 'fin-credit-notes', 'sales-opportunity-pipeline', 'sales-tender-register', 'sales-revenue-forecast', 'sales-client-accounts'],
   projects: ['projects', 'project-list', 'project-hierarchy', 'budget', 'boq-entry', 'job-progress', 'sites', 'scrap-entry'],
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
@@ -166,7 +168,6 @@ export const MAIN_MODULES: NavItem[] = [
   { id: 'organization', icon: 'Building2', label: 'Organization' },
   { id: 'hrms', icon: 'Users', label: 'HRMS' },
   { id: 'procurement', icon: 'ShoppingCart', label: 'Procurement' },
-  { id: 'finance', icon: 'CreditCard', label: 'Finance' },
   { id: 'login-role', icon: 'LogIn', label: 'Login & Role' },
   { id: 'master-setup', icon: 'Layers', label: 'Master Setup' },
   { id: 'purchase', icon: 'ShoppingCart', label: 'Purchase' },
@@ -223,17 +224,6 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'procurement-vendors', icon: 'Users', label: 'Vendor Management', section: 'Procurement' },
     { id: 'procurement-material-tracking', icon: 'Package', label: 'Material Tracking', section: 'Procurement' },
     { id: 'procurement-subcontracts', icon: 'FileText', label: 'Subcontract Register', section: 'Procurement' },
-  ],
-  finance: [
-    { id: 'finance-dashboard', icon: 'BarChart3', label: 'Dashboard', section: 'Finance' },
-    { id: 'ledger', icon: 'BookOpen', label: 'Ledger Management', section: 'Finance' },
-    { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Accounts Payable', section: 'Finance' },
-    { id: 'accounts-receivable', icon: 'ArrowUpCircle', label: 'Accounts Receivable', section: 'Finance' },
-    { id: 'journal-entries', icon: 'FileEdit', label: 'Journal Entries', section: 'Finance' },
-    { id: 'bank-cash', icon: 'Landmark', label: 'Bank & Cash', section: 'Finance' },
-    { id: 'taxation', icon: 'Scale', label: 'Taxation & Compliance', section: 'Finance' },
-    { id: 'budget', icon: 'Target', label: 'Budget & Forecasting', section: 'Finance' },
-    { id: 'financial-reports', icon: 'PieChart', label: 'Financial Reports', section: 'Finance' },
   ],
   // Category modules (like HRMS / Organization)
   'login-role': [
@@ -524,7 +514,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
 };
 
 // Modules with sub-modules (clicking them shows sub-nav instead of a page)
-export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finance', 'sales', 'projects', 'assets', 'system', 'self-service', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'finance-accounts', 'petty-cash', 'mis'];
+export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'sales', 'projects', 'assets', 'system', 'self-service', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'finance-accounts', 'petty-cash', 'mis'];
 
 // Main modules that have their own page (no sub-nav)
 export const PAGE_MODULES = ['dashboard', 'notifications'];
@@ -548,7 +538,12 @@ export function getModuleParents(moduleId: string): string[] {
 }
 
 // Expandable modules that show their own sub-module grid (instead of auto-redirecting to first child)
-export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'finance-accounts', 'sales', 'procurement', 'projects', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'petty-cash', 'mis'];
+export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance-accounts', 'sales', 'procurement', 'projects', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'petty-cash', 'mis'];
+
+// Main modules kept out of the dashboard tile grid. They stay routable (and
+// keep their sub-modules) so existing links and grants still work — they just
+// no longer get a top-level tile.
+export const HIDDEN_MAIN_MODULES: string[] = ['hrms'];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};
