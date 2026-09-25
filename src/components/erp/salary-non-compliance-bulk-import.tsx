@@ -570,7 +570,7 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">
               Salary Non-Compliance Bulk Import
@@ -1061,7 +1061,7 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
 
       {/* Duplicate Handling Dialog */}
       <Dialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-[#e2e8f0] text-base">
               Duplicate Records Found
@@ -1158,19 +1158,19 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
                           <div className="flex justify-between">
                             <span className="text-[#8899aa]">Net Pay:</span>
                             <span className="text-[#e2e8f0] font-mono">
-                              ₹{dup.existingData.netPay.toLocaleString('en-IN')}
+                              ₹{(dup.existingData.netPay ?? 0).toLocaleString('en-IN')}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-[#8899aa]">Gross:</span>
                             <span className="text-[#e2e8f0] font-mono">
-                              ₹{dup.existingData.grossEarning.toLocaleString('en-IN')}
+                              ₹{(dup.existingData.grossEarning ?? 0).toLocaleString('en-IN')}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-[#8899aa]">Advance:</span>
                             <span className="text-[#e2e8f0] font-mono">
-                              ₹{dup.existingData.advance.toLocaleString('en-IN')}
+                              ₹{(dup.existingData.advance ?? 0).toLocaleString('en-IN')}
                             </span>
                           </div>
                           <div className="text-[9px] text-[#5a6878] mt-2">
@@ -1188,19 +1188,19 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
                           <div className="flex justify-between">
                             <span className="text-[#8899aa]">Net Pay:</span>
                             <span className="text-[#e2e8f0] font-mono">
-                              ₹{dup.newData.netPay.toLocaleString('en-IN')}
+                              ₹{(dup.newData.netPay ?? 0).toLocaleString('en-IN')}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-[#8899aa]">Gross:</span>
                             <span className="text-[#e2e8f0] font-mono">
-                              ₹{dup.newData.grossEarning.toLocaleString('en-IN')}
+                              ₹{(dup.newData.grossEarning ?? 0).toLocaleString('en-IN')}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-[#8899aa]">Advance:</span>
                             <span className="text-[#e2e8f0] font-mono">
-                              ₹{dup.newData.advance.toLocaleString('en-IN')}
+                              ₹{(dup.newData.advance ?? 0).toLocaleString('en-IN')}
                             </span>
                           </div>
                           <div className="text-[9px] text-[#5a6878] mt-2">

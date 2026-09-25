@@ -274,7 +274,7 @@ export default function TourRequests() {
                       <Calendar size={11} />
                       {new Date(tr.fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} — {new Date(tr.toDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </span>
-                    <span className="font-semibold text-[#f5a623]">{Number(tr.days)} day{Number(tr.days) > 1 ? 's' : ''}</span>
+                    <span className="font-semibold text-[#f5a623]">{(Number(tr.days) || 0)} day{(Number(tr.days) || 0) > 1 ? 's' : ''}</span>
                   </div>
                   <p className="text-[11px] text-[#5a6878]">{tr.purpose}</p>
                   {tr.rejectionReason && (

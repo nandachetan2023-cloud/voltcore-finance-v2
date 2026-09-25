@@ -55,7 +55,6 @@ export const FULL_MODULE_TREE: {
     key: 'procurement', label: 'Procurement',
     subModules: [
       { key: 'purchases', label: 'Purchase Orders' },
-      { key: 'expenses',  label: 'Expenses' },
     ],
   },
   {
@@ -63,6 +62,7 @@ export const FULL_MODULE_TREE: {
     subModules: [
       { key: 'finance-dashboard',   label: 'Dashboard' },
       { key: 'ledger',              label: 'Ledger Management' },
+      { key: 'fin-purchase-orders', label: 'Purchase Orders (Finance)' },
       { key: 'accounts-payable',    label: 'Accounts Payable' },
       { key: 'accounts-receivable', label: 'Accounts Receivable' },
       { key: 'journal-entries',     label: 'Journal Entries' },

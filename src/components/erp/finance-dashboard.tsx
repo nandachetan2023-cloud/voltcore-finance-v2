@@ -1,626 +1,502 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Wallet, ArrowDownCircle, ArrowUpCircle, Landmark, TrendingDown,
-  Target, BarChart3, PieChart as PieIcon, Activity, ArrowRightLeft, IndianRupee,
+  DollarSign, TrendingUp, AlertCircle, TrendingDown,
+  ArrowUpRight, Package, Banknote,
+  Calendar, Users, FileText, PieChart as PieIcon, Plus, Loader2, ClipboardList, Wallet, Receipt, BarChart3, RefreshCw, PieChart, MapPin, Briefcase
 } from 'lucide-react';
-import {
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
-  Tooltip, ResponsiveContainer
-} from 'recharts';
+import { useERPStore } from '@/store/erp-store';
+import { DonutChart, BarChart } from './finance-charts';
 
-// ── Color palette (VoltCore dark theme) ──
-const COLORS = ['#f5a623', '#00e676', '#00d4ff', '#ff3d3d', '#a78bfa', '#ffab40', '#22d3ee', '#f472b6'];
-
-const TOOLTIP_STYLE = {
-  contentStyle: { background: '#1a2030', border: '1px solid #252e3a', borderRadius: '8px', fontSize: '11px', color: '#e2e8f0' },
-  itemStyle: { color: '#e2e8f0' },
-  labelStyle: { color: '#f5a623' },
-};
-
-// ── Formatters ──
-function formatCr(n: number): string {
-  if (n >= 10000000) return '₹' + (n / 10000000).toFixed(2) + ' Cr';
-  if (n >= 100000) return '₹' + (n / 100000).toFixed(2) + ' L';
-  if (n >= 1000) return '₹' + (n / 1000).toFixed(1) + 'K';
-  return '₹' + n.toLocaleString('en-IN');
+/* ── Types ────────────────────────────────────────── */
+interface DashboardData {
+  kpis: {
+    totalRevenue: number; totalInvoiced: number;
+    accountsReceivablePending: number; accountsReceivableReceived: number; accountsReceivableOverdue: number;
+    accountsPayablePending: number; accountsPayablePaid: number; accountsPayableOverdue: number;
+    totalBankBalance: number; totalExpenses: number;
+    totalBudgetPlanned: number; totalBudgetActual: number; budgetVariance: number;
+    totalPaymentAdvices: number;
+    pettyCashIn: number; pettyCashOut: number; pettyCashBalance: number;
+    totalSiteInvoiceValue: number; totalSiteInvoiceCount: number;
+    totalPOValue: number; openPOCount: number; openPOValue: number;
+    activeVendorCount: number;
+    totalExpenseClaims: number; pendingExpenseClaims: number; approvedExpenseClaims: number;
+    totalCreditNotes: number; openCreditNotes: number;
+    totalAssetCost: number; activeAssets: number;
+  };
+  alerts: { type: string; desc: string; amount: string; urgent: boolean }[];
+  moduleCounts: Record<string, number>;
+  apSummary: { pending: number; paid: number; overdue: number; total: number };
+  arSummary: { pending: number; received: number; overdue: number; total: number };
+  monthlyTrends: { month: string; revenue: number; expenses: number; cashIn: number; cashOut: number }[];
+  sitePnl: { siteCode: string; siteName: string; revenue: number; cost: number; profit: number }[];
+  jobPnl: { jobCode: string; revenue: number; cost: number; profit: number }[];
+  pendingApprovals: { module: string; ref: string; status: string }[];
+  pendingApprovalCount: number;
+  taxDue: { gstTotal: number; gstCount: number; tdsTotal: number; tdsCount: number };
+  syncedAt?: string;
 }
 
-function formatCurrency(n: number): string {
-  return '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(n);
+function fmtCr(n: number | undefined | null): string {
+  const v = n ?? 0;
+  if (v >= 10000000) return '₹' + (v / 10000000).toFixed(2) + ' Cr';
+  if (v >= 100000) return '₹' + (v / 100000).toFixed(2) + ' L';
+  if (v >= 1000) return '₹' + (v / 1000).toFixed(1) + 'K';
+  return '₹' + (v ?? 0).toLocaleString('en-IN');
 }
 
-// ── Interfaces ──
-interface KPIs {
-  totalRevenue: number;
-  totalInvoiced: number;
-  accountsReceivablePending: number;
-  accountsReceivableReceived: number;
-  accountsReceivableOverdue: number;
-  accountsPayablePending: number;
-  accountsPayablePaid: number;
-  accountsPayableOverdue: number;
-  totalBankBalance: number;
-  totalExpenses: number;
-  totalExpensesPending: number;
-  totalExpensesApproved: number;
-  totalPayrollPaid: number;
-  totalPayrollPending: number;
-  totalPayrollGross: number;
-  totalPOValue: number;
-  totalPOOpen: number;
-  totalBudgetPlanned: number;
-  totalBudgetActual: number;
-  budgetVariance: number;
-}
-
-interface MonthlyTrend {
-  month: string;
-  year: number;
-  revenue: number;
-  expenses: number;
-  payroll: number;
-  cashIn: number;
-  cashOut: number;
-}
-
-interface Summary { pending: number; paid: number; received: number; overdue: number; total: number; }
-
-interface BudgetItem { category: string; description: string; planned: number; actual: number; period: string; status: string; }
-interface BankAccount { accountName: string; bankName: string; accountNo: string; type: string; balance: number; status: string; }
-interface JournalEntry { entryNo: string; date: string; account: string; debit: number; credit: number; description: string; reference?: string; status: string; }
-
-// ── Stat Card ──
-function StatCard({ icon: Icon, label, value, change, changeLabel, color }: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  change?: string;
-  changeLabel?: string;
-  color: string;
-}) {
-  return (
-    <div className="vc-stat-card relative overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: color }} />
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">{label}</div>
-          <div className="text-[22px] font-bold leading-none" style={{ fontFamily: "'Barlow Condensed', sans-serif", color }}>{value}</div>
-          {change && (
-            <div className="flex items-center gap-1 mt-1.5">
-              <span className={`text-[10px] font-semibold ${changeLabel === 'overdue' ? 'text-[#ff3d3d]' : 'text-[#00e676]'}`}>
-                {change}
-              </span>
-              {changeLabel && <span className="text-[9px] text-[#5a6878]">{changeLabel}</span>}
-            </div>
-          )}
-        </div>
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}15` }}>
-          <Icon size={18} style={{ color }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Donut Chart ──
-function DonutChart({ data, title, centerLabel }: {
-  data: { name: string; value: number; color: string }[];
-  title: string;
-  centerLabel?: string;
-}) {
-  const total = data.reduce((s, d) => s + d.value, 0);
-  return (
-    <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <PieIcon size={14} className="text-[#f5a623]" />
-        <span className="text-[12px] font-semibold text-[#e2e8f0]">{title}</span>
-      </div>
-      <div className="flex items-center gap-4">
-        <div className="w-[130px] h-[130px] shrink-0 relative">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={38}
-                outerRadius={58}
-                paddingAngle={2}
-                dataKey="value"
-                stroke="none"
-              >
-                {data.map((entry, i) => (
-                  <Cell key={i} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip {...TOOLTIP_STYLE} />
-            </PieChart>
-          </ResponsiveContainer>
-          {centerLabel && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-[9px] text-[#5a6878]">Total</span>
-              <span className="text-[12px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                {centerLabel}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="flex-1 space-y-[6px]">
-          {data.map((d, i) => (
-            <div key={i} className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-[8px] h-[8px] rounded-sm shrink-0" style={{ backgroundColor: d.color }} />
-                <span className="text-[11px] text-[#8899aa] truncate max-w-[110px]">{d.name}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-[#e2e8f0]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                  {formatCr(d.value)}
-                </span>
-                <span className="text-[9px] text-[#5a6878]">({total > 0 ? ((d.value / total) * 100).toFixed(0) : 0}%)</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Cash Flow Card ──
-function CashFlowCard({ trends, bankAccounts }: { trends: MonthlyTrend[]; bankAccounts: BankAccount[] }) {
-  const currentMonth = trends[trends.length - 1];
-  const netCashFlow = currentMonth ? currentMonth.cashIn - currentMonth.cashOut : 0;
-
-  return (
-    <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <Activity size={14} className="text-[#f5a623]" />
-        <span className="text-[12px] font-semibold text-[#e2e8f0]">Cash Flow Summary</span>
-      </div>
-
-      {/* Cash flow mini stats */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-[#0a0d12] rounded-lg p-3 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-1">Inflow</div>
-          <div className="text-[13px] font-bold text-[#00e676]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-            {formatCr(currentMonth?.cashIn || 0)}
-          </div>
-        </div>
-        <div className="bg-[#0a0d12] rounded-lg p-3 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-1">Outflow</div>
-          <div className="text-[13px] font-bold text-[#ff3d3d]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-            {formatCr(currentMonth?.cashOut || 0)}
-          </div>
-        </div>
-        <div className="bg-[#0a0d12] rounded-lg p-3 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-1">Net Flow</div>
-          <div className="text-[13px] font-bold" style={{ fontFamily: "'Share Tech Mono', monospace", color: netCashFlow >= 0 ? '#00e676' : '#ff3d3d' }}>
-            {netCashFlow >= 0 ? '+' : ''}{formatCr(netCashFlow)}
-          </div>
-        </div>
-      </div>
-
-      {/* Mini bar chart - Cash In vs Cash Out */}
-      <div className="h-[120px] mb-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={trends} barSize={14} barGap={2}>
-            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} />
-            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 9 }} width={40} tickFormatter={(v) => v >= 10000000 ? (v/10000000).toFixed(1)+'Cr' : v >= 100000 ? (v/100000).toFixed(0)+'L' : String(v)} />
-            <Tooltip {...TOOLTIP_STYLE} formatter={(value: any, name: any) => [formatCr(Number(value)), String(name)]} />
-            <Bar dataKey="cashIn" name="Cash In" fill="#00e676" radius={[3, 3, 0, 0]} opacity={0.8} />
-            <Bar dataKey="cashOut" name="Cash Out" fill="#ff3d3d" radius={[3, 3, 0, 0]} opacity={0.8} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Bank accounts list */}
-      <div className="border-t border-[#252e3a] pt-3">
-        <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-2">Bank Accounts</div>
-        <div className="space-y-2">
-          {bankAccounts.map((acc, i) => (
-            <div key={i} className="flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-md bg-[#0a0d12] flex items-center justify-center shrink-0">
-                  <Landmark size={12} className="text-[#00d4ff]" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] text-[#e2e8f0] truncate">{acc.bankName}</div>
-                  <div className="text-[9px] text-[#5a6878]">{acc.type}</div>
-                </div>
-              </div>
-              <div className="text-[12px] font-semibold text-[#00e676] shrink-0" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-                {formatCr(acc.balance)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Skeleton Loader ──
-function Skeleton() {
-  return (
-    <div className="p-4 space-y-4 animate-pulse">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 h-[100px]" />
-        ))}
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 h-[280px]" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Main Component ──
-export default function FinanceDashboard() {
-  const [data, setData] = useState<{
-    kpis: KPIs;
-    monthlyTrends: MonthlyTrend[];
-    apSummary: Summary;
-    arSummary: Summary;
-    budgetItems: BudgetItem[];
-    bankAccounts: BankAccount[];
-    recentTransactions: JournalEntry[];
-  } | null>(null);
+export default function FinancialHome() {
+  const { setActiveModule } = useERPStore();
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [lastSync, setLastSync] = useState<string>('');
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    async function fetchDashboard() {
-      try {
-        const res = await fetch('/api/finance-dashboard');
-        const json = await res.json();
-        if (json.success) {
-          setData(json.data);
-        } else {
-          setError(json.error || 'Failed to load');
-        }
-      } catch (e: any) {
-        setError(e.message || 'Network error');
-      } finally {
-        setLoading(false);
+  async function load(showSpinner = false) {
+    if (showSpinner) setRefreshing(true);
+    try {
+      const res = await fetch('/api/finance-dashboard');
+      const json = await res.json();
+      if (json.success) {
+        setData(json.data);
+        setLastSync(json.data.syncedAt || new Date().toISOString());
+        setError('');
+      } else {
+        setError(json.error || 'Failed to load');
       }
+    } catch (e: any) {
+      setError(e?.message || 'Network error');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    fetchDashboard();
+  }
+
+  // Initial load + auto-refresh every 1 hour (3600s). Refreshes immediately
+  // whenever the Finance Assistant (or any data change) fires `finance:data-changed`.
+  useEffect(() => {
+    load();
+    const interval = setInterval(() => load(), 3600000);
+    const onDataChanged = () => load(false);
+    window.addEventListener('finance:data-changed', onDataChanged);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('finance:data-changed', onDataChanged);
+    };
   }, []);
 
-  if (loading) return <Skeleton />;
+  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
   if (error || !data) return (
-    <div className="p-4 text-center text-[#ff3d3d]">
+    <div className="p-6 text-center text-[#ff3d3d]">
+      <AlertCircle size={32} className="mx-auto mb-2" />
       <p>{error || 'No data available'}</p>
-      <button className="vc-btn-primary mt-2" onClick={() => window.location.reload()}>Retry</button>
+      <button className="vc-btn-primary mt-3" onClick={() => load(true)}>Retry</button>
     </div>
   );
 
-  const { kpis, monthlyTrends, apSummary, arSummary, budgetItems, bankAccounts, recentTransactions } = data;
-
-  // Budget chart data
-  const budgetChartData = budgetItems.map(b => ({
-    name: b.category.length > 12 ? b.category.substring(0, 12) + '..' : b.category,
-    fullName: b.category,
-    planned: b.planned,
-    actual: b.actual,
-    variance: b.planned - b.actual,
-    isOverBudget: b.actual > b.planned,
-  }));
-
-  // AR vs AP donut data
-  const arApData = [
-    { name: 'AR Received', value: arSummary.received, color: '#00e676' },
-    { name: 'AR Pending', value: arSummary.pending, color: '#f5a623' },
-    { name: 'AP Paid', value: apSummary.paid, color: '#00d4ff' },
-    { name: 'AP Pending', value: apSummary.pending, color: '#ff3d3d' },
+  const k = data.kpis;
+  const arOutstanding = k.accountsReceivablePending + k.accountsReceivableOverdue;
+  const kpis = [
+    { label: 'Site Invoices', value: fmtCr(k.totalSiteInvoiceValue), icon: Receipt, change: `${k.totalSiteInvoiceCount} invoices`, isPositive: true },
+    { label: 'Outstanding AR', value: fmtCr(arOutstanding), icon: TrendingDown, change: `${fmtCr(k.accountsReceivableOverdue)} overdue`, isPositive: k.accountsReceivableOverdue === 0 },
+    { label: 'Bank Balance', value: fmtCr(k.totalBankBalance), icon: Banknote, change: `${data.moduleCounts.bankCash} accounts`, isPositive: true },
+    { label: 'Pending Alerts', value: String(data.alerts.length), icon: AlertCircle, change: `${data.alerts.filter(a => a.urgent).length} urgent`, isPositive: data.alerts.length === 0 },
+    { label: 'Expense Claims', value: fmtCr(k.totalExpenseClaims), icon: DollarSign, change: `${data.moduleCounts.expenseClaims} total`, isPositive: true },
   ];
 
-  // Expense category distribution (from budget actuals)
-  const expenseDonutData = budgetItems.map((b, i) => ({
-    name: b.category.length > 16 ? b.category.substring(0, 16) + '..' : b.category,
-    value: b.actual,
-    color: COLORS[i % COLORS.length],
-  }));
+  // Chart data
+  const arApData = [
+    { name: 'AR Received', value: data.arSummary.received, color: '#00e676' },
+    { name: 'AR Pending', value: data.arSummary.pending, color: '#f5a623' },
+    { name: 'AP Paid', value: data.apSummary.paid, color: '#00d4ff' },
+    { name: 'AP Pending', value: data.apSummary.pending, color: '#ff3d3d' },
+  ].filter(d => d.value > 0);
+  const arApTotal = arApData.reduce((s, d) => s + d.value, 0);
 
-  // Revenue vs Expenses trend
-  const revenueExpenseTrend = monthlyTrends.map(t => ({
-    month: t.month,
-    revenue: t.revenue,
-    expenses: t.expenses,
-  }));
+  const moduleBars = [
+    { name: 'Site Invoices', value: k.totalSiteInvoiceValue, color: '#a78bfa' },
+    { name: 'AR Total', value: data.arSummary.total, color: '#00e676' },
+    { name: 'AP Total', value: data.apSummary.total, color: '#ff3d3d' },
+    { name: 'Payment Advices', value: k.totalPaymentAdvices, color: '#00d4ff' },
+    { name: 'Purchase Orders', value: k.totalPOValue, color: '#f5a623' },
+  ];
+
+  // Extra donuts (Stage E)
+  const budgetDonut = [
+    { name: 'Budget Planned', value: k.totalBudgetPlanned || 0, color: '#00d4ff' },
+    { name: 'Budget Actual', value: k.totalBudgetActual || 0, color: '#f5a623' },
+    { name: 'Budget Variance', value: Math.abs(k.budgetVariance) || 0, color: '#ff3d3d' },
+  ].filter(d => d.value > 0);
+  const budgetTotal = budgetDonut.reduce((s, d) => s + d.value, 0);
+
+  const poInvoiceDonut = [
+    { name: 'PO Open', value: k.openPOValue || 0, color: '#f5a623' },
+    { name: 'Site Invoices', value: k.totalSiteInvoiceValue || 0, color: '#a78bfa' },
+    { name: 'AR Collected', value: data.arSummary.received || 0, color: '#00e676' },
+    { name: 'AP Owed', value: data.apSummary.pending || 0, color: '#ff3d3d' },
+  ].filter(d => d.value > 0);
+  const poInvoiceTotal = poInvoiceDonut.reduce((s, d) => s + d.value, 0);
+
+  const apPct = (k.accountsPayablePaid + k.accountsPayablePending) > 0
+    ? (k.accountsPayablePaid / (k.accountsPayablePaid + k.accountsPayablePending)) * 100 : 0;
+  const arPct = (k.accountsReceivableReceived + k.accountsReceivablePending) > 0
+    ? (k.accountsReceivableReceived / (k.accountsReceivableReceived + k.accountsReceivablePending)) * 100 : 0;
+
+  const summaryRows = [
+    { icon: Receipt, label: 'Site Invoices', value: fmtCr(k.totalSiteInvoiceValue), right: `${k.totalSiteInvoiceCount} invoices`, rightColor: '#a78bfa' },
+    { icon: Package, label: 'Purchase Orders', value: fmtCr(k.totalPOValue), right: `${k.openPOCount} open`, rightColor: '#f5a623' },
+    { icon: Banknote, label: 'Payment Advices', value: fmtCr(k.totalPaymentAdvices), right: `${data.moduleCounts.paymentAdvices} advices`, rightColor: '#00d4ff' },
+    { icon: Wallet, label: 'Petty Cash Balance', value: fmtCr(k.pettyCashBalance), right: `${fmtCr(k.pettyCashOut)} spent`, rightColor: '#ff3d3d' },
+    { icon: DollarSign, label: 'Expense Claims', value: fmtCr(k.totalExpenseClaims), right: `${k.pendingExpenseClaims} pending`, rightColor: '#f5a623' },
+    { icon: Users, label: 'Active Parties / Vendors', value: String(k.activeVendorCount), right: `${data.moduleCounts.parties} total`, rightColor: '#00d4ff' },
+    { icon: ClipboardList, label: 'Credit Notes', value: fmtCr(k.totalCreditNotes ?? 0), right: `${k.openCreditNotes ?? 0} open`, rightColor: '#ff3d3d' },
+  ];
+
+  const quickLinks = [
+    { label: 'Accounts Payable', icon: Package, badge: data.moduleCounts.accountsPayable, module: 'accounts-payable' },
+    { label: 'Accounts Receivable', icon: DollarSign, badge: data.moduleCounts.accountsReceivable, module: 'accounts-receivable' },
+    { label: 'Site Invoices', icon: Receipt, badge: data.moduleCounts.siteInvoices, module: 'fin-invoices' },
+    { label: 'Payment Advices', icon: FileText, badge: data.moduleCounts.paymentAdvices, module: 'fin-payment-advices' },
+    { label: 'Petty Cash', icon: Wallet, badge: data.moduleCounts.pettyCash, module: 'fin-petty-cash' },
+    { label: 'Bank & Cash', icon: Banknote, badge: data.moduleCounts.bankCash, module: 'bank-cash' },
+    { label: 'Budget', icon: PieIcon, badge: data.moduleCounts.budget, module: 'budget' },
+  ];
 
   return (
-    <div className="p-4 space-y-4">
-      {/* ── Page Header ── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#f5a623]/10 rounded-xl flex items-center justify-center">
-            <Wallet size={20} className="text-[#f5a623]" />
-          </div>
-          <div>
-            <h2 className="text-[18px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-              Finance Dashboard
-            </h2>
-            <p className="text-[11px] text-[#5a6878]">Finance › Overview & Financial Insights</p>
-          </div>
+    <div className="text-[#e2e8f0] p-6">
+      {/* Header Banner */}
+      <div className="h-32 bg-gradient-to-r from-[#f5a623]/10 to-[#e8891a]/10 border-b border-[#252e3a] relative overflow-hidden rounded-xl mb-6">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-10 left-20 w-64 h-64 bg-[#f5a623] rounded-full blur-3xl" />
+          <div className="absolute bottom-0 right-20 w-96 h-96 bg-[#e8891a] rounded-full blur-3xl" />
         </div>
-        <div className="text-[10px] text-[#5a6878]" style={{ fontFamily: "'Share Tech Mono', monospace" }}>
-          Last updated: {new Date().toLocaleDateString('en-IN')}
+        <div className="relative h-full flex items-center px-8">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold text-[#f5a623] tracking-wide" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+              FINANCIAL OVERVIEW
+            </h1>
+            <p className="text-[#8899aa] text-sm tracking-wider">
+              VoltCore Engineering Pvt Ltd &bull; Period: FY {(() => { const y = new Date().getFullYear(); const m = new Date().getMonth(); return m >= 3 ? `${y}-${(y + 1) % 100}` : `${y - 1}-${y % 100}`; })()}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* ── Row 1: 6 KPI Stat Cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard
-          icon={Wallet}
-          label="Total Revenue"
-          value={formatCr(kpis.totalRevenue)}
-          change={formatCr(kpis.totalInvoiced)}
-          changeLabel="invoiced"
-          color="#00e676"
-        />
-        <StatCard
-          icon={ArrowDownCircle}
-          label="Accounts Receivable"
-          value={formatCr(kpis.accountsReceivablePending)}
-          change={formatCr(kpis.accountsReceivableOverdue)}
-          changeLabel="overdue"
-          color="#f5a623"
-        />
-        <StatCard
-          icon={ArrowUpCircle}
-          label="Accounts Payable"
-          value={formatCr(kpis.accountsPayablePending)}
-          change={formatCr(kpis.accountsPayableOverdue)}
-          changeLabel="overdue"
-          color="#ff3d3d"
-        />
-        <StatCard
-          icon={Landmark}
-          label="Bank Balance"
-          value={formatCr(kpis.totalBankBalance)}
-          change={`${bankAccounts.length} accounts`}
-          changeLabel="active"
-          color="#00d4ff"
-        />
-        <StatCard
-          icon={TrendingDown}
-          label="Monthly Expenses"
-          value={formatCr(kpis.totalExpensesApproved + kpis.totalExpensesPending)}
-          change={formatCr(kpis.totalExpensesPending)}
-          changeLabel="pending"
-          color="#a78bfa"
-        />
-        <StatCard
-          icon={Target}
-          label="Budget Variance"
-          value={formatCr(kpis.budgetVariance)}
-          change={kpis.budgetVariance >= 0 ? 'Under budget' : 'Over budget'}
-          changeLabel={kpis.budgetVariance >= 0 ? 'healthy' : 'warning'}
-          color="#ffab40"
-        />
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        {kpis.map((kpi, i) => {
+          const Icon = kpi.icon;
+          return (
+            <div key={i} className="vc-stat-card relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: kpi.isPositive ? '#00e676' : '#ff3d3d' }} />
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">{kpi.label}</div>
+                  <div className="text-[22px] font-bold leading-none text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{kpi.value}</div>
+                </div>
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[#f5a623]/10">
+                  <Icon size={18} className="text-[#f5a623]" />
+                </div>
+              </div>
+              <div className={`flex items-center gap-1 mt-2 text-[10px] font-medium ${kpi.isPositive ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>
+                {kpi.isPositive ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                {kpi.change}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* ── Row 2: Revenue vs Expenses Chart + AR/AP Donut ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Revenue vs Expenses Bar Chart - spans 2 cols */}
-        <div className="lg:col-span-2 bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <BarChart3 size={14} className="text-[#f5a623]" />
-              <span className="text-[12px] font-semibold text-[#e2e8f0]">Revenue vs Expenses (6 Months)</span>
-            </div>
-            <div className="flex items-center gap-3 text-[9px]">
-              <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-[#00e676]" />Revenue</div>
-              <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-[#ff3d3d]" />Expenses</div>
-            </div>
-          </div>
-          <div className="h-[240px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={revenueExpenseTrend} barSize={28} barGap={6}>
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#8899aa', fontSize: 10 }} />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#8899aa', fontSize: 10 }}
-                  width={50}
-                  tickFormatter={(v) => {
-                    if (v >= 10000000) return (v / 10000000).toFixed(1) + 'Cr';
-                    if (v >= 100000) return (v / 100000).toFixed(0) + 'L';
-                    if (v >= 1000) return (v / 1000).toFixed(0) + 'K';
-                    return String(v);
-                  }}
-                />
-                <Tooltip {...TOOLTIP_STYLE} formatter={(value: any, name: any) => [formatCr(Number(value)), String(name)]} />
-                <Bar dataKey="revenue" name="Revenue" fill="#00e676" radius={[4, 4, 0, 0]} opacity={0.85} />
-                <Bar dataKey="expenses" name="Expenses" fill="#ff3d3d" radius={[4, 4, 0, 0]} opacity={0.85} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* AR vs AP Donut */}
-        <DonutChart
-          data={arApData}
-          title="Receivables vs Payables"
-          centerLabel={formatCr(arSummary.total + apSummary.total)}
-        />
-      </div>
-
-      {/* ── Row 3: Budget Planned vs Actual + Expense Donut ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Budget Planned vs Actual - spans 2 cols */}
-        <div className="lg:col-span-2 bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Target size={14} className="text-[#f5a623]" />
-              <span className="text-[12px] font-semibold text-[#e2e8f0]">Budget: Planned vs Actual</span>
-            </div>
-            <div className="flex items-center gap-3 text-[9px]">
-              <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-[#00d4ff]" />Planned</div>
-              <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-[#f5a623]" />Actual</div>
-            </div>
-          </div>
-          <div className="h-[240px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={budgetChartData} barSize={18} barGap={4} layout="vertical">
-                <XAxis
-                  type="number"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#8899aa', fontSize: 9 }}
-                  tickFormatter={(v) => {
-                    if (v >= 10000000) return (v / 10000000).toFixed(1) + 'Cr';
-                    if (v >= 100000) return (v / 100000).toFixed(0) + 'L';
-                    if (v >= 1000) return (v / 1000).toFixed(0) + 'K';
-                    return String(v);
-                  }}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#8899aa', fontSize: 9 }}
-                  width={100}
-                />
-                <Tooltip
-                  {...TOOLTIP_STYLE}
-                  formatter={(value: any, name: any) => [formatCr(Number(value)), String(name)]}
-                  labelFormatter={(label: any) => {
-                    const item = budgetChartData.find(d => d.name === label);
-                    return item?.fullName || label;
-                  }}
-                />
-                <Bar dataKey="planned" name="Planned" fill="#00d4ff" radius={[0, 4, 4, 0]} opacity={0.7} />
-                <Bar dataKey="actual" name="Actual" fill="#f5a623" radius={[0, 4, 4, 0]} opacity={0.9} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Expense Distribution Donut */}
-        <DonutChart data={expenseDonutData} title="Expense Distribution" centerLabel={formatCr(kpis.totalBudgetActual)} />
-      </div>
-
-      {/* ── Row 4: Cash Flow + Recent Transactions ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Cash Flow Summary */}
-        <CashFlowCard trends={monthlyTrends} bankAccounts={bankAccounts} />
-
-        {/* Recent Transactions Table */}
-        <div className="lg:col-span-2 bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+      {/* Section 1 widgets: Site-wise P&L, Job-wise Profitability, Pending Approvals, GST/TDS due */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+        {/* Site-wise P&L */}
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
           <div className="flex items-center gap-2 mb-3">
-            <ArrowRightLeft size={14} className="text-[#f5a623]" />
-            <span className="text-[12px] font-semibold text-[#e2e8f0]">Recent Journal Entries</span>
+            <MapPin size={15} className="text-[#00d4ff]" />
+            <span className="text-[12px] font-semibold text-[#e2e8f0]">Site-wise P&L</span>
           </div>
-          <div className="max-h-[400px] overflow-y-auto">
-            <table className="w-full text-[11px]">
-              <thead className="sticky top-0 bg-[#161c24]">
-                <tr className="text-left text-[#5a6878] border-b border-[#252e3a]">
-                  <th className="pb-2 font-medium">Entry No</th>
-                  <th className="pb-2 font-medium">Date</th>
-                  <th className="pb-2 font-medium">Account</th>
-                  <th className="pb-2 font-medium">Description</th>
-                  <th className="pb-2 font-medium text-right">Debit</th>
-                  <th className="pb-2 font-medium text-right">Credit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentTransactions.map((entry) => (
-                  <tr key={entry.entryNo} className="border-b border-[#252e3a]/50 hover:bg-[#141920]">
-                    <td className="py-2 text-[#f5a623] font-mono">{entry.entryNo}</td>
-                    <td className="py-2 text-[#8899aa] font-mono">{entry.date}</td>
-                    <td className="py-2 text-[#e2e8f0] max-w-[100px] truncate">{entry.account}</td>
-                    <td className="py-2 text-[#8899aa] max-w-[180px] truncate">{entry.description}</td>
-                    <td className="py-2 text-right">
-                      {entry.debit > 0 ? (
-                        <span className="text-[#00e676] font-mono">{formatCurrency(entry.debit)}</span>
-                      ) : (
-                        <span className="text-[#5a6878]">—</span>
-                      )}
-                    </td>
-                    <td className="py-2 text-right">
-                      {entry.credit > 0 ? (
-                        <span className="text-[#ff3d3d] font-mono">{formatCurrency(entry.credit)}</span>
-                      ) : (
-                        <span className="text-[#5a6878]">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {recentTransactions.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="py-6 text-center text-[#5a6878]">No journal entries found</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {(data.sitePnl || []).slice(0, 4).map(s => (
+              <div key={s.siteCode} className="flex items-center justify-between text-[11px]">
+                <span className="text-[#8899aa] truncate">{s.siteName}</span>
+                <span className={`font-mono font-semibold ${s.profit >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{fmtCr(s.profit)}</span>
+              </div>
+            ))}
+            {(data.sitePnl || []).length === 0 && <div className="text-[10px] text-[#5a6878]">No site data</div>}
+          </div>
+        </div>
+        {/* Job-wise Profitability */}
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Briefcase size={15} className="text-[#a78bfa]" />
+            <span className="text-[12px] font-semibold text-[#e2e8f0]">Job-wise Profitability</span>
+          </div>
+          <div className="space-y-2">
+            {(data.jobPnl || []).slice(0, 4).map(j => (
+              <div key={j.jobCode} className="flex items-center justify-between text-[11px]">
+                <span className="text-[#8899aa] truncate">{j.jobCode}</span>
+                <span className={`font-mono font-semibold ${j.profit >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{fmtCr(j.profit)}</span>
+              </div>
+            ))}
+            {(data.jobPnl || []).length === 0 && <div className="text-[10px] text-[#5a6878]">No job data</div>}
+          </div>
+        </div>
+        {/* Pending Approvals */}
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ClipboardList size={15} className="text-[#f5a623]" />
+            <span className="text-[12px] font-semibold text-[#e2e8f0]">Pending Approvals</span>
+            <span className="ml-auto text-[10px] bg-[#f5a623]/20 text-[#f5a623] px-2 py-0.5 rounded-full">{data.pendingApprovalCount || 0}</span>
+          </div>
+          <div className="space-y-1.5">
+            {(data.pendingApprovals || []).slice(0, 5).map((p, i) => (
+              <div key={i} className="flex items-center justify-between text-[10px]">
+                <span className="text-[#8899aa]">{p.module} · {p.ref}</span>
+                <span className="text-[#f5a623] capitalize">{p.status}</span>
+              </div>
+            ))}
+            {(data.pendingApprovals || []).length === 0 && <div className="text-[10px] text-[#5a6878]">All caught up</div>}
+          </div>
+        </div>
+        {/* GST / TDS due */}
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Receipt size={15} className="text-[#ff3d3d]" />
+            <span className="text-[12px] font-semibold text-[#e2e8f0]">GST / TDS Due</span>
+          </div>
+          <div className="space-y-2 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[#8899aa]">GST ({data.taxDue?.gstCount || 0})</span>
+              <span className="font-mono font-semibold text-[#ff3d3d]">{fmtCr(data.taxDue?.gstTotal)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[#8899aa]">TDS</span>
+              <span className="font-mono font-semibold text-[#f5a623]">{fmtCr(data.taxDue?.tdsTotal)}</span>
+            </div>
+            <div className="text-[10px] text-[#5a6878] pt-1">Compliance due from open invoices</div>
           </div>
         </div>
       </div>
 
-      {/* ── Row 5: Financial Summary Strip ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <IndianRupee size={14} className="text-[#00e676]" />
-            <span className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Total Payroll</span>
+      {/* Charts Row — AR/AP donut + Module comparison bars */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* AR vs AP Donut */}
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <PieIcon size={16} className="text-[#f5a623]" />
+            <span className="text-[13px] font-semibold text-[#e2e8f0]">Receivables vs Payables</span>
           </div>
-          <div className="text-[18px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-            {formatCr(kpis.totalPayrollGross)}
+          {arApData.length === 0 ? (
+            <div className="h-[180px] flex items-center justify-center text-[#5a6878] text-xs">No AR/AP data</div>
+          ) : (
+            <DonutChart data={arApData} total={arApTotal} />
+          )}
+        </div>
+
+        {/* Module value comparison — spans 2 cols */}
+        <div className="lg:col-span-2 bg-[#161c24] border border-[#252e3a] rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart3 size={16} className="text-[#f5a623]" />
+            <span className="text-[13px] font-semibold text-[#e2e8f0]">Finance Module Values</span>
           </div>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-[9px] text-[#5a6878]">Paid: {formatCr(kpis.totalPayrollPaid)}</span>
-            <span className="text-[9px] text-[#f5a623]">Pending: {formatCr(kpis.totalPayrollPending)}</span>
+          <div className="h-[200px] flex items-center justify-center">
+            <BarChart data={moduleBars} />
+          </div>
+        </div>
+      </div>
+
+      {/* Stage E: extra donuts — budget health + invoicing/PO mix */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <PieChart size={16} className="text-[#00d4ff]" />
+            <span className="text-[13px] font-semibold text-[#e2e8f0]">Budget — Planned vs Actual</span>
+          </div>
+          {budgetDonut.length === 0 ? (
+            <div className="h-[150px] flex items-center justify-center text-[#5a6878] text-xs">No budget data</div>
+          ) : <DonutChart data={budgetDonut} total={budgetTotal} />}
+        </div>
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <PieChart size={16} className="text-[#f5a623]" />
+            <span className="text-[13px] font-semibold text-[#e2e8f0]">Invoicing & Cash Mix</span>
+          </div>
+          {poInvoiceDonut.length === 0 ? (
+            <div className="h-[150px] flex items-center justify-center text-[#5a6878] text-xs">No PO/invoice data</div>
+          ) : <DonutChart data={poInvoiceDonut} total={poInvoiceTotal} />}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Stats Panel */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Quick Actions */}
+          <div className="flex items-center gap-4 p-4 rounded-xl bg-[#161c24] border border-[#252e3a]">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-[#f5a623]/10 flex items-center justify-center">
+                <FileText size={20} className="text-[#f5a623]" />
+              </div>
+              <div>
+                <div className="text-sm font-medium text-[#e2e8f0]">Quick Actions</div>
+                <div className="text-[#8899aa] text-xs">Create invoice, payment, voucher</div>
+              </div>
+            </div>
+
+            <div className="ml-auto flex gap-2">
+              <button onClick={() => setActiveModule('fin-invoices')} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#f5a623]/10 border border-[#f5a623]/30 text-[#f5a623] text-sm hover:bg-[#f5a623]/20 transition-colors">
+                <Plus size={16} />
+                Create Invoice
+              </button>
+              <button onClick={() => setActiveModule('accounts-payable')} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#252e3a] border border-[#252e3a] text-[#e2e8f0] text-sm hover:bg-[#2a3545] transition-colors">
+                <Plus size={16} />
+                Payment
+              </button>
+              <button onClick={() => setActiveModule('create-journal-entry')} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#252e3a] border border-[#252e3a] text-[#e2e8f0] text-sm hover:bg-[#2a3545] transition-colors">
+                <Plus size={16} />
+                Voucher
+              </button>
+            </div>
+          </div>
+
+          {/* Financial Summary — live data from all modules */}
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-[#e2e8f0] mb-4 flex items-center gap-2">
+              <PieIcon size={20} className="text-[#f5a623]" />
+              Financial Summary
+            </h2>
+
+            <div className="space-y-4">
+              {summaryRows.map((row, i) => {
+                const Icon = row.icon;
+                return (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-[#0a0d12]">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-[#252e3a] flex items-center justify-center">
+                        <Icon size={20} className="text-[#8899aa]" />
+                      </div>
+                      <div>
+                        <div className="text-sm text-[#8899aa]">{row.label}</div>
+                        <div className="text-lg font-semibold text-[#e2e8f0]">{row.value}</div>
+                      </div>
+                    </div>
+                    <div className="font-medium text-sm" style={{ color: row.rightColor }}>{row.right}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* progress bars */}
+            <div className="mt-5 space-y-3">
+              <div>
+                <div className="flex items-center justify-between text-[11px] mb-1">
+                  <span className="text-[#8899aa]">AR Collection Progress</span>
+                  <span className="text-[#00e676] font-mono">{arPct.toFixed(1)}%</span>
+                </div>
+                <div className="w-full h-[6px] bg-[#0a0d12] rounded-full overflow-hidden"><div className="h-full rounded-full bg-[#00e676]" style={{ width: `${Math.min(arPct, 100)}%` }} /></div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-[11px] mb-1">
+                  <span className="text-[#8899aa]">AP Payment Progress</span>
+                  <span className="text-[#00d4ff] font-mono">{apPct.toFixed(1)}%</span>
+                </div>
+                <div className="w-full h-[6px] bg-[#0a0d12] rounded-full overflow-hidden"><div className="h-full rounded-full bg-[#00d4ff]" style={{ width: `${Math.min(apPct, 100)}%` }} /></div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <BarChart3 size={14} className="text-[#00d4ff]" />
-            <span className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Open POs</span>
-          </div>
-          <div className="text-[18px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-            {formatCr(kpis.totalPOOpen)}
-          </div>
-          <div className="text-[9px] text-[#5a6878] mt-1">Total PO Value: {formatCr(kpis.totalPOValue)}</div>
-        </div>
+        {/* Sidebar - Alerts & Quick Links */}
+        <div className="space-y-6">
+          {/* Alerts — live from overdue AR/AP */}
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-[#e2e8f0] mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={20} className="text-[#f5a623]" />
+                Alerts
+              </div>
+              <span className="text-xs bg-[#ff3d3d] text-white px-2 py-1 rounded-full">{data.alerts.length}</span>
+            </h2>
 
-        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Target size={14} className="text-[#f5a623]" />
-            <span className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Budget Utilization</span>
+            <div className="space-y-3">
+              {data.alerts.length === 0 && <div className="text-center text-[#5a6878] text-xs py-4">No alerts — all clear</div>}
+              {data.alerts.map((alert, i) => (
+                <div
+                  key={i}
+                  className={`p-3 rounded-lg ${alert.urgent ? 'bg-[#ff3d3d]/10 border border-[#ff3d3d]/30' : 'bg-[#0a0d12] border border-[#252e3a]'}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${alert.urgent ? 'bg-[#ff3d3d]/20 text-[#ff3d3d]' : 'bg-[#f59e0b]/20 text-[#f59e0b]'}`}>
+                      <AlertCircle size={14} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-medium ${alert.urgent ? 'text-[#ff3d3d]' : 'text-[#f59e0b]'} capitalize`}>{alert.type}</span>
+                        <span className="text-xs text-[#8899aa]">{alert.amount}</span>
+                      </div>
+                      <p className="text-xs text-[#e2e8f0] mt-1 truncate">{alert.desc}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="text-[18px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-            {kpis.totalBudgetPlanned > 0 ? ((kpis.totalBudgetActual / kpis.totalBudgetPlanned) * 100).toFixed(1) : 0}%
-          </div>
-          <div className="w-full h-[6px] bg-[#0a0d12] rounded-full overflow-hidden mt-2">
-            <div
-              className="h-full rounded-full transition-all duration-700"
-              style={{
-                width: `${kpis.totalBudgetPlanned > 0 ? Math.min((kpis.totalBudgetActual / kpis.totalBudgetPlanned) * 100, 100) : 0}%`,
-                backgroundColor: kpis.totalBudgetActual > kpis.totalBudgetPlanned ? '#ff3d3d' : '#00e676',
-              }}
-            />
-          </div>
-          <div className="text-[9px] text-[#5a6878] mt-1">Planned: {formatCr(kpis.totalBudgetPlanned)} | Actual: {formatCr(kpis.totalBudgetActual)}</div>
-        </div>
 
-        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Activity size={14} className="text-[#a78bfa]" />
-            <span className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Net Position</span>
+          {/* Quick Links — live counts */}
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-[#e2e8f0] mb-4 flex items-center gap-2">
+              <TrendingUp size={20} className="text-[#f5a623]" />
+              Quick Links
+            </h2>
+
+            <div className="space-y-3">
+              {quickLinks.map((link, i) => {
+                const Icon = link.icon;
+                return (
+                  <div
+                    key={i}
+                    onClick={() => setActiveModule(link.module as any)}
+                    className="flex items-center gap-3 p-3 rounded-lg bg-[#0a0d12] hover:bg-[#252e3a] transition-colors group cursor-pointer"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-[#f5a623]/10 flex items-center justify-center group-hover:bg-[#f5a623]/20 transition-colors">
+                      <Icon size={18} className="text-[#f5a623]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-[#e2e8f0]">{link.label}</div>
+                      <div className="flex items-center gap-2 text-[#8899aa] text-xs">
+                        <span>{link.badge} items</span>
+                      </div>
+                    </div>
+                    <ArrowUpRight size={16} className="text-[#5a6878] group-hover:text-[#f5a623] transition-colors" />
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div className="text-[18px] font-bold" style={{ fontFamily: "'Barlow Condensed', sans-serif", color: (kpis.totalRevenue - kpis.totalExpenses - kpis.accountsPayablePending) >= 0 ? '#00e676' : '#ff3d3d' }}>
-            {formatCr(kpis.totalRevenue - kpis.totalExpenses - kpis.accountsPayablePending)}
+
+          {/* Last Updated + Refresh */}
+          <div className="p-4 rounded-lg bg-[#161c24] border border-[#252e3a]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-[#8899aa]">
+                <Calendar size={14} />
+                {lastSync
+                  ? `Updated: ${new Date(lastSync).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                  : 'Syncing...'}
+              </div>
+              <button
+                onClick={() => load(true)}
+                disabled={refreshing}
+                className="p-1.5 rounded-lg hover:bg-[#252e3a] transition-colors disabled:opacity-50"
+                title="Refresh now"
+              >
+                <RefreshCw size={14} className={`text-[#8899aa] ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+            <div className="text-[#00e676] text-xs mt-1">✓ Synced with all finance modules</div>
+            <div className="text-[#5a6878] text-[10px] mt-1">Auto-refreshes every 60s</div>
           </div>
-          <div className="text-[9px] text-[#5a6878] mt-1">Revenue - Expenses - AP Pending</div>
         </div>
       </div>
     </div>

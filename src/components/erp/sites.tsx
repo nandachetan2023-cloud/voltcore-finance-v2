@@ -10,13 +10,17 @@ import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
 
 interface Site {
-  id: string;
+  id: string | number;
   name: string;
-  state: string;
-  project: string;
-  manpower: number;
-  incharge: string;
-  status: string;
+  // /api/sites fills these from the matching FinSite row; a Branch with no
+  // finance site behind it simply has none of them, so treat them as optional
+  // instead of trusting them to be present (an undefined manpower used to make
+  // the total NaN).
+  state?: string;
+  project?: string;
+  manpower?: number;
+  incharge?: string;
+  status?: string;
 }
 
 interface SiteFormData {
@@ -44,13 +48,15 @@ function getStatusBadge(status: string) {
 function StatCard({ icon: Icon, label, value, color }: {
   icon: React.ElementType; label: string; value: string | number; color: string;
 }) {
+  // Guard against NaN/undefined reaching the DOM as a child.
+  const shown = typeof value === 'number' && !Number.isFinite(value) ? '—' : value ?? '—';
   return (
     <div className="vc-stat-card">
       <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: color }} />
       <div className="flex items-start justify-between">
         <div>
           <div className="text-[10px] text-[#5a6878] font-semibold uppercase tracking-wider mb-1">{label}</div>
-          <div className="text-[28px] font-bold leading-none" style={{ fontFamily: "'Share Tech Mono', monospace", color }}>{value}</div>
+          <div className="text-[28px] font-bold leading-none" style={{ fontFamily: "'Share Tech Mono', monospace", color }}>{shown}</div>
         </div>
         <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${color}15` }}>
           <Icon size={18} style={{ color }} />
@@ -101,20 +107,27 @@ export default function SitesModule() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const activeSites = sites.filter(s => s.status === 'Active' || s.status === 'HO').length;
-  const uniqueStates = new Set(sites.map(s => s.state)).size;
+  const uniqueStates = new Set(sites.map(s => s.state).filter(Boolean)).size;
   const filteredSites = useMemo(
-    () => sites.filter(s => matchesSearch(search, [s.name, s.state, s.project, s.incharge, s.status])),
+    () => sites.filter(s => matchesSearch(search, [s.name, s.state ?? '', s.project ?? '', s.incharge ?? '', s.status ?? ''])),
     [sites, search]
   );
-  const totalManpower = sites.reduce((s, site) => s + site.manpower, 0);
+  const totalManpower = sites.reduce((s, site) => s + (Number(site.manpower) || 0), 0);
 
   const openCreate = () => { setForm(emptyForm); setCreateOpen(true); };
   const openEdit = (s: Site) => {
-    setForm({ name: s.name, state: s.state, project: s.project, manpower: s.manpower, incharge: s.incharge, status: s.status });
-    setSelectedId(s.id);
+    setForm({
+      name: s.name,
+      state: s.state ?? '',
+      project: s.project ?? '',
+      manpower: Number(s.manpower) || 0,
+      incharge: s.incharge ?? '',
+      status: s.status ?? 'Active',
+    });
+    setSelectedId(String(s.id));
     setEditOpen(true);
   };
-  const openDelete = (id: string) => { setSelectedId(id); setDeleteOpen(true); };
+  const openDelete = (id: string | number) => { setSelectedId(String(id)); setDeleteOpen(true); };
 
   const handleSubmit = async (mode: 'create' | 'edit') => {
     setSubmitting(true);
@@ -204,7 +217,7 @@ export default function SitesModule() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard icon={MapPin} label="Total Sites" value={sites.length} color="#f5a623" />
         <StatCard icon={Building2} label="Active" value={activeSites} color="#00e676" />
@@ -239,11 +252,11 @@ export default function SitesModule() {
               ) : filteredSites.map(site => (
                 <tr key={site.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors group">
                   <td className="py-2.5 px-3"><div className="flex items-center gap-2"><MapPin size={12} className="text-[#f5a623] shrink-0" /><span className="text-[#e2e8f0] font-medium">{site.name}</span></div></td>
-                  <td className="py-2.5 px-3 text-[#8899aa]">{site.state}</td>
-                  <td className="py-2.5 px-3 text-[#8899aa]">{site.project}</td>
-                  <td className="py-2.5 px-3 text-center text-[#00e676] font-medium" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{site.manpower}</td>
-                  <td className="py-2.5 px-3"><div className="flex items-center gap-1.5"><User size={11} className="text-[#5a6878]" /><span className="text-[#e2e8f0]">{site.incharge}</span></div></td>
-                  <td className="py-2.5 px-3"><span className={`vc-badge ${getStatusBadge(site.status)}`}>{site.status}</span></td>
+                  <td className="py-2.5 px-3 text-[#8899aa]">{site.state || '—'}</td>
+                  <td className="py-2.5 px-3 text-[#8899aa]">{site.project || '—'}</td>
+                  <td className="py-2.5 px-3 text-center text-[#00e676] font-medium" style={{ fontFamily: "'Share Tech Mono', monospace" }}>{Number(site.manpower) || 0}</td>
+                  <td className="py-2.5 px-3"><div className="flex items-center gap-1.5"><User size={11} className="text-[#5a6878]" /><span className="text-[#e2e8f0]">{site.incharge || '—'}</span></div></td>
+                  <td className="py-2.5 px-3"><span className={`vc-badge ${getStatusBadge(site.status ?? 'Active')}`}>{site.status || 'Active'}</span></td>
                   <td className="py-2.5 px-3">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button className="w-7 h-7 rounded-md flex items-center justify-center text-[#8899aa] hover:text-[#f5a623] hover:bg-[#f5a623]/10 transition-colors" onClick={() => openEdit(site)}><Pencil size={13} /></button>
@@ -259,7 +272,7 @@ export default function SitesModule() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Create New Site</DialogTitle></DialogHeader>
           {dialogContent()}
           <DialogFooter className="gap-2">
@@ -271,7 +284,7 @@ export default function SitesModule() {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-2xl">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Edit Site</DialogTitle></DialogHeader>
           {dialogContent()}
           <DialogFooter className="gap-2">
@@ -283,7 +296,7 @@ export default function SitesModule() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="bg-[#161c24] border-[#252e3a] max-w-md">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Delete Site</DialogTitle></DialogHeader>
           <div className="flex items-start gap-3 py-2">
             <div className="w-10 h-10 rounded-full bg-[#ff3d3d]/15 flex items-center justify-center shrink-0 mt-0.5"><AlertTriangle size={20} className="text-[#ff3d3d]" /></div>

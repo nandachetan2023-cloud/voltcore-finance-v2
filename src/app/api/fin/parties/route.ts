@@ -1,0 +1,72 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getDbForRequest } from '@/lib/db'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(request: NextRequest) {
+  try {
+    const pdb = getDbForRequest(request)
+    const records = await pdb.finParty.findMany({ orderBy: { name: 'asc' } })
+    return NextResponse.json({ success: true, data: records })
+  } catch (error) {
+    console.error('Error fetching:', error)
+    return NextResponse.json({ success: false, error: 'Failed to fetch data' }, { status: 500 })
+  }
+}
+
+function isValidPartyName(name: string): boolean {
+  return name.trim().length >= 2 && !/^\d+\.?\d*$/.test(name.trim())
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    if (!body.name || !isValidPartyName(body.name)) {
+      return NextResponse.json({ success: false, error: 'Party name must be at least 2 characters and cannot be purely numeric' }, { status: 400 })
+    }
+    const pdb = getDbForRequest(request)
+    const record = await pdb.finParty.create({ data: body })
+    return NextResponse.json({ success: true, data: record }, { status: 201 })
+  } catch (error) {
+    console.error('Error creating:', error)
+    return NextResponse.json({ success: false, error: 'Failed to create record' }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { id, ...data } = body
+    if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    if (data.name && !isValidPartyName(data.name)) {
+      return NextResponse.json({ success: false, error: 'Party name must be at least 2 characters and cannot be purely numeric' }, { status: 400 })
+    }
+    const pdb = getDbForRequest(request)
+    const record = await pdb.finParty.update({ where: { id }, data })
+    return NextResponse.json({ success: true, data: record })
+  } catch (error) {
+    console.error('Error updating:', error)
+    return NextResponse.json({ success: false, error: 'Failed to update record' }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const pdb = getDbForRequest(request)
+    const ids = searchParams.get('ids')
+    if (ids) {
+      const idList = ids.split(',').map(Number).filter(Boolean)
+      if (idList.length === 0) return NextResponse.json({ success: false, error: 'No valid ids' }, { status: 400 })
+      const result = await pdb.finParty.deleteMany({ where: { id: { in: idList } } })
+      return NextResponse.json({ success: true, deleted: result.count })
+    }
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    await pdb.finParty.delete({ where: { id: Number(id) } })
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting:', error)
+    return NextResponse.json({ success: false, error: 'Failed to delete record' }, { status: 500 })
+  }
+}

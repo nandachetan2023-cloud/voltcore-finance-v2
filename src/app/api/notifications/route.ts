@@ -1,5 +1,5 @@
-import { getDbForRequest } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { getDbForRequest } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,11 +106,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: mark read/unread, or mark-all.
+// POST: mark read/unread, mark-all, or create.
 //
 //   { notificationId }                 mark one read   (legacy shape, kept)
 //   { notificationId, isRead: false }  mark one unread
 //   { markAllRead: true }              mark everything in scope read
+//   { title, message, … }              create one (Finance Assistant alerts)
 export async function POST(request: NextRequest) {
   const db = getDbForRequest(request)
   const callerEmail = getCallerEmail(request)
@@ -156,7 +157,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    return NextResponse.json({ success: false, error: 'notificationId or markAllRead required' }, { status: 400 })
+    // Create a notification (used by the Finance Assistant to share alerts).
+    if (body.title || body.message) {
+      const n = await db.notification.create({
+        data: {
+          userId: body.userId ?? 0,
+          userEmail: body.userEmail ?? '',
+          title: body.title ?? 'Notification',
+          message: body.message ?? '',
+          type: body.type ?? 'info',
+          link: body.link ?? '',
+          entityType: body.entityType ?? 'finance',
+          entityId: body.entityId ?? null,
+        },
+      })
+      return NextResponse.json({ success: true, data: { id: n.id } })
+    }
+
+    return NextResponse.json({ success: false, error: 'notificationId, markAllRead or a notification body required' }, { status: 400 })
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Failed to update notification' }, { status: 500 })
   }
@@ -209,9 +227,10 @@ function formatTime(date: Date): string {
   const now = new Date()
   const diff = now.getTime() - date.getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'Just now'
+  if (mins < 1) return 'just now'
   if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
 }
