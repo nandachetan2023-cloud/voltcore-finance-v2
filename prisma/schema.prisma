@@ -2099,12 +2099,15 @@ model FinProject {
   name            String
   client          String
   contractValue   Float    @default(0)
-  sector          String? // Power | Mining | Industrial
+  sector          String? // Power | Mining | Industrial — also doubles as the "Type" shown on the All Projects list (Thermal/Solar/Transmission/Substation/Maintenance)
   projectManager  String?
   startDate       DateTime? @db.Date
   endDate         DateTime? @db.Date
-  status          String   @default("Active") // Active | On Hold | Completed | Cancelled
+  status          String   @default("Active") // Active | On Hold | Completed | Cancelled — the All Projects list uses its own vocabulary (On Track/At Risk/Delayed/Near Done/Completed), stored as-is
   description     String?
+  site            String? // free-text site/location shown on the All Projects list (not an FK — a project can span multiple FinSite rows via its jobs)
+  progress        Int      @default(0) // 0-100, manually tracked on the All Projects list
+  people          Int      @default(0) // headcount, manually tracked on the All Projects list
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
