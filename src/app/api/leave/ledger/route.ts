@@ -5,9 +5,9 @@ import { resolveLedgerScope } from '@/lib/services/leave-ledger-scope'
 export const dynamic = 'force-dynamic'
 
 // GET: Leave ledger — active employees the caller may see, with ALL their
-// leave requests. Scoped by role hierarchy on the server (see
-// src/lib/services/leave-ledger-scope.ts); the client never receives rows for
-// peers or superiors.
+// leave requests. Scoped on the server (see
+// src/lib/services/leave-ledger-scope.ts): admins get everyone, everyone else
+// only their own ledger — the client never receives anyone else's rows.
 //
 // Kept separate from GET /api/leave, which returns only the requests awaiting
 // the caller's approval and is paginated — neither is right for balances.
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     const employees = allEmployees.filter(e =>
       e.employmentStatus?.toLowerCase() === 'active' &&
-      (scope.kind === 'all' || scope.canSee(e.id, e.Department?.name ?? null)),
+      (scope.kind === 'all' || scope.canSee(e.id)),
     )
 
     const records = employees.length === 0 ? [] : await db.leaveRequest.findMany({

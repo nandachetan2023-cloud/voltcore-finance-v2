@@ -176,9 +176,9 @@ function BalanceCard({ label, allocated, used, color }: {
    LEAVE LEDGER COMPONENT
    Shows per-employee leave balance summary with expandable
    rows to view individual leave request logs.
-   Fetches its own data from /api/leave/ledger, which only
-   returns the caller and employees below them in the role
-   hierarchy.
+   Fetches its own data from /api/leave/ledger, which returns
+   every employee to an admin and only the caller's own
+   ledger to anyone else.
    ════════════════════════════════════════════════════════ */
 function LeaveLedger({ leavePolicies, refreshKey }: {
   leavePolicies: any[];
