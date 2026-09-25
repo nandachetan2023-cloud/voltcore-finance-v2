@@ -2,7 +2,9 @@
  * Create the finance_admin@voltcore.in login with full finance authority.
  *
  *   email    : finance_admin@voltcore.in
- *   password : FinAdmin@123
+ *   password : taken from FINANCE_ADMIN_PASSWORD, otherwise a random one is
+ *              generated and printed once by this run. Never hardcode it here —
+ *              a literal in the repo is a committed credential.
  *
  * What it gets:
  *   • superadmin DB — a TenantUser on the `voltcore` tenant with an OrgRole
@@ -17,8 +19,10 @@
  * Segregation-of-Duties is still checked: the script refuses to add a role that
  * conflicts with one this user already holds.
  *
- *   npx tsx scripts/seed-finance-admin-user.ts
+ *   FINANCE_ADMIN_PASSWORD='<your password>' npx tsx scripts/seed-finance-admin-user.ts
+ *   npx tsx scripts/seed-finance-admin-user.ts        # generates one for you
  */
+import { randomBytes } from 'crypto'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { PrismaClient } from '@prisma/client'
@@ -38,8 +42,20 @@ loadEnv()
 
 const TENANT_SLUG = 'voltcore'
 const EMAIL = 'finance_admin@voltcore.in'
-const PASSWORD = 'FinAdmin@123'
 const NAME = 'Finance Admin'
+
+/**
+ * Password source, in order: FINANCE_ADMIN_PASSWORD, else a freshly generated
+ * one. Rerunning without the env var therefore ROTATES the password — the run
+ * prints the new value, which is the only place it appears.
+ */
+function resolvePassword(): { value: string; generated: boolean } {
+  const fromEnv = process.env.FINANCE_ADMIN_PASSWORD?.trim()
+  if (fromEnv) return { value: fromEnv, generated: false }
+  // url-safe, no ambiguous characters to mistype
+  const raw = randomBytes(18).toString('base64').replace(/[^A-Za-z0-9]/g, '')
+  return { value: `Fin-${raw.slice(0, 16)}`, generated: true }
+}
 const ROLE_NAME = 'Finance Admin'
 // Highest finance authority: every module × every action at every site.
 const FIN_ROLE = 'DIRECTOR'
@@ -65,7 +81,8 @@ async function main() {
     },
   })
 
-  const passwordHash = await bcrypt.hash(PASSWORD, 10)
+  const { value: password, generated } = resolvePassword()
+  const passwordHash = await bcrypt.hash(password, 10)
   await sadb.tenantUser.upsert({
     where: { tenantId_email: { tenantId: tenant.id, email: EMAIL } },
     update: {
@@ -89,7 +106,8 @@ async function main() {
       createdBySuperadmin: true,
     },
   })
-  console.log(`✓ Login: ${EMAIL} / ${PASSWORD} (OrgRole ${ROLE_NAME}, modules=all)`)
+  console.log(`✓ Login: ${EMAIL} / ${password} (OrgRole ${ROLE_NAME}, modules=all)`)
+  if (generated) console.log('  ↑ generated for this run — save it now, it is not stored anywhere else.')
 
   const role = await db.finRole.findUnique({ where: { code: FIN_ROLE } })
   if (!role) throw new Error(`FinRole ${FIN_ROLE} missing — run scripts/seed-fin-rbac.ts first.`)
