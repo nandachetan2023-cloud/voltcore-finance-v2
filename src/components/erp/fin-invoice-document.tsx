@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { useCompanyProfile } from '@/hooks/use-company-profile';
 
@@ -71,6 +73,18 @@ function fmtDate(d: string | null | undefined): string {
 }
 
 export default function InvoiceDocument({ invoice, onClose }: { invoice: InvoiceData; onClose: () => void }) {
+  // Rendered in place, this overlay lands inside the module wrapper's
+  // `relative z-10` stacking context, which sits BELOW the app header (z-30) —
+  // so the sheet and its Print/Close toolbar painted under the header and the
+  // buttons were unreachable. Portal to <body> to escape that context.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const handlePrint = () => window.print();
   const profile = useCompanyProfile();
   const SUPPLIER = {
@@ -104,8 +118,10 @@ export default function InvoiceDocument({ invoice, onClose }: { invoice: Invoice
   const showIgst = !isExempt && !sameState;
   const recipientName = invoice.party?.name || invoice.client || 'N/A';
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center overflow-y-auto py-8 print:bg-white print:p-0 print:block print:overflow-visible">
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[200] bg-black/70 flex items-start justify-center overflow-y-auto py-8 print:bg-white print:p-0 print:block print:overflow-visible">
       <style>{`
         /* Keep everything inside the sheet on screen and in print */
         #invoice-printable, #invoice-printable * { box-sizing: border-box; }
@@ -133,7 +149,7 @@ export default function InvoiceDocument({ invoice, onClose }: { invoice: Invoice
       `}</style>
 
       {/* Toolbar */}
-      <div className="no-print fixed top-4 right-4 z-50 flex items-center gap-2">
+      <div className="no-print fixed top-4 right-4 z-[210] flex items-center gap-2">
         <button onClick={handlePrint} className="px-4 py-2 rounded-lg bg-[#f5a623] text-[#0a0d12] text-[12px] font-semibold hover:bg-[#e8991a] flex items-center gap-1.5 shadow-lg">
           <Printer size={14} /> Print / Save PDF
         </button>
@@ -323,6 +339,7 @@ export default function InvoiceDocument({ invoice, onClose }: { invoice: Invoice
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
