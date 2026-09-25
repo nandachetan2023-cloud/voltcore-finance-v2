@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { nextLedgerCode, withCodeRetry, isBlank } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +47,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const pdb = getDbForRequest(request)
-    const record = await pdb.ledgerAccount.create({ data: body })
+    // The account code is generated here; a caller-supplied one (import) is honoured.
+    const record = isBlank(body.accountCode)
+      ? await withCodeRetry(() => nextLedgerCode(pdb), (accountCode) => pdb.ledgerAccount.create({ data: { ...body, accountCode } }))
+      : await pdb.ledgerAccount.create({ data: body })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating ledger account:', error)

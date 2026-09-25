@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
+import { nextSeriesCode, withCodeRetry, isBlank } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,10 +43,6 @@ export async function POST(request: NextRequest) {
     const pdb = getDbForRequest(request)
 
     const site = await pdb.finSite.findUnique({ where: { id: Number(data.siteId) } }).catch(() => null)
-    if (!data.claimNo) {
-      const count = (await pdb.finExpenseClaim.count()) + 1
-      data.claimNo = `EC-${new Date().getFullYear()}-${String(count).padStart(3, '0')}`
-    }
     if (!data.costCenter) data.costCenter = site?.siteCode ? `CC-${site.siteCode}` : null
     if (!data.department) data.department = 'Site Operations'
     if (!data.projectManager) data.projectManager = site?.responsiblePerson || null
@@ -58,9 +55,10 @@ export async function POST(request: NextRequest) {
     if (data.poId !== undefined && data.poId !== null) data.poId = Number(data.poId)
     if (data.totalAmount !== undefined) data.totalAmount = Number(data.totalAmount) || 0
 
-    const record = await pdb.finExpenseClaim.create({
-      data: { ...data, items: items?.length ? { create: items } : undefined },
-    })
+    const build = (claimNo: string) => ({ ...data, claimNo, items: items?.length ? { create: items } : undefined })
+    const record = isBlank(data.claimNo)
+      ? await withCodeRetry(() => nextSeriesCode(pdb, 'claim'), (claimNo) => pdb.finExpenseClaim.create({ data: build(claimNo) }))
+      : await pdb.finExpenseClaim.create({ data: build(String(data.claimNo)) })
     notifyFinance(pdb, {
       entityType: 'FinExpenseClaim',
       entityId: String(record.id),

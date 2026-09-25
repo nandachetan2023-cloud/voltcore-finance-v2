@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { getAssignedSiteScope, isTenantAdmin } from '@/lib/fin-rbac'
+import { nextSeriesCode, withCodeRetry, isBlank } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,25 +39,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const pdb = getDbForRequest(request)
 
-    let jobCode = body.jobCode?.trim()
-    if (!jobCode) {
-      const year = new Date().getFullYear()
-      const count = await pdb.finJob.count({ where: { jobCode: { startsWith: `JOB-${year}-` } } })
-      jobCode = `JOB-${year}-${String(count + 1).padStart(3, '0')}`
+    // The job code is generated here; a caller-supplied one (import) is honoured.
+    const data = {
+      projectId: body.projectId ? Number(body.projectId) : null,
+      parentId: body.parentId ? Number(body.parentId) : null,
+      siteId: Number(body.siteId),
+      poId: body.poId ? Number(body.poId) : null,
+      description: body.description || null,
+      budget: Number(body.budget) || 0,
+      status: body.status || 'Active',
     }
-
-    const record = await pdb.finJob.create({
-      data: {
-        jobCode,
-        projectId: body.projectId ? Number(body.projectId) : null,
-        parentId: body.parentId ? Number(body.parentId) : null,
-        siteId: Number(body.siteId),
-        poId: body.poId ? Number(body.poId) : null,
-        description: body.description || null,
-        budget: Number(body.budget) || 0,
-        status: body.status || 'Active',
-      },
-    })
+    const record = isBlank(body.jobCode)
+      ? await withCodeRetry(() => nextSeriesCode(pdb, 'job'), (jobCode) => pdb.finJob.create({ data: { jobCode, ...data } }))
+      : await pdb.finJob.create({ data: { jobCode: String(body.jobCode).trim(), ...data } })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating:', error)

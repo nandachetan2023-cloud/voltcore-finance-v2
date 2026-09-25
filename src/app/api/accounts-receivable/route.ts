@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { postJournalEntry, GL_ACCOUNTS } from '@/lib/gl-posting'
 import { assertPermission } from '@/lib/fin-rbac'
+import { nextSeriesCode, withCodeRetry, isBlank } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,13 +29,10 @@ export async function POST(request: NextRequest) {
     const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
     const denied = await assertPermission(pdb, body.actor || '', 'AR_CREATE', { request, module: 'AR', siteCode: site?.siteCode ?? null })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create AR invoices' }, { status: 403 })
-    if (!body.invoiceNo) {
-      const year = new Date().getFullYear()
-      const count = (await pdb.accountsReceivable.count()) + 1
-      body.invoiceNo = `AR-${year}-${String(count).padStart(3, '0')}`
-    }
     const { actor: _actor, ...createData } = body
-    const record = await pdb.accountsReceivable.create({ data: createData })
+    const record = isBlank(createData.invoiceNo)
+      ? await withCodeRetry(() => nextSeriesCode(pdb, 'ar'), (invoiceNo) => pdb.accountsReceivable.create({ data: { ...createData, invoiceNo } }))
+      : await pdb.accountsReceivable.create({ data: createData })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating AR record:', error)

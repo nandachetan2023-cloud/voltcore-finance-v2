@@ -3,6 +3,7 @@ import { getDbForRequest } from '@/lib/db'
 import { postJournalEntry, GL_ACCOUNTS } from '@/lib/gl-posting'
 import { assertPermission } from '@/lib/fin-rbac'
 import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
+import { nextSeriesCode, withCodeRetry, isBlank } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,18 +30,15 @@ export async function POST(request: NextRequest) {
     const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
     const denied = await assertPermission(pdb, body.actor || '', 'AR_CREATE', { request, module: 'AR', siteCode: site?.siteCode ?? null })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create invoices' }, { status: 403 })
-    if (!body.invoiceNo) {
-      const year = new Date().getFullYear()
-      const count = (await pdb.finInvoice.count()) + 1
-      body.invoiceNo = `INV-${year}-${String(count).padStart(3, '0')}`
-    }
     const { actor: _actor, ...createData } = body
     // Prisma expects Date objects, but JSON sends strings - coerce
     if (createData.invoiceDate) createData.invoiceDate = new Date(createData.invoiceDate)
     if (createData.dueDate) createData.dueDate = new Date(createData.dueDate)
     if (createData.eInvoiceDate) createData.eInvoiceDate = new Date(createData.eInvoiceDate)
     if (createData.receivedDate) createData.receivedDate = new Date(createData.receivedDate)
-    const record = await pdb.finInvoice.create({ data: createData })
+    const record = isBlank(createData.invoiceNo)
+      ? await withCodeRetry(() => nextSeriesCode(pdb, 'invoice'), (invoiceNo) => pdb.finInvoice.create({ data: { ...createData, invoiceNo } }))
+      : await pdb.finInvoice.create({ data: createData })
 
     // Auto-post the GL entry for this invoice: Dr Accounts Receivable / Cr
     // Project Revenue. FinInvoice has no invoice-type field to distinguish
