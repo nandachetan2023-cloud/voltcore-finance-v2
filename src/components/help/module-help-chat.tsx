@@ -262,6 +262,16 @@ function AreaHelpChat({ area }: { area: HelpArea }) {
     }
   }
 
+  /** Suggestion chips open their own topic directly — no search, so they can't land on a neighbour. */
+  function showEntry(entry: HelpEntry) {
+    setPending(null);
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', text: entry.title },
+      { role: 'assistant', text: entry.body, entry },
+    ]);
+  }
+
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     send(input);
@@ -364,7 +374,7 @@ function AreaHelpChat({ area }: { area: HelpArea }) {
                         <button
                           key={e.id}
                           type="button"
-                          onClick={() => send(e.title, true)}
+                          onClick={() => showEntry(e)}
                           className="rounded-full border border-[#252e3a] bg-[#161c24] px-3 py-1.5 text-[12px] text-[#cbd5e1] transition-colors hover:border-[#f5a623]/50 hover:text-[#f5a623]"
                         >
                           {e.title}
@@ -451,7 +461,7 @@ function AreaHelpChat({ area }: { area: HelpArea }) {
                       <button
                         key={e.id}
                         type="button"
-                        onClick={() => send(e.title, true)}
+                        onClick={() => showEntry(e)}
                         className="rounded-lg border border-[#252e3a] bg-[#161c24] px-3 py-2 text-left text-[12.5px] text-[#cbd5e1] transition-colors hover:border-[#f5a623]/50 hover:text-[#f5a623]"
                       >
                         {e.title}
