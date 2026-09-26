@@ -5,7 +5,7 @@ import { resolveNotificationTarget as resolveTarget, TYPE_COLOR } from '@/lib/no
 import React, { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
 import { RoleScopeIndicator } from '@/components/erp/_role-scope-indicator';
-import { FinanceHelpChat } from '@/components/help/finance-help-chat';
+import { ModuleHelpChat } from '@/components/help/module-help-chat';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useTenantBranding } from '@/hooks/use-tenant-branding';
 import {
@@ -686,8 +686,8 @@ export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
         </main>
       </div>
 
-      {/* Finance Help — floating assistant, renders only on finance modules */}
-      <FinanceHelpChat />
+      {/* Module Help — floating assistant; follows the active module (none for HRMS) */}
+      <ModuleHelpChat />
     </div>
   );
 }
