@@ -11,11 +11,21 @@ function fmtCr(n: number | undefined | null): string {
 }
 
 const r2d = Math.PI / 180;
-function donutPath(cx: number, cy: number, r: number, startAngle: number, endAngle: number) {
-  const s = r * Math.sin(startAngle * r2d), c = -r * Math.cos(startAngle * r2d);
-  const e = r * Math.sin(endAngle * r2d), c2 = -r * Math.cos(endAngle * r2d);
-  const large = endAngle - startAngle > 180 ? 1 : 0;
-  return `M${cx + s} ${cy + c} A${r} ${r} 0 ${large} 1 ${cx + e} ${cy + c2}`;
+const pt = (cx: number, cy: number, r: number, deg: number) =>
+  `${(cx + r * Math.sin(deg * r2d)).toFixed(3)} ${(cy - r * Math.cos(deg * r2d)).toFixed(3)}`;
+
+/** Ring segment: outer arc clockwise, line in, inner arc back, close. Angles in degrees, 0 = 12 o'clock. */
+function donutSlicePath(cx: number, cy: number, outerR: number, innerR: number, startAngle: number, endAngle: number) {
+  // A 360° arc has identical start and end points and renders as nothing; stop just short.
+  const end = endAngle - startAngle >= 360 ? startAngle + 359.999 : endAngle;
+  const large = end - startAngle > 180 ? 1 : 0;
+  return [
+    `M${pt(cx, cy, outerR, startAngle)}`,
+    `A${outerR} ${outerR} 0 ${large} 1 ${pt(cx, cy, outerR, end)}`,
+    `L${pt(cx, cy, innerR, end)}`,
+    `A${innerR} ${innerR} 0 ${large} 0 ${pt(cx, cy, innerR, startAngle)}`,
+    'Z',
+  ].join(' ');
 }
 
 export function DonutChart({ data, total }: { data: { name: string; value: number; color: string }[]; total: number }) {
@@ -32,9 +42,10 @@ export function DonutChart({ data, total }: { data: { name: string; value: numbe
             const start = current;
             const end = current + slice;
             current = end;
+            if (slice <= 0) return null;
             return (
               <path key={i}
-                d={donutPath(cx, cy, outerR, start, end) + ' ' + donutPath(cx, cy, innerR, start, end).split('A').map((p, j) => j === 0 ? p : `A${innerR} ${innerR}`).join('A') + ' Z'}
+                d={donutSlicePath(cx, cy, outerR, innerR, start, end)}
                 fill={d.color} stroke="#161c24" strokeWidth={1.5}
               />
             );

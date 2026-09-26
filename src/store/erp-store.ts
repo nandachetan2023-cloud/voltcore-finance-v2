@@ -596,7 +596,11 @@ export const useERPStore = create<ERPStore>((set) => ({
       return s; // No state change — stay where they are
     }
 
-    const parent = resolveParent(module);
+    // A screen can live under several menus (e.g. Employees under HRMS and
+    // Master Setup). Stay in the menu the user is browsing when it has the
+    // screen, instead of jumping to whichever menu lists it first.
+    const staysInMenu = SUB_MODULES[s.activeParentModule]?.some((sub) => sub.id === module);
+    const parent = staysInMenu ? s.activeParentModule : resolveParent(module);
     const finalModule = (
       EXPANDABLE_MODULES.includes(module) &&
       !EXPANDABLE_WITH_PAGE.includes(module) &&

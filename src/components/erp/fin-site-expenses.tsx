@@ -433,7 +433,7 @@ export default function FinSiteExpenses() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
 
-  // month filter — default to current month
+  // month filter — empty shows every month
   const [monthFilter, setMonthFilter] = useState('');
 
   // form
@@ -595,7 +595,7 @@ export default function FinSiteExpenses() {
     if (!rows.length) rows.push({ ...template });
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Site Expenses');
-    XLSX.writeFile(wb, `site-expenses-${monthFilter}.xlsx`); toast.success('Exported');
+    XLSX.writeFile(wb, `site-expenses-${monthFilter || 'all'}.xlsx`); toast.success('Exported');
   };
 
   // ── Import ────────────────────────────────────────────────────────────────
@@ -672,7 +672,9 @@ export default function FinSiteExpenses() {
   const toggleType = (t: string) => setExpandedTypes(s => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n; });
   const toggleRow = (id: number) => setExpanded(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
+  // An empty filter means "all months" — formatting it as a date gave "Invalid Date".
   const monthLabel = (() => {
+    if (!monthFilter) return 'All months';
     const [y,m] = monthFilter.split('-');
     return new Date(Number(y), Number(m)-1, 1).toLocaleString('en-IN', { month: 'long', year: 'numeric' });
   })();
