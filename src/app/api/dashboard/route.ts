@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Run a query, falling back when it fails. The Prisma schema was rewritten for
- * Finance and several legacy models (Project, Expense, Incident, Equipment,
- * Subcontractor, Payroll, Site) no longer exist; a missing delegate throws a
+ * Finance and several legacy models (Project, Expense, Payroll, Site) no
+ * longer exist; a missing delegate throws a
  * TypeError, and one bad query used to turn the whole dashboard into a 500.
  */
 async function safe<T>(query: () => Promise<T>, fallback: T): Promise<T> {
@@ -22,8 +22,7 @@ export async function GET(request: NextRequest) {
   try {
     const today = new Date().toISOString().split('T')[0]
 
-    // Run all queries in parallel for performance. Modules with no backing
-    // model (incidents, equipment, subcontractors) report 0 until one exists.
+    // Run all queries in parallel for performance.
     const [
       totalEmployees,
       activeEmployees,
@@ -38,6 +37,11 @@ export async function GET(request: NextRequest) {
       sites,
       expenseTotal,
       payrollTotals,
+      totalIncidents,
+      openIncidents,
+      totalEquipment,
+      operationalEquipment,
+      totalSubcontractors,
     ] = await Promise.all([
       safe(() => db.employee.count(), 0),
       safe(() => db.employee.count({ where: { employmentStatus: { equals: 'active', mode: 'insensitive' } } }), 0),
@@ -66,12 +70,12 @@ export async function GET(request: NextRequest) {
       safe(() => db.payrollRun.aggregate({ _sum: { totalNet: true, totalGross: true } }), {
         _sum: { totalNet: 0, totalGross: 0 },
       }),
+      safe(() => db.incident.count(), 0),
+      safe(() => db.incident.count({ where: { status: { in: ['Investigating', 'Open'] } } }), 0),
+      safe(() => db.equipment.count(), 0),
+      safe(() => db.equipment.count({ where: { status: 'Operational' } }), 0),
+      safe(() => db.subcontractor.count(), 0),
     ])
-    const totalIncidents = 0
-    const openIncidents = 0
-    const totalEquipment = 0
-    const operationalEquipment = 0
-    const totalSubcontractors = 0
 
     // Compute attendance breakdown
     const presentCount = todayAttendance.filter(

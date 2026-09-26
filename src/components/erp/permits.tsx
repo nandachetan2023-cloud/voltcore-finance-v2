@@ -188,12 +188,10 @@ export default function PermitsModule() {
     }
     try {
       setSubmitting(true);
-      const count = await (await fetch('/api/permits')).json().then((j: any) => j.data?.length || 0);
-      const permitNo = `PTW-${String(count + 1).padStart(3, '0')}`;
       const res = await fetch('/api/permits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permitNo, ...form, description: form.description || null, precautions: form.precautions || null }),
+        body: JSON.stringify({ ...form, description: form.description || null, precautions: form.precautions || null }),
       });
       const json = await res.json();
       if (json.success) {
