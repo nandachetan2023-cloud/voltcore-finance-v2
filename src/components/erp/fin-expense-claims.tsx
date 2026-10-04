@@ -516,7 +516,7 @@ export default function FinExpenseClaims() {
 
           <DialogFooter className="flex items-center justify-end gap-2 px-4 pb-4 pt-3 border-t border-[#1a2028]">
             <button onClick={() => setFormOpen(false)} disabled={submitting} className="px-4 py-2 text-[12px] font-medium text-[#8899aa] hover:text-[#e2e8f0] bg-[#1a2028] rounded-lg hover:bg-[#252e3a] disabled:opacity-50 transition-colors">Cancel</button>
-            <button onClick={handleSubmit} disabled={submitting} className="flex items-center gap-1.5 px-5 py-2 bg-[#f5a623] text-[#0a0d12] rounded-lg text-[12px] font-semibold hover:bg-[#d48f1a] disabled:opacity-50 transition-colors">
+            <button onClick={handleSubmit} disabled={submitting} className="vc-btn-primary flex items-center gap-1.5">
               {submitting && <Loader2 size={14} className="animate-spin" />}
               {!submitting && <CheckCircle2 size={14} />}
               {editTarget ? 'Update' : 'Create Claim'}

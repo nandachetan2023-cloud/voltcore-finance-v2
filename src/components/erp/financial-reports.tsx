@@ -653,6 +653,7 @@ export default function FinancialReports() {
             <ReportSection icon={FileText} title="Tax Summary by Type">
               {taxData.length > 0 ? (
                 <div className="space-y-2">
+                  <div className="overflow-x-auto">
                   <table className="w-full text-[11px]">
                     <thead>
                       <tr className="border-b border-[#252e3a]">
@@ -718,6 +719,7 @@ export default function FinancialReports() {
                       </tr>
                     </tfoot>
                   </table>
+                  </div>
                 </div>
               ) : (
                 <NoData message="No tax data available" />

@@ -366,6 +366,7 @@ export default function ImportWizard({ title, fields, keyField, existingKeys, co
             </div>
           </div>
           <div className="vc-panel mt-3 overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="bg-[#0f1318] border-b border-[#252e3a]">
@@ -414,6 +415,7 @@ export default function ImportWizard({ title, fields, keyField, existingKeys, co
                 })}
               </tbody>
             </table>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-3 mt-3">
             <MiniStat label="Mapped Columns" value={`${mappedCount} / ${headers.length}`} color="#e2e8f0" />

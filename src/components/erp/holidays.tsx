@@ -318,7 +318,7 @@ export default function HolidaysModule() {
           </Select>
           <Button 
             onClick={() => setCreateOpen(true)}
-            className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold"
+            className="vc-btn-primary"
           >
             <Plus className="w-4 h-4 mr-1" />
             Add Holiday
@@ -575,7 +575,7 @@ export default function HolidaysModule() {
               Cancel
             </Button>
             <Button 
-              className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold"
+              className="vc-btn-primary"
               disabled={submitting}
               onClick={handleCreate}
             >
@@ -663,7 +663,7 @@ export default function HolidaysModule() {
               Cancel
             </Button>
             <Button 
-              className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold"
+              className="vc-btn-primary"
               disabled={submitting}
               onClick={handleEdit}
             >

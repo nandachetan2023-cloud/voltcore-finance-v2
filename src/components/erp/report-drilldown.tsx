@@ -124,6 +124,7 @@ export default function ReportDrilldown() {
       </div>
 
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
           <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">
             <th className="text-left px-4 py-3 text-[#8899aa] font-semibold uppercase tracking-wider text-[9px]">Account</th>
@@ -137,6 +138,7 @@ export default function ReportDrilldown() {
             {groups.length === 0 && <tr><td colSpan={3} className="py-10 text-center text-[#5a6878]">No accounts.</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

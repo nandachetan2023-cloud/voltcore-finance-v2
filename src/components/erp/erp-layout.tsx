@@ -272,7 +272,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
               <div className="text-[14px] font-bold text-[#e2e8f0] tracking-tight truncate">
                 {branding?.name?.toUpperCase() || 'VOLTCORE'}
               </div>
-              <div className="text-[9px] text-[#5a6878] tracking-[2px] uppercase mt-0.5">ERP · HRMS</div>
+              <div className="text-[9px] text-[#5a6878] tracking-[2px] uppercase mt-0.5">ERP</div>
             </div>
           </button>
           <button className="ml-auto lg:hidden text-[#5a6878] hover:text-[#e2e8f0] shrink-0" onClick={() => setSidebarOpen(false)}><X size={18} /></button>

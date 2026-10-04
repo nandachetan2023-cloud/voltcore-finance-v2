@@ -191,7 +191,7 @@ export default function ChecklistTemplates() {
           </div>
 
           <div className="flex gap-2">
-            <button onClick={save} disabled={saving} className="px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50">
+            <button onClick={save} disabled={saving} className="vc-btn-primary">
               {saving ? 'Saving...' : 'Save Template'}
             </button>
             <button onClick={() => setShowForm(false)} className="px-4 py-2 text-[12px] text-[#8899aa] border border-[#252e3a] rounded-lg hover:border-[#f5a623]">Cancel</button>

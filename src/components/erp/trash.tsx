@@ -341,7 +341,7 @@ export default function TrashModule() {
             Are you sure you want to restore <span className="text-[#e2e8f0] font-semibold">{selectedItem?.name}</span>? It will be moved back to the active list.
           </p>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setRestoreOpen(false)}>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setRestoreOpen(false)}>
               Cancel
             </Button>
             <Button className="bg-[#00e676] text-black hover:bg-[#00c853] font-semibold" disabled={submitting} onClick={handleRestore}>
@@ -370,7 +370,7 @@ export default function TrashModule() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setDeleteOpen(false)}>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setDeleteOpen(false)}>
               Cancel
             </Button>
             <Button className="bg-[#ff3d3d] text-white hover:bg-[#e63535] font-semibold" disabled={submitting} onClick={handlePermanentDelete}>

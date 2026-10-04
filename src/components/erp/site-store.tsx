@@ -148,6 +148,7 @@ function GrnTab({ lookups }: { lookups: Lookups }) {
     <div>
       <TableHeader title="Goods Receipt Notes" count={records.length} onNew={openNew} newLabel="New GRN" />
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
           <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['GRN No', 'Date', 'Site', 'Vendor', 'PO', 'Items', 'Value', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
@@ -167,6 +168,7 @@ function GrnTab({ lookups }: { lookups: Lookups }) {
             {records.length === 0 && <tr><td colSpan={9} className="py-8 text-center text-[#5a6878]">No GRNs yet</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
 
       {formOpen && (
@@ -254,6 +256,7 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
       <TableHeader title="Material Requisition Slips" count={records.length} onNew={openNew} newLabel="New MRS" />
       <p className="text-[10px] text-[#5a6878] mb-2">Material can only be issued against an <span className="text-[#e2e8f0] font-semibold">Approved</span> MRS.</p>
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
           <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['MRS No', 'Date', 'Site', 'Requested By', 'Purpose', 'Items', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
@@ -278,6 +281,7 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
             {records.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-[#5a6878]">No requisitions yet</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
 
       {formOpen && (
@@ -349,6 +353,7 @@ function ReturnsTab({ lookups }: { lookups: Lookups }) {
     <div>
       <TableHeader title="Material Returns" count={records.length} onNew={openNew} newLabel="New Return" />
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
           <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Return No', 'Date', 'Site', 'Returned By', 'Items', 'Condition', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
@@ -366,6 +371,7 @@ function ReturnsTab({ lookups }: { lookups: Lookups }) {
             {records.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-[#5a6878]">No returns yet</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
 
       {formOpen && (
@@ -439,6 +445,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
     <div>
       <TableHeader title="Tool & Tackle Register" count={records.length} onNew={openNew} newLabel="New Tool" />
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
           <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Tool Code', 'Name', 'Category', 'Site', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
@@ -461,6 +468,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
             {records.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-[#5a6878]">No tools registered yet</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
 
       {formOpen && (
@@ -526,6 +534,7 @@ function GatePassTab({ lookups }: { lookups: Lookups }) {
     <div>
       <TableHeader title="Gate Pass Register" count={records.length} onNew={openNew} newLabel="New Gate Pass" />
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
           <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Gate Pass No', 'Date', 'Type', 'Site', 'Item', 'Qty', 'Vehicle', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
@@ -550,6 +559,7 @@ function GatePassTab({ lookups }: { lookups: Lookups }) {
             {records.length === 0 && <tr><td colSpan={9} className="py-8 text-center text-[#5a6878]">No gate passes yet</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
 
       {formOpen && (
@@ -602,6 +612,7 @@ function EquipmentTab({ lookups }: { lookups: Lookups }) {
     <div>
       <TableHeader title="Equipment Register" count={records.length} onNew={openNew} newLabel="New Equipment" />
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
           <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Code', 'Name', 'Type', 'Site', 'Operator', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
@@ -619,6 +630,7 @@ function EquipmentTab({ lookups }: { lookups: Lookups }) {
             {records.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-[#5a6878]">No equipment registered yet</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
 
       {formOpen && (
@@ -674,6 +686,7 @@ function ScrapTab({ lookups }: { lookups: Lookups }) {
     <div>
       <TableHeader title="Scrap Register" count={records.length} onNew={openNew} newLabel="New Scrap Entry" />
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
           <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Scrap No', 'Date', 'Site', 'Description', 'Qty', 'Est. Value', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
@@ -697,6 +710,7 @@ function ScrapTab({ lookups }: { lookups: Lookups }) {
             {records.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-[#5a6878]">No scrap entries yet</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
 
       {formOpen && (
@@ -756,6 +770,7 @@ function PvTab({ lookups }: { lookups: Lookups }) {
     <div>
       <TableHeader title="Physical Stock Verification" count={records.length} onNew={openNew} newLabel="New Verification" />
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
           <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Verification No', 'Date', 'Type', 'Site', 'Verified By', 'Items', 'Variances', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
@@ -777,6 +792,7 @@ function PvTab({ lookups }: { lookups: Lookups }) {
             {records.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-[#5a6878]">No verifications recorded yet</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
 
       {formOpen && (
@@ -863,6 +879,7 @@ function ReportTab({ lookups }: { lookups: Lookups }) {
           </div>
           <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
             <div className="px-4 py-2.5 border-b border-[#252e3a] text-[11px] font-bold text-[#e2e8f0]">Item-wise Movement — {month}</div>
+            <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
               <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['SKU', 'Item', 'Received', 'Issued', 'Returned'].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
               <tbody className="divide-y divide-[#1a2028]">
@@ -878,6 +895,7 @@ function ReportTab({ lookups }: { lookups: Lookups }) {
                 {data.itemMovement.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-[#5a6878]">No movement this month</td></tr>}
               </tbody>
             </table>
+            </div>
           </div>
           <p className="text-[10px] text-[#5a6878]">Note: this reports material movement for the month (received/issued/returned/scrapped). Opening/closing stock balances require a running stock ledger, which is a separate follow-up.</p>
         </div>
@@ -893,7 +911,7 @@ function TableHeader({ title, count, onNew, newLabel }: { title: string; count: 
   return (
     <div className="flex items-center justify-between mb-3">
       <span className="text-[12px] font-semibold text-[#e2e8f0]">{title} <span className="text-[#5a6878] font-normal">({count})</span></span>
-      <button onClick={onNew} className="flex items-center gap-1.5 px-3 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a]"><Plus size={13} /> {newLabel}</button>
+      <button onClick={onNew} className="vc-btn-primary flex items-center gap-1.5"><Plus size={13} /> {newLabel}</button>
     </div>
   );
 }
@@ -913,7 +931,7 @@ function ModalFooter({ onCancel, onSave, saving, label }: { onCancel: () => void
   return (
     <div className="flex justify-end gap-2 mt-4">
       <button onClick={onCancel} className="px-3 py-1.5 text-[11px] text-[#8899aa] border border-[#252e3a] rounded-lg">Cancel</button>
-      <button onClick={onSave} disabled={saving} className="px-4 py-1.5 bg-[#f5a623] text-black text-[11px] font-bold rounded-lg disabled:opacity-50">{saving ? 'Saving…' : label}</button>
+      <button onClick={onSave} disabled={saving} className="vc-btn-primary">{saving ? 'Saving…' : label}</button>
     </div>
   );
 }
@@ -949,7 +967,7 @@ function WizardFooter({ step, totalSteps, onBack, onNext, onCancel, onFinish, sa
       {step < totalSteps - 1 ? (
         <button onClick={onNext} className="px-4 py-1.5 bg-[#f5a623] text-black text-[11px] font-bold rounded-lg">Next →</button>
       ) : (
-        <button onClick={onFinish} disabled={saving} className="px-4 py-1.5 bg-[#f5a623] text-black text-[11px] font-bold rounded-lg disabled:opacity-50">{saving ? 'Saving…' : finishLabel}</button>
+        <button onClick={onFinish} disabled={saving} className="vc-btn-primary">{saving ? 'Saving…' : finishLabel}</button>
       )}
     </div>
   );

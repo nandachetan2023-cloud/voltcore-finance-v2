@@ -542,7 +542,7 @@ export default function UserManagement() {
           </div>
           <div className="flex gap-2 mt-4">
             <button onClick={save} disabled={saving}
-              className="px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50 transition-colors">
+              className="vc-btn-primary">
               {saving ? 'Saving...' : 'Save User'}
             </button>
             <button onClick={() => { setShowForm(false); setEmpSearch(''); setShowEmpDropdown(false); }}

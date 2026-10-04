@@ -309,7 +309,7 @@ function TenantsTab({ tenants, onRefresh }: { tenants: Tenant[]; onRefresh: () =
             </div>
           </div>
           <div className="flex gap-2 pt-1">
-            <button onClick={save} disabled={saving} className="px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50 transition-colors">
+            <button onClick={save} disabled={saving} className="vc-btn-primary">
               {saving ? 'Saving...' : 'Save'}
             </button>
             <button onClick={() => setShowForm(false)} className="px-4 py-2 text-[12px] text-[#8899aa] border border-[#252e3a] rounded-lg hover:border-[#f5a623] transition-colors">Cancel</button>
@@ -642,7 +642,7 @@ function UsersTab({ users, tenants, onRefresh }: { users: TenantUser[]; tenants:
             </div>
           </div>
           <div className="flex gap-2 pt-1">
-            <button onClick={save} disabled={saving} className="px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50 transition-colors">
+            <button onClick={save} disabled={saving} className="vc-btn-primary">
               {saving ? 'Saving...' : 'Save'}
             </button>
             <button onClick={() => {
@@ -821,7 +821,7 @@ function BiometricTab({ configs, tenants, onRefresh }: { configs: BiometricConfi
             </div>
           </div>
           <div className="flex gap-2 pt-1">
-            <button onClick={save} disabled={saving} className="px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50 transition-colors">
+            <button onClick={save} disabled={saving} className="vc-btn-primary">
               {saving ? 'Saving...' : 'Save'}
             </button>
             <button onClick={() => setShowForm(false)} className="px-4 py-2 text-[12px] text-[#8899aa] border border-[#252e3a] rounded-lg hover:border-[#f5a623] transition-colors">Cancel</button>

@@ -172,7 +172,7 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
       `}</style>
 
       <div className="no-print fixed top-4 right-4 z-[210] flex items-center gap-2">
-        <button onClick={handlePrint} className="px-4 py-2 rounded-lg bg-[#f5a623] text-[#0a0d12] text-[12px] font-semibold hover:bg-[#e8991a] flex items-center gap-1.5 shadow-lg">
+        <button onClick={handlePrint} className="vc-btn-primary flex items-center gap-1.5 shadow-lg">
           <Printer size={14} /> Print / Save PDF
         </button>
         <button onClick={onClose} className="px-3 py-2 rounded-lg bg-[#252e3a] text-[#e2e8f0] text-[12px] font-semibold hover:bg-[#2a3545] flex items-center gap-1.5 shadow-lg">
@@ -239,6 +239,7 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
           </div>
 
           {/* Items table */}
+          <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-[#f5a623]/15 text-[8px] uppercase">
@@ -296,6 +297,7 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
               </tr>
             </tbody>
           </table>
+          </div>
 
           {/* Totals */}
           <div className="grid grid-cols-[1fr_auto] border-b border-[#1a1a1a]">

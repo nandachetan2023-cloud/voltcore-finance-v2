@@ -475,7 +475,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button className="bg-[#f5a623] hover:bg-[#f5a623]/90">
+          <Button className="vc-btn-primary">
             <Upload className="w-4 h-4 mr-2" />
             Bulk Import
           </Button>
@@ -644,7 +644,7 @@ export default function EmployeeBulkImport({ onImportComplete }: { onImportCompl
                   <Button
                     onClick={handleImport}
                     disabled={uploading || mappedCount !== totalToMap || totalToMap === 0}
-                    className="bg-[#f5a623] hover:bg-[#f5a623]/90"
+                    className="vc-btn-primary"
                   >
                     {uploading ? 'Importing...' : `Import ${totalToMap} Employees`}
                   </Button>

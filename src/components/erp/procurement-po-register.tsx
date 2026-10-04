@@ -433,7 +433,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
           <div className="ml-2">
             <SearchInput value={searchText} onChange={setSearchText} placeholder="Search PO#..." />
           </div>
-          <button onClick={openCreate} className="ml-2 px-3 py-1.5 rounded-lg bg-[#f5a623] text-[#0a0d12] text-[11px] font-semibold hover:bg-[#e8991a] flex items-center gap-1.5"><Plus size={13} /> New PO</button>
+          <button onClick={openCreate} className="vc-btn-primary ml-2 flex items-center gap-1.5"><Plus size={13} /> New PO</button>
         </div>
         <div className="px-3 py-2 flex flex-wrap items-center gap-2 border-b border-[#252e3a]">
           <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} className="bg-[#0f1318] border border-[#252e3a] rounded-lg px-2.5 py-1.5 text-[11px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none">
@@ -605,6 +605,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
             </div>
 
             {/* Line Items Table */}
+            <div className="overflow-x-auto">
             <table className="w-full text-[10px] border-collapse mb-3">
               <thead>
                 <tr className="bg-[#f0f0f0]">
@@ -656,6 +657,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
                 </tr>
               </tfoot>
             </table>
+            </div>
 
             {/* Terms & Conditions */}
             <div className="mb-3 text-[10px]">

@@ -390,8 +390,8 @@ function DepartmentsPanel({ departments, onRefresh }: { departments: Department[
             </FormField>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('create')}>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={() => handleSubmit('create')}>
               {submitting ? 'Creating...' : 'Create'}
             </Button>
           </DialogFooter>
@@ -578,7 +578,7 @@ function HolidaysPanel({ holidays, onRefresh }: { holidays: Holiday[]; onRefresh
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button className="bg-[#00e676] text-black hover:bg-[#00c853] font-semibold" disabled={submitting} onClick={() => handleSubmit('create')}>
               {submitting ? 'Creating...' : 'Create'}
             </Button>
@@ -619,8 +619,8 @@ function HolidaysPanel({ holidays, onRefresh }: { holidays: Holiday[]; onRefresh
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('edit')}>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={() => handleSubmit('edit')}>
               {submitting ? 'Updating...' : 'Update'}
             </Button>
           </DialogFooter>
@@ -633,7 +633,7 @@ function HolidaysPanel({ holidays, onRefresh }: { holidays: Holiday[]; onRefresh
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2"><AlertTriangle size={20} className="text-[#ff3d3d]" /> Delete Holiday</DialogTitle></DialogHeader>
           <p className="text-[13px] text-[#8899aa]">Are you sure you want to delete this holiday? This action cannot be undone.</p>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button className="bg-[#ff3d3d] text-white hover:bg-[#e63535] font-semibold" disabled={submitting} onClick={handleDelete}>
               {submitting ? 'Deleting...' : 'Delete'}
             </Button>
@@ -834,7 +834,7 @@ function LeavePoliciesPanel({ policies, onRefresh }: { policies: LeavePolicy[]; 
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button className="bg-[#00d4ff] text-black hover:bg-[#00b8d4] font-semibold" disabled={submitting} onClick={() => handleSubmit('create')}>
               {submitting ? 'Creating...' : 'Create'}
             </Button>
@@ -904,8 +904,8 @@ function LeavePoliciesPanel({ policies, onRefresh }: { policies: LeavePolicy[]; 
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('edit')}>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={() => handleSubmit('edit')}>
               {submitting ? 'Updating...' : 'Update'}
             </Button>
           </DialogFooter>
@@ -918,7 +918,7 @@ function LeavePoliciesPanel({ policies, onRefresh }: { policies: LeavePolicy[]; 
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2"><AlertTriangle size={20} className="text-[#ff3d3d]" /> Delete Leave Policy</DialogTitle></DialogHeader>
           <p className="text-[13px] text-[#8899aa]">Are you sure you want to delete this leave policy? This action cannot be undone.</p>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button className="bg-[#ff3d3d] text-white hover:bg-[#e63535] font-semibold" disabled={submitting} onClick={handleDelete}>
               {submitting ? 'Deleting...' : 'Delete'}
             </Button>
@@ -1152,7 +1152,7 @@ function AttendanceRulesPanel({ rules, onRefresh }: { rules: AttendanceRule[]; o
             </FormField>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button className="bg-[#a78bfa] text-black hover:bg-[#9575cd] font-semibold" disabled={submitting} onClick={() => handleSubmit('create')}>
               {submitting ? 'Creating...' : 'Create'}
             </Button>
@@ -1228,8 +1228,8 @@ function AttendanceRulesPanel({ rules, onRefresh }: { rules: AttendanceRule[]; o
             </FormField>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('edit')}>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={() => handleSubmit('edit')}>
               {submitting ? 'Updating...' : 'Update'}
             </Button>
           </DialogFooter>
@@ -1242,7 +1242,7 @@ function AttendanceRulesPanel({ rules, onRefresh }: { rules: AttendanceRule[]; o
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2"><AlertTriangle size={20} className="text-[#ff3d3d]" /> Delete Attendance Rule</DialogTitle></DialogHeader>
           <p className="text-[13px] text-[#8899aa]">Are you sure you want to delete this attendance rule? This action cannot be undone.</p>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button className="bg-[#ff3d3d] text-white hover:bg-[#e63535] font-semibold" disabled={submitting} onClick={handleDelete}>
               {submitting ? 'Deleting...' : 'Delete'}
             </Button>
@@ -1401,7 +1401,7 @@ function GradesPanel({ grades, onRefresh }: { grades: Grade[]; onRefresh: () => 
             </FormField>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button className="bg-[#a78bfa] text-black hover:bg-[#9575cd] font-semibold" disabled={submitting} onClick={() => handleSubmit('create')}>
               {submitting ? 'Creating...' : 'Create'}
             </Button>
@@ -1438,8 +1438,8 @@ function GradesPanel({ grades, onRefresh }: { grades: Grade[]; onRefresh: () => 
             </FormField>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('edit')}>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={() => handleSubmit('edit')}>
               {submitting ? 'Updating...' : 'Update'}
             </Button>
           </DialogFooter>
@@ -1452,7 +1452,7 @@ function GradesPanel({ grades, onRefresh }: { grades: Grade[]; onRefresh: () => 
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2"><AlertTriangle size={20} className="text-[#ff3d3d]" /> Delete Salary Grade</DialogTitle></DialogHeader>
           <p className="text-[13px] text-[#8899aa]">Are you sure you want to delete this salary grade? This action cannot be undone and will affect employees assigned to this grade.</p>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button className="bg-[#ff3d3d] text-white hover:bg-[#e63535] font-semibold" disabled={submitting} onClick={handleDelete}>
               {submitting ? 'Deleting...' : 'Delete'}
             </Button>

@@ -925,7 +925,7 @@ export default function PayrollModule() {
               Cancel
             </Button>
             <Button 
-              className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" 
+              className="vc-btn-primary" 
               disabled={submitting} 
               onClick={handleSearchAndDownloadPayslips}
             >
@@ -1017,7 +1017,7 @@ export default function PayrollModule() {
               Cancel
             </Button>
             <Button 
-              className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" 
+              className="vc-btn-primary" 
               onClick={handleDownloadTemplate}
             >
               Download Template
@@ -1098,7 +1098,7 @@ export default function PayrollModule() {
               Cancel
             </Button>
             <Button 
-              className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" 
+              className="vc-btn-primary" 
               disabled={!templateFile || calculating}
               onClick={handleUploadAndCalculate}
             >
@@ -1136,6 +1136,7 @@ export default function PayrollModule() {
               </div>
 
               <div className="w-full max-h-[calc(100vh-280px)] overflow-y-auto">
+                <div className="overflow-x-auto">
                 <table className="w-full text-[11px] min-w-full">
                   <thead className="sticky top-0 bg-[#161c24] z-10">
                     <tr className="border-b border-[#252e3a]">
@@ -1179,6 +1180,7 @@ export default function PayrollModule() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}

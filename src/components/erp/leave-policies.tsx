@@ -458,7 +458,7 @@ export default function LeavePoliciesModule() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button className="bg-[#00d4ff] text-black hover:bg-[#00b8d4] font-semibold" disabled={submitting} onClick={() => handleSubmit('create')}>
               {submitting ? 'Creating...' : 'Create'}
             </Button>
@@ -634,8 +634,8 @@ export default function LeavePoliciesModule() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('edit')}>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={() => handleSubmit('edit')}>
               {submitting ? 'Updating...' : 'Update'}
             </Button>
           </DialogFooter>
@@ -648,7 +648,7 @@ export default function LeavePoliciesModule() {
           <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base flex items-center gap-2"><AlertTriangle size={20} className="text-[#ff3d3d]" /> Delete Leave Policy</DialogTitle></DialogHeader>
           <p className="text-[13px] text-[#8899aa]">Are you sure you want to delete this leave policy? This action cannot be undone.</p>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button className="bg-[#ff3d3d] text-white hover:bg-[#e63535] font-semibold" disabled={submitting} onClick={handleDelete}>
               {submitting ? 'Deleting...' : 'Delete'}
             </Button>

@@ -540,6 +540,7 @@ export default function PayrollCompliance() {
               </div>
 
               <div className="w-full max-h-[calc(100vh-280px)] overflow-y-auto">
+                <div className="overflow-x-auto">
                 <table className="w-full text-[11px] min-w-full">
                   <thead className="sticky top-0 bg-[#161c24] z-10">
                     <tr className="border-b border-[#252e3a]">
@@ -576,6 +577,7 @@ export default function PayrollCompliance() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}

@@ -501,7 +501,7 @@ export default function PayrollGenerateModule() {
               Cancel
             </Button>
             <Button
-              className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold"
+              className="vc-btn-primary"
               disabled={!templateFile || calculating}
               onClick={handleUploadAndCalculate}
             >

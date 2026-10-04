@@ -590,7 +590,7 @@ export default function MyLeave() {
             </div>
           </div>
           <DialogFooter>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" onClick={() => setBlockError(null)}>
+            <Button className="vc-btn-primary" onClick={() => setBlockError(null)}>
               OK
             </Button>
           </DialogFooter>

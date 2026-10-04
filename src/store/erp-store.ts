@@ -18,12 +18,12 @@ export const MODULE_TREE: Record<string, string[]> = {
   system: ['system', 'reports', 'settings', 'user-management', 'onboarding-approvals', 'requests', 'notice-board'],
   reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
   // Category groups (like HRMS / Organization)
-  'login-role': ['fin-user-management'],
+  'login-role': ['fin-user-management', 'notifications-ultra'],
   'master-setup': ['fin-sites', 'fin-jobs', 'fin-parties', 'procurement-vendors', 'employees', 'chart-of-accounts'],
   purchase: ['procurement-pr', 'procurement-rfq', 'rfq-comparison-matrix', 'procurement-po-register', 'po-approval-stepper', 'grn-3way-match', 'accounts-payable'],
   inventory: ['site-store', 'material-receipt', 'material-issue-wip', 'stock-ledger', 'scrap-entry'],
   'sales-billing': ['sales-orders', 'sales-quotations', 'ra-work-slider', 'sales-tax-invoices', 'receipt-entry'],
-  'finance-accounts': ['finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'bank-cash', 'fin-bank-reconciliation', 'journal-entries', 'taxation', 'fin-profit-loss', 'financial-reports', 'tally-sync', 'notifications-ultra'],
+  'finance-accounts': ['finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'bank-cash', 'fin-bank-reconciliation', 'journal-entries', 'taxation', 'fin-profit-loss', 'financial-reports', 'tally-sync'],
   'petty-cash': ['fin-petty-cash-custodian', 'fin-petty-cash', 'fin-petty-cash-approval-queue', 'fin-petty-cash-replenishment'],
   mis: ['report-drilldown', 'po-cost-tree', 'customer-profitability', 'budget'],
 }
@@ -228,6 +228,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
   // Category modules (like HRMS / Organization)
   'login-role': [
     { id: 'fin-user-management', icon: 'UserCog', label: 'Finance Access Control', section: 'Access Control' },
+    { id: 'notifications-ultra', icon: 'Bell', label: 'Notifications Ultra', section: 'Access Control' },
   ],
   'master-setup': [
     { id: 'fin-sites', icon: 'MapPin', label: 'Sites', section: 'Masters' },
@@ -281,7 +282,6 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'bank-cash', icon: 'Landmark', label: 'Bank & Cash', section: 'Bank & Cash' },
     { id: 'fin-bank-reconciliation', icon: 'Scale', label: 'Bank Reconciliation', section: 'Bank & Cash' },
     { id: 'tally-sync', icon: 'Plug', label: 'Tally Sync', section: 'Tally Integration' },
-    { id: 'notifications-ultra', icon: 'Bell', label: 'Notifications Ultra', section: 'Tally Integration' },
 
     { id: 'fin-expense-claims', icon: 'Wallet', label: 'Expense Claims', section: 'Expense Management' },
     { id: 'fin-site-expenses', icon: 'FileSpreadsheet', label: 'Site Expenses', section: 'Expense Management' },
@@ -447,7 +447,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'fin-work-orders': { title: 'Work Orders (Orders in Hand)', breadcrumb: 'Finance › Work Orders' },
   'fin-bank-reconciliation': { title: 'Bank Reconciliation', breadcrumb: 'Finance › Bank Reconciliation' },
   'tally-sync': { title: 'Tally Sync', breadcrumb: 'Finance › Tally Sync (CA-Grade)' },
-  'notifications-ultra': { title: 'Notifications Ultra', breadcrumb: 'Finance › Notifications Ultra' },
+  'notifications-ultra': { title: 'Notifications Ultra', breadcrumb: 'Login & Role › Notifications Ultra' },
   'fin-profit-loss': { title: 'Profit & Loss', breadcrumb: 'Finance › Profit & Loss Account' },
   'fin-client-follow-up': { title: 'Client Follow Up', breadcrumb: 'Finance › Client Follow Up' },
   'receipt-entry': { title: 'Receipt Entry', breadcrumb: 'Sales › Receipts' },

@@ -156,7 +156,7 @@ export default function OffboardingModule() {
           )}
           <button onClick={fetchData} className="p-1.5 text-[#5a6878] hover:text-[#e2e8f0]"><RefreshCw size={14} /></button>
           {currentUser.isAdmin && (
-            <button onClick={() => { setShowForm(true); setOffboardFieldErrors({}); }} className="flex items-center gap-1.5 px-3 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a]">
+            <button onClick={() => { setShowForm(true); setOffboardFieldErrors({}); }} className="vc-btn-primary flex items-center gap-1.5">
               <Plus size={13} /> New Resignation
             </button>
           )}
@@ -362,7 +362,7 @@ export default function OffboardingModule() {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] border border-[#2e3a48]" onClick={() => { setShowForm(false); setOffboardFieldErrors({}); }}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={submit}>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={submit}>
               {submitting ? 'Submitting...' : 'Submit'}
             </Button>
           </DialogFooter>

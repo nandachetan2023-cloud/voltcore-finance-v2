@@ -148,8 +148,8 @@ export default function GlobalOtSettingsModule() {
             <p className="text-[11px] text-[#5a6878]">Working Days is the earn-wages divisor for Fixed employees. The OT divisors set the earn-wages and OT hourly-rate base for Non-Fixed employees of that OT type (e.g. 26).</p>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48]" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={handleSave}>Save</Button>
+            <Button variant="ghost" className="vc-btn-ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={handleSave}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

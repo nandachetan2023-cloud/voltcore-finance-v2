@@ -655,6 +655,7 @@ export default function EmployeeAnalytics() {
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Recent Attendance ({new Date(selectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})</span>
         </div>
         <div className="max-h-[240px] overflow-y-auto">
+          <div className="overflow-x-auto">
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 bg-[#161c24]">
               <tr className="text-left text-[#5a6878] border-b border-[#252e3a]">
@@ -701,6 +702,7 @@ export default function EmployeeAnalytics() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>
