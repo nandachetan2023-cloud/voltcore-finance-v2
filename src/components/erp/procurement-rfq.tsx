@@ -513,6 +513,7 @@ export default function ProcurementRFQ() {
                   {/* Bid Entry Table */}
                   {activeVendorTab && (
                     <div className="border border-[#252e3a] rounded-lg overflow-hidden">
+                      <div className="overflow-x-auto">
                       <table className="w-full text-[11px]">
                         <thead><tr className="bg-[#0a0d12]">
                           <th className="text-left py-2 px-3 text-[#5a6878] text-[9px] uppercase font-semibold w-2/5">Line Item</th>
@@ -550,6 +551,7 @@ export default function ProcurementRFQ() {
                           })}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   )}
 

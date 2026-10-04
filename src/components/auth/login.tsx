@@ -216,7 +216,7 @@ export default function Login({ onLogin }: LoginProps) {
             value={email}
             onChange={e => { setEmail(e.target.value); setEmailError(''); setLoginError(''); }}
             onBlur={() => email && validateEmail(email)}
-            placeholder="admin@voltcore.com"
+            placeholder="admin@voltcore.in"
             className={`w-full px-4 py-3 bg-[#0d1117] border rounded-lg text-[#e2e8f0] placeholder:text-[#5a6878] focus:outline-none focus:ring-2 transition-all ${emailError ? 'border-red-500/50 focus:ring-red-500/50' : 'border-[#2e3a48] focus:ring-[#f5a623] focus:border-transparent'}`}
             disabled={loading}
           />

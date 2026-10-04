@@ -53,13 +53,23 @@ export async function authenticateUser(email: string, password: string): Promise
     console.error('SuperAdmin auth error:', e)
   }
 
-  // 2. Check tenant users
+  // 2. Check tenant users - select only needed fields to avoid onboardingStatus column missing in stale DB
   try {
     const tenantUser = await superadminDb.tenantUser.findFirst({
       where: { email, isActive: true },
-      include: {
+      select: {
+        id: true,
+        tenantId: true,
+        name: true,
+        email: true,
+        password: true,
+        phone: true,
+        allowedModules: true,
+        orgRoleId: true,
+        employeeId: true,
+        createdBySuperadmin: true,
+        isActive: true,
         tenant: true,
-        // Include the assigned OrgRole to get its moduleAccess
       },
     })
 

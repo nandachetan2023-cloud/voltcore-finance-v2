@@ -1044,7 +1044,7 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
             {/* Show "Import" when all matched or in mapping UI */}
             {validation && (validation.summary.canProceed || showMappingUI) && !result && (
               <Button
-                className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold"
+                className="vc-btn-primary"
                 disabled={uploading}
                 onClick={handleImport}
               >
@@ -1277,7 +1277,7 @@ export default function SalaryNonComplianceBulkImport({ onImportComplete }: { on
               Cancel
             </Button>
             <Button
-              className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold"
+              className="vc-btn-primary"
               disabled={uploading || duplicateActions.size === 0}
               onClick={handleProceedWithDuplicates}
             >

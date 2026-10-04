@@ -138,10 +138,10 @@ async function main() {
   // 5. Restore known assignments (the legacy FinApprovalRole table was migrated
   // once when the model existed; these demo rows are restored deterministically).
   const demoAssignments: Array<{ email: string; name: string | null; role: string; siteCode: string | null }> = [
-    { email: 'finance_admin@voltcore.com', name: null, role: 'FINANCE_MGR', siteCode: null },
-    { email: 'finance_admin@voltcore.com', name: null, role: 'SITE_MGR', siteCode: 'SITE-004' },
+    { email: 'finance_admin@voltcore.in', name: null, role: 'FINANCE_MGR', siteCode: null },
+    { email: 'finance_admin@voltcore.in', name: null, role: 'SITE_MGR', siteCode: 'SITE-004' },
     { email: 'custodian@test.com', name: 'Test Custodian', role: 'CUSTODIAN', siteCode: 'SITE-004' },
-    { email: 'sitemanager@voltcore.com', name: 'Ankit Verma', role: 'SITE_MGR', siteCode: 'SITE-004' },
+    { email: 'sitemanager@voltcore.in', name: 'Ankit Verma', role: 'SITE_MGR', siteCode: 'SITE-004' },
   ]
   for (const a of demoAssignments) {
     const roleId = roleIds[a.role]

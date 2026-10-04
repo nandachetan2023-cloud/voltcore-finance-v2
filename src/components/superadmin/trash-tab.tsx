@@ -160,6 +160,7 @@ export default function TrashTab({ tenants }: { tenants: Tenant[] }) {
                 <p className="text-[12px] text-[#5a6878]">No deleted items</p>
               </div>
             ) : (
+              <div className="overflow-x-auto">
               <table className="w-full text-[12px]">
                 <thead>
                   <tr className="border-b border-[#252e3a] bg-[#141920]">
@@ -208,6 +209,7 @@ export default function TrashTab({ tenants }: { tenants: Tenant[] }) {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </>

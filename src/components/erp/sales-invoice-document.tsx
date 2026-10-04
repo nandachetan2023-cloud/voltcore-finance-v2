@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { useCompanyProfile } from '@/hooks/use-company-profile';
 
@@ -77,6 +79,17 @@ function fmt(n: number | undefined | null): string {
   return (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// A line's total is the stored value, or taxable value + its own taxes when the
+// stored total is missing (older rows were saved without it).
+function lineTotal(it: InvoiceItem): number {
+  const stored = Number(it.total) || 0;
+  if (stored) return stored;
+  return (Number(it.taxableValue) || 0)
+    + (Number(it.cgstAmount) || 0)
+    + (Number(it.sgstAmount) || 0)
+    + (Number(it.igstAmount) || 0);
+}
+
 function fmtDate(d: string | null | undefined): string {
   if (!d) return '—';
   try {
@@ -86,6 +99,19 @@ function fmtDate(d: string | null | undefined): string {
 }
 
 export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: SalesInvoiceData; onClose: () => void }) {
+  // The module content is rendered inside a wrapper with `relative z-10`, which
+  // is its own stacking context BELOW the app header (z-30). An overlay rendered
+  // in place therefore painted under the header, hiding the Print/Close buttons
+  // pinned at top-4 right-4. Portalling to <body> escapes that context so the
+  // sheet and its toolbar sit above the whole app. Esc closes it too.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const handlePrint = () => window.print();
   const profile = useCompanyProfile();
   const SUPPLIER = {
@@ -116,8 +142,10 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
   // pad to a minimum number of rows for an authentic look
   const padRows = Math.max(0, 4 - items.length);
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center overflow-y-auto py-8 print:bg-white print:p-0 print:block print:overflow-visible">
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[200] bg-black/70 flex items-start justify-center overflow-y-auto py-8 print:bg-white print:p-0 print:block print:overflow-visible">
       <style>{`
         /* Keep everything inside the sheet on screen and in print */
         #sales-invoice-printable, #sales-invoice-printable * { box-sizing: border-box; }
@@ -143,8 +171,8 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
         }
       `}</style>
 
-      <div className="no-print fixed top-4 right-4 z-50 flex items-center gap-2">
-        <button onClick={handlePrint} className="px-4 py-2 rounded-lg bg-[#f5a623] text-[#0a0d12] text-[12px] font-semibold hover:bg-[#e8991a] flex items-center gap-1.5 shadow-lg">
+      <div className="no-print fixed top-4 right-4 z-[210] flex items-center gap-2">
+        <button onClick={handlePrint} className="vc-btn-primary flex items-center gap-1.5 shadow-lg">
           <Printer size={14} /> Print / Save PDF
         </button>
         <button onClick={onClose} className="px-3 py-2 rounded-lg bg-[#252e3a] text-[#e2e8f0] text-[12px] font-semibold hover:bg-[#2a3545] flex items-center gap-1.5 shadow-lg">
@@ -153,7 +181,18 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
       </div>
 
       {/* ══════════ TAX INVOICE ══════════ */}
-      <div id="sales-invoice-printable" className="bg-white text-[#1a1a1a] max-w-full shadow-2xl" style={{ fontFamily: "Arial, sans-serif", fontSize: '10px', width: 'calc(7.7in + 400px)' }}>
+      <div
+        id="sales-invoice-printable"
+        className="bg-white text-[#1a1a1a] max-w-full shadow-2xl"
+        style={{
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '10px',
+          // The sheet is a fixed 1139.2px wide on screen (max-w-full still caps
+          // it on narrow viewports); print CSS overrides this to 100%.
+          width: 'calc(1139.2px)',
+          marginTop: '36px',
+        }}
+      >
         <div className="border-2 border-[#1a1a1a]">
 
           <div className="text-center border-b-2 border-[#1a1a1a] py-1.5 bg-[#f5a623]/15">
@@ -200,6 +239,7 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
           </div>
 
           {/* Items table */}
+          <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-[#f5a623]/15 text-[8px] uppercase">
@@ -225,7 +265,8 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
                 <tr key={idx} className="text-[9px]">
                   <td className="border border-[#1a1a1a] p-1.5 align-top">{it.description}</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{it.hsnSac || '—'}</td>
-<td className="border border-[#1a1a1a] p-1.5 text-center align-top">{(Number(it.quantity) || 0)}</td>
+                  <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{(Number(it.quantity) || 0)}</td>
+                  <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{it.uom || '—'}</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(it.rate)}</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(it.taxableValue)}</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{(Number(it.cgstPercent) || 0)}%</td>
@@ -234,7 +275,7 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
                   <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(it.sgstAmount)}</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{(Number(it.igstPercent) || 0)}%</td>
                   <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(it.igstAmount)}</td>
-                  <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(it.total)}</td>
+                  <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(lineTotal(it))}</td>
                 </tr>
               ))}
               {Array.from({ length: padRows }).map((_, i) => (
@@ -256,6 +297,7 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
               </tr>
             </tbody>
           </table>
+          </div>
 
           {/* Totals */}
           <div className="grid grid-cols-[1fr_auto] border-b border-[#1a1a1a]">
@@ -294,6 +336,7 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

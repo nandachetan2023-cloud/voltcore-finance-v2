@@ -46,7 +46,7 @@ export default function ReportNotices() {
   return (
     <ReportShell title="Notice Read Rate Report" icon={Bell} color="#f5a623" onDownload={handleDownload} loading={loading}>
       <div className="flex items-center gap-3">
-        <button onClick={fetch} disabled={loading} className="flex items-center gap-1.5 px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50">
+        <button onClick={fetch} disabled={loading} className="vc-btn-primary flex items-center gap-1.5">
           {loading ? <div className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : <RefreshCw size={13} />}
           {loaded ? 'Refresh' : 'Generate Report'}
         </button>

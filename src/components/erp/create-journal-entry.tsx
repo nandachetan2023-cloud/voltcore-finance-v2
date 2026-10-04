@@ -715,6 +715,7 @@ export default function CreateJournalEntry() {
             ) : filtered.length === 0 ? (
               <div className="py-10 text-center text-[#5a6878] text-[11px]">No entries found</div>
             ) : (
+              <div className="overflow-x-auto">
               <table className="w-full text-[10px]">
                 <thead className="sticky top-0 z-10 bg-[#0f1318]">
                   <tr>
@@ -758,6 +759,7 @@ export default function CreateJournalEntry() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
 

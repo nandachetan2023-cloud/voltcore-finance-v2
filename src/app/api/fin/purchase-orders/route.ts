@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
+import { nextSeriesCode, withCodeRetry, isBlank } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,13 +25,10 @@ export async function POST(request: NextRequest) {
     const missing = ['siteId', 'jobCode', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
-    if (!body.poNo) {
-      const year = new Date().getFullYear()
-      const count = (await pdb.finPurchaseOrder.count()) + 1
-      body.poNo = `PO/${year}/${String(count).padStart(3, '0')}`
-    }
     const { actor, ...createData } = body
-    const record = await pdb.finPurchaseOrder.create({ data: createData })
+    const record = isBlank(createData.poNo)
+      ? await withCodeRetry(() => nextSeriesCode(pdb, 'po'), (poNo) => pdb.finPurchaseOrder.create({ data: { ...createData, poNo } }))
+      : await pdb.finPurchaseOrder.create({ data: createData })
     const site = await pdb.finSite.findUnique({ where: { id: Number(record.siteId) } }).catch(() => null)
     notifyFinance(pdb, {
       entityType: 'FinPurchaseOrder',

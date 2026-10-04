@@ -89,7 +89,7 @@ function StatCardSkeleton() {
   return (
     <div className="vc-stat-card">
       <div className="flex items-center justify-between mb-3">
-        <Skeleton className="h-8 w-8 rounded-lg bg-[#1e252e]" />
+        <Skeleton className="h-12 w-12 rounded-xl bg-[#1e252e]" />
         <Skeleton className="h-4 w-16 rounded bg-[#1e252e]" />
       </div>
       <Skeleton className="h-7 w-20 mb-1 rounded bg-[#1e252e]" />
@@ -182,10 +182,10 @@ function StatCard({
       <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: color, opacity: 0.7 }} />
       <div className="flex items-center justify-between mb-3">
         <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center"
+          className="w-12 h-12 rounded-xl flex items-center justify-center"
           style={{ background: `${color}1a` }}
         >
-          <Icon size={18} style={{ color }} />
+          <Icon size={24} style={{ color }} />
         </div>
         {trend && (
           <span

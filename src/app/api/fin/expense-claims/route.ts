@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
+import { nextSeriesCode, withCodeRetry, isBlank } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,14 +32,33 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const missing = ['siteId', 'jobCode', 'poId', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
-    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
+    // Only the site is genuinely required. A claim need not be tied to a PO, and
+    // the costing fields are derived from the site when the caller omits them —
+    // demanding all six made every caller that passed `poId: null` fail with a
+    // "Missing required fields" 400.
+    if (body.siteId === undefined || body.siteId === null || body.siteId === '') {
+      return NextResponse.json({ success: false, error: 'Missing required fields: siteId' }, { status: 400 })
+    }
     const { items, actor, ...data } = body
     const pdb = getDbForRequest(request)
-    const record = await pdb.finExpenseClaim.create({
-      data: { ...data, items: items?.length ? { create: items } : undefined },
-    })
-    const site = await pdb.finSite.findUnique({ where: { id: Number(record.siteId) } }).catch(() => null)
+
+    const site = await pdb.finSite.findUnique({ where: { id: Number(data.siteId) } }).catch(() => null)
+    if (!data.costCenter) data.costCenter = site?.siteCode ? `CC-${site.siteCode}` : null
+    if (!data.department) data.department = 'Site Operations'
+    if (!data.projectManager) data.projectManager = site?.responsiblePerson || null
+    if (!data.submittedBy) data.submittedBy = request.cookies.get('erp_user_email')?.value || actor || 'unknown'
+    // `date` is @db.Date — a plain 'YYYY-MM-DD' string from a form field is not a
+    // valid Prisma DateTime and throws, so normalise whatever the caller sent.
+    data.date = data.date ? new Date(data.date) : new Date()
+    if (isNaN(data.date.getTime())) return NextResponse.json({ success: false, error: 'Invalid date' }, { status: 400 })
+    if (data.siteId !== undefined) data.siteId = Number(data.siteId)
+    if (data.poId !== undefined && data.poId !== null) data.poId = Number(data.poId)
+    if (data.totalAmount !== undefined) data.totalAmount = Number(data.totalAmount) || 0
+
+    const build = (claimNo: string) => ({ ...data, claimNo, items: items?.length ? { create: items } : undefined })
+    const record = isBlank(data.claimNo)
+      ? await withCodeRetry(() => nextSeriesCode(pdb, 'claim'), (claimNo) => pdb.finExpenseClaim.create({ data: build(claimNo) }))
+      : await pdb.finExpenseClaim.create({ data: build(String(data.claimNo)) })
     notifyFinance(pdb, {
       entityType: 'FinExpenseClaim',
       entityId: String(record.id),
@@ -66,13 +86,20 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const missing = ['siteId', 'jobCode', 'poId', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
-    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
-    const { id, items, ...data } = body
+    // Partial updates are allowed — approving a claim only sends {id, status},
+    // and requiring the full costing payload here rejected exactly that.
+    const { id, items, actor: _actor, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
+    if (data.date) {
+      const d = new Date(data.date)
+      if (isNaN(d.getTime())) return NextResponse.json({ success: false, error: 'Invalid date' }, { status: 400 })
+      data.date = d
+    }
+    if (data.siteId !== undefined) data.siteId = Number(data.siteId)
+    if (data.totalAmount !== undefined) data.totalAmount = Number(data.totalAmount) || 0
     const record = await pdb.finExpenseClaim.update({
-      where: { id },
+      where: { id: Number(id) },
       data: {
         ...data,
         items: items?.length

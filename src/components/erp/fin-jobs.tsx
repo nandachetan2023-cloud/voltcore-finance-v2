@@ -185,8 +185,8 @@ export default function FinJobs() {
         <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-lg" onKeyDown={(e) => { if (e.key === 'Enter' && !(e.target as HTMLElement).closest('textarea')) { e.preventDefault(); handleSubmit(); } }}>
           <DialogHeader><DialogTitle className="text-[#f5a623]">{editTarget ? 'Edit Job' : 'New Job'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <FormField label="Job Code" hint="Leave blank to auto-generate JOB-YYYY-NNN">
-              <input autoFocus value={form.jobCode} onChange={e => setField('jobCode', e.target.value)} className="vc-input font-mono" placeholder="JOB-2026-006" />
+            <FormField label="Job Code" hint="Generated automatically when you save">
+              <input value={form.jobCode} readOnly className="vc-input font-mono opacity-60" placeholder="Auto-generated on save" />
             </FormField>
             <FormField label="Site" required error={errors.siteId}>
               <SearchableSelect value={form.siteId} onChange={v => setField('siteId', v)} options={sites.map(s => ({ value: String(s.id), label: s.name, sublabel: s.siteCode }))} placeholder="— Select site —" />

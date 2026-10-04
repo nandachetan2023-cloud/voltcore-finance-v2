@@ -182,6 +182,7 @@ export default function TallySync() {
         <div className="vc-panel">
           <div className="vc-panel-header"><History size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Sync History (FinTallySync)</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{history.length}</span></div>
           <div className="max-h-[400px] overflow-y-auto">
+            <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
               <thead className="sticky top-0 bg-[#0f1318]"><tr className="text-[#5a6878]"><th className="py-2 px-3 text-left">Time</th><th className="px-3">Company/FY</th><th className="px-3">Type/Trigger</th><th className="px-3">Rows</th><th className="px-3">Status</th><th className="px-3">Actor</th></tr></thead>
               <tbody className="divide-y divide-[#1a2028]">
@@ -198,6 +199,7 @@ export default function TallySync() {
                 {history.length===0 && <tr><td colSpan={6} className="py-8 text-center text-[#5a6878]">No syncs yet — push from Export tab</td></tr>}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}
@@ -216,6 +218,7 @@ export default function TallySync() {
                 <div className="p-2 rounded bg-[#0a0d12] border border-[#252e3a]"><div className="text-[#5a6878]">Diffs</div><div className={`font-bold ${reconcile.summary?.diffCount===0?'text-[#00e676]':'text-[#ff3d3d]'}`}>{reconcile.summary?.diffCount||0} diffs {reconcile.summary?.matched?'• Matched':''}</div></div>
               </div>
               <div className="max-h-[350px] overflow-y-auto border border-[#252e3a] rounded">
+                <div className="overflow-x-auto">
                 <table className="w-full text-[11px]">
                   <thead className="sticky top-0 bg-[#0f1318]"><tr className="text-[#5a6878]"><th className="py-2 px-3 text-left">Account</th><th className="px-3 text-right">ERP</th><th className="px-3 text-right">Tally</th><th className="px-3 text-right">Diff</th><th className="px-3">Status</th></tr></thead>
                   <tbody className="divide-y divide-[#1a2028]">
@@ -231,6 +234,7 @@ export default function TallySync() {
                     {reconcile.diffs.length===0 && <tr><td colSpan={5} className="py-6 text-center text-[#00e676]">✓ All balances matched — TB is clean</td></tr>}
                   </tbody>
                 </table>
+                </div>
               </div>
               <div className="text-[10px] text-[#5a6878]">FY {reconcile.summary?.finYear || finYear} • Company {companyName} • Reconcile blocks FY close if diffs {'>'} 0</div>
             </>

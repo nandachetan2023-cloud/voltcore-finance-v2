@@ -826,7 +826,7 @@ export default function ShiftRosterModule() {
           {shiftFormDialog()}
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => { setCreateShiftOpen(false); setShiftFieldErrors({}); }}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={handleCreateShift}>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={handleCreateShift}>
               {submitting ? 'Creating...' : 'Create Shift'}
             </Button>
           </DialogFooter>
@@ -843,7 +843,7 @@ export default function ShiftRosterModule() {
           {shiftFormDialog()}
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => { setEditShiftOpen(false); setShiftFieldErrors({}); }}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={handleUpdateShift}>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={handleUpdateShift}>
               {submitting ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
@@ -1058,7 +1058,7 @@ export default function ShiftRosterModule() {
               Cancel
             </Button>
             <Button 
-              className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" 
+              className="vc-btn-primary" 
               disabled={submitting || selectedEmployees.length === 0 || bulkShiftIds.length === 0} 
               onClick={handleBulkAssign}
             >

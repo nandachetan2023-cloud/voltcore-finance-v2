@@ -1,11 +1,11 @@
 'use client';
 
-import { useERPStore, MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed, getModuleParents } from '@/store/erp-store';
+import { useERPStore, MAIN_MODULES, HIDDEN_MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed, getModuleParents } from '@/store/erp-store';
 import { resolveNotificationTarget as resolveTarget, TYPE_COLOR } from '@/lib/notification-routing';
 import React, { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
 import { RoleScopeIndicator } from '@/components/erp/_role-scope-indicator';
-import { FinanceHelpChat } from '@/components/help/finance-help-chat';
+import { ModuleHelpChat } from '@/components/help/module-help-chat';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useTenantBranding } from '@/hooks/use-tenant-branding';
 import {
@@ -97,7 +97,8 @@ const ModuleRendererWrapper = React.memo(function ModuleRendererWrapper({ module
 function ModuleGrid() {
   const { setActiveModule, userRole, allowedModules } = useERPStore();
   const visibleModules = MAIN_MODULES.filter(mod =>
-    allowedModules === 'all' || isModuleAllowed(mod.id, allowedModules)
+    !HIDDEN_MAIN_MODULES.includes(mod.id) &&
+    (allowedModules === 'all' || isModuleAllowed(mod.id, allowedModules))
   );
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 p-6">
@@ -271,7 +272,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
               <div className="text-[14px] font-bold text-[#e2e8f0] tracking-tight truncate">
                 {branding?.name?.toUpperCase() || 'VOLTCORE'}
               </div>
-              <div className="text-[9px] text-[#5a6878] tracking-[2px] uppercase mt-0.5">ERP · HRMS</div>
+              <div className="text-[9px] text-[#5a6878] tracking-[2px] uppercase mt-0.5">ERP</div>
             </div>
           </button>
           <button className="ml-auto lg:hidden text-[#5a6878] hover:text-[#e2e8f0] shrink-0" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
@@ -685,8 +686,8 @@ export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
         </main>
       </div>
 
-      {/* Finance Help — floating assistant, renders only on finance modules */}
-      <FinanceHelpChat />
+      {/* Module Help — floating assistant; follows the active module (none for HRMS) */}
+      <ModuleHelpChat />
     </div>
   );
 }

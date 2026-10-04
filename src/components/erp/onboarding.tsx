@@ -198,7 +198,7 @@ export default function OnboardingModule() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={fetchData} className="p-1.5 text-[#5a6878] hover:text-[#e2e8f0]"><RefreshCw size={14} /></button>
-          <button onClick={() => { setShowCreate(true); setChecklistFieldErrors({}); }} className="flex items-center gap-1.5 px-3 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a]"><Plus size={13} /> Start Onboarding</button>
+          <button onClick={() => { setShowCreate(true); setChecklistFieldErrors({}); }} className="vc-btn-primary flex items-center gap-1.5"><Plus size={13} /> Start Onboarding</button>
         </div>
       </div>
 
@@ -244,7 +244,7 @@ export default function OnboardingModule() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={createChecklist} disabled={creating} className="px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50">{creating ? 'Creating...' : 'Create Checklist'}</button>
+            <button onClick={createChecklist} disabled={creating} className="vc-btn-primary">{creating ? 'Creating...' : 'Create Checklist'}</button>
             <button onClick={() => { setShowCreate(false); setChecklistFieldErrors({}); }} className="px-4 py-2 text-[12px] text-[#8899aa] border border-[#252e3a] rounded-lg hover:border-[#f5a623]">Cancel</button>
           </div>
         </div>

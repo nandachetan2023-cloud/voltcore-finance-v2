@@ -7,7 +7,9 @@ export const MODULE_TREE: Record<string, string[]> = {
   organization: ['organization', 'departments', 'designations', 'payroll-sites', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents', 'roles-access'],
   hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
   procurement: ['procurement', 'purchases', 'expenses', 'procurement-pr', 'procurement-rfq', 'procurement-po-register', 'procurement-vendors', 'procurement-material-tracking', 'procurement-subcontracts', 'po-approval-stepper', 'rfq-comparison-matrix', 'grn-3way-match'],
-  finance: ['finance', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
+  // Legacy alias: the old "Finance" menu was merged into "Finance & Accounts".
+  // Kept so accounts whose saved grants still say 'finance' keep their access.
+  finance: ['finance', 'finance-accounts', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'fin-bank-reconciliation', 'taxation', 'budget', 'fin-profit-loss', 'financial-reports', 'tally-sync', 'notifications-ultra'],
   sales: ['sales', 'sales-tax-invoices', 'sales-orders', 'sales-quotations', 'fin-credit-notes', 'sales-opportunity-pipeline', 'sales-tender-register', 'sales-revenue-forecast', 'sales-client-accounts'],
   projects: ['projects', 'project-list', 'project-hierarchy', 'budget', 'boq-entry', 'job-progress', 'sites', 'scrap-entry'],
   assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
@@ -16,12 +18,12 @@ export const MODULE_TREE: Record<string, string[]> = {
   system: ['system', 'reports', 'settings', 'user-management', 'onboarding-approvals', 'requests', 'notice-board'],
   reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
   // Category groups (like HRMS / Organization)
-  'login-role': ['fin-user-management'],
+  'login-role': ['fin-user-management', 'notifications-ultra'],
   'master-setup': ['fin-sites', 'fin-jobs', 'fin-parties', 'procurement-vendors', 'employees', 'chart-of-accounts'],
   purchase: ['procurement-pr', 'procurement-rfq', 'rfq-comparison-matrix', 'procurement-po-register', 'po-approval-stepper', 'grn-3way-match', 'accounts-payable'],
   inventory: ['site-store', 'material-receipt', 'material-issue-wip', 'stock-ledger', 'scrap-entry'],
   'sales-billing': ['sales-orders', 'sales-quotations', 'ra-work-slider', 'sales-tax-invoices', 'receipt-entry'],
-  'finance-accounts': ['finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'bank-cash', 'fin-bank-reconciliation', 'journal-entries', 'taxation', 'fin-profit-loss', 'financial-reports', 'tally-sync', 'notifications-ultra'],
+  'finance-accounts': ['finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'bank-cash', 'fin-bank-reconciliation', 'journal-entries', 'taxation', 'fin-profit-loss', 'financial-reports', 'tally-sync'],
   'petty-cash': ['fin-petty-cash-custodian', 'fin-petty-cash', 'fin-petty-cash-approval-queue', 'fin-petty-cash-replenishment'],
   mis: ['report-drilldown', 'po-cost-tree', 'customer-profitability', 'budget'],
 }
@@ -166,7 +168,6 @@ export const MAIN_MODULES: NavItem[] = [
   { id: 'organization', icon: 'Building2', label: 'Organization' },
   { id: 'hrms', icon: 'Users', label: 'HRMS' },
   { id: 'procurement', icon: 'ShoppingCart', label: 'Procurement' },
-  { id: 'finance', icon: 'CreditCard', label: 'Finance' },
   { id: 'login-role', icon: 'LogIn', label: 'Login & Role' },
   { id: 'master-setup', icon: 'Layers', label: 'Master Setup' },
   { id: 'purchase', icon: 'ShoppingCart', label: 'Purchase' },
@@ -224,20 +225,10 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'procurement-material-tracking', icon: 'Package', label: 'Material Tracking', section: 'Procurement' },
     { id: 'procurement-subcontracts', icon: 'FileText', label: 'Subcontract Register', section: 'Procurement' },
   ],
-  finance: [
-    { id: 'finance-dashboard', icon: 'BarChart3', label: 'Dashboard', section: 'Finance' },
-    { id: 'ledger', icon: 'BookOpen', label: 'Ledger Management', section: 'Finance' },
-    { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Accounts Payable', section: 'Finance' },
-    { id: 'accounts-receivable', icon: 'ArrowUpCircle', label: 'Accounts Receivable', section: 'Finance' },
-    { id: 'journal-entries', icon: 'FileEdit', label: 'Journal Entries', section: 'Finance' },
-    { id: 'bank-cash', icon: 'Landmark', label: 'Bank & Cash', section: 'Finance' },
-    { id: 'taxation', icon: 'Scale', label: 'Taxation & Compliance', section: 'Finance' },
-    { id: 'budget', icon: 'Target', label: 'Budget & Forecasting', section: 'Finance' },
-    { id: 'financial-reports', icon: 'PieChart', label: 'Financial Reports', section: 'Finance' },
-  ],
   // Category modules (like HRMS / Organization)
   'login-role': [
     { id: 'fin-user-management', icon: 'UserCog', label: 'Finance Access Control', section: 'Access Control' },
+    { id: 'notifications-ultra', icon: 'Bell', label: 'Notifications Ultra', section: 'Access Control' },
   ],
   'master-setup': [
     { id: 'fin-sites', icon: 'MapPin', label: 'Sites', section: 'Masters' },
@@ -291,7 +282,6 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'bank-cash', icon: 'Landmark', label: 'Bank & Cash', section: 'Bank & Cash' },
     { id: 'fin-bank-reconciliation', icon: 'Scale', label: 'Bank Reconciliation', section: 'Bank & Cash' },
     { id: 'tally-sync', icon: 'Plug', label: 'Tally Sync', section: 'Tally Integration' },
-    { id: 'notifications-ultra', icon: 'Bell', label: 'Notifications Ultra', section: 'Tally Integration' },
 
     { id: 'fin-expense-claims', icon: 'Wallet', label: 'Expense Claims', section: 'Expense Management' },
     { id: 'fin-site-expenses', icon: 'FileSpreadsheet', label: 'Site Expenses', section: 'Expense Management' },
@@ -457,7 +447,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'fin-work-orders': { title: 'Work Orders (Orders in Hand)', breadcrumb: 'Finance › Work Orders' },
   'fin-bank-reconciliation': { title: 'Bank Reconciliation', breadcrumb: 'Finance › Bank Reconciliation' },
   'tally-sync': { title: 'Tally Sync', breadcrumb: 'Finance › Tally Sync (CA-Grade)' },
-  'notifications-ultra': { title: 'Notifications Ultra', breadcrumb: 'Finance › Notifications Ultra' },
+  'notifications-ultra': { title: 'Notifications Ultra', breadcrumb: 'Login & Role › Notifications Ultra' },
   'fin-profit-loss': { title: 'Profit & Loss', breadcrumb: 'Finance › Profit & Loss Account' },
   'fin-client-follow-up': { title: 'Client Follow Up', breadcrumb: 'Finance › Client Follow Up' },
   'receipt-entry': { title: 'Receipt Entry', breadcrumb: 'Sales › Receipts' },
@@ -524,7 +514,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
 };
 
 // Modules with sub-modules (clicking them shows sub-nav instead of a page)
-export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'finance', 'sales', 'projects', 'assets', 'system', 'self-service', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'finance-accounts', 'petty-cash', 'mis'];
+export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'sales', 'projects', 'assets', 'system', 'self-service', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'finance-accounts', 'petty-cash', 'mis'];
 
 // Main modules that have their own page (no sub-nav)
 export const PAGE_MODULES = ['dashboard', 'notifications'];
@@ -548,7 +538,12 @@ export function getModuleParents(moduleId: string): string[] {
 }
 
 // Expandable modules that show their own sub-module grid (instead of auto-redirecting to first child)
-export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance', 'finance-accounts', 'sales', 'procurement', 'projects', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'petty-cash', 'mis'];
+export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance-accounts', 'sales', 'procurement', 'projects', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'petty-cash', 'mis'];
+
+// Main modules kept out of the dashboard tile grid. They stay routable (and
+// keep their sub-modules) so existing links and grants still work — they just
+// no longer get a top-level tile.
+export const HIDDEN_MAIN_MODULES: string[] = ['hrms'];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};
@@ -601,7 +596,11 @@ export const useERPStore = create<ERPStore>((set) => ({
       return s; // No state change — stay where they are
     }
 
-    const parent = resolveParent(module);
+    // A screen can live under several menus (e.g. Employees under HRMS and
+    // Master Setup). Stay in the menu the user is browsing when it has the
+    // screen, instead of jumping to whichever menu lists it first.
+    const staysInMenu = SUB_MODULES[s.activeParentModule]?.some((sub) => sub.id === module);
+    const parent = staysInMenu ? s.activeParentModule : resolveParent(module);
     const finalModule = (
       EXPANDABLE_MODULES.includes(module) &&
       !EXPANDABLE_WITH_PAGE.includes(module) &&

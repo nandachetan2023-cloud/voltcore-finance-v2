@@ -57,7 +57,7 @@ npm run db:seed
 ```
 
 This will create:
-- Admin user (admin@voltcore.com / admin123)
+- Admin user (admin@voltcore.in / <ADMIN_PASSWORD>)
 - 5 sample employees
 - 4 departments (Engineering, HR, Finance, Operations)
 - 4 designations (Manager, Engineer, Technician, Executive)
@@ -73,7 +73,7 @@ npm run dev
 
 ### 5. Test the Application
 - Open http://localhost:3000
-- Login with `admin@voltcore.com` / `admin123`
+- Login with `admin@voltcore.in` / `<ADMIN_PASSWORD>`
 - Navigate to Employees page - should show 5 employees
 - Navigate to Organization page - should show departments and designations
 

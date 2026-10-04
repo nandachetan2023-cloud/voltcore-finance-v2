@@ -606,6 +606,7 @@ export default function FinPaymentAdvices() {
                     </div>
                     {/* Line items */}
                     <div className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-2">Line Items</div>
+                    <div className="overflow-x-auto">
                     <table className="w-full text-[10px]">
                       <thead><tr className="text-[#5a6878]">
                         <th className="text-left py-1 pr-3 font-semibold">#</th>
@@ -642,6 +643,7 @@ export default function FinPaymentAdvices() {
                         <td className="py-1.5 text-right text-[#f5a623] font-mono font-semibold">{fmt(r.lines.reduce((s, l) => s + (l.balanceAmount || 0), 0))}</td>
                       </tr></tfoot>
                     </table>
+                    </div>
                     {r.notes && <div className="mt-2 text-[10px] text-[#5a6878]"><span className="font-semibold">Notes:</span> {r.notes}</div>}
                   </td>
                 </tr>

@@ -200,7 +200,7 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2">
           <button onClick={fetchSettings} className="p-1.5 text-[#5a6878] hover:text-[#e2e8f0]"><RefreshCw size={14} /></button>
           <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a] disabled:opacity-50">
+            className="vc-btn-primary flex items-center gap-1.5">
             {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
             {saving ? 'Saving...' : 'Save All'}
           </button>

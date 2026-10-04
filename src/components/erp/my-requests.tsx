@@ -325,7 +325,7 @@ export default function MyRequests() {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#1a2332] text-[#8899aa] border border-[#2e3a48]" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={handleSubmit}>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={handleSubmit}>
               {submitting ? 'Submitting...' : 'Submit Request'}
             </Button>
           </DialogFooter>
@@ -347,7 +347,7 @@ export default function MyRequests() {
             </div>
           </div>
           <DialogFooter>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" onClick={() => setBlockError(null)}>
+            <Button className="vc-btn-primary" onClick={() => setBlockError(null)}>
               OK
             </Button>
           </DialogFooter>

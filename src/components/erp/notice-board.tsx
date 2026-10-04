@@ -117,7 +117,7 @@ export default function NoticeBoardModule() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={fetchAll} className="p-1.5 text-[#5a6878] hover:text-[#e2e8f0]"><RefreshCw size={14} /></button>
-          <button onClick={openCreate} className="flex items-center gap-1.5 px-3 py-2 bg-[#f5a623] text-black text-[12px] font-bold rounded-lg hover:bg-[#e8891a]">
+          <button onClick={openCreate} className="vc-btn-primary flex items-center gap-1.5">
             <Plus size={13} /> New Notice
           </button>
         </div>

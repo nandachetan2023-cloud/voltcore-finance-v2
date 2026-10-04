@@ -1229,7 +1229,7 @@ export default function EmployeesModule() {
           </div>
           <DialogFooter className="gap-2 pt-2 border-t border-[#252e3a]">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('create')}>{submitting ? 'Creating...' : 'Add Employee'}</Button>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={() => handleSubmit('create')}>{submitting ? 'Creating...' : 'Add Employee'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1246,7 +1246,7 @@ export default function EmployeesModule() {
           </div>
           <DialogFooter className="gap-2 pt-2 border-t border-[#252e3a]">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" disabled={submitting} onClick={() => handleSubmit('edit')}>{submitting ? 'Saving...' : 'Save Changes'}</Button>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={() => handleSubmit('edit')}>{submitting ? 'Saving...' : 'Save Changes'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1356,7 +1356,7 @@ export default function EmployeesModule() {
           })()}
           <DialogFooter className="gap-2 pt-2 border-t border-[#252e3a]">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setViewOpen(false)}>Close</Button>
-            {viewEmp && <Button className="bg-[#f5a623] text-[#0f141a] hover:bg-[#e0961a] font-semibold" onClick={() => { setViewOpen(false); openEdit(viewEmp); }}>Edit</Button>}
+            {viewEmp && <Button className="vc-btn-primary" onClick={() => { setViewOpen(false); openEdit(viewEmp); }}>Edit</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1406,7 +1406,7 @@ export default function EmployeesModule() {
           </div>
           <DialogFooter className="gap-2 pt-2 border-t border-[#252e3a]">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setBulkOpen(false)}>Cancel</Button>
-            <Button className="bg-[#f5a623] text-[#0f141a] hover:bg-[#e0961a] font-semibold" disabled={bulkSubmitting} onClick={submitBulk}>
+            <Button className="vc-btn-primary" disabled={bulkSubmitting} onClick={submitBulk}>
               {bulkSubmitting ? 'Applying...' : `Apply to ${selectedIds.size}`}
             </Button>
           </DialogFooter>

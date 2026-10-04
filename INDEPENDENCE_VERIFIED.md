@@ -83,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File validate-independence.ps1
 
 5. **Open browser:**
    - URL: `http://localhost:3000`
-   - Login: `admin@voltcore.com` / `admin123`
+   - Login: `admin@voltcore.in` / `<ADMIN_PASSWORD>`
 
 See `QUICKSTART.md` for detailed instructions.
 

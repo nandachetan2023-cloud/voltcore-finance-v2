@@ -169,6 +169,7 @@ export default function MyAttendance() {
         </div>
       ) : (
         <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-[12px]">
             <thead>
               <tr className="border-b border-[#252e3a] bg-[#141920]">
@@ -217,6 +218,7 @@ export default function MyAttendance() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

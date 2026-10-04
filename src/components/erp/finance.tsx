@@ -266,6 +266,7 @@ export default function Finance() {
                   <div className="mt-4">
                     <div className="text-[11px] font-semibold text-[#e2e8f0] mb-2">Sample Data:</div>
                     <div className="border border-[#2e3a48] rounded bg-[#0d1117] max-h-60 overflow-y-auto">
+                      <div className="overflow-x-auto">
                       <table className="w-full text-[10px]">
                         <thead className="bg-[#141920] sticky top-0">
                           <tr>
@@ -284,6 +285,7 @@ export default function Finance() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -327,7 +329,7 @@ export default function Finance() {
               Close
             </Button>
             {activeTab !== 'expenses-preview' && selectedFile && selectedSheet && !result && (
-              <Button className="bg-[#f5a623] text-black hover:bg-[#e8891a] font-semibold" onClick={handleImport} disabled={uploading}>
+              <Button className="vc-btn-primary" onClick={handleImport} disabled={uploading}>
                 {uploading ? 'Importing...' : 'Import Data'}
               </Button>
             )}

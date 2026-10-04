@@ -88,7 +88,7 @@ export default function FinSites() {
   const openEdit = (r: Site) => { setEditTarget(r); setForm({ siteCode: r.siteCode, name: r.name, location: r.location || '', state: r.state || '', contactPerson: r.contactPerson || '', contactPhone: r.contactPhone || '', contactEmail: r.contactEmail || '', budget: r.budget, customerId: r.customerId ? String(r.customerId) : '', startDate: r.startDate?.split('T')[0] || '', endDate: r.endDate?.split('T')[0] || '', status: r.status }); setFormOpen(true); };
 
   const handleSubmit = async () => {
-    if (!form.siteCode || !form.name) { toast.error('Site code and name required'); return; }
+    if (!form.name) { toast.error('Site name is required'); return; }
     setSubmitting(true);
     try {
       const { customerId, startDate, endDate, ...rest } = form;
@@ -158,7 +158,7 @@ export default function FinSites() {
         <DialogHeader><DialogTitle className="text-[#f5a623]">{editTarget?'Edit Site':'New Site'}</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <FormField label="Site Code" required><input value={form.siteCode} onChange={e=>setForm(p=>({...p,siteCode:e.target.value}))} className="vc-input" placeholder="SITE-001"/></FormField>
+            <FormField label="Site Code" hint="Generated automatically when you save"><input value={form.siteCode} readOnly className="vc-input opacity-60" placeholder="Auto-generated on save"/></FormField>
             <FormField label="Name" required><input value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} className="vc-input" placeholder="JSG Steel Plant"/></FormField>
           </div>
           <div className="grid grid-cols-2 gap-3">

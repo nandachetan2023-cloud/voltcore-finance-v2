@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { getAssignedSiteScope, isTenantAdmin } from '@/lib/fin-rbac'
+import { nextSeriesCode, withCodeRetry, isBlank } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +34,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const pdb = getDbForRequest(request)
-    const record = await pdb.finSite.create({ data: body })
+    // The site code is generated here; a caller-supplied one (import) is honoured.
+    const { siteCode, ...rest } = body
+    const record = isBlank(siteCode)
+      ? await withCodeRetry(() => nextSeriesCode(pdb, 'site'), (code) => pdb.finSite.create({ data: { ...rest, siteCode: code } }))
+      : await pdb.finSite.create({ data: body })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating:', error)

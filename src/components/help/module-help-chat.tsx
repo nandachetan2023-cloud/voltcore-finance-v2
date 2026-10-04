@@ -1,18 +1,21 @@
 'use client';
 
 /**
- * Finance Help Chat Widget
- * ────────────────────────
- * A self-contained, offline assistant scoped to the FINANCE module.
+ * Module Help Chat Widget
+ * ───────────────────────
+ * A self-contained, offline assistant that follows the active module.
  *
- * - A floating button (FAB) appears ONLY when a finance sub-module is active.
+ * - A floating button (FAB) appears when the active module belongs to a help
+ *   area (see `help-registry.ts`). HRMS has no area, so it shows nothing.
  * - Opens a right-side Sheet with a chat UI.
- * - Matches the user's query against the curated KB (`finance-help-data.ts`)
- *   and renders the best answer as Markdown.
+ * - Matches the user's query against the area's curated KB and renders the
+ *   best answer as Markdown; falls back to every other area's topics.
+ * - Areas flagged `assistant` (Finance, Petty Cash) can also create records
+ *   through /api/finance-assistant.
  * - "Open …" chips call `setActiveModule` to jump to the relevant module.
  *
- * No AI / no backend — everything is bundled. To add topics, edit
- * `finance-help-data.ts`.
+ * No AI / no LLM — everything is bundled. To add topics, edit the area's data
+ * file under `./data/` (or `finance-help-data.ts`).
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -26,43 +29,13 @@ import { useERPStore } from '@/store/erp-store';
 import { notifyFinanceDataChanged } from '@/store/erp-store';
 import type { ModuleId } from '@/store/erp-store';
 import ReactMarkdown from 'react-markdown';
+import type { HelpEntry } from './finance-help-data';
 import {
-  FINANCE_HELP_ENTRIES,
-  POPULAR_HELP_IDS,
-  type HelpEntry,
-} from './finance-help-data';
-
-// ── Finance module ids (where the widget is visible) ────────────
-// Sourced from MODULE_TREE.finance in src/store/erp-store.ts.
-const FINANCE_MODULE_IDS = new Set<string>([
-  'finance',
-  'finance-dashboard',
-  'ledger',
-  'accounts-receivable',
-  'accounts-payable',
-  'journal-entries',
-  'create-journal-entry',
-  'bank-cash',
-  'taxation',
-  'budget',
-  'financial-reports',
-  'fin-sites',
-  'fin-jobs',
-  'fin-parties',
-  'fin-invoices',
-  'fin-payments',
-  'fin-payment-advices',
-  'fin-petty-cash',
-  'fin-assets',
-  'fin-profit-loss',
-  'fin-bank-reconciliation',
-  'fin-expense-claims',
-  'fin-site-expenses',
-  'fin-work-orders',
-  'fin-purchase-orders',
-  'fin-credit-notes',
-  'fin-client-follow-up',
-]);
+  ALL_HELP_ENTRIES,
+  popularEntriesFor,
+  resolveHelpArea,
+  type HelpArea,
+} from './help-registry';
 
 // ── Types ───────────────────────────────────────────────────────
 interface ChatMessage {
@@ -117,13 +90,13 @@ function scoreEntry(entry: HelpEntry, queryTokens: string[]): number {
   return score;
 }
 
-function findAnswer(query: string): HelpEntry | null {
+function findAnswer(query: string, pool: HelpEntry[]): HelpEntry | null {
   const tokens = tokenize(query);
   if (tokens.length === 0) return null;
 
   let best: HelpEntry | null = null;
   let bestScore = 0;
-  for (const entry of FINANCE_HELP_ENTRIES) {
+  for (const entry of pool) {
     const s = scoreEntry(entry, tokens);
     if (s > bestScore) {
       bestScore = s;
@@ -134,12 +107,30 @@ function findAnswer(query: string): HelpEntry | null {
   return bestScore >= 4 ? best : null;
 }
 
+// Small talk for areas without the record-creating assistant (which has its own).
+const GREETING_RE = /^(hi|hii+|hiya|hello+|hey+|yo|good\s?(morning|afternoon|evening|day))\b[\s!.]*$/i;
+const THANKS_RE = /^(thanks|thank\s?you|thx|ty|much appreciated|appreciate it)\b[\s!.]*$/i;
+
+function smallTalk(text: string, areaName: string): string | null {
+  const t = text.trim();
+  if (GREETING_RE.test(t)) return `Hi! Ask me anything about **${areaName}**, or tap one of the suggestions.`;
+  if (THANKS_RE.test(t)) return "You're welcome! Anything else?";
+  return null;
+}
+
 // ── Component ───────────────────────────────────────────────────
-export function FinanceHelpChat() {
+/** Floating help button + chat sheet for whichever module is active. */
+export function ModuleHelpChat() {
+  const activeModule = useERPStore((s) => s.activeModule);
+  const area = resolveHelpArea(activeModule);
+  if (!area) return null;
+  // Keyed by area so switching menus starts a fresh conversation.
+  return <AreaHelpChat key={area.id} area={area} />;
+}
+
+function AreaHelpChat({ area }: { area: HelpArea }) {
   const activeModule = useERPStore((s) => s.activeModule);
   const setActiveModule = useERPStore((s) => s.setActiveModule);
-
-  const visible = FINANCE_MODULE_IDS.has(activeModule);
 
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -147,10 +138,7 @@ export function FinanceHelpChat() {
   /** Pending form the assistant asked us to fill in — forwarded on the next message. */
   const [pending, setPending] = useState<{ formId: string; text: string } | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    {
-      role: 'assistant',
-      text: "Hi! I'm your **Finance** helper. Ask me how to use any finance feature — or tell me to create an entry, e.g. *\"create a journal entry Dr Rent 50000 Cr SBI Bank 50000\"* or *\"raise an invoice of 2 lakh to L&T at site NTPC Rihand\"*.",
-    },
+    { role: 'assistant', text: area.greeting },
   ]);
 
   const currentUserEmail = () => {
@@ -170,13 +158,26 @@ export function FinanceHelpChat() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, open]);
 
-  const popularEntries = useMemo(
-    () =>
-      POPULAR_HELP_IDS
-        .map((id) => FINANCE_HELP_ENTRIES.find((e) => e.id === id))
-        .filter((e): e is HelpEntry => Boolean(e)),
-    [],
-  );
+  const popularEntries = useMemo(() => popularEntriesFor(area), [area]);
+
+  /** Best local answer: this area first, then every other area's topics. */
+  function findLocalAnswer(query: string): HelpEntry | null {
+    return findAnswer(query, area.entries) ?? findAnswer(query, ALL_HELP_ENTRIES);
+  }
+
+  /** Answer from the bundled KB, or offer suggestions when nothing matches. */
+  function replyLocally(query: string, noMatchText: string) {
+    const match = findLocalAnswer(query);
+    if (match) {
+      setMessages((prev) => [...prev, { role: 'assistant', text: match.body, entry: match }]);
+      return;
+    }
+    setMessages((prev) => [
+      ...prev,
+      { role: 'assistant', text: noMatchText },
+      { role: 'assistant', text: '__suggestions__' },
+    ]);
+  }
 
   async function send(text: string, fresh = false) {
     const query = text.trim();
@@ -186,6 +187,18 @@ export function FinanceHelpChat() {
     const userMsg: ChatMessage = { role: 'user', text: query };
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
+
+    // Areas without the record-creating assistant answer purely from the KB.
+    if (!area.assistant) {
+      const talk = smallTalk(query, area.name);
+      if (talk) {
+        setMessages((prev) => [...prev, { role: 'assistant', text: talk }]);
+      } else {
+        replyLocally(query, "I couldn't find a direct match for that. Here are some popular topics — tap one:");
+      }
+      return;
+    }
+
     setBusy(true);
 
     try {
@@ -221,19 +234,7 @@ export function FinanceHelpChat() {
       if (j.action === 'info') {
         // Question / unclear → fall back to the local KB.
         setPending(null);
-        const match = findAnswer(query);
-        if (match) {
-          setMessages((prev) => [...prev, { role: 'assistant', text: match.body, entry: match }]);
-        } else {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: 'assistant',
-              text: j.message || "I couldn't find a direct match for that. Here are some popular topics — tap one:",
-            },
-            { role: 'assistant', text: '__suggestions__' },
-          ]);
-        }
+        replyLocally(query, j.message || "I couldn't find a direct match for that. Here are some popular topics — tap one:");
         return;
       }
 
@@ -255,19 +256,20 @@ export function FinanceHelpChat() {
       setMessages((prev) => [...prev, { role: 'assistant', text: entry.body, entry }]);
     } catch (e) {
       setPending(null);
-      const match = findAnswer(query);
-      if (match) {
-        setMessages((prev) => [...prev, { role: 'assistant', text: match.body, entry: match }]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          { role: 'assistant', text: "The assistant service isn't reachable right now. Here are some popular topics — tap one:" },
-          { role: 'assistant', text: '__suggestions__' },
-        ]);
-      }
+      replyLocally(query, "The assistant service isn't reachable right now. Here are some popular topics — tap one:");
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Suggestion chips open their own topic directly — no search, so they can't land on a neighbour. */
+  function showEntry(entry: HelpEntry) {
+    setPending(null);
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', text: entry.title },
+      { role: 'assistant', text: entry.body, entry },
+    ]);
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -287,7 +289,7 @@ export function FinanceHelpChat() {
     setMessages([
       {
         role: 'assistant',
-        text: "Cleared. What would you like to know about the **Finance** module?",
+        text: `Cleared. What would you like to know about **${area.name}**?`,
       },
     ]);
   }
@@ -297,9 +299,6 @@ export function FinanceHelpChat() {
     setOpen(false);
   }
 
-  // Don't render the FAB outside finance modules.
-  if (!visible) return null;
-
   const showSuggestions = messages.length > 0 && messages[messages.length - 1].text === '__suggestions__';
 
   return (
@@ -307,7 +306,7 @@ export function FinanceHelpChat() {
       {/* Floating action button */}
       <button
         type="button"
-        aria-label="Open Finance Help"
+        aria-label="Open VOLTCORE ERP Help"
         onClick={() => setOpen(true)}
         className={cn(
           'fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center',
@@ -335,10 +334,10 @@ export function FinanceHelpChat() {
               </div>
               <div>
                 <SheetTitle className="text-sm font-semibold text-[#e2e8f0]">
-                  Finance Help
+                  VOLTCORE ERP Help
                 </SheetTitle>
                 <p className="text-[10px] uppercase tracking-wider text-[#5a6878]">
-                  Self-contained guide
+                  {area.id === 'dashboard' ? 'Self-contained guide' : `Guide · ${area.name}`}
                 </p>
               </div>
             </div>
@@ -375,7 +374,7 @@ export function FinanceHelpChat() {
                         <button
                           key={e.id}
                           type="button"
-                          onClick={() => send(e.title, true)}
+                          onClick={() => showEntry(e)}
                           className="rounded-full border border-[#252e3a] bg-[#161c24] px-3 py-1.5 text-[12px] text-[#cbd5e1] transition-colors hover:border-[#f5a623]/50 hover:text-[#f5a623]"
                         >
                           {e.title}
@@ -462,7 +461,7 @@ export function FinanceHelpChat() {
                       <button
                         key={e.id}
                         type="button"
-                        onClick={() => send(e.title, true)}
+                        onClick={() => showEntry(e)}
                         className="rounded-lg border border-[#252e3a] bg-[#161c24] px-3 py-2 text-left text-[12.5px] text-[#cbd5e1] transition-colors hover:border-[#f5a623]/50 hover:text-[#f5a623]"
                       >
                         {e.title}
@@ -497,7 +496,7 @@ export function FinanceHelpChat() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={busy}
-              placeholder={'Ask, or create - e.g. "create a journal entry"'}
+              placeholder={area.placeholder}
               rows={1}
               className={cn(
                 'min-h-[40px] max-h-32 flex-1 resize-none border-[#252e3a] bg-[#0a0d12] text-[13px]',

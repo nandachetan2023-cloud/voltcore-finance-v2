@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
-import { hasPermission, assertPermission } from '@/lib/fin-rbac'
+import { hasPermission, assertPermission, isTenantAdmin } from '@/lib/fin-rbac'
 import { getInboxOwner, emitNotification, deriveFinYear } from '@/lib/notification-bus'
 
 export const dynamic = 'force-dynamic'
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     if (!actor) return NextResponse.json({ success: false, error: 'Not signed in' }, { status: 401 })
     const pdb = getDbForRequest(request)
 
-    const decision = await hasPermission(pdb, actor, 'ADMIN_CREATE')
+    const decision = isTenantAdmin(request) ? { allowed: true } : await hasPermission(pdb, actor, 'ADMIN_CREATE')
     if (!decision.allowed) return NextResponse.json({ success: true, data: { canBroadcast: false, broadcasts: [] } })
 
     const recent = await pdb.finNotification.findMany({

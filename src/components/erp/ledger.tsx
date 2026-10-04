@@ -116,9 +116,9 @@ export default function Ledger() {
   };
 
   const handleSubmit = async () => {
-    if (!form.accountCode.trim() || !form.name.trim()) { toast.error('Account code and name are required'); return; }
+    if ((editTarget && !form.accountCode.trim()) || !form.name.trim()) { toast.error('Account name is required'); return; }
     // Guard against duplicate codes (client-side; API enforces uniqueness too)
-    const dup = records.find(r => r.source !== 'fin' && r.accountCode.toLowerCase() === form.accountCode.trim().toLowerCase() && r.id !== editTarget?.id);
+    const dup = form.accountCode.trim() ? records.find(r => r.source !== 'fin' && r.accountCode.toLowerCase() === form.accountCode.trim().toLowerCase() && r.id !== editTarget?.id) : null;
     if (dup) { toast.error(`Account code "${form.accountCode}" already exists`); return; }
     setSubmitting(true);
     try {
@@ -319,8 +319,8 @@ export default function Ledger() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Account Code *</label>
-                <input value={form.accountCode} onChange={e => setForm(p => ({ ...p, accountCode: e.target.value }))} className="vc-input" placeholder="e.g. 1001" />
+                <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Account Code</label>
+                <input value={form.accountCode} readOnly className="vc-input opacity-60" placeholder="Auto-generated on save" />
               </div>
               <div>
                 <label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label>

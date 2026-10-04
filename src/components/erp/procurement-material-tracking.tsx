@@ -315,7 +315,7 @@ export default function ProcurementMaterialTracking() {
             <button onClick={() => setViewMode('dashboard')} className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${viewMode === 'dashboard' ? 'bg-[#f5a623] text-[#0a0d12]' : 'text-[#8899aa] hover:text-[#e2e8f0]'}`}><LayoutDashboard size={13} className="inline mr-1" />Dashboard</button>
           </div>
           <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={MATERIAL_COLUMNS} filename="procurement-material-tracking" />
-          <button onClick={openCreate} className="ml-2 px-3 py-1.5 rounded-lg bg-[#f5a623] text-[#0a0d12] text-[11px] font-semibold hover:bg-[#e8991a] flex items-center gap-1.5"><Plus size={13} /> New Entry</button>
+          <button onClick={openCreate} className="vc-btn-primary ml-2 flex items-center gap-1.5"><Plus size={13} /> New Entry</button>
         </div>
 
         {/* ── LIST VIEW ── */}
