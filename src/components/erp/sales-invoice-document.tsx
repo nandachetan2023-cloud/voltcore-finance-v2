@@ -105,7 +105,7 @@ export default function SalesInvoiceDocument({ invoice, onClose }: { invoice: Sa
   // pinned at top-4 right-4. Portalling to <body> escapes that context so the
   // sheet and its toolbar sit above the whole app. Esc closes it too.
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => { const id = requestAnimationFrame(() => setMounted(true)); return () => cancelAnimationFrame(id); }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);

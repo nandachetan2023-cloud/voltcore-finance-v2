@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { nextSeriesCode, withCodeRetry } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,25 +19,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: `Only Approved PRs can be converted (this one is ${pr.status})` }, { status: 400 })
     }
 
-    const year = new Date().getFullYear()
-    const count = (await pdb.finRFQ.count()) + 1
-    const rfq = await pdb.finRFQ.create({
-      data: {
-        rfqNo: `RFQ/${year}/${String(count).padStart(3, '0')}`,
-        description: `Against PR ${pr.prNo}${pr.items[0] ? ` — ${pr.items[0].description}` : ''}`,
-        issueDate: new Date(),
-        responseDeadline: new Date(Date.now() + 14 * 86400000),
-        project: pr.project,
-        notes: `Auto-converted from ${pr.prNo}`,
-        status: 'Draft',
-        lineItems: pr.items.length
-          ? { create: pr.items.map((i: { description: string; qty: number; unit: string }) => ({ description: i.description, qty: i.qty, unit: i.unit })) }
-          : undefined,
-      },
-    })
-    const updatedPR = await pdb.finPurchaseRequisition.update({
-      where: { id }, data: { status: 'Converted to RFQ/PO' }, include: { items: true, approvals: true },
-    })
+    const scopeSummary = pr.items
+      .slice(0, 3)
+      .map((i: { description: string }) => i.description)
+      .join(', ')
+    const description = `Against PR ${pr.prNo}${scopeSummary ? ` — ${scopeSummary}${pr.items.length > 3 ? ' …' : ''}` : ''}`
+
+    // One transaction: RFQ create + PR status flip. Code generated with the
+    // usual series helper (highest suffix + 1, P2002 race retried).
+    const rfq = await withCodeRetry(
+      () => nextSeriesCode(pdb, 'rfq'),
+      (rfqNo) =>
+        pdb.$transaction(async (tx) => {
+          const created = await tx.finRFQ.create({
+            data: {
+              rfqNo,
+              description,
+              issueDate: new Date(),
+              responseDeadline: new Date(Date.now() + 14 * 86400000),
+              project: pr.project,
+              notes: `Auto-converted from ${pr.prNo}`,
+              status: 'Draft',
+              lineItems: pr.items.length
+                ? { create: pr.items.map((i: { description: string; qty: number; unit: string }) => ({ description: i.description, qty: i.qty, unit: i.unit })) }
+                : undefined,
+            },
+          })
+          await tx.finPurchaseRequisition.update({ where: { id }, data: { status: 'Converted to RFQ/PO' } })
+          return created
+        }),
+    )
+    const updatedPR = await pdb.finPurchaseRequisition.findUnique({ where: { id }, include: { items: true, approvals: true } })
     return NextResponse.json({ success: true, data: rfq, pr: updatedPR })
   } catch (error) {
     console.error('Error converting PR to RFQ:', error)

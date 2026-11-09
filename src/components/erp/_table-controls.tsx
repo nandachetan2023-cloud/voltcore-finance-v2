@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 
 export const PAGE_SIZES = [10, 25, 50, 100];
@@ -32,9 +32,9 @@ export function useTableControls<T>(
   toSearchText: (r: T) => string,
   initialPageSize = 10,
 ) {
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(initialPageSize);
+  const [search, setSearchState] = useState('');
+  const [page, setPageState] = useState(1);
+  const [pageSize, setPageSizeState] = useState(initialPageSize);
   const [sort, setSort] = useState<SortState<T>>({ key: null, dir: 'asc' });
 
   const filtered = useMemo(() => {
@@ -61,16 +61,19 @@ export function useTableControls<T>(
   const total = sorted.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  // Keep current page valid when filters/data change
-  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
-  useEffect(() => { setPage(1); }, [search, pageSize]);
-
-  const start = (page - 1) * pageSize;
+  // Resetting to page 1 happens in the setters below; clamping an
+  // out-of-range page (filters shrank the list) happens here so render
+  // always slices a valid page — no effect needed.
+  const currentPage = Math.min(page, totalPages);
+  const start = (currentPage - 1) * pageSize;
   const pageItems = sorted.slice(start, start + pageSize);
   const from = total === 0 ? 0 : start + 1;
   const to = Math.min(start + pageSize, total);
 
-  return { search, setSearch, page, setPage, pageSize, setPageSize, filtered, pageItems, total, totalPages, from, to, sort, toggleSort };
+  const setSearch = (v: string) => { setSearchState(v); setPageState(1); };
+  const setPageSize = (n: number) => { setPageSizeState(n); setPageState(1); };
+
+  return { search, setSearch, page: currentPage, setPage: setPageState, pageSize, setPageSize, filtered, pageItems, total, totalPages, from, to, sort, toggleSort };
 }
 
 /**

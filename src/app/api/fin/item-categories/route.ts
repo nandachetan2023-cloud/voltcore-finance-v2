@@ -20,10 +20,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const code = String(body.code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+    const code = String(body.code || '').trim().toUpperCase().replace(/[^A-Z]/g, '')
     const name = String(body.name || '').trim()
-    if (code.length < 2 || code.length > 4) {
-      return NextResponse.json({ success: false, error: 'Category code must be 2–4 letters (e.g. ELC)' }, { status: 400 })
+    if (!/^[A-Z]{3}$/.test(code)) {
+      return NextResponse.json({ success: false, error: 'Category code must be exactly 3 letters (e.g. ELC)' }, { status: 400 })
     }
     if (name.length < 2) return NextResponse.json({ success: false, error: 'Category name is required' }, { status: 400 })
     const pdb = getDbForRequest(request)

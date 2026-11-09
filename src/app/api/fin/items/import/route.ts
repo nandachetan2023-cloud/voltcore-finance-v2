@@ -55,7 +55,9 @@ export async function POST(request: NextRequest) {
         const data = {
           name: String(r.name).trim(),
           description: r.description || null,
-          categoryId: category?.id ?? null,
+          // Category omitted from the sheet → leave it untouched on update
+          // (null only when explicitly resolved to an uncategorised row on create).
+          ...(category ? { categoryId: category.id } : {}),
           uom: r.uom || 'Nos',
           hsn: r.hsn || null,
           reorderLevel: parseNum(r.reorderLevel),

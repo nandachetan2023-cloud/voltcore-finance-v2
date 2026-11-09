@@ -190,15 +190,17 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
   } | null>(null);
 
   useEffect(() => {
-    const userStr = localStorage.getItem('erp_auth_user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        setUserData(user);
-      } catch (e) {
-        console.error('Failed to parse user data:', e);
+    const id = requestAnimationFrame(() => {
+      const userStr = localStorage.getItem('erp_auth_user');
+      if (userStr) {
+        try {
+          setUserData(JSON.parse(userStr));
+        } catch (e) {
+          console.error('Failed to parse user data:', e);
+        }
       }
-    }
+    });
+    return () => cancelAnimationFrame(id);
   }, []);
 
   useEffect(() => {
@@ -254,7 +256,10 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
   }, [subModules]);
 
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
-  useEffect(() => { setCollapsedSections(new Set()); }, [activeParentModule]);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setCollapsedSections(new Set()));
+    return () => cancelAnimationFrame(id);
+  }, [activeParentModule]);
   const toggleSection = (section: string) => {
     setCollapsedSections((prev) => {
       const next = new Set(prev);

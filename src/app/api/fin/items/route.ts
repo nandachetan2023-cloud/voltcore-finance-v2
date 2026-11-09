@@ -9,6 +9,24 @@ function parseNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
+// Item codes live as plain strings in the ledger (no FK). A soft check so a
+// delete doesn't strand ledger history — the fix is deactivating the item.
+async function itemsInUse(pdb: any, ids: number[]): Promise<Set<number>> {
+  const items: Array<{ id: number; itemCode: string }> = await pdb.finItem.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, itemCode: true },
+  })
+  if (items.length === 0) return new Set()
+  const codes = items.map((i) => i.itemCode)
+  const refs: Array<{ itemCode: string }> = await pdb.finStockLedger.findMany({
+    where: { itemCode: { in: codes } },
+    select: { itemCode: true },
+    distinct: ['itemCode'],
+  })
+  const usedCodes = new Set(refs.map((r) => r.itemCode))
+  return new Set(items.filter((i) => usedCodes.has(i.itemCode)).map((i) => i.id))
+}
+
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
@@ -33,7 +51,9 @@ export async function POST(request: NextRequest) {
     let categoryId: number | null = null
     let categoryCode: string | null = null
     if (!isBlank(body.categoryId)) {
-      const cat = await pdb.finItemCategory.findUnique({ where: { id: Number(body.categoryId) } })
+      const n = Number(body.categoryId)
+      if (!Number.isFinite(n)) return NextResponse.json({ success: false, error: 'categoryId must be a number' }, { status: 400 })
+      const cat = await pdb.finItemCategory.findUnique({ where: { id: n } })
       if (!cat) return NextResponse.json({ success: false, error: 'Category not found' }, { status: 400 })
       categoryId = cat.id
       categoryCode = cat.code
@@ -65,6 +85,15 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { id, itemCode, ...rest } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    const idNum = Number(id)
+    if (!Number.isFinite(idNum)) return NextResponse.json({ success: false, error: 'id must be a number' }, { status: 400 })
+    if (rest.name !== undefined && String(rest.name).trim().length < 2) {
+      return NextResponse.json({ success: false, error: 'Item name must be at least 2 characters' }, { status: 400 })
+    }
+    if (rest.categoryId !== undefined && !isBlank(rest.categoryId)) {
+      const n = Number(rest.categoryId)
+      if (!Number.isFinite(n)) return NextResponse.json({ success: false, error: 'categoryId must be a number' }, { status: 400 })
+    }
     // itemCode is immutable — PRs/grids reference it, so edits keep the code.
     void itemCode
     const pdb = getDbForRequest(request)
@@ -78,7 +107,7 @@ export async function PUT(request: NextRequest) {
     if (rest.rate !== undefined) data.rate = parseNum(rest.rate)
     if (rest.isActive !== undefined) data.isActive = !!rest.isActive
     if (rest.status !== undefined) data.isActive = String(rest.status).toLowerCase() !== 'inactive'
-    const record = await pdb.finItem.update({ where: { id: Number(id) }, data, include: { category: { select: { id: true, code: true, name: true } } } })
+    const record = await pdb.finItem.update({ where: { id: idNum }, data, include: { category: { select: { id: true, code: true, name: true } } } })
     return NextResponse.json({ success: true, data: record })
   } catch (error) {
     console.error('Error updating item:', error)
@@ -92,14 +121,25 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const ids = searchParams.get('ids')
     if (ids) {
-      const idList = ids.split(',').map(Number).filter(Boolean)
+      const idList = [...new Set(ids.split(',').map(Number).filter((n) => Number.isFinite(n) && n > 0))]
       if (idList.length === 0) return NextResponse.json({ success: false, error: 'No valid ids' }, { status: 400 })
-      const result = await pdb.finItem.deleteMany({ where: { id: { in: idList } } })
-      return NextResponse.json({ success: true, deleted: result.count })
+      const blocked = await itemsInUse(pdb, idList)
+      const deletable = idList.filter((n) => !blocked.has(n))
+      const result = deletable.length ? await pdb.finItem.deleteMany({ where: { id: { in: deletable } } }) : { count: 0 }
+      return NextResponse.json({
+        success: true,
+        deleted: result.count,
+        skipped: blocked.size,
+        message: blocked.size ? `${blocked.size} item(s) in use by the stock ledger were skipped — deactivate them instead` : undefined,
+      })
     }
-    const id = searchParams.get('id')
+    const id = Number(searchParams.get('id'))
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
-    await pdb.finItem.delete({ where: { id: Number(id) } })
+    const blocked = await itemsInUse(pdb, [id])
+    if (blocked.has(id)) {
+      return NextResponse.json({ success: false, error: 'Item is referenced by the stock ledger — deactivate it instead of deleting' }, { status: 409 })
+    }
+    await pdb.finItem.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting item:', error)

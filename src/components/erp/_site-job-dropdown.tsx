@@ -30,13 +30,12 @@ export default function SiteJobDropdown({ value, onChange, label = 'Site & Job',
   const [jobs, setJobs] = useState<JobOption[]>([]);
   const [siteId, setSiteId] = useState<number | null>(value?.siteId ?? null);
   const [jobId, setJobId] = useState<number | null>(value?.jobId ?? null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success) setSites(j.data || []); }).catch(() => {}); }, []);
 
   // Load all jobs once (the jobs API returns siteId), filter client-side by site.
   useEffect(() => {
-    setLoading(true);
     fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success) setJobs(j.data || []); }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 

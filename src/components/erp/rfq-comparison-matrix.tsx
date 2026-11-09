@@ -164,11 +164,17 @@ export default function RfqComparisonMatrix() {
       });
       const json = await res.json();
       if (!json.success) { toast.error(json.error || 'Failed to create PO'); return; }
-      await fetch(`/api/procurement/rfqs/${selected.id}`, {
+      const rfqRes = await fetch(`/api/procurement/rfqs/${selected.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'Awarded' }),
       });
+      const rfqJson = await rfqRes.json().catch(() => null);
+      if (!rfqJson?.success) {
+        toast.error(`PO ${json.data?.poNo || ''} created, but the RFQ could not be marked Awarded — update it manually`);
+        setPoOpen(false);
+        return;
+      }
       setRfqs(prev => prev.map(r => r.id === selected.id ? { ...r, status: 'Awarded' } : r));
       setPoOpen(false);
       toast.success(`PO ${json.data.poNo} created for ${vName(selectedVendor)} — sent for approval`);

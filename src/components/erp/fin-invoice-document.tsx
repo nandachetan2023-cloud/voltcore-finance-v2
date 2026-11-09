@@ -78,7 +78,7 @@ export default function InvoiceDocument({ invoice, onClose }: { invoice: Invoice
   // so the sheet and its Print/Close toolbar painted under the header and the
   // buttons were unreachable. Portal to <body> to escape that context.
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => { const id = requestAnimationFrame(() => setMounted(true)); return () => cancelAnimationFrame(id); }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);

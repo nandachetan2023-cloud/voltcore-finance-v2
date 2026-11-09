@@ -109,7 +109,14 @@ export function SearchableSelect({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  useEffect(() => { if (open) { setActiveIdx(0); requestAnimationFrame(() => inputRef.current?.focus()); } }, [open]);
+  const toggleOpen = () => {
+    const willOpen = !open;
+    if (willOpen) {
+      setActiveIdx(0);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+    setOpen(willOpen);
+  };
 
   const commit = (opt: SearchableOption | null) => {
     onChange(opt?.value ?? '');
@@ -129,7 +136,7 @@ export function SearchableSelect({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggleOpen}
         className="vc-input flex items-center justify-between gap-2 text-left disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <span className={selected ? 'text-[#e2e8f0] truncate' : 'text-[#5a6878] truncate'}>

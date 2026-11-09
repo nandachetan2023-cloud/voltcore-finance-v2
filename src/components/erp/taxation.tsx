@@ -90,7 +90,6 @@ function GstTdsRegister({ type }: { type: RegisterType }) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     fetch(`/api/fin/gst-tds-register?type=${type}`)
       .then(r => r.json())
       .then(j => { if (!cancelled) setLoaded({ type, payload: j.success ? j.data : null }); })

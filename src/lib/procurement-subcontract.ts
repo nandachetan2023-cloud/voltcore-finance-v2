@@ -24,8 +24,9 @@ export function childRows(list: unknown, dateKey: string): any[] {
 
 /**
  * Split a request body into scalar data (dates normalized, id/children removed)
- * plus normalized child arrays. Returns null dates when the value is missing so
- * PUT can leave the column unchanged.
+ * plus normalized child arrays. Children are `undefined` when the key is absent
+ * from the body (so PUT leaves them untouched) and an array — possibly empty —
+ * when the key is present (`[]` means "delete all children").
  */
 export function normalizeSubcontractBody(body: Record<string, unknown>) {
   const { id: _id, milestones, retentionReleases, progressClaims, startDate, endDate, ...rest } = body || {}
@@ -33,8 +34,8 @@ export function normalizeSubcontractBody(body: Record<string, unknown>) {
     rest: rest as Record<string, unknown>,
     startDate: toIsoDate(startDate),
     endDate: toIsoDate(endDate),
-    milestones: Array.isArray(milestones) ? milestones : [],
-    retentionReleases: Array.isArray(retentionReleases) ? retentionReleases : [],
-    progressClaims: Array.isArray(progressClaims) ? progressClaims : [],
+    milestones: Array.isArray(milestones) ? milestones : undefined,
+    retentionReleases: Array.isArray(retentionReleases) ? retentionReleases : undefined,
+    progressClaims: Array.isArray(progressClaims) ? progressClaims : undefined,
   }
 }

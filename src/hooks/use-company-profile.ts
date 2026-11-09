@@ -58,7 +58,10 @@ export function useCompanyProfile(): CompanyProfile {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => load());
+    return () => cancelAnimationFrame(id);
+  }, [load]);
   useEffect(() => {
     const onChanged = () => load();
     window.addEventListener('company-profile:changed', onChanged);

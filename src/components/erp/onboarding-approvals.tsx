@@ -30,7 +30,7 @@ function FormViewer({ user, onClose }: { user: OnboardingUser; onClose: () => vo
   // the form (its title bar) painted under the header. Portal to <body> to escape
   // that context; Esc closes it as well.
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => { const id = requestAnimationFrame(() => setMounted(true)); return () => cancelAnimationFrame(id); }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);

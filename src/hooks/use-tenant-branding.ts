@@ -28,16 +28,15 @@ export function useTenantBranding(): TenantBranding | null {
   const [branding, setBranding] = useState<TenantBranding | null>(cached);
 
   useEffect(() => {
-    if (cached) {
-      setBranding(cached);
-      return;
-    }
+    if (cached) return; // initial useState already read it
     if (!cachePromise) {
       cachePromise = fetchBranding();
     }
+    let cancelled = false;
     cachePromise.then(b => {
-      if (b) setBranding(b);
+      if (!cancelled && b) setBranding(b);
     });
+    return () => { cancelled = true; };
   }, []);
 
   return branding;

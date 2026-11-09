@@ -21,6 +21,8 @@ export const NUMBER_SERIES = {
   po:       () => ({ model: 'finPurchaseOrder', field: 'poNo',      prefix: `PO-${year()}-`,  pad: 3 }),
   ar:       () => ({ model: 'accountsReceivable', field: 'invoiceNo', prefix: `AR-${year()}-`, pad: 3 }),
   claim:    () => ({ model: 'finExpenseClaim',  field: 'claimNo',   prefix: `EC-${year()}-`,  pad: 3 }),
+  rfq:      () => ({ model: 'finRFQ',           field: 'rfqNo',     prefix: `RFQ/${year()}/`, pad: 3 }),
+  subcontract: () => ({ model: 'finSubcontract', field: 'subcontractNo', prefix: `SC-${year()}-`, pad: 3 }),
 } as const
 
 export type SeriesKind = keyof typeof NUMBER_SERIES
@@ -93,6 +95,9 @@ export const isBlank = (v: unknown) => v === undefined || v === null || String(v
  * free a number, P2002 race retried via withCodeRetry) — the same doctrine the
  * other NUMBER_SERIES entries follow. A blank/unresolved category falls back
  * to the safe generic ITM- segment.
+ *
+ * Format: <CATEGORY-3>-<4 digits>, e.g. ELC-0007 (generic fallback ITM-0007).
+ * Category segments are exactly 3 uppercase letters (see /api/fin/item-categories).
  */
 export async function nextItemCode(db: any, categoryCode?: string | null): Promise<string> {
   const seg = (categoryCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '')

@@ -78,8 +78,6 @@ export default function SalesRevenueForecast() {
   const pageSize = 10;
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
     fetch('/api/sales/opportunities')
       .then(res => res.json())
       .then(json => {
