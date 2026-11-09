@@ -507,7 +507,7 @@ export default function ProcurementPR() {
   if (importOpen) {
     return (
       <ImportWizard
-        title="Purchase Requisitions"
+        title="PR Module"
         fields={PR_IMPORT_FIELDS}
         keyField="prNo"
         existingKeys={new Set(records.map(r => r.prNo))}
@@ -545,7 +545,7 @@ export default function ProcurementPR() {
           </div>
           <div>
             <h1 className="text-[18px] font-bold text-[#e2e8f0]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-              Purchase Requisitions
+              PR Module
             </h1>
             <p className="text-[11px] text-[#5a6878]">Manage and track material requisitions across projects</p>
           </div>

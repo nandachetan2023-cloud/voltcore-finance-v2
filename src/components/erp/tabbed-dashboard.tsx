@@ -29,7 +29,7 @@ const CATEGORIES: Category[] = [
     screens: [
       { key: 'fin-sites', label: 'Sites' },
       { key: 'fin-jobs', label: 'Jobs (PO-wise)' },
-      { key: 'fin-items', label: 'Items' },
+      { key: 'fin-items', label: 'Item Code Generator' },
       { key: 'fin-clients', label: 'Clients' },
       { key: 'procurement-vendors', label: 'Vendors' },
     ],
@@ -37,7 +37,7 @@ const CATEGORIES: Category[] = [
   {
     id: 'procurement', label: 'Procurement', icon: ShoppingCart,
     screens: [
-      { key: 'procurement-pr', label: 'Purchase Requisition' },
+      { key: 'procurement-pr', label: 'PR Module' },
       { key: 'procurement-rfq', label: 'RFQ Management' },
       { key: 'rfq-comparison-matrix', label: 'Quotation Comparison' },
       { key: 'procurement-po-register', label: 'PO Register' },
