@@ -246,6 +246,7 @@ export default function AccountsPayable() {
             <p className="text-[11px] text-[#5a6878] mt-0.5">{editTarget ? 'Update vendor bill details and line allocations.' : 'Manual data entry for plant expenditure verification.'}</p>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={() => setView('list')} className="px-4 py-2 rounded-lg border border-[#252e3a] text-[#8899aa] text-[12px] font-medium hover:text-[#e2e8f0] hover:border-[#f5a623] flex items-center gap-1.5">Cancel</button>
             <button onClick={() => handleSubmit('Pending')} disabled={submitting} className="px-4 py-2 rounded-lg border border-[#f5a623] text-[#f5a623] text-[12px] font-semibold hover:bg-[#f5a623]/10 disabled:opacity-50 flex items-center gap-1.5"><Save size={13} /> Save Draft</button>
             <button onClick={() => handleSubmit('Pending')} disabled={submitting} className="px-4 py-2 rounded-lg bg-[#f5a623] text-[#0a0d12] text-[12px] font-semibold hover:bg-[#e8991a] disabled:opacity-50 flex items-center gap-1.5">{submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} {editTarget ? 'Update Invoice' : 'Submit for Approval'}</button>
           </div>

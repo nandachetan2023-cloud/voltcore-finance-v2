@@ -414,6 +414,33 @@ export default function ProcurementPR() {
     }
   };
 
+  /* ── Convert Approved PR → RFQ ── */
+  const [converting, setConverting] = useState(false);
+
+  const handleConvertToRFQ = async (pr: PurchaseRequisition) => {
+    setConverting(true);
+    try {
+      const res = await fetch('/api/procurement/requisitions/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pr.id }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        const updated = { ...json.pr, approvalChain: json.pr.approvals || [] };
+        setRecords(prev => prev.map(r => r.id === updated.id ? updated : r));
+        if (detailPR && detailPR.id === updated.id) setDetailPR(updated);
+        toast.success(`Converted to ${json.data.rfqNo} — open Quotation Comparison to select a supplier`);
+      } else {
+        toast.error(json.error || 'Failed to convert PR');
+      }
+    } catch {
+      toast.error('Network error');
+    } finally {
+      setConverting(false);
+    }
+  };
+
   /* ── Delete ── */
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -645,6 +672,12 @@ export default function ProcurementPR() {
                           className="p-1.5 rounded-md text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10 transition-all" title="Edit">
                           <Pencil size={13} />
                         </button>
+                        {pr.status === 'Approved' && (
+                          <button onClick={() => handleConvertToRFQ(pr)} disabled={converting}
+                            className="p-1.5 rounded-md text-[#5a6878] hover:text-[#00e676] hover:bg-[#00e676]/10 transition-all disabled:opacity-50" title="Convert to RFQ">
+                            <ChevronRight size={13} />
+                          </button>
+                        )}
                         <button onClick={() => { setDeleteTarget(pr); setDeleteOpen(true); }}
                           className="p-1.5 rounded-md text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 transition-all" title="Delete">
                           <Trash2 size={13} />
@@ -719,6 +752,12 @@ export default function ProcurementPR() {
                       <button onClick={() => runApprovalAction('submit')} disabled={approvalSubmitting}
                         className="px-3 py-1.5 rounded-lg bg-[#f5a623]/15 text-[#f5a623] text-[10px] font-semibold hover:bg-[#f5a623]/25 transition-all flex items-center gap-1 disabled:opacity-50">
                         <ChevronRight size={11} /> {approvalSubmitting ? 'Submitting...' : 'Submit for Approval'}
+                      </button>
+                    )}
+                    {detailPR.status === 'Approved' && (
+                      <button onClick={() => handleConvertToRFQ(detailPR)} disabled={converting}
+                        className="px-3 py-1.5 rounded-lg bg-[#00d4ff]/15 text-[#00d4ff] text-[10px] font-semibold hover:bg-[#00d4ff]/25 transition-all flex items-center gap-1 disabled:opacity-50">
+                        <ChevronRight size={11} /> {converting ? 'Converting...' : 'Convert to RFQ'}
                       </button>
                     )}
                     {detailPR.status === 'Pending Approval' && detailPR.approvalChain.some(s => s.status === 'Pending') && (

@@ -4,6 +4,7 @@ import { useERPStore, MAIN_MODULES, HIDDEN_MAIN_MODULES, SUB_MODULES, MODULE_CON
 import { resolveNotificationTarget as resolveTarget, TYPE_COLOR } from '@/lib/notification-routing';
 import React, { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
+import { ProcurementDashboard } from '@/components/erp/procurement-dashboard';
 import { RoleScopeIndicator } from '@/components/erp/_role-scope-indicator';
 import { ModuleHelpChat } from '@/components/help/module-help-chat';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
@@ -34,7 +35,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
 };
 
 const NO_CREATE_MODULES = ['dashboard', 'reports', 'settings', 'hrms', 'employee-analytics', 'timesheet', 'finance-dashboard', 'fin-payments', 'financial-reports', 'fin-client-follow-up', 'trash'];
-const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'sales', 'projects', 'assets', 'system', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'finance-accounts', 'petty-cash', 'mis'];
+const SUB_GRID_MODULES = ['hrms', 'organization', 'procurement', 'sales', 'projects', 'assets', 'system', 'login-role', 'master-setup', 'inventory', 'sales-billing', 'finance-accounts', 'petty-cash', 'mis'];
 
 // ── Error Boundary ──────────────────────────────────────────────
 interface EBProps { children: ReactNode; moduleName: string; onBack: () => void }
@@ -124,7 +125,7 @@ function ModuleGrid() {
 }
 
 // ── Sub-Module Grid ─────────────────────────────────────────────
-function SubModuleGrid({ moduleId }: { moduleId: string }) {
+function SubModuleGrid({ moduleId, children }: { moduleId: string; children?: ReactNode }) {
   const { setActiveModule, userRole, allowedModules } = useERPStore();
   const allItems = SUB_MODULES[moduleId] || [];
   const items = allowedModules === 'all'
@@ -135,6 +136,14 @@ function SubModuleGrid({ moduleId }: { moduleId: string }) {
   return (
     <div className="p-6">
       <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => setActiveModule('dashboard')}
+          title="Back to all modules"
+          aria-label="Back to all modules"
+          className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#141920] border border-[#252e3a] text-[#8899aa] hover:text-[#e2e8f0] hover:border-[#f5a623]/50 transition-colors shrink-0"
+        >
+          <ArrowLeft size={16} />
+        </button>
         {parentInfo && (() => {
           const PIcon = ICON_MAP[parentInfo.icon] || Zap;
           return <div className="w-10 h-10 bg-[#f5a623]/10 rounded-lg flex items-center justify-center"><PIcon size={20} className="text-[#f5a623]" /></div>;
@@ -144,6 +153,7 @@ function SubModuleGrid({ moduleId }: { moduleId: string }) {
           <p className="text-[11px] text-[#5a6878] mt-0.5">{config?.breadcrumb || ''}</p>
         </div>
       </div>
+      {children}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
         {items.map((item) => {
           const Icon = ICON_MAP[item.icon] || Zap;
@@ -404,7 +414,7 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
 
 // ── Topbar ──────────────────────────────────────────────────────
 function Topbar({ onLogout }: { onLogout?: () => void }) {
-  const { activeModule, setSidebarOpen, setActiveModule, userRole, allowedModules } = useERPStore();
+  const { activeModule, setSidebarOpen, setActiveModule, goBack, userRole, allowedModules } = useERPStore();
   const config = MODULE_CONFIG[activeModule];
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -508,6 +518,19 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
   return (
     <header className="h-[60px] vc-glass border-b border-[#252e3a] flex items-center gap-3 px-6 shrink-0 relative z-30">
       <button className="lg:hidden text-[#8899aa] hover:text-[#e2e8f0]" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
+      {/* Back — one click back to the previous screen (sub-grid, dashboard, or
+          wherever the user navigated from). Falls back to the logical parent
+          when history isn't available, e.g. right after a page reload. */}
+      {activeModule !== 'dashboard' && (
+        <button
+          onClick={goBack}
+          title="Back"
+          aria-label="Back"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8899aa] hover:text-[#e2e8f0] hover:bg-[#1a212c] transition-colors shrink-0"
+        >
+          <ArrowLeft size={18} />
+        </button>
+      )}
       <div>
         <h1 className="text-[16px] font-semibold text-[#e2e8f0] tracking-tight">{config?.title || 'VoltCore ERP'}</h1>
         <p className="text-[11px] text-[#5a6878] mt-0.5">{config?.breadcrumb || ''}</p>
@@ -681,7 +704,11 @@ export default function ERPLayout({ onLogout }: { onLogout?: () => void }) {
             </div>
           )}
           <div className="animate-in fade-in duration-200 relative z-10 max-w-[1600px] mx-auto w-full">
-            {isDashboard ? <ModuleGrid /> : isSubGrid ? <SubModuleGrid moduleId={activeModule} /> : <div className="p-6"><ModuleRendererWrapper moduleKey={activeModule} /></div>}
+            {isDashboard ? <ModuleGrid /> : isSubGrid ? (
+              <SubModuleGrid moduleId={activeModule}>
+                {activeModule === 'procurement' ? <ProcurementDashboard /> : null}
+              </SubModuleGrid>
+            ) : <div className="p-6"><ModuleRendererWrapper moduleKey={activeModule} /></div>}
           </div>
         </main>
       </div>

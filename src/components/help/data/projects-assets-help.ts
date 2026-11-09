@@ -151,7 +151,7 @@ export const ASSETS_HELP_ENTRIES: HelpEntry[] = [
 - **Equipment** — equipment register with maintenance dates and utilization
 - **Work Permits** — permit-to-work with expiry and revocation
 - **Safety & HSE** — incident register
-- **Subcontractors** — contractor register with statutory compliance
+- **Contractors** — contractor register with statutory compliance (internal name: Subcontractors)
 
 For the accounting side of fixed assets (register & depreciation) see the Finance help.`,
     links: [
@@ -214,16 +214,16 @@ Delete removes the record after confirmation.`,
   },
   {
     id: 'asset-subcontractors',
-    title: 'Subcontractor register & compliance',
+    title: 'Contractor register & compliance',
     relatedModule: 'subcontractors',
     keywords: [
-      'subcontractor', 'subcontractors', 'contractor', 'labour licence', 'pf registration',
+      'subcontractor', 'subcontractors', 'contractor', 'contractors', 'labour licence', 'pf registration',
       'esi registration', 'compliance', 'non compliant', 'workers deployed', 'trade',
     ],
     summary: 'Track contractors, workers deployed and statutory compliance.',
-    body: `### Subcontractors
+    body: `### Contractors
 
-**Add Subcontractor** with **Company Name**, **Trade**, **Site** and **Workers Deployed**, then record:
+**Add Contractor** with **Company Name**, **Trade**, **Site** and **Workers Deployed**, then record:
 
 - **PF Registration** — Done / Pending / Missing
 - **ESI Registration** — Done / Pending / Missing
@@ -231,8 +231,8 @@ Delete removes the record after confirmation.`,
 
 The **Compliance Status** shows **Compliant** or **Non-Compliant** from those checks. Edit or delete from each row.
 
-For contract value and progress claims see **Procurement → Subcontract Register**.`,
-    links: [{ label: 'Subcontract Register', moduleId: 'procurement-subcontracts' }],
+For contract value and progress claims see **Procurement → Contractors Management**.`,
+    links: [{ label: 'Contractors Management', moduleId: 'procurement-subcontracts' }],
   },
   {
     id: 'asset-about',

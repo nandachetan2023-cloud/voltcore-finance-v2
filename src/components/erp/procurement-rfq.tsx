@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   FileText, Plus, Pencil, Trash2, Search, Link, Loader2, CheckCircle, Calendar, X as XIcon,
   TrendingUp, TrendingDown, Clock, Users, Award, BarChart3, ChevronDown, ChevronRight, Upload,
@@ -133,19 +133,19 @@ export default function ProcurementRFQ() {
   const [detailTab, setDetailTab] = useState<'bids' | 'compare'>('bids');
   const [importOpen, setImportOpen] = useState(false);
 
-  useEffect(() => {
-    setLoading(true); setError(null);
-    fetch('/api/procurement/rfqs')
-      .then(res => res.json())
-      .then(json => {
-        if (json.success) {
-          if (json.data && json.data.length > 0) setRfqs(json.data);
-          else { setRfqs(generateMockRFQs()); toast.info('Showing sample data — API unavailable'); }
-        } else { setRfqs(generateMockRFQs()); toast.info('Showing sample data — API unavailable'); }
-      })
-      .catch(() => { setRfqs(generateMockRFQs()); toast.info('Showing sample data — API unavailable'); })
-      .finally(() => setLoading(false));
+  const fetchRfqs = useCallback(async () => {
+    try {
+      setLoading(true); setError(null);
+      const res = await fetch('/api/procurement/rfqs');
+      const json = await res.json();
+      if (json.success) {
+        if (json.data && json.data.length > 0) setRfqs(json.data);
+        else { setRfqs(generateMockRFQs()); toast.info('Showing sample data — API unavailable'); }
+      } else { setRfqs(generateMockRFQs()); toast.info('Showing sample data — API unavailable'); }
+    } catch { setRfqs(generateMockRFQs()); toast.info('Showing sample data — API unavailable'); }
+    finally { setLoading(false); }
   }, []);
+  useEffect(() => { fetchRfqs(); }, [fetchRfqs]);
 
   const filtered = rfqs.filter(r => statusFilter === 'All' || r.status === statusFilter);
   const tc = useTableControls(filtered, (r) => r.rfqNo + ' ' + r.description + ' ' + r.project + ' ' + r.status);

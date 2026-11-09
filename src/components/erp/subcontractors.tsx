@@ -118,7 +118,7 @@ export default function SubcontractorsModule() {
       const res = await fetch('/api/subcontractors', { method: mode === 'create' ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
       if (json.success) {
-        toast.success(mode === 'create' ? 'Subcontractor added successfully' : 'Subcontractor updated successfully');
+        toast.success(mode === 'create' ? 'Contractor added successfully' : 'Contractor updated successfully');
         if (mode === 'create') setCreateOpen(false); else setEditOpen(false);
         fetchData();
       } else { toast.error(json.error || `Failed to ${mode}`); }
@@ -132,7 +132,7 @@ export default function SubcontractorsModule() {
     try {
       const res = await fetch('/api/subcontractors', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: selectedId }) });
       const json = await res.json();
-      if (json.success) { toast.success('Subcontractor deleted successfully'); setDeleteOpen(false); fetchData(); }
+      if (json.success) { toast.success('Contractor deleted successfully'); setDeleteOpen(false); fetchData(); }
       else { toast.error(json.error || 'Failed to delete'); }
     } catch { toast.error('Failed to delete'); }
     finally { setSubmitting(false); }
@@ -223,9 +223,9 @@ export default function SubcontractorsModule() {
       <div className="vc-panel">
         <div className="vc-panel-header">
           <Handshake size={15} className="text-[#f5a623]" />
-          <span className="text-[12px] font-semibold text-[#e2e8f0]">Subcontractor Register</span>
+          <span className="text-[12px] font-semibold text-[#e2e8f0]">Contractor Register</span>
           <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{subcontractors.length} Total</span>
-          <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={openCreate}><Plus size={13} /> Add Subcontractor</button>
+          <button className="vc-btn-primary ml-2 flex items-center gap-1" onClick={openCreate}><Plus size={13} /> Add Contractor</button>
         </div>
         <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
           <table className="w-full text-[11px]">
@@ -238,7 +238,7 @@ export default function SubcontractorsModule() {
             </thead>
             <tbody>
               {subcontractors.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-8 text-[#5a6878] text-[11px]">No subcontractors found</td></tr>
+                <tr><td colSpan={9} className="text-center py-8 text-[#5a6878] text-[11px]">No contractors found</td></tr>
               ) : subcontractors.map(sc => (
                 <tr key={sc.id} className="border-b border-[#252e3a]/50 hover:bg-[#141920] transition-colors group">
                   <td className="py-2.5 px-3 text-[#e2e8f0] font-medium">{sc.name}</td>
@@ -264,17 +264,17 @@ export default function SubcontractorsModule() {
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Add Subcontractor</DialogTitle></DialogHeader>{dialogContent()}
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Add Contractor</DialogTitle></DialogHeader>{dialogContent()}
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button className="vc-btn-primary" disabled={submitting} onClick={() => handleSubmit('create')}>{submitting ? 'Adding...' : 'Add Subcontractor'}</Button>
+            <Button className="vc-btn-primary" disabled={submitting} onClick={() => handleSubmit('create')}>{submitting ? 'Adding...' : 'Add Contractor'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Edit Subcontractor</DialogTitle></DialogHeader>{dialogContent()}
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-2xl"><DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Edit Contractor</DialogTitle></DialogHeader>{dialogContent()}
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setEditOpen(false)}>Cancel</Button>
             <Button className="vc-btn-primary" disabled={submitting} onClick={() => handleSubmit('edit')}>{submitting ? 'Saving...' : 'Save Changes'}</Button>
@@ -285,10 +285,10 @@ export default function SubcontractorsModule() {
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] max-w-md">
-          <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Delete Subcontractor</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-[#e2e8f0] text-base">Delete Contractor</DialogTitle></DialogHeader>
           <div className="flex items-start gap-3 py-2">
             <div className="w-10 h-10 rounded-full bg-[#ff3d3d]/15 flex items-center justify-center shrink-0 mt-0.5"><AlertTriangle size={20} className="text-[#ff3d3d]" /></div>
-            <div><p className="text-[13px] text-[#e2e8f0] mb-1">Are you sure you want to delete this subcontractor?</p><p className="text-[11px] text-[#8899aa]">This action cannot be undone.</p></div>
+            <div><p className="text-[13px] text-[#e2e8f0] mb-1">Are you sure you want to delete this contractor?</p><p className="text-[11px] text-[#8899aa]">This action cannot be undone.</p></div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="ghost" className="bg-[#141920] text-[#8899aa] hover:text-[#e2e8f0] border border-[#2e3a48] hover:border-[#f5a623]" onClick={() => setDeleteOpen(false)}>Cancel</Button>

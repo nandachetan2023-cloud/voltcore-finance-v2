@@ -83,7 +83,9 @@ const AREA_DEFS: HelpArea[] = [
       'financial-reports',
       'fin-sites',
       'fin-jobs',
+      'fin-items',
       'fin-parties',
+      'fin-clients',
       'fin-invoices',
       'fin-payments',
       'fin-payment-advices',
@@ -189,7 +191,7 @@ const AREA_DEFS: HelpArea[] = [
     id: 'assets',
     name: 'Assets',
     greeting:
-      "Hi! I'm your **Assets** helper. Ask about equipment maintenance, work permits, safety incidents or subcontractor compliance — e.g. *\"how do I revoke a permit\"*.",
+      "Hi! I'm your **Assets** helper. Ask about equipment maintenance, work permits, safety incidents or contractor compliance — e.g. *\"how do I revoke a permit\"*.",
     placeholder: 'Ask - e.g. "how do I log a safety incident"',
     entries: ASSETS_HELP_ENTRIES,
     assistant: false,
@@ -287,7 +289,7 @@ Pick a module tile on the dashboard (or from the sidebar):
 - **Petty Cash** — vouchers, custodian dashboard, approvals, replenishment
 - **Master Setup** — sites, jobs, parties, chart of accounts
 - **Projects** — portfolio, job hierarchy, BOQ, progress
-- **Assets** — equipment, permits, safety, subcontractors
+- **Assets** — equipment, permits, safety, contractors
 - **MIS** — drill-downs, PO cost tree, customer profitability
 - **Login & Role / System** — access control, users, settings, notices
 

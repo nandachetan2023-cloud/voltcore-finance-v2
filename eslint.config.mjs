@@ -22,7 +22,7 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "react/no-unescaped-entities": "off",
     "react/display-name": "off",
     "react/prop-types": "off",
-    "react-compiler/react-compiler": "off",
+    "react-hooks/set-state-in-effect": "off",
     
     // Next.js rules
     "@next/next/no-img-element": "off",

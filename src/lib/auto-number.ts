@@ -85,3 +85,26 @@ export async function withCodeRetry<T>(
 
 /** A key the caller supplied (import, edit) wins; otherwise generate one. */
 export const isBlank = (v: unknown) => v === undefined || v === null || String(v).trim() === ''
+
+/**
+ * Next item code in a category-segmented series, e.g. ELC-0007.
+ * Item codes are the identity PRs/GRNs/stock ledger reference, so they are
+ * generated server-side per category prefix (highest suffix + 1, deletes never
+ * free a number, P2002 race retried via withCodeRetry) — the same doctrine the
+ * other NUMBER_SERIES entries follow. A blank/unresolved category falls back
+ * to the safe generic ITM- segment.
+ */
+export async function nextItemCode(db: any, categoryCode?: string | null): Promise<string> {
+  const seg = (categoryCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const prefix = seg ? `${seg}-` : 'ITM-'
+  const rows: Array<{ itemCode: string }> = await db.finItem.findMany({
+    where: { itemCode: { startsWith: prefix } },
+    select: { itemCode: true },
+  })
+  let max = 0
+  for (const r of rows) {
+    const m = String(r.itemCode).slice(prefix.length).match(/^\d+/)
+    if (m) max = Math.max(max, parseInt(m[0], 10))
+  }
+  return `${prefix}${String(max + 1).padStart(4, '0')}`
+}

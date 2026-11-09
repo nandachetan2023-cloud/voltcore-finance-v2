@@ -35,7 +35,7 @@ export const PROCUREMENT_HELP_ENTRIES: HelpEntry[] = [
 
 **🤝 Vendors & contracts**
 - **Vendor Management** — vendor directory, rating, compliance
-- **Subcontract Register** — subcontracts and progress claims
+- **Contractor Register** — contracts and progress claims
 - **Expenses** — expense claims
 
 The typical flow is **PR → RFQ → PO → GRN → Bill → Payment**.`,
@@ -251,21 +251,21 @@ Two views: **List** and **Dashboard**.
   },
   {
     id: 'proc-subcontracts',
-    title: 'Subcontract register & progress claims',
+    title: 'Contractor register & progress claims',
     relatedModule: 'procurement-subcontracts',
     keywords: [
       'subcontract', 'subcontracts', 'subcontractor', 'contract', 'progress claim',
       'claim', 'retention', 'scope', '% complete', 'work done',
     ],
-    summary: 'Track subcontracts, retention and progress claims.',
-    body: `### Subcontract Register
+    summary: 'Track contracts, retention and progress claims.',
+    body: `### Contractor Register
 
-- **New Subcontract** — subcontract no., vendor/contractor, project/site, scope summary, value, start & end dates, **retention %**, status.
-- Open a subcontract to see **% Complete**, scope and retention held.
-- **New Progress Claim** — claim no., date and amount claimed; submit it against the subcontract.
+- **New Contractor** — contract no., vendor/contractor, project/site, scope summary, value, start & end dates, **retention %**, status.
+- Open a contract to see **% Complete**, scope and retention held.
+- **New Progress Claim** — claim no., date and amount claimed; submit it against the contract.
 
-For contractor compliance (PF/ESI/licences) see **Assets → Subcontractors**.`,
-    links: [{ label: 'Subcontractors', moduleId: 'subcontractors' }],
+For contractor compliance (PF/ESI/licences) see **Assets → Contractors**.`,
+    links: [{ label: 'Contractors', moduleId: 'subcontractors' }],
   },
   {
     id: 'proc-expenses',

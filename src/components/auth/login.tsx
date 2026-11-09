@@ -26,7 +26,7 @@ function Card({ children }: { children: React.ReactNode }) {
           {children}
         </div>
         <div className="mt-8 text-center">
-          <p className="text-xs text-[#5a6878]">© 2025 VoltCore Engineering Pvt. Ltd. All rights reserved.</p>
+          <p className="text-xs text-[#5a6878]">© 2025 <a href="https://upasanaassociate.com/" target="_blank" rel="noopener noreferrer" className="hover:text-[#f5a623] underline underline-offset-2">Upasana Associates</a>. All rights reserved.</p>
           <div className="mt-3 flex justify-center">
             <ThemeToggle compact />
           </div>

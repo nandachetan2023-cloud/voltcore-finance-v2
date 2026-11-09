@@ -12,7 +12,10 @@ interface FinRec {
   id: number; poNo: string; vendorName: string; description: string; jobCode: string;
   totalAmount: number; status: string; date: string; siteName: string;
 }
-interface FormRec { vendorName: string; description: string; jobCode: string; totalAmount: number; }
+interface FormRec {
+  vendorName: string; description: string; jobCode: string; siteId: string;
+  costCenter: string; projectManager: string; totalAmount: number;
+}
 
 const PO_COLUMNS: ExportColumn<FinRec>[] = [
   { header: 'PO No', accessor: 'poNo' },
@@ -25,16 +28,8 @@ const PO_COLUMNS: ExportColumn<FinRec>[] = [
 
 const STEPS = ['Draft', 'Pending Approval', 'Approved', 'Converted to PO'];
 const POOL_INDEX: Record<string, number> = { Draft: 0, 'Pending Approval': 1, Approved: 2, 'Converted to PO': 3, Converted: 3 };
-const EMPTY: FormRec = { vendorName: '', description: '', jobCode: '', totalAmount: 0 };
+const EMPTY: FormRec = { vendorName: '', description: '', jobCode: '', siteId: '', costCenter: 'CC-PROJ', projectManager: '', totalAmount: 0 };
 const inpBox = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#00d4ff]/60 placeholder:text-[#5a6878]';
-
-function generateMockPOs(): FinRec[] {
-  return [
-    { id: 1, poNo: 'PO-2026-021', vendorName: 'ElectroMech Solutions', description: '40 MT Structural Steel supply', jobCode: 'JOB-2026-001', totalAmount: 2940000, status: 'Pending Approval', date: '2026-07-01', siteName: 'BALCO' },
-    { id: 2, poNo: 'PO-2026-022', vendorName: 'PowerTech Industries', description: '2 x 50 MVA Power Transformers', jobCode: 'JOB-2026-003', totalAmount: 8400000, status: 'Draft', date: '2026-07-12', siteName: 'Hindalco' },
-    { id: 3, poNo: 'PO-2026-023', vendorName: 'CementMart', description: 'OPC 53 Cement 5000 MT', jobCode: 'JOB-2026-004', totalAmount: 31250000, status: 'Approved', date: '2026-06-20', siteName: 'Ballet' },
-  ];
-}
 
 export default function PoApprovalStepper() {
   const [records, setRecords] = useState<FinRec[]>([]);
@@ -43,22 +38,27 @@ export default function PoApprovalStepper() {
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<FormRec>(EMPTY);
+  const [sites, setSites] = useState<{ id: number; name: string }[]>([]);
+  const [jobs, setJobs] = useState<{ id: number; jobCode: string; siteId: number }[]>([]);
 
   const tc = useTableControls(records, (r) => `${r.poNo} ${r.vendorName} ${r.description} ${r.jobCode}`);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const j = await fetch('/api/fin/purchase-orders').then(r => r.json());
-      if (j.success && j.data?.length) {
-        setRecords(j.data.map((po: any) => ({
+      const [j, sRes, jRes] = await Promise.all([
+        fetch('/api/fin/purchase-orders').then(r => r.json()),
+        fetch('/api/fin/sites').then(r => r.json()).catch(() => null),
+        fetch('/api/fin/jobs').then(r => r.json()).catch(() => null),
+      ]);
+      if (sRes?.success) setSites((sRes.data || []).map((s: { id: number; name: string }) => ({ id: s.id, name: s.name })));
+      if (jRes?.success) setJobs((jRes.data || []).map((x: { id: number; jobCode: string; siteId: number }) => ({ id: x.id, jobCode: x.jobCode, siteId: x.siteId })));
+      if (j.success) {
+        setRecords((j.data || []).map((po: { id: number; poNo: string; vendorName: string; descriptionOfWork: string; jobCode: string; totalAmount: number; status: string; date: string; site?: { name: string } }) => ({
           id: po.id, poNo: po.poNo, vendorName: po.vendorName || '', description: po.descriptionOfWork || '', jobCode: po.jobCode || '', totalAmount: po.totalAmount || 0, status: po.status || 'Draft', date: po.date, siteName: po.site?.name || '',
         })));
-      } else {
-        setRecords(generateMockPOs());
-        toast.info('Sample data shown — no POs in database yet');
       }
-    } catch { setRecords(generateMockPOs()); toast.info('Sample data shown'); }
+    } catch { /* empty state */ }
     finally { setLoading(false); }
   };
 
@@ -83,11 +83,28 @@ export default function PoApprovalStepper() {
 
   const create = async () => {
     if (!form.vendorName || !form.description) { toast.error('Vendor and description required'); return; }
+    if (!form.siteId || !form.jobCode || !form.costCenter.trim() || !form.projectManager.trim()) { toast.error('Site, Job, Cost Center and Project Manager required'); return; }
     setSaving(true);
     try {
-      const res = await fetch('/api/fin/purchase-orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ poNo: `PO-${Date.now()}`, vendorName: form.vendorName, descriptionOfWork: form.description, jobCode: form.jobCode || 'JOB-2026-001', siteId: 1, costCenter: 'CC-A', department: 'Procurement', projectManager: 'R. Sharma', status: 'Pending Approval', date: new Date().toISOString().split('T')[0], totalAmount: Number(form.totalAmount) || 0 }) });
+      const res = await fetch('/api/fin/purchase-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendorId: '0',
+          vendorName: form.vendorName,
+          descriptionOfWork: form.description,
+          jobCode: form.jobCode,
+          siteId: Number(form.siteId),
+          costCenter: form.costCenter.trim(),
+          department: 'Procurement',
+          projectManager: form.projectManager.trim(),
+          status: 'Pending Approval',
+          date: new Date().toISOString(),
+          totalAmount: Number(form.totalAmount) || 0,
+        }),
+      });
       const j = await res.json();
-      if (j.success) { toast.success('PO created'); setFormOpen(false); setForm(EMPTY); await fetchData(); }
+      if (j.success) { toast.success('PO created and sent for approval'); setFormOpen(false); setForm(EMPTY); await fetchData(); }
       else toast.error(j.error || 'Failed to create');
     } catch { toast.error('Network error'); }
     finally { setSaving(false); }
@@ -193,10 +210,27 @@ export default function PoApprovalStepper() {
           <div className="bg-[#161c24] border border-[#00d4ff]/25 rounded-xl p-4 max-w-md w-full">
             <h4 className="text-[13px] font-bold text-[#e2e8f0] mb-3">New Purchase Order</h4>
             <div className="space-y-3">
-              <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Vendor</label><input className={inpBox} value={form.vendorName} onChange={e => setForm(f => ({ ...f, vendorName: e.target.value }))} /></div>
-              <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Description</label><input className={inpBox} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
+              <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Vendor</label><input className={inpBox} value={form.vendorName} onChange={e => setForm(f => ({ ...f, vendorName: e.target.value }))} placeholder="Supplier name" /></div>
+              <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Description</label><input className={inpBox} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Scope of supply" /></div>
               <div className="grid grid-cols-2 gap-2">
-                <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Job</label><input className={inpBox} value={form.jobCode} onChange={e => setForm(f => ({ ...f, jobCode: e.target.value }))} /></div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Site *</label>
+                  <select className={inpBox} value={form.siteId} onChange={e => setForm(f => ({ ...f, siteId: e.target.value, jobCode: '' }))}>
+                    <option value="">Select site…</option>
+                    {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Job *</label>
+                  <select className={inpBox} value={form.jobCode} onChange={e => setForm(f => ({ ...f, jobCode: e.target.value }))}>
+                    <option value="">Select job…</option>
+                    {jobs.filter(x => !form.siteId || x.siteId === Number(form.siteId)).map(x => <option key={x.id} value={x.jobCode}>{x.jobCode}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Cost Ctr *</label><input className={inpBox} value={form.costCenter} onChange={e => setForm(f => ({ ...f, costCenter: e.target.value }))} /></div>
+                <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">PM *</label><input className={inpBox} value={form.projectManager} onChange={e => setForm(f => ({ ...f, projectManager: e.target.value }))} placeholder="Name" /></div>
                 <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Amount</label><input type="number" className={inpBox} value={form.totalAmount} onChange={e => setForm(f => ({ ...f, totalAmount: Number(e.target.value) }))} /></div>
               </div>
             </div>

@@ -1,5 +1,5 @@
 ﻿'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Building2, Plus, Pencil, Trash2, Search, LayoutGrid, List, Star, X, ChevronDown, ChevronUp, Shield, Award, TrendingUp, Clock, FileText, User, Phone, Mail, MapPin, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -128,14 +128,14 @@ export default function ProcurementVendors() {
   const [showAddBlacklist, setShowAddBlacklist] = useState(false);
   const [vendors, setVendors] = useState<Vendor[]>([]);
 
-  const loadVendors = async () => {
+  const loadVendors = useCallback(async () => {
     try {
       const r = await fetch('/api/fin/vendors');
       const j = await r.json();
-      if (j.success) setVendors(j.data);
+      if (j.success) requestAnimationFrame(() => setVendors(j.data));
     } catch { toast.error('Failed to load vendors'); }
-  };
-  useEffect(() => { loadVendors(); }, []);
+  }, []);
+  useEffect(() => { loadVendors(); }, [loadVendors]);
 
   const mutateVendors = (updated: Vendor) => {
     setVendors(prev => prev.map(x => x.id === updated.id ? updated : x));
@@ -334,9 +334,9 @@ export default function ProcurementVendors() {
       <div className="vc-panel">
         <div className="vc-panel-header">
           <Building2 size={15} className="text-[#f5a623]" />
-          <span className="text-[12px] font-semibold text-[#e2e8f0]">Vendor Directory</span>
+          <span className="text-[12px] font-semibold text-[#e2e8f0]">Contractors Management</span>
           <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{vendors.length}</span>
-          <button onClick={openNewDialog} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Vendor</button>
+          <button onClick={openNewDialog} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Contractor</button>
         </div>
         <div className="px-3 pb-3 space-y-2.5">
           <div className="flex flex-col sm:flex-row gap-2.5">
@@ -452,7 +452,7 @@ export default function ProcurementVendors() {
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
         <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>New Vendor</DialogTitle>
+            <DialogTitle>New Contractor</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateVendor} className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">

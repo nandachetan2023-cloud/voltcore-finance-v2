@@ -16,6 +16,7 @@ interface LineItem {
   unit: string;
   unitPrice: number;
   total: number;
+  hsn?: string;
 }
 
 interface PORecord {
@@ -24,6 +25,7 @@ interface PORecord {
   vendor: string;
   project: string;
   projectShort: string;
+  jobCode?: string | null;
   totalValue: number;
   deliveryAddress: string;
   requiredDate: string;
@@ -38,8 +40,14 @@ interface PORecord {
   invoiceMatched: boolean;
 }
 
+interface VendorMaster { id: number; name: string; address?: string | null; status?: string }
+interface SiteMaster { id: number; siteCode: string; name: string; location?: string | null }
+interface JobMaster { id: number; jobCode: string; siteId: number; description?: string | null; site?: { id: number; name: string; siteCode: string } | null }
+interface ItemMaster { id: number; itemCode: string; name: string; uom: string; rate: number; hsn?: string | null }
+
 const VENDORS = ['SteelMech India Pvt Ltd', 'PowerCables Ltd', 'Transformers & Co', 'Elecon Engineering', 'Kirloskar Brothers', 'Siemens India', 'BHEL', 'ABB India'];
 const PROJECTS = ['BALCO', 'NTPC', 'Hindalco', 'Coal India', 'JSW'];
+const UOMS = ['Nos', 'Kg', 'Mtr', 'Ltr', 'Sets', 'Bag', 'Ton', 'Cum', 'Box', 'Lot'];
 const STATUSES: PORecord['status'][] = ['Open', 'Partially Received', 'Completed', 'Overdue'];
 
 const STATUS_STYLES: Record<PORecord['status'], string> = {
@@ -135,15 +143,20 @@ const [grnEditQty, setGrnEditQty] = useState(0);
 const [formOpen, setFormOpen] = useState(false);
 const [formTarget, setFormTarget] = useState<PORecord | null>(null);
 const [formVendor, setFormVendor] = useState(VENDORS[0]);
-const [formProject, setFormProject] = useState(PROJECTS[0]);
+const [formSiteCode, setFormSiteCode] = useState(PROJECTS[0]);
+const [formJobCode, setFormJobCode] = useState('');
 const [formAddress, setFormAddress] = useState('');
 const [formReqDate, setFormReqDate] = useState('');
 const [formItems, setFormItems] = useState<(Omit<LineItem, 'id'> & { id: number })[]>([]);
 const [nextFormItemId, setNextFormItemId] = useState(1);
+const [vendors, setVendors] = useState<VendorMaster[]>([]);
+const [sites, setSites] = useState<SiteMaster[]>([]);
+const [jobs, setJobs] = useState<JobMaster[]>([]);
+const [items, setItems] = useState<ItemMaster[]>([]);
 
   const loadPOs = useCallback(async () => {
     try {
-      const r = await fetch('/api/fin/po-register');
+      const r = await fetch('/api/procurement/po-register');
       const j = await r.json();
       if (j.success) setRecords(j.data);
     } catch {
@@ -152,8 +165,55 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
   }, []);
   useEffect(() => { loadPOs(); }, [loadPOs]);
 
+  useEffect(() => {
+    fetch('/api/fin/vendors').then(r => r.json()).then(j => { if (j.success && Array.isArray(j.data)) setVendors(j.data); }).catch(() => {});
+    fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success && Array.isArray(j.data)) setSites(j.data); }).catch(() => {});
+    fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success && Array.isArray(j.data)) setJobs(j.data); }).catch(() => {});
+    fetch('/api/fin/items').then(r => r.json()).then(j => { if (j.success && Array.isArray(j.data)) setItems(j.data); }).catch(() => {});
+  }, []);
+
+  const vendorNames = useMemo(() => {
+    const fromMaster = vendors.map(v => v.name);
+    const fromRecords = records.map(r => r.vendor).filter(Boolean);
+    return Array.from(new Set([...fromMaster, ...fromRecords]));
+  }, [vendors, records]);
+
+  const siteCodes = useMemo(() => {
+    const fromMaster = sites.map(s => s.siteCode);
+    const fromRecords = records.map(r => r.projectShort).filter(Boolean);
+    return Array.from(new Set([...fromMaster, ...fromRecords]));
+  }, [sites, records]);
+
+  const formSiteOptions = formSiteCode && !siteCodes.includes(formSiteCode) ? [...siteCodes, formSiteCode] : siteCodes;
+  const formVendorOptions = formVendor && !vendorNames.includes(formVendor) ? [...vendorNames, formVendor] : vendorNames;
+  const scopedJobs = formSiteCode ? jobs.filter(j => j.site?.siteCode === formSiteCode) : jobs;
+  const formJobOptions = formJobCode && !scopedJobs.some(j => j.jobCode === formJobCode)
+    ? [{ id: -1, jobCode: formJobCode, siteId: 0, description: null }, ...scopedJobs]
+    : scopedJobs;
+
+  const pickSite = (code: string) => {
+    setFormSiteCode(code);
+    setFormJobCode('');
+    const s = sites.find(x => x.siteCode === code);
+    if (s?.location && (!formAddress || formAddress === 'Site Location, Korba, Chhattisgarh')) {
+      setFormAddress(s.location);
+    }
+  };
+
+  const pickItemDesc = (index: number, value: string) => {
+    const u = [...formItems];
+    u[index] = { ...u[index], itemDesc: value };
+    const m = items.find(i => i.name === value || i.itemCode === value);
+    if (m) {
+      if (!u[index].unit || u[index].unit === 'Nos') u[index].unit = m.uom || u[index].unit;
+      if (!u[index].unitPrice) u[index].unitPrice = m.rate || 0;
+      if (m.hsn) u[index].hsn = m.hsn;
+    }
+    setFormItems(u);
+  };
+
   const persistPO = (method: 'POST' | 'PUT', payload: Record<string, unknown>) => {
-    fetch('/api/fin/po-register', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    fetch('/api/procurement/po-register', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       .then(r => r.json())
       .then(j => { if (!j.success) toast.error(j.error || 'Failed'); })
       .catch(() => toast.error('Network error'));
@@ -203,7 +263,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
         <td style="padding:12px;font-size:12px;vertical-align:top">${String(i + 1).padStart(2, '0')}</td>
         <td style="padding:12px;font-size:12px;vertical-align:top">
           <div style="font-weight:700;font-size:13px;margin-bottom:2px">${esc(it.itemDesc) || '—'}</div>
-          <div style="font-size:11px;color:#877363">HSN: ${esc(it.unit) || '—'}</div>
+          <div style="font-size:11px;color:#877363">HSN: ${esc(it.hsn || '') || '—'}</div>
         </td>
         <td style="padding:12px;font-size:12px;text-align:right;vertical-align:top;font-variant-numeric:tabular-nums">${num(it.qtyOrdered)}</td>
         <td style="padding:12px;font-size:12px;text-align:left;vertical-align:top">${esc(it.unit) || '—'}</td>
@@ -254,7 +314,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
             <tr style="border-bottom:1px solid #e0e3e5"><td style="padding:4px 24px 4px 0;font-size:12px;color:#544435;text-align:right">PO Number:</td><td style="padding:4px 0;font-size:12px;font-weight:700;text-align:right">${esc(r.poNo)}</td></tr>
             <tr style="border-bottom:1px solid #e0e3e5"><td style="padding:4px 24px 4px 0;font-size:12px;color:#544435;text-align:right">Date:</td><td style="padding:4px 0;font-size:12px;text-align:right">${fmtDate(r.poIssueDate)}</td></tr>
             <tr style="border-bottom:1px solid #e0e3e5"><td style="padding:4px 24px 4px 0;font-size:12px;color:#544435;text-align:right">Site Code:</td><td style="padding:4px 0;font-size:12px;text-align:right">${esc(r.projectShort)}</td></tr>
-            <tr><td style="padding:4px 24px 4px 0;font-size:12px;color:#544435;text-align:right">Job Code:</td><td style="padding:4px 0;font-size:12px;text-align:right">${esc(r.project)}</td></tr>
+            <tr><td style="padding:4px 24px 4px 0;font-size:12px;color:#544435;text-align:right">Job Code:</td><td style="padding:4px 0;font-size:12px;text-align:right">${esc(r.jobCode || r.project)}</td></tr>
           </table>
         </div>
       </div>
@@ -263,7 +323,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
         <div style="padding:16px;background:#eceef0;border:1px solid #dac2af;border-radius:4px">
           <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#544435;border-bottom:1px solid #dac2af;padding-bottom:6px;margin:0 0 10px">Supplier</h3>
           <div style="font-weight:700;font-size:14px;margin-bottom:4px">${esc(r.vendor)}</div>
-          <p style="font-size:12px;color:#333;line-height:1.5;margin:0">Address on file</p>
+          <p style="font-size:12px;color:#333;line-height:1.5;margin:0">${esc(vendors.find(v => v.name === r.vendor)?.address || 'Address on file')}</p>
         </div>
         <div style="padding:16px;background:#eceef0;border:1px solid #dac2af;border-radius:4px">
           <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#544435;border-bottom:1px solid #dac2af;padding-bottom:6px;margin:0 0 10px">Shipping &amp; Billing</h3>
@@ -321,7 +381,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
   const handleDelete = () => {
     if (!deleteTarget) return;
     setRecords(prev => prev.filter(r => r.id !== deleteTarget.id));
-    fetch(`/api/fin/po-register?id=${deleteTarget.id}`, { method: 'DELETE' }).then(r => r.json()).then(j => { if (!j.success) toast.error(j.error || 'Failed'); }).catch(() => toast.error('Network error'));
+    fetch(`/api/procurement/po-register?id=${deleteTarget.id}`, { method: 'DELETE' }).then(r => r.json()).then(j => { if (!j.success) toast.error(j.error || 'Failed'); }).catch(() => toast.error('Network error'));
     toast.success(`PO ${deleteTarget.poNo} deleted`);
     setDeleteOpen(false);
     setDeleteTarget(null);
@@ -366,8 +426,9 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
 
   const openCreate = () => {
     setFormTarget(null);
-    setFormVendor(VENDORS[0]);
-    setFormProject(PROJECTS[0]);
+    setFormVendor(vendorNames[0] || VENDORS[0]);
+    setFormSiteCode(sites[0]?.siteCode || PROJECTS[0]);
+    setFormJobCode('');
     setFormAddress('Site Location, Korba, Chhattisgarh');
     setFormReqDate(addDays(now, 30).toISOString().split('T')[0]);
     setFormItems([
@@ -382,7 +443,8 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
   const openEdit = (r: PORecord) => {
     setFormTarget(r);
     setFormVendor(r.vendor);
-    setFormProject(r.projectShort);
+    setFormSiteCode(r.projectShort);
+    setFormJobCode(r.jobCode || '');
     setFormAddress(r.deliveryAddress);
     setFormReqDate(r.requiredDate);
     setFormItems(r.lineItems.map(it => ({ ...it })));
@@ -394,16 +456,18 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
     if (!formVendor || !formReqDate) { toast.error('Vendor and Required Date are required'); return; }
     const validItems = formItems.filter(it => it.itemDesc && it.qtyOrdered > 0);
     if (validItems.length === 0) { toast.error('Add at least one line item with a description and quantity'); return; }
-    const newId = formTarget ? formTarget.id : Math.max(...records.map(r => r.id)) + 1;
+    const newId = formTarget ? formTarget.id : (records.length ? Math.max(...records.map(r => r.id)) : 0) + 1;
     const poNo = formTarget ? formTarget.poNo : 'PO-2026-' + String(newId).padStart(3, '0');
     const address = formAddress || 'Site Location, Korba, Chhattisgarh';
     const reqDate = formReqDate || toDateStr(addDays(now, 30));
-    const projectFull = PROJECTS.find(p => p.startsWith(formProject)) || formProject;
+    const site = sites.find(s => s.siteCode === formSiteCode);
+    const projectFull = site?.name || formSiteCode;
     const items = validItems.map(it => ({ ...it, total: it.qtyOrdered * it.unitPrice }));
     const total = items.reduce((s, it) => s + it.total, 0);
     const poDate = toDateStr(new Date());
     const record: PORecord = {
-      id: newId, poNo, vendor: formVendor, project: projectFull, projectShort: formProject,
+      id: newId, poNo, vendor: formVendor, project: projectFull, projectShort: formSiteCode,
+      jobCode: formJobCode || null,
       totalValue: total, deliveryAddress: address, requiredDate: reqDate, actualDeliveryDate: '',
       lineItems: items, status: 'Open', poIssueDate: poDate, grnDate: null, invoiceMatchDate: null,
       poIssued: true, grnCompleted: false, invoiceMatched: false,
@@ -411,7 +475,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
     if (formTarget) {
       const merged = { ...record, status: formTarget!.status, grnCompleted: formTarget!.grnCompleted, invoiceMatched: formTarget!.invoiceMatched };
       setRecords(prev => prev.map(r => r.id === newId ? merged : r));
-      persistPO('PUT', { id: newId, ...record, status: merged.status, grnCompleted: merged.grnCompleted, invoiceMatched: merged.invoiceMatched });
+      persistPO('PUT', { ...record, status: merged.status, grnCompleted: merged.grnCompleted, invoiceMatched: merged.invoiceMatched });
       toast.success(`PO ${poNo} updated`);
     } else {
       setRecords(prev => [...prev, record]);
@@ -437,12 +501,12 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
         </div>
         <div className="px-3 py-2 flex flex-wrap items-center gap-2 border-b border-[#252e3a]">
           <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} className="bg-[#0f1318] border border-[#252e3a] rounded-lg px-2.5 py-1.5 text-[11px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none">
-            <option value="All">All Projects</option>
-            {PROJECTS.map(p => <option key={p} value={p}>{p}</option>)}
+            <option value="All">All Sites</option>
+            {siteCodes.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
           <select value={vendorFilter} onChange={e => setVendorFilter(e.target.value)} className="bg-[#0f1318] border border-[#252e3a] rounded-lg px-2.5 py-1.5 text-[11px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none">
             <option value="All">All Vendors</option>
-            {VENDORS.map(v => <option key={v} value={v}>{v}</option>)}
+            {vendorNames.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-[#0f1318] border border-[#252e3a] rounded-lg px-2.5 py-1.5 text-[11px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none">
             <option value="All">All Status</option>
@@ -458,7 +522,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
             <table className="w-full text-[11px]">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0f1318]">
-                  {['PO#', 'Vendor', 'Project', 'Total Value', 'Delivery Address', 'Required Date', 'Line Items', 'GRN Status', '3-Way Match', 'Status', 'Actions'].map(h =>
+                  {['PO#', 'Vendor', 'Site', 'Job', 'Total Value', 'Delivery Address', 'Required Date', 'Line Items', 'GRN Status', '3-Way Match', 'Status', 'Actions'].map(h =>
                     <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>
                   )}
                 </tr>
@@ -473,6 +537,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
                       </td>
                       <td className="py-2.5 px-3 text-[#e2e8f0]">{r.vendor}</td>
                       <td className="py-2.5 px-3 text-[#8899aa]">{r.projectShort}</td>
+                      <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || '—'}</td>
                       <td className="py-2.5 px-3 text-[#e2e8f0] font-mono">{formatCurrency(r.totalValue)}</td>
                       <td className="py-2.5 px-3 text-[#8899aa] max-w-[140px] truncate">{r.deliveryAddress}</td>
                       <td className={`py-2.5 px-3 font-mono ${isOverdue(r.requiredDate) && r.status !== 'Completed' ? 'text-[#ff3d3d]' : 'text-[#8899aa]'}`}>{r.requiredDate}</td>
@@ -507,7 +572,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
                   );
                 })}
                 {tc.pageItems.length === 0 && (
-                  <tr><td colSpan={11} className="py-8 text-center text-[#5a6878]">No purchase orders match the current filters</td></tr>
+                  <tr><td colSpan={12} className="py-8 text-center text-[#5a6878]">No purchase orders match the current filters</td></tr>
                 )}
               </tbody>
             </table>
@@ -534,8 +599,12 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
                     <div className="text-[#e2e8f0]">{detailTarget.vendor}</div>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Project</label>
-                    <div className="text-[#e2e8f0]">{detailTarget.project}</div>
+                    <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Site</label>
+                    <div className="text-[#e2e8f0]">{detailTarget.projectShort} — {detailTarget.project}</div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Job Code</label>
+                    <div className="text-[#e2e8f0] font-mono">{detailTarget.jobCode || '—'}</div>
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Status</label>
@@ -583,17 +652,24 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
               </div>
               <div className="text-right text-[10px] w-[240px]">
                 <div className="font-bold text-[12px] mb-1">Vendor:</div>
-                <input value={formVendor} onChange={e => setFormVendor(e.target.value)} list="form-vendors" className="w-full bg-transparent border-b border-dashed border-[#999] outline-none text-[11px] font-bold text-[#1a1a1a] text-right" />
-                <datalist id="form-vendors">{VENDORS.map(v => <option key={v} value={v} />)}</datalist>
+                <select value={formVendor} onChange={e => setFormVendor(e.target.value)} className="w-full bg-transparent border-b border-dashed border-[#999] outline-none text-[11px] font-bold text-[#1a1a1a] text-right appearance-none">
+                  {formVendorOptions.map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
                 <input value={formAddress} onChange={e => setFormAddress(e.target.value)} className="w-full bg-transparent border-b border-dashed border-[#999] outline-none text-[10px] text-[#555] text-right mt-0.5" placeholder="Delivery Address" />
               </div>
             </div>
 
             {/* Project & Delivery Info */}
             <div className="mb-4 text-[10px] space-y-1">
-              <div className="flex items-center gap-2"><span className="font-bold">Project:</span>
-                <select value={formProject} onChange={e => setFormProject(e.target.value)} className="bg-transparent border-b border-dashed border-[#999] outline-none text-[10px] text-[#1a1a1a] appearance-none">
-                  {PROJECTS.map(p => <option key={p} value={p}>{p}</option>)}
+              <div className="flex items-center gap-2"><span className="font-bold">Site:</span>
+                <select value={formSiteCode} onChange={e => pickSite(e.target.value)} className="bg-transparent border-b border-dashed border-[#999] outline-none text-[10px] text-[#1a1a1a] appearance-none">
+                  {formSiteOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-2"><span className="font-bold">Job:</span>
+                <select value={formJobCode} onChange={e => setFormJobCode(e.target.value)} className="bg-transparent border-b border-dashed border-[#999] outline-none text-[10px] text-[#1a1a1a] appearance-none">
+                  <option value="">— Select Job —</option>
+                  {formJobOptions.map(j => <option key={j.id} value={j.jobCode}>{j.jobCode}{j.description ? ` — ${j.description}` : ''}</option>)}
                 </select>
               </div>
               <div className="flex items-center gap-2"><span className="font-bold">Delivery Address:</span>
@@ -605,6 +681,7 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
             </div>
 
             {/* Line Items Table */}
+            <datalist id="po-item-master">{items.map(it => <option key={it.id} value={it.name}>{it.itemCode}{it.hsn ? ` · HSN ${it.hsn}` : ''}</option>)}</datalist>
             <div className="overflow-x-auto">
             <table className="w-full text-[10px] border-collapse mb-3">
               <thead>
@@ -625,13 +702,16 @@ const [nextFormItemId, setNextFormItemId] = useState(1);
                     <tr key={it.id}>
                       <td className="border border-[#ccc] px-2 py-1 text-[#555] text-center">{i + 1}</td>
                       <td className="border border-[#ccc] px-2 py-1">
-                        <input value={it.itemDesc} onChange={e => { const u = [...formItems]; u[i] = { ...u[i], itemDesc: e.target.value }; setFormItems(u); }} className="w-full bg-transparent outline-none text-[10px]" placeholder="Description of item/service" />
+                        <input value={it.itemDesc} onChange={e => pickItemDesc(i, e.target.value)} list="po-item-master" className="w-full bg-transparent outline-none text-[10px]" placeholder="Description of item/service" />
                       </td>
                       <td className="border border-[#ccc] px-2 py-1 text-right">
                         <input type="number" value={it.qtyOrdered || ''} onChange={e => { const u = [...formItems]; u[i] = { ...u[i], qtyOrdered: Math.max(0, Number(e.target.value)) }; setFormItems(u); }} className="w-full bg-transparent outline-none text-[10px] text-right font-mono" min={0} />
                       </td>
                       <td className="border border-[#ccc] px-2 py-1 text-right">
-                        <input value={it.unit} onChange={e => { const u = [...formItems]; u[i] = { ...u[i], unit: e.target.value }; setFormItems(u); }} className="w-full bg-transparent outline-none text-[10px] text-right" />
+                        <select value={UOMS.includes(it.unit) ? it.unit : ''} onChange={e => { const u = [...formItems]; u[i] = { ...u[i], unit: e.target.value }; setFormItems(u); }} className="w-full bg-transparent outline-none text-[10px] text-right">
+                          {!UOMS.includes(it.unit) && it.unit && <option value="">{it.unit}</option>}
+                          {UOMS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
                       </td>
                       <td className="border border-[#ccc] px-2 py-1 text-right">
                         <input type="number" value={it.unitPrice || ''} onChange={e => { const u = [...formItems]; u[i] = { ...u[i], unitPrice: Math.max(0, Number(e.target.value)) }; setFormItems(u); }} className="w-full bg-transparent outline-none text-[10px] text-right font-mono" min={0} />

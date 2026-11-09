@@ -87,7 +87,7 @@ export const FULL_MODULE_TREE: {
       { key: 'equipment',      label: 'Equipment' },
       { key: 'permits',        label: 'Work Permits' },
       { key: 'safety',         label: 'Safety & HSE' },
-      { key: 'subcontractors', label: 'Subcontractors' },
+      { key: 'subcontractors', label: 'Contractors' },
     ],
   },
   {

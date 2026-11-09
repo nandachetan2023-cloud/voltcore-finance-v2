@@ -29,13 +29,13 @@ const CATEGORIES: Category[] = [
     screens: [
       { key: 'fin-sites', label: 'Sites' },
       { key: 'fin-jobs', label: 'Jobs (PO-wise)' },
-      { key: 'fin-parties', label: 'Clients & Vendors' },
-      { key: 'procurement-vendors', label: 'Vendor Management' },
-      { key: 'chart-of-accounts', label: 'Chart of Accounts' },
+      { key: 'fin-items', label: 'Items' },
+      { key: 'fin-clients', label: 'Clients' },
+      { key: 'procurement-vendors', label: 'Vendors' },
     ],
   },
   {
-    id: 'purchase', label: 'Purchase', icon: ShoppingCart,
+    id: 'procurement', label: 'Procurement', icon: ShoppingCart,
     screens: [
       { key: 'procurement-pr', label: 'Purchase Requisition' },
       { key: 'procurement-rfq', label: 'RFQ Management' },

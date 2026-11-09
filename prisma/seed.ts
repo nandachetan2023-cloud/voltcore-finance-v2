@@ -968,6 +968,59 @@ await db.finMaterialIssue.create({ data: { issueNo: 'MI-2026-003', issueDate: da
   console.log(`   Chart of Accounts: ${Object.keys(accByCode).length} accounts · AR ${arSeed.length} · AP ${apSeed.length} · PO ${poSeed.length} · Projects ${projectSeed.length} · Sub-jobs ${subJobSeed.length}`)
   console.log(`   Site Store: ${grnStoreSeed.length} GRNs · ${mrsSeed.length} MRS · ${toolSeed.length} tools · ${equipSeed.length} equipment · 2 scrap entries · 1 physical verification`)
   console.log(`   Data is anchored to today (${TODAY.toISOString().slice(0, 10)}) so ageing buckets stay meaningful.`)
+
+  // ── Item Master: categories drive the segmented item-code series (ELC-0001…) ──
+  const catDefs: Array<[string, string]> = [
+    ['ELC', 'Electrical'], ['MEC', 'Mechanical'], ['CIV', 'Civil'],
+    ['SAF', 'Safety'], ['TNL', 'Tools & Consumables'], ['CNS', 'Consultancy & Services'],
+  ]
+  for (const [code, name] of catDefs) {
+    await db.finItemCategory.upsert({ where: { code }, update: { name }, create: { code, name } })
+  }
+  const catByCode = new Map((await db.finItemCategory.findMany()).map(c => [c.code, c.id]))
+
+  const itemsByCat: Record<string, Array<[string, string, string, string, number, number]>> = {
+    ELC: [
+      ['33kV XLPE Cable 3Cx400sqmm', 'HT cable for switchyard interconnection', 'Mtr', '8544', 500, 4850],
+      ['415V LT Power Cable 4Cx25sqmm', 'LT armoured cable for distribution', 'Mtr', '8544', 1000, 1180],
+      ['Distribution Transformer 250kVA', 'Oil-cooled, 11/0.415kV', 'Nos', '8504', 2, 385000],
+      ['VCB Panel 11kV 630A', 'Vacuum circuit breaker feeder panel', 'Nos', '8535', 1, 425000],
+    ],
+    MEC: [
+      ['Centrifugal Pump 15HP', 'Borewell / dewatering pump', 'Nos', '8413', 2, 145000],
+      ['Gate Valve DN150', 'Cast iron sluice valve', 'Nos', '8481', 8, 18500],
+      ['MS Pipe 150mm Class-B', '6m length, medium duty', 'Mtr', '7306', 200, 2450],
+    ],
+    CIV: [
+      ['OPC 53 Grade Cement', '43/53 grade, 50kg bags', 'Pkt', '2523', 400, 415],
+      ['TMT Bar 12mm Fe500D', 'Reinforcement steel 12m bars', 'Nos', '7214', 500, 1120],
+      ['Ready Mix Concrete M25', 'RMC design mix, per cum', 'Job', '3824', 50, 5480],
+    ],
+    SAF: [
+      ['Safety Helmet (ISI)', 'HDPE helmet with ratchet strap', 'Nos', '6506', 50, 480],
+      ['Full Body Harness', 'Double-lanyard fall arrest', 'Nos', '6309', 25, 2250],
+    ],
+    TNL: [
+      ['Hacksaw Blade 12inch', 'Bi-metal blade, 24TPI', 'Nos', '8202', 100, 95],
+      ["Torque Wrench 40-200Nm", 'Ratcheting torque wrench', 'Nos', '8467', 4, 8900],
+    ],
+    CNS: [['Survey & Levelling Service', 'Third-party survey agency', 'Job', '', 0, 35000]]
+  }
+  let seededItems = 0
+  for (const [catCode, list] of Object.entries(itemsByCat)) {
+    for (let seq = 1; seq <= list.length; seq++) {
+      const [name, description, uom, hsn, reorderLevel, rate] = list[seq - 1]
+      const itemCode = `${catCode}-${String(seq).padStart(4, '0')}`
+      await db.finItem.upsert({
+        where: { itemCode },
+        update: { name, description, uom, hsn, reorderLevel, rate, categoryId: catByCode.get(catCode) ?? null },
+        create: { itemCode, name, description, uom, hsn, reorderLevel, rate, categoryId: catByCode.get(catCode) ?? null },
+      })
+      seededItems++
+    }
+  }
+
+  console.log(`   Item Master: ${catDefs.length} categories (ELC/MEC/CIV/SAF/TNL/CNS) + ${seededItems} sample items with segmented codes`)
 }
 
 main().catch((e) => { console.error(e); process.exit(1) }).finally(async () => { await db.$disconnect() })

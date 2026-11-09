@@ -6,7 +6,7 @@ export type UserRole = 'superadmin' | 'admin' | 'demo';
 export const MODULE_TREE: Record<string, string[]> = {
   organization: ['organization', 'departments', 'designations', 'payroll-sites', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents', 'roles-access'],
   hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
-  procurement: ['procurement', 'purchases', 'expenses', 'procurement-pr', 'procurement-rfq', 'procurement-po-register', 'procurement-vendors', 'procurement-material-tracking', 'procurement-subcontracts', 'po-approval-stepper', 'rfq-comparison-matrix', 'grn-3way-match'],
+  procurement: ['procurement', 'procurement-pr', 'procurement-rfq', 'procurement-po-register', 'procurement-material-tracking', 'procurement-subcontracts', 'po-approval-stepper', 'rfq-comparison-matrix', 'grn-3way-match'],
   // Legacy alias: the old "Finance" menu was merged into "Finance & Accounts".
   // Kept so accounts whose saved grants still say 'finance' keep their access.
   finance: ['finance', 'finance-accounts', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'fin-bank-reconciliation', 'taxation', 'budget', 'fin-profit-loss', 'financial-reports', 'tally-sync', 'notifications-ultra'],
@@ -19,8 +19,7 @@ export const MODULE_TREE: Record<string, string[]> = {
   reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
   // Category groups (like HRMS / Organization)
   'login-role': ['fin-user-management', 'notifications-ultra'],
-  'master-setup': ['fin-sites', 'fin-jobs', 'fin-parties', 'procurement-vendors', 'employees', 'chart-of-accounts'],
-  purchase: ['procurement-pr', 'procurement-rfq', 'rfq-comparison-matrix', 'procurement-po-register', 'po-approval-stepper', 'grn-3way-match', 'accounts-payable'],
+  'master-setup': ['fin-sites', 'fin-jobs', 'fin-items', 'fin-clients', 'procurement-vendors', 'employees'],
   inventory: ['site-store', 'material-receipt', 'material-issue-wip', 'stock-ledger', 'scrap-entry'],
   'sales-billing': ['sales-orders', 'sales-quotations', 'ra-work-slider', 'sales-tax-invoices', 'receipt-entry'],
   'finance-accounts': ['finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'bank-cash', 'fin-bank-reconciliation', 'journal-entries', 'taxation', 'fin-profit-loss', 'financial-reports', 'tally-sync'],
@@ -70,7 +69,7 @@ export type ModuleId =
   | 'projects' | 'assets'
   | 'system'
   // Category parents (like HRMS / Organization)
-  | 'login-role' | 'master-setup' | 'purchase' | 'inventory' | 'sales-billing'
+  | 'login-role' | 'master-setup' | 'inventory' | 'sales-billing'
   | 'finance-accounts' | 'petty-cash' | 'mis'
   // Sub-modules
   | 'employees' | 'attendance' | 'leave' | 'tour-requests' | 'shift' | 'training' | 'recruitment'
@@ -88,7 +87,7 @@ export type ModuleId =
   // Finance sub-modules
   | 'finance-dashboard' | 'chart-of-accounts' | 'ledger' | 'accounts-payable' | 'accounts-receivable'
   | 'journal-entries' | 'bank-cash' | 'taxation' | 'budget' | 'financial-reports'
-   | 'finance' | 'create-journal-entry' | 'fin-sites' | 'fin-jobs' | 'fin-parties'
+   | 'finance' | 'create-journal-entry' | 'fin-sites' | 'fin-jobs' | 'fin-items' | 'fin-clients' | 'fin-parties'
     | 'fin-invoices' | 'fin-payments' | 'fin-payment-advices' | 'fin-petty-cash' | 'fin-profit-loss' | 'fin-bank-reconciliation' | 'tally-sync' | 'notifications-ultra'
     | 'fin-purchase-orders' | 'fin-credit-notes' | 'fin-expense-claims' | 'fin-site-expenses' | 'fin-work-orders' | 'fin-client-follow-up'
     | 'fin-petty-cash-custodian' | 'fin-petty-cash-approval-queue' | 'fin-petty-cash-replenishment'
@@ -170,7 +169,6 @@ export const MAIN_MODULES: NavItem[] = [
   { id: 'procurement', icon: 'ShoppingCart', label: 'Procurement' },
   { id: 'login-role', icon: 'LogIn', label: 'Login & Role' },
   { id: 'master-setup', icon: 'Layers', label: 'Master Setup' },
-  { id: 'purchase', icon: 'ShoppingCart', label: 'Purchase' },
   { id: 'inventory', icon: 'Package', label: 'Inventory' },
   { id: 'sales-billing', icon: 'BadgePercent', label: 'Sales & Billing' },
   { id: 'finance-accounts', icon: 'Landmark', label: 'Finance & Accounts' },
@@ -216,14 +214,16 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'exit-management', icon: 'ArrowLeft', label: 'Exit Management', section: 'Lifecycle' },
   ],
   procurement: [
-    { id: 'purchases', icon: 'ShoppingBag', label: 'Purchase Orders', section: 'Procurement' },
-    { id: 'expenses', icon: 'Receipt', label: 'Expenses', badge: 3, section: 'Procurement' },
     { id: 'procurement-pr', icon: 'FileEdit', label: 'Purchase Requisition', section: 'Procurement' },
     { id: 'procurement-rfq', icon: 'ClipboardList', label: 'RFQ Management', section: 'Procurement' },
+    { id: 'rfq-comparison-matrix', icon: 'BarChart3', label: 'Quotation Comparison', section: 'Procurement' },
     { id: 'procurement-po-register', icon: 'ShoppingCart', label: 'PO Register', section: 'Procurement' },
-    { id: 'procurement-vendors', icon: 'Users', label: 'Vendor Management', section: 'Procurement' },
+    { id: 'fin-purchase-orders', icon: 'ShoppingBag', label: 'Purchase Orders', section: 'Procurement' },
+    { id: 'po-approval-stepper', icon: 'ListChecks', label: 'PO Approval', section: 'Procurement' },
+    { id: 'grn-3way-match', icon: 'Scale', label: 'GRN 3-Way Match', section: 'Procurement' },
+    { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Purchase Bills (AP)', section: 'Procurement' },
     { id: 'procurement-material-tracking', icon: 'Package', label: 'Material Tracking', section: 'Procurement' },
-    { id: 'procurement-subcontracts', icon: 'FileText', label: 'Subcontract Register', section: 'Procurement' },
+    { id: 'procurement-subcontracts', icon: 'FileText', label: 'Contractors Management', section: 'Procurement' },
   ],
   // Category modules (like HRMS / Organization)
   'login-role': [
@@ -233,20 +233,10 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
   'master-setup': [
     { id: 'fin-sites', icon: 'MapPin', label: 'Sites', section: 'Masters' },
     { id: 'fin-jobs', icon: 'Briefcase', label: 'Jobs (PO-wise)', section: 'Masters' },
-    { id: 'fin-parties', icon: 'Users', label: 'Clients & Vendors', section: 'Masters' },
-    { id: 'procurement-vendors', icon: 'Users', label: 'Vendor Management', section: 'Masters' },
+    { id: 'fin-items', icon: 'Package', label: 'Items', section: 'Masters' },
+    { id: 'fin-clients', icon: 'Users', label: 'Clients', section: 'Masters' },
+    { id: 'procurement-vendors', icon: 'Users', label: 'Contractors Management', section: 'Masters' },
     { id: 'employees', icon: 'HardHat', label: 'Employees', section: 'Masters' },
-    { id: 'chart-of-accounts', icon: 'BookOpen', label: 'Chart of Accounts', section: 'Masters' },
-  ],
-  purchase: [
-    { id: 'procurement-pr', icon: 'FileEdit', label: 'Purchase Requisition', section: 'Purchase' },
-    { id: 'procurement-rfq', icon: 'ClipboardList', label: 'RFQ Management', section: 'Purchase' },
-    { id: 'rfq-comparison-matrix', icon: 'BarChart3', label: 'Quotation Comparison', section: 'Purchase' },
-    { id: 'procurement-po-register', icon: 'ShoppingCart', label: 'PO Register', section: 'Purchase' },
-    { id: 'po-approval-stepper', icon: 'ListChecks', label: 'PO Approval', section: 'Purchase' },
-    { id: 'grn-3way-match', icon: 'Scale', label: 'GRN 3-Way Match', section: 'Purchase' },
-    { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Purchase Bills (AP)', section: 'Purchase' },
-    { id: 'fin-purchase-orders', icon: 'ShoppingCart', label: 'Purchase Orders', section: 'Purchase' },
   ],
   inventory: [
     { id: 'site-store', icon: 'Warehouse', label: 'Site Store Management', section: 'Inventory' },
@@ -327,7 +317,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'equipment', icon: 'Wrench', label: 'Equipment', section: 'Assets' },
     { id: 'permits', icon: 'ShieldAlert', label: 'Work Permits', badge: 2, section: 'Operations' },
     { id: 'safety', icon: 'HardHat', label: 'Safety & HSE', section: 'Operations' },
-    { id: 'subcontractors', icon: 'Handshake', label: 'Subcontractors', section: 'Operations' },
+    { id: 'subcontractors', icon: 'Handshake', label: 'Contractors', section: 'Operations' },
   ],
   system: [
     { id: 'reports', icon: 'BarChart3', label: 'Reports', section: 'System' },
@@ -381,7 +371,6 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   system: { title: 'System', breadcrumb: 'VoltCore ERP › System' },
   'login-role': { title: 'Login & Role', breadcrumb: 'VoltCore ERP › Login & Role' },
   'master-setup': { title: 'Master Setup', breadcrumb: 'VoltCore ERP › Master Setup' },
-  purchase: { title: 'Purchase', breadcrumb: 'VoltCore ERP › Purchase' },
   inventory: { title: 'Inventory', breadcrumb: 'VoltCore ERP › Inventory' },
   'sales-billing': { title: 'Sales & Billing', breadcrumb: 'VoltCore ERP › Sales & Billing' },
   'finance-accounts': { title: 'Finance & Accounts', breadcrumb: 'VoltCore ERP › Finance & Accounts' },
@@ -414,16 +403,18 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'procurement-pr': { title: 'Purchase Requisition', breadcrumb: 'Procurement › PR' },
   'procurement-rfq': { title: 'RFQ Management', breadcrumb: 'Procurement › RFQ' },
   'procurement-po-register': { title: 'PO Register', breadcrumb: 'Procurement › PO Register' },
-  'procurement-vendors': { title: 'Vendor Management', breadcrumb: 'Procurement › Vendors' },
+  'procurement-vendors': { title: 'Contractors Management', breadcrumb: 'Procurement › Contractors' },
   'procurement-material-tracking': { title: 'Material Tracking', breadcrumb: 'Procurement › Materials' },
-  'procurement-subcontracts': { title: 'Subcontract Register', breadcrumb: 'Procurement › Subcontracts' },
+  'procurement-subcontracts': { title: 'Contractors Management', breadcrumb: 'Procurement › Contractors' },
   payroll: { title: 'Payroll', breadcrumb: 'HRMS › Payroll Processing' },
   // Finance sub-modules
   'finance-dashboard': { title: 'Finance Dashboard', breadcrumb: 'Finance › Overview' },
   'create-journal-entry': { title: 'Create Journal Entry', breadcrumb: 'Finance › New Journal Entry' },
   'fin-sites': { title: 'Finance Sites', breadcrumb: 'Finance › Sites' },
   'fin-jobs': { title: 'Job Master', breadcrumb: 'Finance › Jobs' },
+  'fin-items': { title: 'Item Master', breadcrumb: 'Finance › Items' },
   'fin-parties': { title: 'Party Master', breadcrumb: 'Finance › Parties' },
+  'fin-clients': { title: 'Clients', breadcrumb: 'Finance › Clients' },
   'fin-invoices': { title: 'Site Invoices', breadcrumb: 'Finance › Invoices' },
   'fin-purchase-orders': { title: 'Purchase Orders (Finance)', breadcrumb: 'Finance › Purchase Orders' },
   'po-approval-stepper': { title: 'PO Approval Stepper', breadcrumb: 'Finance › Purchase › Approval Stepper' },
@@ -477,7 +468,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   permits: { title: 'Work Permits (PTW)', breadcrumb: 'Operations › Permit to Work' },
   safety: { title: 'Safety & HSE', breadcrumb: 'Operations › HSE Management' },
   equipment: { title: 'Equipment', breadcrumb: 'Operations › Asset Management' },
-  subcontractors: { title: 'Subcontractors', breadcrumb: 'Operations › Subcontractor Management' },
+  subcontractors: { title: 'Contractors', breadcrumb: 'Operations › Contractor Management' },
   reports: { title: 'Reports', breadcrumb: 'System › Reports' },
   'report-manpower':   { title: 'Manpower Report',         breadcrumb: 'Reports › Manpower' },
   'report-attendance': { title: 'Attendance Report',        breadcrumb: 'Reports › Attendance' },
@@ -514,7 +505,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
 };
 
 // Modules with sub-modules (clicking them shows sub-nav instead of a page)
-export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'sales', 'projects', 'assets', 'system', 'self-service', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'finance-accounts', 'petty-cash', 'mis'];
+export const EXPANDABLE_MODULES = ['organization', 'hrms', 'procurement', 'sales', 'projects', 'assets', 'system', 'self-service', 'reports', 'login-role', 'master-setup', 'inventory', 'sales-billing', 'finance-accounts', 'petty-cash', 'mis'];
 
 // Main modules that have their own page (no sub-nav)
 export const PAGE_MODULES = ['dashboard', 'notifications'];
@@ -538,7 +529,7 @@ export function getModuleParents(moduleId: string): string[] {
 }
 
 // Expandable modules that show their own sub-module grid (instead of auto-redirecting to first child)
-export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance-accounts', 'sales', 'procurement', 'projects', 'reports', 'login-role', 'master-setup', 'purchase', 'inventory', 'sales-billing', 'petty-cash', 'mis'];
+export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance-accounts', 'sales', 'procurement', 'projects', 'reports', 'login-role', 'master-setup', 'inventory', 'sales-billing', 'petty-cash', 'mis'];
 
 // Main modules kept out of the dashboard tile grid. They stay routable (and
 // keep their sub-modules) so existing links and grants still work — they just
@@ -574,6 +565,9 @@ interface ERPStore {
   activeModule: ModuleId;
   setActiveModule: (module: ModuleId) => void;
   activeParentModule: ModuleId;
+  /** Recent navigation snapshots (newest last) backing the Topbar Back button. */
+  navHistory: { module: ModuleId; parent: ModuleId }[];
+  goBack: () => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
   triggerCreate: number;
@@ -607,12 +601,47 @@ export const useERPStore = create<ERPStore>((set) => ({
       SUB_MODULES[module] &&
       SUB_MODULES[module].length > 0
     ) ? resolveInitialSubModule(module, s.allowedModules, s.userRole) : module;
+    if (finalModule === s.activeModule && parent === s.activeParentModule) {
+      // Re-selecting the current screen shouldn't pollute the back history
+      return s;
+    }
     return {
       activeModule: finalModule,
       activeParentModule: parent,
+      navHistory: [...s.navHistory, { module: s.activeModule, parent: s.activeParentModule }].slice(-25),
     };
   }),
   activeParentModule: 'dashboard' as ModuleId,
+  navHistory: [],
+  goBack: () => set((s) => {
+    // Pop the most recent remembered screen that differs from where we are now
+    const history = [...s.navHistory];
+    let entry: { module: ModuleId; parent: ModuleId } | null = null;
+    while (history.length > 0) {
+      const candidate = history.pop()!;
+      if (candidate.module !== s.activeModule) { entry = candidate; break; }
+    }
+    if (!entry) {
+      // Nothing useful remembered (e.g. page was reloaded) — fall back to the
+      // logical parent: a sub-module goes back to its sub-grid, anything else
+      // goes back to the dashboard.
+      if (s.activeParentModule !== 'dashboard' && s.activeParentModule !== s.activeModule) {
+        entry = { module: s.activeParentModule, parent: 'dashboard' };
+      } else if (s.activeModule !== 'dashboard') {
+        entry = { module: 'dashboard', parent: 'dashboard' };
+      }
+    }
+    if (!entry) return s; // Already on the dashboard with no history
+    // Access guard in case grants changed since the screen was visited
+    if (s.allowedModules !== 'all' && entry.module !== 'dashboard' && !isModuleAllowed(entry.module, s.allowedModules)) {
+      entry = { module: 'dashboard', parent: 'dashboard' };
+    }
+    return {
+      activeModule: entry.module,
+      activeParentModule: entry.parent,
+      navHistory: history,
+    };
+  }),
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   triggerCreate: 0,

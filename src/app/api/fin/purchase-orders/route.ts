@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const pdb = getDbForRequest(request)
     const records = await pdb.finPurchaseOrder.findMany({
       orderBy: { date: 'desc' },
-      include: { site: true },
+      include: { site: true, items: true },
     })
     return NextResponse.json({ success: true, data: records })
   } catch (error) {
@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
     const { actor, ...createData } = body
+    if (Array.isArray(createData.items)) createData.items = { create: createData.items }
     const record = isBlank(createData.poNo)
       ? await withCodeRetry(() => nextSeriesCode(pdb, 'po'), (poNo) => pdb.finPurchaseOrder.create({ data: { ...createData, poNo } }))
       : await pdb.finPurchaseOrder.create({ data: createData })
@@ -57,12 +58,19 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const missing = ['siteId', 'jobCode', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
-    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
-    const { id, ...data } = body
+    const { id, actor: _actor, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
-    const record = await pdb.finPurchaseOrder.update({ where: { id }, data })
+    const current = await pdb.finPurchaseOrder.findUnique({ where: { id: Number(id) } })
+    if (!current) return NextResponse.json({ success: false, error: 'Purchase order not found' }, { status: 404 })
+    // Partial updates (e.g. status-only advances) are validated against the merged record
+    const merged: Record<string, unknown> = { ...current, ...data }
+    delete merged.id
+    delete merged.createdAt
+    delete merged.updatedAt
+    const missing = ['siteId', 'jobCode', 'costCenter', 'department', 'projectManager'].filter(k => merged[k] === undefined || merged[k] === null || merged[k] === '')
+    if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
+    const record = await pdb.finPurchaseOrder.update({ where: { id: Number(id) }, data: merged })
     return NextResponse.json({ success: true, data: record })
   } catch (error) {
     console.error('Error updating:', error)

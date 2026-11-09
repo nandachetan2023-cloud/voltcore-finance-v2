@@ -1757,6 +1757,7 @@ model FinPO {
   vendor             String
   project            String
   projectShort       String
+  jobCode            String?
   totalValue         Float     @default(0)
   deliveryAddress    String
   requiredDate       DateTime  @db.Date
@@ -2116,6 +2117,44 @@ model FinProject {
   @@index([projectCode])
   @@index([status])
   @@map("FinProject")
+}
+
+// ── Item Master (purchase-side, category-segmented auto codes) ───────
+// itemCode format: <CATEGORY-3>-<SEQ4>, e.g. ELC-0001, CIV-0002, SAF-0001.
+// Generated server-side (never typed), max suffix + 1 so deleted rows never
+// free their code, and unique — codes referenced by PRs/GRN/ledger live on.
+model FinItemCategory {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique // 3-letter segment used in item codes, e.g. ELC
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items FinItem[]
+
+  @@map("FinItemCategory")
+}
+
+model FinItem {
+  id           Int      @id @default(autoincrement())
+  itemCode     String   @unique
+  name         String
+  description  String?
+  categoryId   Int?
+  uom          String   @default("Nos")
+  hsn          String?
+  reorderLevel Float    @default(0)
+  rate         Float    @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category FinItemCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([name])
+  @@index([categoryId])
+  @@map("FinItem")
 }
 
 // ── Finance – Job Master (one unique job code per PO/project) ────────

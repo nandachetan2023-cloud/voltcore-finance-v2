@@ -110,7 +110,7 @@ function MiniStat({ label, value, color }: { label: string; value: string | numb
   );
 }
 
-export default function ImportWizard({ title, fields, keyField, existingKeys, commitEndpoint, onClose, onImported, sampleRow, referenceColumns, keyFn }: {
+export default function ImportWizard({ title, fields, keyField, existingKeys, commitEndpoint, onClose, onImported, sampleRow, referenceColumns, keyFn, recordDefaults }: {
   title: string;
   fields: ImportField[];
   keyField: string;
@@ -123,6 +123,10 @@ export default function ImportWizard({ title, fields, keyField, existingKeys, co
   /** Override how the dedup/update key is computed per row (for composite keys
    *  like taxType + period). Defaults to the value of `keyField`. */
   keyFn?: (record: Row) => string;
+  /** Fills any BLANK cell with the given value at commit time (explicit sheet
+   *  values always win). Lets one commit endpoint serve scoped screens, e.g. a
+   *  Customers-only page pins partyType='Customer'. */
+  recordDefaults?: Record<string, unknown>;
 }) {
   const [step, setStep] = useState<Step>('upload');
   const [maxStep, setMaxStep] = useState(0);
@@ -257,7 +261,14 @@ export default function ImportWizard({ title, fields, keyField, existingKeys, co
   };
 
   const handleCommit = async () => {
-    const records = previewRows.filter(r => selected.has(r.index)).map(r => r.record);
+    const records = previewRows.filter(r => selected.has(r.index)).map(r => {
+      const merged: Record<string, unknown> = { ...r.record };
+      for (const [k, v] of Object.entries(recordDefaults ?? {})) {
+        const cur = merged[k];
+        if (cur === undefined || cur === null || String(cur).trim() === '') merged[k] = v;
+      }
+      return merged;
+    });
     if (records.length === 0) { toast.error('No rows selected'); return; }
     setSubmitting(true);
     try {
