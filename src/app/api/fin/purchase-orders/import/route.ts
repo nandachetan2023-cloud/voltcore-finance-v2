@@ -81,7 +81,7 @@ async function handleJsonRecords(pdb: any, records: any[]) {
   for (let i = 0; i < records.length; i++) {
     const r = records[i]
     if (!r.poNo) { skipped++; continue }
-    const missing = ['siteId', 'jobCode', 'costCenter', 'department', 'projectManager'].filter(k => !r[k])
+    const missing = ['siteId', 'jobCode'].filter(k => !r[k])
     if (missing.length) { skipped++; errorRows.push({ row: i + 1, message: `Missing required fields: ${missing.join(', ')}` }); continue }
     try {
       const data = {

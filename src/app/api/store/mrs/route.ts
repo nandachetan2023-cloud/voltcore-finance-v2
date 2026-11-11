@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { nextPrefixedCode } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,8 +39,7 @@ export async function POST(request: NextRequest) {
     const { lines, ...data } = body
     if (!data.mrsNo) {
       const year = new Date().getFullYear()
-      const count = (await pdb.finMaterialRequisition.count()) + 1
-      data.mrsNo = `MRS/${year}/${String(count).padStart(4, '0')}`
+      data.mrsNo = await nextPrefixedCode(pdb, 'finMaterialRequisition', 'mrsNo', `MRS/${year}/`, 4)
     }
     const record = await pdb.finMaterialRequisition.create({
       data: {
@@ -50,6 +50,8 @@ export async function POST(request: NextRequest) {
         requestedBy: data.requestedBy || null,
         department: data.department || null,
         purpose: data.purpose || null,
+        requiredByDate: data.requiredByDate ? new Date(data.requiredByDate) : null,
+        reasonForRequirement: data.reasonForRequirement || null,
         status: data.status || 'Draft',
         lines: lines?.length ? {
           create: lines.map((l: any) => ({
@@ -123,6 +125,8 @@ export async function PUT(request: NextRequest) {
         ...(data.requestedBy !== undefined ? { requestedBy: data.requestedBy } : {}),
         ...(data.department !== undefined ? { department: data.department } : {}),
         ...(data.purpose !== undefined ? { purpose: data.purpose } : {}),
+        ...(data.requiredByDate !== undefined ? { requiredByDate: data.requiredByDate ? new Date(data.requiredByDate) : null } : {}),
+        ...(data.reasonForRequirement !== undefined ? { reasonForRequirement: data.reasonForRequirement } : {}),
         ...(data.status !== undefined ? { status: data.status } : {}),
       },
       include: INCLUDE,

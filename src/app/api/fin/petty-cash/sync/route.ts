@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { nextSiteBalance } from '@/lib/petty-cash-balance'
 import { getDbForRequest } from '@/lib/db'
+import { nextPrefixedCode } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,10 +54,9 @@ export async function POST(request: NextRequest) {
     // it carries the site's current balance without moving it.
     const balance = await nextSiteBalance(pdb, siteId ?? null, { type: 'Debit', amount, approvalStatus: null })
 
-    const count = (await pdb.finPettyCash.count()) + 1
     const prefix = linkedType === 'PO' ? 'PO' : 'EX'
     const yr = new Date().getFullYear()
-    const voucherNo = `${prefix}/PV/${yr}/${String(count).padStart(4, '0')}`
+    const voucherNo = await nextPrefixedCode(pdb, 'finPettyCash', 'voucherNo', `${prefix}/PV/${yr}/`, 4)
 
     const record = await pdb.finPettyCash.create({
       data: {

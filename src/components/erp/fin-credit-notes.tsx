@@ -55,7 +55,7 @@ const CN_IMPORT_FIELDS: ImportField[] = [
   { key: 'reason', label: 'Reason' },
   { key: 'status', label: 'Status' },
 ];
-const CN_SAMPLE_ROW = { creditNoteNo: 'CN-2026-001', date: '2026-01-25', client: 'L&T Construction', invoiceId: 1, siteId: 1, jobCode: 'JOB-2026-001', poNo: 'PO-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', invoiceValue: 2500000, gstValue: 450000, totalInvoiceValue: 2950000, amount: 50000, afterTdsBalance: 2800000, receivedAmount: 0, status: 'Issued' };
+const CN_SAMPLE_ROW = { creditNoteNo: 'CN-2026-001', date: '2026-01-25', client: 'L&T Construction', invoiceId: 1, siteId: 1, jobCode: 'JOB-2026-001', poNo: 'PO-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', invoiceValue: 2500000, gstValue: 450000, totalInvoiceValue: 2950000, amount: 50000, afterTdsBalance: 2800000, receivedAmount: 0, receivedDate: '2026-02-10', reason: 'Rate difference adjustment', status: 'Issued' };
 
 interface CreditNote {
   id: number; creditNoteNo: string; trackingNo?: string | null; poNo?: string | null;

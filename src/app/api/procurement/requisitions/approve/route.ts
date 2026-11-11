@@ -9,7 +9,7 @@ const INCLUDE = { items: true, approvals: true }
 const APPROVAL_TEMPLATE = [
   { role: 'site_engineer', label: 'Site Engineer' },
   { role: 'project_manager', label: 'Project Manager' },
-  { role: 'procurement', label: 'Procurement' },
+  { role: 'procurement', label: 'Purchase' },
   { role: 'finance', label: 'Finance' },
 ]
 

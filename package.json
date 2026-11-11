@@ -22,6 +22,8 @@
     "biometric:backfill": "tsx scripts/biometric-backfill.ts",
     "biometric:reprocess": "tsx scripts/biometric-reprocess.ts",
     "biometric:scheduler": "tsx scripts/biometric-sync-scheduler.ts",
+    "item:register": "node scripts/generate-item-register.mjs",
+    "item:register:dry": "node scripts/generate-item-register.mjs --dry-run",
     "biometric:test": "curl -X POST http://localhost:3000/api/biometric/sync"
   },
   "dependencies": {

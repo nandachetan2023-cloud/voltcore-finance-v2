@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { readJsonSafe } from '@/lib/safe-json';
 
 interface TenderDocument { name: string; status: 'Submitted' | 'Pending' | 'Not Required'; uploadedDate: string; }
 interface BidTeamMember { name: string; role: string; email: string; assignedDate: string; }
@@ -151,7 +152,7 @@ export default function SalesTenderRegister() {
 
   useEffect(() => {
     fetch('/api/sales/tenders')
-      .then(res => res.json())
+      .then(res => readJsonSafe(res))
       .then(json => {
         if (json.success) {
           if (json.data && json.data.length > 0) {
@@ -239,7 +240,7 @@ export default function SalesTenderRegister() {
       const url = editTarget ? `/api/sales/tenders/${form.id}` : '/api/sales/tenders';
       const method = editTarget ? 'PUT' : 'POST';
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
-      const json = await res.json();
+      const json = await readJsonSafe(res);
       if (json.success) {
         if (editTarget) {
           setRecords(prev => prev.map(r => r.id === json.data.id ? json.data : r));
@@ -263,7 +264,7 @@ export default function SalesTenderRegister() {
     if (!deleteTarget) return;
     try {
       const res = await fetch(`/api/sales/tenders/${deleteTarget.id}`, { method: 'DELETE' });
-      const json = await res.json();
+      const json = await readJsonSafe(res);
       if (json.success) {
         setRecords(prev => prev.filter(r => r.id !== deleteTarget.id));
         toast.success(`Tender ${deleteTarget.tenderNo} deleted`);
@@ -283,7 +284,7 @@ export default function SalesTenderRegister() {
       const res = await fetch(`/api/sales/tenders/${detailTarget.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(detailTarget)
       });
-      const json = await res.json();
+      const json = await readJsonSafe(res);
       if (json.success) {
         setRecords(prev => prev.map(r => r.id === json.data.id ? json.data : r));
         toast.success('Tender details updated');

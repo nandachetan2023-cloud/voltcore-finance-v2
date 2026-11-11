@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-/** Shared helpers for the Assets & Operations routes (equipment, permits, incidents, subcontractors). */
+/** Shared helpers for the Assets & Operations routes (equipment, permits, incidents, contractors). */
 
 export const ok = (data: unknown, status = 200) => NextResponse.json({ success: true, data }, { status })
 

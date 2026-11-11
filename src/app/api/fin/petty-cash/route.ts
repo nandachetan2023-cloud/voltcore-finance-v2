@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission, getPermittedSiteScope, isTenantAdmin } from '@/lib/fin-rbac'
 import { nextSiteBalance, recomputePettyCashBalances } from '@/lib/petty-cash-balance'
+import { nextPrefixedCode } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,8 +75,7 @@ export async function POST(request: NextRequest) {
 
     if (!body.voucherNo) {
       const yr = new Date().getFullYear()
-      const count = (await pdb.finPettyCash.count()) + 1
-      body.voucherNo = `PV/${yr}/${String(count).padStart(4, '0')}`
+      body.voucherNo = await nextPrefixedCode(pdb, 'finPettyCash', 'voucherNo', `PV/${yr}/`, 4)
     }
 
     // Running balance is per SITE and counts approved vouchers only — a global
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     const record = await pdb.finPettyCash.create({
       data: {
         voucherNo: body.voucherNo,
-        date: new Date(body.date),
+        date: body.date && !isNaN(new Date(body.date).getTime()) ? new Date(body.date) : new Date(),
         description: body.description,
         amount: Number(body.amount),
         type: body.type || 'Debit',
@@ -160,7 +160,7 @@ export async function PUT(request: NextRequest) {
 
     const updateData: any = {}
     if (data.voucherNo !== undefined) updateData.voucherNo = data.voucherNo
-    if (data.date !== undefined) updateData.date = new Date(data.date)
+    if (data.date !== undefined) updateData.date = data.date && !isNaN(new Date(data.date).getTime()) ? new Date(data.date) : new Date()
     if (data.description !== undefined) updateData.description = data.description
     if (data.amount !== undefined) updateData.amount = Number(data.amount)
     if (data.type !== undefined) updateData.type = data.type

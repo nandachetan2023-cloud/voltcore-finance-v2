@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { nextPrefixedCode } from '@/lib/auto-number'
+import { postGrnLinesToLedger } from '@/lib/store-ledger'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,37 +42,70 @@ export async function POST(request: NextRequest) {
     const { lines, ...data } = body
     if (!data.grnNo) {
       const year = new Date().getFullYear()
-      const count = (await pdb.finStoreGrn.count()) + 1
-      data.grnNo = `GRN/${year}/${String(count).padStart(4, '0')}`
+      data.grnNo = await nextPrefixedCode(pdb, 'finStoreGrn', 'grnNo', `GRN/${year}/`, 4)
     }
-    const record = await pdb.finStoreGrn.create({
-      data: {
-        grnNo: data.grnNo,
-        grnDate: new Date(data.grnDate || Date.now()),
-        poId: data.poId ? Number(data.poId) : null,
-        siteId: Number(data.siteId),
-        jobId: data.jobId ? Number(data.jobId) : null,
-        vendorName: data.vendorName || null,
-        dcNo: data.dcNo || null,
-        invoiceNo: data.invoiceNo || null,
-        status: data.status || 'Draft',
-        remarks: data.remarks || null,
-        lines: lines?.length ? {
-          create: lines.map((l: any) => ({
-            itemId: Number(l.itemId),
-            poItemId: l.poItemId ? Number(l.poItemId) : null,
-            qtyOrdered: Number(l.qtyOrdered) || 0,
-            qtyReceived: Number(l.qtyReceived) || 0,
-            qtyAccepted: resolveAccepted(l),
-            qtyRejected: Number(l.qtyRejected) || 0,
-            rate: Number(l.rate) || 0,
-            amount: resolveAccepted(l) * (Number(l.rate) || 0),
-            condition: l.condition || 'Good',
-            remarks: l.remarks || null,
-          })),
-        } : undefined,
-      },
-      include: INCLUDE,
+    const jobForLedger = data.jobId ? await pdb.finJob.findUnique({ where: { id: Number(data.jobId) }, select: { jobCode: true } }) : null
+
+    // Create + (when posted) ledger posting in one transaction so a Posted
+    // GRN is always in stock, never a draft that silently holds inventory.
+    const record = await pdb.$transaction(async (tx) => {
+      const created = await tx.finStoreGrn.create({
+        data: {
+          grnNo: data.grnNo,
+          grnDate: new Date(data.grnDate || Date.now()),
+          poId: data.poId ? Number(data.poId) : null,
+          siteId: Number(data.siteId),
+          jobId: data.jobId ? Number(data.jobId) : null,
+          vendorName: data.vendorName || null,
+          dcNo: data.dcNo || null,
+          invoiceNo: data.invoiceNo || null,
+          timeOfReceipt: data.timeOfReceipt || null,
+          projectName: data.projectName || null,
+          siteLocation: data.siteLocation || null,
+          gateEntryNo: data.gateEntryNo || null,
+          vehicleNo: data.vehicleNo || null,
+          lrDetails: data.lrDetails || null,
+          storeLocation: data.storeLocation || null,
+          receivedBy: data.receivedBy || null,
+          status: data.status || 'Draft',
+          remarks: data.remarks || null,
+          lines: lines?.length ? {
+            create: lines.map((l: any) => ({
+              itemId: Number(l.itemId),
+              poItemId: l.poItemId ? Number(l.poItemId) : null,
+              qtyOrdered: Number(l.qtyOrdered) || 0,
+              qtyReceived: Number(l.qtyReceived) || 0,
+              qtyAccepted: resolveAccepted(l),
+              qtyRejected: Number(l.qtyRejected) || 0,
+              rate: Number(l.rate) || 0,
+              amount: resolveAccepted(l) * (Number(l.rate) || 0),
+              condition: l.condition || 'Good',
+              remarks: l.remarks || null,
+              materialCategory: l.materialCategory || null,
+              batchHeatNo: l.batchHeatNo || null,
+              damageTransit: l.damageTransit || null,
+              inspectionStatus: l.inspectionStatus || null,
+            })),
+          } : undefined,
+        },
+        include: INCLUDE,
+      })
+
+      if ((data.status || 'Draft') === 'Posted') {
+        await postGrnLinesToLedger(
+          tx,
+          {
+            grnNo: created.grnNo,
+            grnDate: created.grnDate,
+            lines: created.lines.map((l: any) => ({ ...l, item: l.item })),
+          },
+          site?.name ?? null,
+          site?.siteCode ?? null,
+          jobForLedger?.jobCode ?? null,
+        )
+      }
+
+      return created
     })
 
     // Reconcile against the PO line's receivedQty when a poItemId is given —
@@ -115,6 +150,14 @@ export async function PUT(request: NextRequest) {
         ...(data.vendorName !== undefined ? { vendorName: data.vendorName } : {}),
         ...(data.dcNo !== undefined ? { dcNo: data.dcNo } : {}),
         ...(data.invoiceNo !== undefined ? { invoiceNo: data.invoiceNo } : {}),
+        ...(data.timeOfReceipt !== undefined ? { timeOfReceipt: data.timeOfReceipt } : {}),
+        ...(data.projectName !== undefined ? { projectName: data.projectName } : {}),
+        ...(data.siteLocation !== undefined ? { siteLocation: data.siteLocation } : {}),
+        ...(data.gateEntryNo !== undefined ? { gateEntryNo: data.gateEntryNo } : {}),
+        ...(data.vehicleNo !== undefined ? { vehicleNo: data.vehicleNo } : {}),
+        ...(data.lrDetails !== undefined ? { lrDetails: data.lrDetails } : {}),
+        ...(data.storeLocation !== undefined ? { storeLocation: data.storeLocation } : {}),
+        ...(data.receivedBy !== undefined ? { receivedBy: data.receivedBy } : {}),
         ...(data.status !== undefined ? { status: data.status } : {}),
         ...(data.remarks !== undefined ? { remarks: data.remarks } : {}),
         lines: lines?.length ? {
@@ -129,6 +172,10 @@ export async function PUT(request: NextRequest) {
             amount: resolveAccepted(l) * (Number(l.rate) || 0),
             condition: l.condition || 'Good',
             remarks: l.remarks || null,
+            materialCategory: l.materialCategory || null,
+            batchHeatNo: l.batchHeatNo || null,
+            damageTransit: l.damageTransit || null,
+            inspectionStatus: l.inspectionStatus || null,
           })),
         } : undefined,
       },
@@ -150,6 +197,13 @@ export async function DELETE(request: NextRequest) {
     const actor = request.headers.get('x-actor-email') || ''
     const denied = await assertPermission(pdb, actor, 'INVENTORY_DELETE', { request, module: 'Inventory', entityId: id })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to delete GRNs' }, { status: 403 })
+    // Remove the stock-ledger lines this GRN posted so the Stock Register
+    // stays consistent after a delete (entryNo is deterministic per line).
+    const grn = await pdb.finStoreGrn.findUnique({ where: { id: Number(id) }, select: { grnNo: true } })
+    if (grn) {
+      const prefix = `SL-${String(grn.grnNo).replace(/[^\w-]/g, '')}-L`
+      await pdb.finStockLedger.deleteMany({ where: { entryNo: { startsWith: prefix } } })
+    }
     await pdb.finStoreGrn.delete({ where: { id: Number(id) } })
     return NextResponse.json({ success: true })
   } catch (error) {

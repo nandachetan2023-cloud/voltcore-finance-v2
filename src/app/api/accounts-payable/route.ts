@@ -3,6 +3,7 @@ import { getDbForRequest } from '@/lib/db'
 import { postJournalEntry, GL_ACCOUNTS } from '@/lib/gl-posting'
 import { assertPermission } from '@/lib/fin-rbac'
 import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
+import { nextSeriesCode, withCodeRetry } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,13 +27,10 @@ export async function POST(request: NextRequest) {
     const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
     const denied = await assertPermission(pdb, body.actor || '', 'AP_CREATE', { request, module: 'AP', siteCode: site?.siteCode ?? null })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create AP bills' }, { status: 403 })
-    if (!body.billNo) {
-      const year = new Date().getFullYear()
-      const count = (await pdb.accountsPayable.count()) + 1
-      body.billNo = `AP-${year}-${String(count).padStart(3, '0')}`
-    }
     const { actor: _actor, ...createData } = body
-    const record = await pdb.accountsPayable.create({ data: createData })
+    const record = createData.billNo
+      ? await pdb.accountsPayable.create({ data: createData })
+      : await withCodeRetry(() => nextSeriesCode(pdb, 'ap'), (billNo) => pdb.accountsPayable.create({ data: { ...createData, billNo } }))
 
     // Auto-post the GL entry for this bill: Dr Inventory / Cr Vendor Payable
     // (matches the spec's own worked example). A posting failure must never

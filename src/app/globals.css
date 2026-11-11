@@ -282,6 +282,7 @@ html:not(.dark) select.bg-\[\#0f141a\] option {
   font-weight: 600;
   cursor: pointer;
   border: none;
+  white-space: nowrap;
   transition: background 0.15s ease, opacity 0.15s ease;
 }
 .vc-btn-primary:hover { background: #e8891a; }
@@ -297,6 +298,7 @@ html:not(.dark) select.bg-\[\#0f141a\] option {
   font-weight: 600;
   cursor: pointer;
   border: 1px solid var(--vc-border2);
+  white-space: nowrap;
   transition: all 0.15s ease;
 }
 .vc-btn-ghost:hover { color: var(--vc-text); border-color: var(--vc-text3); background: var(--vc-bg2); }
@@ -310,6 +312,7 @@ html:not(.dark) select.bg-\[\#0f141a\] option {
   font-weight: 600;
   cursor: pointer;
   border: none;
+  white-space: nowrap;
   transition: background 0.15s ease, opacity 0.15s ease;
 }
 .vc-btn-danger:hover { background: #e03030; }
@@ -328,6 +331,7 @@ html:not(.dark) .vc-btn-danger:active { background: #991b1b; }
   font-weight: 600;
   cursor: pointer;
   border: 1px solid var(--vc-border2);
+  white-space: nowrap;
   transition: background 0.15s ease, opacity 0.15s ease;
 }
 .vc-btn-secondary:hover { background: var(--vc-border); }
@@ -536,6 +540,8 @@ html:not(.dark) .text-\[\#a855f7\] { color: #6d28d9 !important; } /* purple sibl
 html:not(.dark) .text-\[\#00e8ff\] { color: #0369a1 !important; } /* cyan sibling of 00d4ff */
 /* Very light slate used for body text in the Finance Help chat — vanished
    against the white bubble background; same mapping as its sibling c8d2dc. */
+html:not(.dark) .text-\[\#38bdf8\] { color: #0369a1 !important; } /* sky, sibling of 00d4ff */
+html:not(.dark) .text-\[\#94a3b8\] { color: #475569 !important; } /* slate, sibling of 8899aa */
 html:not(.dark) .text-\[\#cbd5e1\] { color: #1a2332 !important; }
 
 /* ── Solid status backgrounds: neons stay vivid (badges/buttons) ── */

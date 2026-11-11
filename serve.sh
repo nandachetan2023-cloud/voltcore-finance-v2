@@ -6,7 +6,7 @@ cd "$SCRIPT_DIR"
 WARMUP_APIS=(
   employees organization dashboard sites projects attendance
   leave payroll permits incidents equipment expenses purchases
-  invoices subcontractors recruitment shifts training settings
+  invoices recruitment shifts training settings
   crm support knowledgebase inventory sales
   accounts-payable accounts-receivable journal-entries bank-cash
   taxation budget financial-reports finance-dashboard ledger

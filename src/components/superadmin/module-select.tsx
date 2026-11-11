@@ -52,9 +52,17 @@ export const FULL_MODULE_TREE: {
     ],
   },
   {
-    key: 'procurement', label: 'Procurement',
+    key: 'procurement', label: 'Purchase Management',
     subModules: [
-      { key: 'purchases', label: 'Purchase Orders' },
+      { key: 'procurement-pr',             label: 'PR Module' },
+      { key: 'procurement-rfq',            label: 'RFQ Management' },
+      { key: 'rfq-comparison-matrix',      label: 'Quotation Comparison' },
+      { key: 'procurement-po-register',    label: 'PO Register' },
+      { key: 'fin-purchase-orders',         label: 'Purchase Orders' },
+      { key: 'po-approval-stepper',        label: 'PO Approval' },
+      { key: 'grn-3way-match',             label: 'GRN 3-Way Match' },
+      { key: 'procurement-vendors',        label: 'Contractors Management' },
+      { key: 'procurement-material-tracking', label: 'Material Tracking' },
     ],
   },
   {
@@ -87,7 +95,6 @@ export const FULL_MODULE_TREE: {
       { key: 'equipment',      label: 'Equipment' },
       { key: 'permits',        label: 'Work Permits' },
       { key: 'safety',         label: 'Safety & HSE' },
-      { key: 'subcontractors', label: 'Contractors' },
     ],
   },
   {

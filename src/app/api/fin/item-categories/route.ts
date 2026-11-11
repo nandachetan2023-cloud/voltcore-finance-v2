@@ -20,10 +20,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const code = String(body.code || '').trim().toUpperCase().replace(/[^A-Z]/g, '')
+    const code = String(body.code || '').trim().toUpperCase().replace(/[^A-Z0-9&]/g, '')
     const name = String(body.name || '').trim()
-    if (!/^[A-Z]{3}$/.test(code)) {
-      return NextResponse.json({ success: false, error: 'Category code must be exactly 3 letters (e.g. ELC)' }, { status: 400 })
+    // Docx prefix master allows up to 4 chars incl. '&' (CON, P&M, T&T, PPE, GAS…)
+    if (!/^[A-Z0-9&]{2,4}$/.test(code)) {
+      return NextResponse.json({ success: false, error: 'Category code must be 2–4 characters: letters, digits or & (e.g. CON, P&M, T&T)' }, { status: 400 })
     }
     if (name.length < 2) return NextResponse.json({ success: false, error: 'Category name is required' }, { status: 400 })
     const pdb = getDbForRequest(request)

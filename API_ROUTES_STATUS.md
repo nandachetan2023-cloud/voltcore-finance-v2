@@ -15,7 +15,7 @@ The old_erp application had API routes written for an old schema. The current Pr
 - `/api/inventory` - Fixed to use Item and StockLedger models
 - `/api/sales` - Fixed to use Customer and SalesOrder models
 
-### Procurement
+### Purchase Management
 - `/api/purchases` - Uses PurchaseOrder model (needs field verification)
 - `/api/invoices` - Uses Invoice model (needs field verification)
 
@@ -28,7 +28,6 @@ These routes return empty arrays with 501 status until models are added to schem
 - `/api/incidents` - Incident model doesn't exist
 - `/api/permits` - Permit model doesn't exist
 - `/api/expenses` - Expense model doesn't exist
-- `/api/subcontractors` - Subcontractor model doesn't exist
 - `/api/support` - Support/Ticket models don't exist
 - `/api/knowledgebase` - Knowledgebase model doesn't exist
 - `/api/journal-entries` - JournalEntry model doesn't exist
@@ -79,7 +78,7 @@ These routes reference models that exist but may have incorrect field names:
 - StockEntry, StockEntryLine
 - StockLedger
 
-### Procurement
+### Purchase Management
 - Vendor
 - PurchaseOrder, PurchaseOrderItem
 
@@ -102,7 +101,6 @@ These models are referenced in API routes but don't exist in the schema:
 - Incident
 - Permit
 - Expense
-- Subcontractor
 - Training, Certification, TrainingSession
 - Support, Ticket
 - Knowledgebase, KnowledgebaseArticle

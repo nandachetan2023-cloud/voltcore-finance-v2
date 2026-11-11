@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { postGrnLinesToLedger } from '@/lib/store-ledger'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,42 +43,14 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       const current = await tx.finStoreGrn.findUnique({ where: { id }, select: { status: true } })
       if (current?.status === 'Posted') throw new Error(ALREADY_POSTED)
 
-      let written = 0
-      for (const line of acceptedLines) {
-        const itemCode = line.item?.sku || `ITEM-${line.itemId}`
-        const entryNo = `SL-${grn.grnNo.replace(/[^\w-]/g, '')}-${line.id}`
-        const existing = await tx.finStockLedger.findFirst({ where: { entryNo }, select: { id: true } })
-        if (existing) continue
-        const last = await tx.finStockLedger.findFirst({
-          where: { itemCode },
-          orderBy: { id: 'desc' },
-          select: { balanceQty: true },
-        })
-        const balanceQty = Math.round(((last?.balanceQty ?? 0) + line.qtyAccepted) * 1000) / 1000
-        await tx.finStockLedger.create({
-          data: {
-            entryNo,
-            postingDate: grn.grnDate,
-            itemCode,
-            itemName: line.item?.name || itemCode,
-            unit: line.item?.Uom_Item_uomIdToUom?.code || 'Nos',
-            warehouse: grn.site?.name || null,
-            warehouseId: null,
-            qtyIn: line.qtyAccepted,
-            qtyOut: 0,
-            balanceQty,
-            rate: line.rate,
-            valueIn: Math.round(line.qtyAccepted * line.rate * 100) / 100,
-            valueOut: 0,
-            referenceType: 'Stock Receipt',
-            referenceNo: grn.grnNo,
-            jobCode: grn.job?.jobCode || null,
-            siteCode: grn.site?.siteCode || null,
-            remarks: `GRN ${grn.grnNo} posting${line.remarks ? ` — ${line.remarks}` : ''}`,
-          },
-        })
-        written++
-      }
+      const written = await postGrnLinesToLedger(
+        tx,
+        { grnNo: grn.grnNo, grnDate: grn.grnDate, lines: acceptedLines },
+        grn.site?.name || null,
+        grn.site?.siteCode || null,
+        grn.job?.jobCode || null,
+      )
+
       await tx.finStoreGrn.update({ where: { id }, data: { status: 'Posted' } })
       return written
     }).catch((e: Error) => {

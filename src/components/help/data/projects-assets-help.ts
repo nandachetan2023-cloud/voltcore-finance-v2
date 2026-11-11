@@ -1,6 +1,6 @@
 /**
  * Projects & Assets Help — Knowledge Base
- * Covers the Projects menu and the Assets menu (equipment, permits, HSE, subcontractors).
+ * Covers the Projects menu and the Assets menu (equipment, permits, HSE).
  */
 
 import type { HelpEntry } from '../finance-help-data';
@@ -151,7 +151,8 @@ export const ASSETS_HELP_ENTRIES: HelpEntry[] = [
 - **Equipment** — equipment register with maintenance dates and utilization
 - **Work Permits** — permit-to-work with expiry and revocation
 - **Safety & HSE** — incident register
-- **Contractors** — contractor register with statutory compliance (internal name: Subcontractors)
+
+For vendors and contractors, see **Master Setup → Contractors Management**.
 
 For the accounting side of fixed assets (register & depreciation) see the Finance help.`,
     links: [
@@ -211,28 +212,6 @@ Use **Revoke** to cancel an active permit. A warning appears for permits that ar
 3. Save; update the **Status** as the investigation progresses.
 
 Delete removes the record after confirmation.`,
-  },
-  {
-    id: 'asset-subcontractors',
-    title: 'Contractor register & compliance',
-    relatedModule: 'subcontractors',
-    keywords: [
-      'subcontractor', 'subcontractors', 'contractor', 'contractors', 'labour licence', 'pf registration',
-      'esi registration', 'compliance', 'non compliant', 'workers deployed', 'trade',
-    ],
-    summary: 'Track contractors, workers deployed and statutory compliance.',
-    body: `### Contractors
-
-**Add Contractor** with **Company Name**, **Trade**, **Site** and **Workers Deployed**, then record:
-
-- **PF Registration** — Done / Pending / Missing
-- **ESI Registration** — Done / Pending / Missing
-- **Labour Licence** — Valid / Expired
-
-The **Compliance Status** shows **Compliant** or **Non-Compliant** from those checks. Edit or delete from each row.
-
-For contract value and progress claims see **Procurement → Contractors Management**.`,
-    links: [{ label: 'Contractors Management', moduleId: 'procurement-subcontracts' }],
   },
   {
     id: 'asset-about',

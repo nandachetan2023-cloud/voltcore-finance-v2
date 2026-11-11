@@ -8,6 +8,8 @@ import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
+import { useContractors } from './_contractor-master';
+import { useERPStore } from '@/store/erp-store';
 
 interface Milestone {
   id: number;
@@ -59,7 +61,7 @@ interface Subcontract {
 }
 
 const SC_COLUMNS: ExportColumn<Subcontract>[] = [
-  { header: 'Contractor No', accessor: 'subcontractNo' },
+  { header: 'Contract No', accessor: 'subcontractNo' },
   { header: 'Vendor', accessor: 'vendor' },
   { header: 'Project', accessor: 'project' },
   { header: 'Scope Summary', accessor: 'scopeSummary' },
@@ -74,7 +76,7 @@ const SC_COLUMNS: ExportColumn<Subcontract>[] = [
 ];
 
 const SC_IMPORT_FIELDS: ImportField[] = [
-  { key: 'subcontractNo', label: 'Contractor No', required: true },
+  { key: 'subcontractNo', label: 'Contract No', required: true },
   { key: 'vendor', label: 'Vendor' },
   { key: 'project', label: 'Project' },
   { key: 'scopeSummary', label: 'Scope Summary' },
@@ -103,7 +105,6 @@ function generateMockSubcontracts(): Subcontract[] {
   ];
 }
 
-const VENDORS = ['Singh Civil Contractors', 'Pioneer Fabricators', 'MinMet Engineering', 'GreenTech Electricals', 'Rapid Logistics'];
 const PROJECTS = ['BALCO', 'NTPC', 'Hindalco', 'Coal India'];
 const STATUSES: Subcontract['status'][] = ['Active', 'Completed', 'On Hold', 'Terminated'];
 const STATUS_STYLES: Record<Subcontract['status'], string> = {
@@ -133,7 +134,7 @@ function formatInr(amount: number): string {
 }
 
 const EMPTY_FORM: Subcontract = {
-  id: 0, subcontractNo: '', vendor: VENDORS[0], project: PROJECTS[0], scopeSummary: '', value: 0,
+  id: 0, subcontractNo: '', vendor: '', project: PROJECTS[0], scopeSummary: '', value: 0,
   startDate: '', endDate: '', percentComplete: 0, status: 'Active', retentionPercent: 5, notes: '',
   milestones: [], retentionReleases: [], progressClaims: [],
 };
@@ -167,10 +168,19 @@ export default function ProcurementSubcontracts() {
   const [detailTab, setDetailTab] = useState<'general' | 'milestones' | 'retention' | 'claims'>('general');
   const [claimForm, setClaimForm] = useState({ claimNo: '', date: '', amountClaimed: 0 });
 
+  // Contractors are owned by Contractors Management — this module only reads
+  // the master to fill its dropdown (and never creates a contractor).
+  const setActiveModule = useERPStore(s => s.setActiveModule);
+  const { optionsWith, loading: contractorsLoading } = useContractors();
+  const vendorOptions = useMemo(
+    () => optionsWith(records.map(r => r.vendor)),
+    [optionsWith, records],
+  );
+
   useEffect(() => {
     fetch('/api/procurement/subcontracts')
       .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch contractors');
+        if (!res.ok) throw new Error('Failed to fetch contracts');
         return res.json();
       })
       .then(json => {
@@ -256,7 +266,7 @@ export default function ProcurementSubcontracts() {
         const json = await res.json();
         if (!json.success) throw new Error(json.message || 'Update failed');
         setRecords(prev => prev.map(r => r.id === json.data.id ? json.data : r));
-        toast.success('Contractor updated');
+        toast.success('Contract updated');
       } else {
         const res = await fetch('/api/procurement/subcontracts', {
           method: 'POST',
@@ -266,7 +276,7 @@ export default function ProcurementSubcontracts() {
         const json = await res.json();
         if (!json.success) throw new Error(json.message || 'Create failed');
         setRecords(prev => [...prev, json.data]);
-        toast.success('Contractor created');
+        toast.success('Contract created');
       }
       setFormOpen(false);
     } catch (err: any) {
@@ -283,7 +293,7 @@ export default function ProcurementSubcontracts() {
       const json = await res.json();
       if (!json.success) throw new Error(json.message || 'Delete failed');
       setRecords(prev => prev.filter(r => r.id !== deleteTarget.id));
-      toast.success(`Contractor ${deleteTarget.subcontractNo} deleted`);
+      toast.success(`Contract ${deleteTarget.subcontractNo} deleted`);
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -303,7 +313,7 @@ export default function ProcurementSubcontracts() {
       if (!json.success) throw new Error(json.message || 'Update failed');
       setRecords(prev => prev.map(r => r.id === json.data.id ? json.data : r));
       setDetailTarget(json.data);
-      toast.success('Contractor details updated');
+      toast.success('Contract details updated');
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -348,7 +358,7 @@ export default function ProcurementSubcontracts() {
   if (importOpen) {
     return (
       <ImportWizard
-        title="Contractors"
+        title="Contracts"
         fields={SC_IMPORT_FIELDS}
         keyField="subcontractNo"
         existingKeys={new Set(records.map(r => r.subcontractNo))}
@@ -364,7 +374,7 @@ export default function ProcurementSubcontracts() {
     <div className="p-6">
       <div className="vc-panel p-8 text-center">
         <AlertTriangle size={28} className="mx-auto mb-3 text-[#ff3d3d]" />
-        <p className="text-[#e2e8f0] font-semibold text-[13px]">Failed to load contractors</p>
+        <p className="text-[#e2e8f0] font-semibold text-[13px]">Failed to load contracts</p>
         <p className="text-[#8899aa] text-[11px] mt-1">{error}</p>
         <button onClick={() => window.location.reload()} className={STYLE.btn + ' mt-5 mx-auto inline-flex'}>Retry</button>
       </div>
@@ -385,10 +395,10 @@ export default function ProcurementSubcontracts() {
       <div className="vc-panel">
         <div className="vc-panel-header">
           <FileText size={15} className="text-[#f5a623]" />
-          <span className="text-[12px] font-semibold text-[#e2e8f0]">Contractors Management</span>
+          <span className="text-[12px] font-semibold text-[#e2e8f0]">Contracts</span>
           <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{records.length}</span>
-          <div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search subcontract, vendor..." /></div>
-          <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={SC_COLUMNS} filename="procurement-subcontracts" />
+          <div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search contract, vendor..." /></div>
+          <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={SC_COLUMNS} filename="purchase-contracts" />
           <div className="ml-2 flex gap-1">
             {['All', 'Active', 'Completed', 'On Hold', 'Terminated'].map(f => (
               <button key={f} onClick={() => setQuickFilter(f)}
@@ -396,8 +406,11 @@ export default function ProcurementSubcontracts() {
               >{f}</button>
             ))}
           </div>
-          <button onClick={openNew} className={STYLE.btn}>
+          <button onClick={() => setActiveModule('procurement-vendors')} className="vc-btn-ghost flex items-center gap-1.5 ml-2 text-[11px]">
             <Plus size={13} /> New Contractor
+          </button>
+          <button onClick={openNew} className={STYLE.btn}>
+            <Plus size={13} /> New Contract
           </button>
         </div>
 
@@ -406,7 +419,7 @@ export default function ProcurementSubcontracts() {
             <thead>
               <tr className="bg-[#0f1318]">
                 {[
-                  { key: 'subcontractNo', label: 'Contractor #' },
+                  { key: 'subcontractNo', label: 'Contract No' },
                   { key: 'vendor', label: 'Vendor/Contractor' },
                   { key: 'project', label: 'Project/Site' },
                   { key: '' as any, label: 'Scope Summary' },
@@ -465,7 +478,7 @@ export default function ProcurementSubcontracts() {
                 );
               })}
               {sorted.length === 0 && (
-                <tr><td colSpan={11} className="py-12 text-center text-[#5a6878]">No matching contractors found</td></tr>
+                <tr><td colSpan={11} className="py-12 text-center text-[#5a6878]">No matching contracts found</td></tr>
               )}
             </tbody>
           </table>
@@ -477,18 +490,22 @@ export default function ProcurementSubcontracts() {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{editTarget ? 'Edit' : 'New'} Contractor</DialogTitle>
+            <DialogTitle>{editTarget ? 'Edit' : 'New'} Contract</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
             <div>
-              <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Contractor No</label>
+              <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Contract No</label>
               <input value={form.subcontractNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated" />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Vendor</label>
+              <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Contractor <span className="text-[#ff3d3d]">*</span></label>
               <select value={form.vendor} onChange={e => setForm({...form, vendor: e.target.value})} className="vc-input">
-                {VENDORS.map(v => <option key={v} value={v}>{v}</option>)}
+                <option value="">Select contractor…</option>
+                {vendorOptions.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
               </select>
+              <div className="text-[10px] text-[#5a6878] mt-1">
+                {contractorsLoading ? 'Loading contractors…' : 'From Contractors Management master — add new ones there.'}
+              </div>
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Project</label>
@@ -537,13 +554,13 @@ export default function ProcurementSubcontracts() {
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Contractor Details</DialogTitle>
+            <DialogTitle>Contract Details</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {detailTarget && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-<label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Contractor No</label>
+<label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Contract No</label>
                   <div className="text-[#e2e8f0]">{detailTarget.subcontractNo}</div>
                 </div>
                 <div>
@@ -617,10 +634,10 @@ export default function ProcurementSubcontracts() {
         <AlertDialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0]">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-[#ff3d3d] flex items-center gap-2">
-              <AlertTriangle size={16} /> Delete Contractor
+              <AlertTriangle size={16} /> Delete Contract
             </AlertDialogTitle>
             <AlertDialogDescription className="text-[#8899aa]">
-              Delete contractor <strong className="text-[#f5a623]">{deleteTarget?.subcontractNo}</strong> — {deleteTarget?.vendor} ({deleteTarget?.project})? This action cannot be undone.
+              Delete contract <strong className="text-[#f5a623]">{deleteTarget?.subcontractNo}</strong> — {deleteTarget?.vendor} ({deleteTarget?.project})? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

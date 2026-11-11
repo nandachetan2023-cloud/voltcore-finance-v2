@@ -9,6 +9,8 @@
 // invoke this AFTER the primary record is created/updated, and this
 // function swallows its own errors (logging them) rather than throwing.
 
+import { nextPrefixedCode } from '@/lib/auto-number'
+
 export interface PostJournalLine {
   accountCode: string;
   debit: number;
@@ -60,15 +62,13 @@ export async function postJournalEntry(pdb: any, opts: PostJournalEntryOptions):
 
     const year = opts.entryDate.getFullYear();
 
-    // entryNo is generated from a count(), which races under concurrent
-    // postings (two entries computing the same number, the second failing
-    // its unique constraint). Retry a few times with a fresh count on that
-    // specific failure so a losing request still gets its GL entry posted
-    // instead of silently vanishing into the catch below.
+    // entryNo is generated from the highest existing suffix + 1 (deletes never
+    // free a number). Two concurrent postings can still compute the same
+    // number, so retry on that unique-constraint failure instead of letting
+    // the GL entry silently vanish into the catch below.
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const count = (await pdb.finJournalEntry.count()) + 1 + attempt;
-      const entryNo = `${opts.prefix}/${year}/${String(count).padStart(4, '0')}`;
+      const entryNo = await nextPrefixedCode(pdb, 'finJournalEntry', 'entryNo', `${opts.prefix}/${year}/`, 4);
       try {
         await pdb.finJournalEntry.create({
           data: {

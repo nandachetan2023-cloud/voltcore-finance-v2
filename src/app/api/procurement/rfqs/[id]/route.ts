@@ -7,11 +7,15 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   try {
     const { id } = await ctx.params
     const body = await request.json()
-    const { lineItems, bids, ...data } = body
+    const { lineItems, bids, vendorIds, ...raw } = body
     const pdb = getDbForRequest(request)
     const current = await pdb.finRFQ.findUnique({ where: { id: Number(id) } })
     if (!current) return NextResponse.json({ success: false, error: 'RFQ not found' }, { status: 404 })
+    const data: any = { ...raw }
     if (data.rfqNo) delete data.rfqNo
+    if (data.issueDate) data.issueDate = new Date(data.issueDate)
+    if (data.responseDeadline) data.responseDeadline = new Date(data.responseDeadline)
+    if (Array.isArray(vendorIds)) data.vendorIds = vendorIds.map(Number).filter(Number.isFinite)
     if (lineItems) {
       await pdb.finRFQLineItem.deleteMany({ where: { rfqId: Number(id) } })
       for (const li of lineItems) {

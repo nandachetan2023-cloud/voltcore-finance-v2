@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const missing = ['siteId', 'jobCode', 'costCenter', 'department', 'projectManager'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
+    const missing = ['siteId', 'jobCode'].filter(k => body[k] === undefined || body[k] === null || body[k] === '')
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const pdb = getDbForRequest(request)
     const { actor, ...createData } = body
@@ -68,7 +68,7 @@ export async function PUT(request: NextRequest) {
     delete merged.id
     delete merged.createdAt
     delete merged.updatedAt
-    const missing = ['siteId', 'jobCode', 'costCenter', 'department', 'projectManager'].filter(k => merged[k] === undefined || merged[k] === null || merged[k] === '')
+    const missing = ['siteId', 'jobCode'].filter(k => merged[k] === undefined || merged[k] === null || merged[k] === '')
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })
     const record = await pdb.finPurchaseOrder.update({ where: { id: Number(id) }, data: merged })
     return NextResponse.json({ success: true, data: record })

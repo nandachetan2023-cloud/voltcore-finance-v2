@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Warehouse, Plus, X, Loader2, RefreshCw, Truck, ClipboardList, PackageCheck, PackageX,
   Wrench, IdCard, Forklift, Recycle, ClipboardCheck, FileBarChart, Check, Ban, Trash2,
+  Package, Fuel, Flame,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUserEmail } from '@/lib/current-user';
@@ -24,23 +25,31 @@ function DeleteButton({ onClick }: { onClick: () => void }) {
 }
 
 // ── Shared lookups ──────────────────────────────────────────────────
-interface SiteRef { id: number; name: string; siteCode: string; }
-interface JobRef { id: number; jobCode: string; description: string | null; siteId: number | null; }
+interface SiteRef { id: number; name: string; siteCode: string; location?: string | null; }
+interface JobRef { id: number; jobCode: string; description: string | null; siteId: number | null; projectName?: string | null; }
 interface ItemRef { id: number; sku: string; name: string; }
 interface PoRef { id: number; poNo: string; vendorName: string; }
+// Contractor master (Contractors Management) — served at /api/fin/vendors.
+interface VendorRef { id: number; name: string; vendorCode: string | null; }
 
 function useLookups() {
   const [sites, setSites] = useState<SiteRef[]>([]);
   const [jobs, setJobs] = useState<JobRef[]>([]);
   const [items, setItems] = useState<ItemRef[]>([]);
   const [pos, setPos] = useState<PoRef[]>([]);
+  const [vendors, setVendors] = useState<VendorRef[]>([]);
+  // Live stock position per item (opening/received/issued/closing) — used by
+  // the MRS slip (Current Stock / Minimum Stock columns) and the Stock Register.
+  const [stockIndex, setStockIndex] = useState<Record<string, { balance: number; reorderLevel: number; unit: string; belowMin: boolean }>>({});
   useEffect(() => {
     fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success) setSites(j.data); }).catch(() => {});
-    fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success) setJobs(j.data.map((x: any) => ({ id: x.id, jobCode: x.jobCode, description: x.description, siteId: x.siteId }))); }).catch(() => {});
+    fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success) setJobs(j.data.map((x: any) => ({ id: x.id, jobCode: x.jobCode, description: x.description, siteId: x.siteId, projectName: x.project?.name ?? null }))); }).catch(() => {});
     fetch('/api/items').then(r => r.json()).then(j => { if (j.success) setItems(j.data.map((x: any) => ({ id: x.id, sku: x.sku, name: x.name }))); }).catch(() => {});
     fetch('/api/fin/purchase-orders').then(r => r.json()).then(j => { if (j.success) setPos(j.data.map((x: any) => ({ id: x.id, poNo: x.poNo, vendorName: x.vendorName }))); }).catch(() => {});
+    fetch('/api/fin/vendors').then(r => r.json()).then(j => { if (j.success && Array.isArray(j.data)) setVendors(j.data.map((x: any) => ({ id: x.id, name: x.name, vendorCode: x.vendorCode ?? null }))); }).catch(() => {});
+    fetch('/api/store/stock-register').then(r => r.json()).then(j => { if (j.success) setStockIndex(Object.fromEntries(j.data.map((x: any) => [x.itemCode, { balance: x.balance, reorderLevel: x.reorderLevel, unit: x.unit, belowMin: x.belowMin }]))); }).catch(() => {});
   }, []);
-  return { sites, jobs, items, pos };
+  return { sites, jobs, items, pos, vendors, stockIndex };
 }
 
 const inp = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]/60 placeholder:text-[#5a6878]';
@@ -61,6 +70,10 @@ const TABS = [
   { id: 'equipment', label: 'Equipment', icon: Forklift },
   { id: 'scrap', label: 'Scrap Register', icon: Recycle },
   { id: 'pv', label: 'Physical Verification', icon: ClipboardCheck },
+  { id: 'stock', label: 'Stock Register', icon: Package },
+  { id: 'diesel', label: 'Diesel Register', icon: Fuel },
+  { id: 'gas', label: 'Gas Cylinder Register', icon: Flame },
+  { id: 'daily', label: 'Daily Issue Register', icon: ClipboardList },
   { id: 'report', label: 'Monthly Report', icon: FileBarChart },
 ] as const;
 type TabId = typeof TABS[number]['id'];
@@ -101,6 +114,10 @@ export default function SiteStore() {
       {tab === 'equipment' && <EquipmentTab lookups={lookups} />}
       {tab === 'scrap' && <ScrapTab lookups={lookups} />}
       {tab === 'pv' && <PvTab lookups={lookups} />}
+      {tab === 'stock' && <StockRegisterTab lookups={lookups} />}
+      {tab === 'diesel' && <DieselTab lookups={lookups} />}
+      {tab === 'gas' && <GasCylinderTab lookups={lookups} />}
+      {tab === 'daily' && <DailyIssueTab lookups={lookups} />}
       {tab === 'report' && <ReportTab lookups={lookups} />}
     </div>
   );
@@ -114,8 +131,8 @@ function GrnTab({ lookups }: { lookups: Lookups }) {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState({ siteId: '', jobId: '', poId: '', vendorName: '', dcNo: '', invoiceNo: '', status: 'Posted', remarks: '' });
-  const [lines, setLines] = useState([{ itemId: '', qtyReceived: '', rate: '' }]);
+  const [f, setF] = useState({ siteId: '', jobId: '', poId: '', vendorName: '', dcNo: '', invoiceNo: '', status: 'Posted', remarks: '', timeOfReceipt: '', projectName: '', siteLocation: '', gateEntryNo: '', vehicleNo: '', lrDetails: '', storeLocation: 'Main Store', receivedBy: '' });
+  const [lines, setLines] = useState([{ itemId: '', qtyReceived: '', rate: '', materialCategory: 'CONSUMABLE ITEM', batchHeatNo: '', damageTransit: 'No', inspectionStatus: 'Accepted' }]);
   const [step, setStep] = useState(0);
 
   const fetchData = useCallback(async () => {
@@ -125,8 +142,8 @@ function GrnTab({ lookups }: { lookups: Lookups }) {
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openNew = () => { setF({ siteId: '', jobId: '', poId: '', vendorName: '', dcNo: '', invoiceNo: '', status: 'Posted', remarks: '' }); setLines([{ itemId: '', qtyReceived: '', rate: '' }]); setStep(0); setFormOpen(true); };
-  const addLine = () => setLines([...lines, { itemId: '', qtyReceived: '', rate: '' }]);
+  const openNew = () => { setF({ siteId: '', jobId: '', poId: '', vendorName: '', dcNo: '', invoiceNo: '', status: 'Posted', remarks: '', timeOfReceipt: '', projectName: '', siteLocation: '', gateEntryNo: '', vehicleNo: '', lrDetails: '', storeLocation: 'Main Store', receivedBy: '' }); setLines([{ itemId: '', qtyReceived: '', rate: '', materialCategory: 'CONSUMABLE ITEM', batchHeatNo: '', damageTransit: 'No', inspectionStatus: 'Accepted' }]); setStep(0); setFormOpen(true); };
+  const addLine = () => setLines([...lines, { itemId: '', qtyReceived: '', rate: '', materialCategory: 'CONSUMABLE ITEM', batchHeatNo: '', damageTransit: 'No', inspectionStatus: 'Accepted' }]);
   const removeLine = (i: number) => { if (lines.length > 1) setLines(lines.filter((_, idx) => idx !== i)); };
   const goNext = () => { if (!f.siteId) { toast.error('Site is required'); return; } setStep(1); };
 
@@ -136,7 +153,7 @@ function GrnTab({ lookups }: { lookups: Lookups }) {
     if (!validLines.length) { toast.error('Add at least one item line'); return; }
     setSaving(true);
     try {
-      const body = { ...f, siteId: Number(f.siteId), jobId: f.jobId || null, poId: f.poId || null, grnDate: new Date().toISOString(), actor: getCurrentUserEmail(), lines: validLines.map(l => ({ itemId: Number(l.itemId), qtyReceived: Number(l.qtyReceived), qtyAccepted: Number(l.qtyReceived), rate: Number(l.rate) || 0 })) };
+      const body = { ...f, siteId: Number(f.siteId), jobId: f.jobId || null, poId: f.poId || null, grnDate: new Date().toISOString(), actor: getCurrentUserEmail(), lines: validLines.map(l => ({ itemId: Number(l.itemId), qtyReceived: Number(l.qtyReceived), qtyAccepted: Number(l.qtyReceived), rate: Number(l.rate) || 0, materialCategory: l.materialCategory, batchHeatNo: l.batchHeatNo, damageTransit: l.damageTransit, inspectionStatus: l.inspectionStatus })) };
       const j = await fetch('/api/store/grn', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
       if (j.success) { toast.success(`GRN ${j.data.grnNo} posted`); setFormOpen(false); await fetchData(); } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); } finally { setSaving(false); }
@@ -150,41 +167,54 @@ function GrnTab({ lookups }: { lookups: Lookups }) {
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
-          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['GRN No', 'Date', 'Site', 'Vendor', 'PO', 'Items', 'Value', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['GRN No', 'Date', 'Time', 'Site', 'Vendor', 'PO', 'Challan', 'Items', 'Accepted', 'Value', 'Store', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
             {records.map(r => (
               <tr key={r.id} className="hover:bg-[#141920]">
                 <td className="py-2 px-3 text-[#f5a623] font-mono">{r.grnNo}</td>
                 <td className="py-2 px-3 text-[#8899aa] font-mono">{r.grnDate?.split('T')[0]}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.timeOfReceipt || '—'}</td>
                 <td className="py-2 px-3 text-[#e2e8f0]">{r.site?.siteCode}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.vendorName || r.po?.vendorName || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa] font-mono">{r.po?.poNo || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.dcNo || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.lines?.length ?? 0}</td>
+                <td className="py-2 px-3 text-[#00e676] font-mono">{r.lines?.reduce((s: number, l: any) => s + (l.qtyAccepted ?? 0), 0) ?? 0}</td>
                 <td className="py-2 px-3 text-[#e2e8f0] font-mono">{fmt(r.lines?.reduce((s: number, l: any) => s + l.amount, 0) ?? 0)}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.storeLocation || '—'}</td>
                 <td className="py-2 px-3"><Badge text={r.status} tone={r.status === 'Posted' ? 'ok' : r.status === 'Rejected' ? 'bad' : 'muted'} /></td>
                 <td className="py-2 px-3"><DeleteButton onClick={() => remove(r.id)} /></td>
               </tr>
             ))}
-            {records.length === 0 && <tr><td colSpan={9} className="py-8 text-center text-[#5a6878]">No GRNs yet</td></tr>}
+            {records.length === 0 && <tr><td colSpan={13} className="py-8 text-center text-[#5a6878]">No GRNs yet</td></tr>}
           </tbody>
         </table>
         </div>
       </div>
 
       {formOpen && (
-        <Modal title="New Goods Receipt Note" onClose={() => setFormOpen(false)}>
+        <Modal title="New Goods Receipt Note" onClose={() => setFormOpen(false)} wide>
           <Stepper steps={['Basics', 'Items']} current={step} />
           {step === 0 && (
             <div className="grid grid-cols-2 gap-3">
-              <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
-              <div><label className={lbl}>Job</label><select className={inp} value={f.jobId} onChange={e => setF({ ...f, jobId: e.target.value })}><option value="">— None —</option>{lookups.jobs.filter(j => !f.siteId || j.siteId === Number(f.siteId)).map(j => <option key={j.id} value={j.id}>{j.jobCode}</option>)}</select></div>
-              <div><label className={lbl}>Purchase Order</label><select className={inp} value={f.poId} onChange={e => setF({ ...f, poId: e.target.value })}><option value="">— None —</option>{lookups.pos.map(p => <option key={p.id} value={p.id}>{p.poNo} — {p.vendorName}</option>)}</select></div>
-              <div><label className={lbl}>Vendor</label><input className={inp} value={f.vendorName} onChange={e => setF({ ...f, vendorName: e.target.value })} /></div>
-              <div><label className={lbl}>DC No</label><input className={inp} value={f.dcNo} onChange={e => setF({ ...f, dcNo: e.target.value })} /></div>
+              <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => { const s = lookups.sites.find(x => String(x.id) === e.target.value); setF({ ...f, siteId: e.target.value, siteLocation: s?.location ?? f.siteLocation }); }}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
+              <div><label className={lbl}>Job</label><select className={inp} value={f.jobId} onChange={e => { const j = lookups.jobs.find(x => String(x.id) === e.target.value); setF({ ...f, jobId: e.target.value, projectName: j?.projectName ?? f.projectName }); }}><option value="">— None —</option>{lookups.jobs.filter(j => !f.siteId || j.siteId === Number(f.siteId)).map(j => <option key={j.id} value={j.id}>{j.jobCode}</option>)}</select></div>
+              <div><label className={lbl}>Purchase Order</label><select className={inp} value={f.poId} onChange={e => { const p = lookups.pos.find(x => String(x.id) === e.target.value); setF({ ...f, poId: e.target.value, vendorName: p?.vendorName || f.vendorName }); }}><option value="">— None —</option>{lookups.pos.map(p => <option key={p.id} value={p.id}>{p.poNo} — {p.vendorName}</option>)}</select></div>
+              <div><label className={lbl}>Supplier / Vendor (Contractors)</label><select className={inp + ' appearance-none'} value={f.vendorName} onChange={e => setF({ ...f, vendorName: e.target.value })}><option value="">— Select contractor —</option>{lookups.vendors.map(v => <option key={v.id} value={v.name}>{v.vendorCode ? `${v.vendorCode} — ` : ''}{v.name}</option>)}{f.vendorName && !lookups.vendors.some(v => v.name === f.vendorName) && <option value={f.vendorName}>{f.vendorName} (existing)</option>}</select></div>
+              <div><label className={lbl}>Challan/Invoice No</label><input className={inp} value={f.dcNo} onChange={e => setF({ ...f, dcNo: e.target.value })} placeholder="DC-0813" /></div>
               <div><label className={lbl}>Invoice No</label><input className={inp} value={f.invoiceNo} onChange={e => setF({ ...f, invoiceNo: e.target.value })} /></div>
+              <div><label className={lbl}>Time of Receipt</label><input className={inp} value={f.timeOfReceipt} onChange={e => setF({ ...f, timeOfReceipt: e.target.value })} placeholder="e.g. 05:30 PM" /></div>
+              <div><label className={lbl}>Store Location</label><select className={inp} value={f.storeLocation} onChange={e => setF({ ...f, storeLocation: e.target.value })}>{['Main Store', 'PPEs Store', 'Power & Machine Store', 'Tools & Tackles Store'].map(s => <option key={s}>{s}</option>)}</select></div>
+              <div><label className={lbl}>Gate Entry No</label><input className={inp} value={f.gateEntryNo} onChange={e => setF({ ...f, gateEntryNo: e.target.value })} placeholder="GE-10125" /></div>
+              <div><label className={lbl}>Vehicle No</label><input className={inp} value={f.vehicleNo} onChange={e => setF({ ...f, vehicleNo: e.target.value })} placeholder="OD23U4075" /></div>
+              <div><label className={lbl}>LR / Transporter</label><input className={inp} value={f.lrDetails} onChange={e => setF({ ...f, lrDetails: e.target.value })} placeholder="Lorry receipt details" /></div>
+              <div><label className={lbl}>Received By</label><input className={inp} value={f.receivedBy} onChange={e => setF({ ...f, receivedBy: e.target.value })} placeholder="Store Keeper" /></div>
+              <div><label className={lbl}>Project Name</label><input className={inp} value={f.projectName} onChange={e => setF({ ...f, projectName: e.target.value })} placeholder="e.g. AAP Gap AMC" /></div>
+              <div><label className={lbl}>Site Location</label><input className={inp} value={f.siteLocation} onChange={e => setF({ ...f, siteLocation: e.target.value })} placeholder="e.g. Lapanga OD" /></div>
+              <div className="col-span-2"><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
             </div>
           )}
-          {step === 1 && <LinesEditor lines={lines} setLines={setLines} items={lookups.items} addLine={addLine} removeLine={removeLine} qtyKey="qtyReceived" />}
+          {step === 1 && <GrnLinesEditor lines={lines} setLines={setLines} items={lookups.items} addLine={addLine} removeLine={removeLine} />}
           <WizardFooter step={step} totalSteps={2} onBack={() => setStep(0)} onNext={goNext} onCancel={() => setFormOpen(false)} onFinish={save} saving={saving} finishLabel="Post GRN" />
         </Modal>
       )}
@@ -199,7 +229,7 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
   const [formOpen, setFormOpen] = useState(false);
   const [issueTarget, setIssueTarget] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState({ siteId: '', jobId: '', requestedBy: '', department: '', purpose: '' });
+  const [f, setF] = useState({ siteId: '', jobId: '', requestedBy: '', department: '', purpose: '', requiredByDate: '', reasonForRequirement: 'New Work' });
   const [lines, setLines] = useState([{ itemId: '', qtyRequested: '' }]);
   const [issueForm, setIssueForm] = useState({ issuedTo: '', issuedBy: '' });
   const [step, setStep] = useState(0);
@@ -211,7 +241,7 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openNew = () => { setF({ siteId: '', jobId: '', requestedBy: '', department: '', purpose: '' }); setLines([{ itemId: '', qtyRequested: '' }]); setStep(0); setFormOpen(true); };
+  const openNew = () => { setF({ siteId: '', jobId: '', requestedBy: '', department: '', purpose: '', requiredByDate: '', reasonForRequirement: 'New Work' }); setLines([{ itemId: '', qtyRequested: '' }]); setStep(0); setFormOpen(true); };
   const addLine = () => setLines([...lines, { itemId: '', qtyRequested: '' }]);
   const removeLine = (i: number) => { if (lines.length > 1) setLines(lines.filter((_, idx) => idx !== i)); };
   const goNext = () => { if (!f.siteId) { toast.error('Site is required'); return; } setStep(1); };
@@ -258,14 +288,16 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
-          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['MRS No', 'Date', 'Site', 'Requested By', 'Purpose', 'Items', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['MRS No', 'Date', 'Required By', 'Site', 'Requested By', 'Reason', 'Purpose', 'Items', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
             {records.map(r => (
               <tr key={r.id} className="hover:bg-[#141920]">
                 <td className="py-2 px-3 text-[#f5a623] font-mono">{r.mrsNo}</td>
                 <td className="py-2 px-3 text-[#8899aa] font-mono">{r.mrsDate?.split('T')[0]}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.requiredByDate ? new Date(r.requiredByDate).toISOString().split('T')[0] : '—'}</td>
                 <td className="py-2 px-3 text-[#e2e8f0]">{r.site?.siteCode}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.requestedBy || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa] max-w-[150px] truncate">{r.reasonForRequirement || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa] max-w-[160px] truncate">{r.purpose || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.lines?.length ?? 0}</td>
                 <td className="py-2 px-3"><Badge text={r.status} tone={r.status === 'Approved' ? 'ok' : r.status === 'Issued' ? 'muted' : r.status === 'Rejected' ? 'bad' : 'warn'} /></td>
@@ -278,7 +310,7 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
                 </td>
               </tr>
             ))}
-            {records.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-[#5a6878]">No requisitions yet</td></tr>}
+            {records.length === 0 && <tr><td colSpan={10} className="py-8 text-center text-[#5a6878]">No requisitions yet</td></tr>}
           </tbody>
         </table>
         </div>
@@ -293,10 +325,12 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
               <div><label className={lbl}>Job</label><select className={inp} value={f.jobId} onChange={e => setF({ ...f, jobId: e.target.value })}><option value="">— None —</option>{lookups.jobs.filter(j => !f.siteId || j.siteId === Number(f.siteId)).map(j => <option key={j.id} value={j.id}>{j.jobCode}</option>)}</select></div>
               <div><label className={lbl}>Requested By</label><input className={inp} value={f.requestedBy} onChange={e => setF({ ...f, requestedBy: e.target.value })} /></div>
               <div><label className={lbl}>Department</label><input className={inp} value={f.department} onChange={e => setF({ ...f, department: e.target.value })} /></div>
-              <div className="col-span-2"><label className={lbl}>Purpose</label><input className={inp} value={f.purpose} onChange={e => setF({ ...f, purpose: e.target.value })} /></div>
+              <div><label className={lbl}>Required On-Site By</label><input type="date" className={inp} value={f.requiredByDate} onChange={e => setF({ ...f, requiredByDate: e.target.value })} /></div>
+              <div><label className={lbl}>Reason for Requirement</label><select className={inp + ' appearance-none'} value={f.reasonForRequirement} onChange={e => setF({ ...f, reasonForRequirement: e.target.value })}>{['New Work', 'Stock Replenishment', 'Emergency Requirement', 'Replacement of Damaged Material', 'Additional Scope of Work', 'Regular Requirement'].map(r => <option key={r}>{r}</option>)}</select></div>
+              <div className="col-span-2"><label className={lbl}>Purpose</label><input className={inp} value={f.purpose} onChange={e => setF({ ...f, purpose: e.target.value })} placeholder="Purpose of issue / Work location / Area" /></div>
             </div>
           )}
-          {step === 1 && <LinesEditor lines={lines} setLines={setLines} items={lookups.items} addLine={addLine} removeLine={removeLine} qtyKey="qtyRequested" />}
+          {step === 1 && <LinesEditor lines={lines} setLines={setLines} items={lookups.items} addLine={addLine} removeLine={removeLine} qtyKey="qtyRequested" stockIndex={lookups.stockIndex} />}
           <WizardFooter step={step} totalSteps={2} onBack={() => setStep(0)} onNext={goNext} onCancel={() => setFormOpen(false)} onFinish={save} saving={saving} finishLabel="Submit for Approval" />
         </Modal>
       )}
@@ -321,7 +355,7 @@ function ReturnsTab({ lookups }: { lookups: Lookups }) {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState({ siteId: '', jobId: '', returnedBy: '', remarks: '' });
+  const [f, setF] = useState({ siteId: '', jobId: '', returnedBy: '', receivedBy: '', remarks: '' });
   const [lines, setLines] = useState([{ itemId: '', qty: '', condition: 'Good' }]);
 
   const fetchData = useCallback(async () => {
@@ -331,7 +365,7 @@ function ReturnsTab({ lookups }: { lookups: Lookups }) {
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openNew = () => { setF({ siteId: '', jobId: '', returnedBy: '', remarks: '' }); setLines([{ itemId: '', qty: '', condition: 'Good' }]); setFormOpen(true); };
+  const openNew = () => { setF({ siteId: '', jobId: '', returnedBy: '', receivedBy: '', remarks: '' }); setLines([{ itemId: '', qty: '', condition: 'Good' }]); setFormOpen(true); };
   const addLine = () => setLines([...lines, { itemId: '', qty: '', condition: 'Good' }]);
   const removeLine = (i: number) => { if (lines.length > 1) setLines(lines.filter((_, idx) => idx !== i)); };
 
@@ -355,7 +389,7 @@ function ReturnsTab({ lookups }: { lookups: Lookups }) {
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
-          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Return No', 'Date', 'Site', 'Returned By', 'Items', 'Condition', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Return No', 'Date', 'Site', 'Returned By', 'Received By', 'Items', 'Condition', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
             {records.map(r => (
               <tr key={r.id} className="hover:bg-[#141920]">
@@ -363,12 +397,13 @@ function ReturnsTab({ lookups }: { lookups: Lookups }) {
                 <td className="py-2 px-3 text-[#8899aa] font-mono">{r.returnDate?.split('T')[0]}</td>
                 <td className="py-2 px-3 text-[#e2e8f0]">{r.site?.siteCode}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.returnedBy || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.receivedBy || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.lines?.length ?? 0}</td>
                 <td className="py-2 px-3 text-[#5a6878]">{r.lines?.map((l: any) => l.condition).includes('Damaged') ? <Badge text="Has damaged items" tone="warn" /> : <Badge text="Good" tone="ok" />}</td>
                 <td className="py-2 px-3"><DeleteButton onClick={() => remove(r.id)} /></td>
               </tr>
             ))}
-            {records.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-[#5a6878]">No returns yet</td></tr>}
+            {records.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-[#5a6878]">No returns yet</td></tr>}
           </tbody>
         </table>
         </div>
@@ -379,7 +414,8 @@ function ReturnsTab({ lookups }: { lookups: Lookups }) {
           <div className="grid grid-cols-2 gap-3">
             <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
             <div><label className={lbl}>Job</label><select className={inp} value={f.jobId} onChange={e => setF({ ...f, jobId: e.target.value })}><option value="">— None —</option>{lookups.jobs.filter(j => !f.siteId || j.siteId === Number(f.siteId)).map(j => <option key={j.id} value={j.id}>{j.jobCode}</option>)}</select></div>
-            <div><label className={lbl}>Returned By</label><input className={inp} value={f.returnedBy} onChange={e => setF({ ...f, returnedBy: e.target.value })} /></div>
+            <div><label className={lbl}>Returned By</label><input className={inp} value={f.returnedBy} onChange={e => setF({ ...f, returnedBy: e.target.value })} placeholder="Who returned the material" /></div>
+            <div><label className={lbl}>Received By</label><input className={inp} value={f.receivedBy} onChange={e => setF({ ...f, receivedBy: e.target.value })} placeholder="Store keeper who received it" /></div>
             <div><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
           </div>
           <LinesEditor lines={lines} setLines={setLines} items={lookups.items} addLine={addLine} removeLine={removeLine} qtyKey="qty" withCondition />
@@ -396,7 +432,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [issueTarget, setIssueTarget] = useState<any | null>(null);
-  const [returnTarget, setReturnTarget] = useState<any | null>(null);
+  const [returnTarget, setReturnTarget] = useState<{ tool: any; log: any } | null>(null);
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({ name: '', category: '', siteId: '', remarks: '' });
   const [issuedTo, setIssuedTo] = useState('');
@@ -408,6 +444,12 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Flat issue-log register (client Excel "Tool box Register" format):
+  // Issue No | Date | Tool Name | Tool ID | Issued To | Qty | Issue Date | Return Date | Condition | Remarks
+  const registerRows = records
+    .flatMap(r => (r.logs ?? []).map((l: any) => ({ tool: r, log: l })))
+    .sort((a, b) => new Date(b.log.issueDate).getTime() - new Date(a.log.issueDate).getTime());
 
   const openNew = () => { setF({ name: '', category: '', siteId: '', remarks: '' }); setFormOpen(true); };
   const save = async () => {
@@ -431,20 +473,47 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
 
   const doReturn = async () => {
     if (!returnTarget) return;
-    const openLog = returnTarget.logs?.find((l: any) => !l.returnDate);
-    if (!openLog) { toast.error('No open issue log for this tool'); return; }
+    const { tool, log } = returnTarget;
     setSaving(true);
     try {
-      const j = await fetch('/api/store/tools', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: returnTarget.id, actor: getCurrentUserEmail(), issueLog: { returnLogId: openLog.id, condition: returnCondition } }) }).then(r => r.json());
+      const j = await fetch('/api/store/tools', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: tool.id, actor: getCurrentUserEmail(), issueLog: { returnLogId: log.id, condition: returnCondition } }) }).then(r => r.json());
       if (j.success) { toast.success('Tool returned'); setReturnTarget(null); await fetchData(); } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); } finally { setSaving(false); }
   };
 
   if (loading) return <Spinner />;
   return (
-    <div>
-      <TableHeader title="Tool & Tackle Register" count={records.length} onNew={openNew} newLabel="New Tool" />
+    <div className="space-y-4">
+      <TableHeader title="Tool Box Register (Issue Log)" count={registerRows.length} onNew={openNew} newLabel="New Tool" />
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+        <table className="w-full text-[11px]">
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Issue No', 'Issue Date', 'Tool Name', 'Tool ID', 'Issued To', 'Qty', 'Return Date', 'Condition', 'Remarks', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <tbody className="divide-y divide-[#1a2028]">
+            {registerRows.map(({ tool, log }) => (
+              <tr key={log.id} className="hover:bg-[#141920]">
+                <td className="py-2 px-3 text-[#f5a623] font-mono">{log.issueNo || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{log.issueDate?.split('T')[0]}</td>
+                <td className="py-2 px-3 text-[#e2e8f0]">{tool.name}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{tool.toolCode}</td>
+                <td className="py-2 px-3 text-[#e2e8f0]">{log.issuedTo}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{log.qty ?? 1}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{log.returnDate ? String(log.returnDate).split('T')[0] : '— (open)'}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{log.condition || '—'}</td>
+                <td className="py-2 px-3 text-[#5a6878] max-w-[160px] truncate">{log.remarks || '—'}</td>
+                <td className="py-2 px-3">
+                  {!log.returnDate && <button onClick={() => setReturnTarget({ tool, log })} className="px-2 py-1 rounded bg-[#00d4ff]/15 text-[#00d4ff] text-[10px] font-semibold hover:bg-[#00d4ff]/25">Return</button>}
+                </td>
+              </tr>
+            ))}
+            {registerRows.length === 0 && <tr><td colSpan={10} className="py-8 text-center text-[#5a6878]">No tools issued yet — register a tool and click Issue</td></tr>}
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="px-4 py-2 border-b border-[#252e3a] text-[11px] font-bold text-[#e2e8f0]">Tool Master ({records.length})</div>
         <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
           <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Tool Code', 'Name', 'Category', 'Site', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
@@ -459,7 +528,6 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
                 <td className="py-2 px-3">
                   <div className="flex gap-1.5 items-center">
                     {r.status === 'Available' && <button onClick={() => setIssueTarget(r)} className="px-2 py-1 rounded bg-[#f5a623]/15 text-[#f5a623] text-[10px] font-semibold hover:bg-[#f5a623]/25">Issue</button>}
-                    {r.status === 'Issued' && <button onClick={() => setReturnTarget(r)} className="px-2 py-1 rounded bg-[#00d4ff]/15 text-[#00d4ff] text-[10px] font-semibold hover:bg-[#00d4ff]/25">Return</button>}
                     {r.status !== 'Issued' && <DeleteButton onClick={() => remove(r.id)} />}
                   </div>
                 </td>
@@ -477,6 +545,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
             <div className="col-span-2"><label className={lbl}>Name *</label><input className={inp} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="e.g. Grinding Machine" /></div>
             <div><label className={lbl}>Category</label><input className={inp} value={f.category} onChange={e => setF({ ...f, category: e.target.value })} placeholder="e.g. Welding Machine" /></div>
             <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
+            <div className="col-span-2"><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
           </div>
           <ModalFooter onCancel={() => setFormOpen(false)} onSave={save} saving={saving} label="Register Tool" />
         </Modal>
@@ -488,7 +557,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
         </Modal>
       )}
       {returnTarget && (
-        <Modal title={`Return Tool — ${returnTarget.toolCode}`} onClose={() => setReturnTarget(null)}>
+        <Modal title={`Return Tool — ${returnTarget.tool.toolCode}`} onClose={() => setReturnTarget(null)}>
           <div><label className={lbl}>Condition on Return</label><select className={inp} value={returnCondition} onChange={e => setReturnCondition(e.target.value)}>{['Good', 'Damaged', 'Lost'].map(c => <option key={c}>{c}</option>)}</select></div>
           <ModalFooter onCancel={() => setReturnTarget(null)} onSave={doReturn} saving={saving} label="Confirm Return" />
         </Modal>
@@ -503,7 +572,7 @@ function GatePassTab({ lookups }: { lookups: Lookups }) {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState({ siteId: '', type: 'Outward', itemDescription: '', qty: '', vehicleNo: '', driverName: '', purpose: '', authorizedBy: '' });
+  const [f, setF] = useState({ siteId: '', type: 'Outward', itemDescription: '', itemCode: '', qty: '', vehicleNo: '', driverName: '', purpose: '', authorizedBy: '', outwardGpNo: '', outwardDate: '', remarks: '' });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -512,7 +581,7 @@ function GatePassTab({ lookups }: { lookups: Lookups }) {
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openNew = () => { setF({ siteId: '', type: 'Outward', itemDescription: '', qty: '', vehicleNo: '', driverName: '', purpose: '', authorizedBy: '' }); setFormOpen(true); };
+  const openNew = () => { setF({ siteId: '', type: 'Outward', itemDescription: '', itemCode: '', qty: '', vehicleNo: '', driverName: '', purpose: '', authorizedBy: '', outwardGpNo: '', outwardDate: '', remarks: '' }); setFormOpen(true); };
   const save = async () => {
     if (!f.siteId || !f.itemDescription) { toast.error('Site and item description are required'); return; }
     setSaving(true);
@@ -536,7 +605,7 @@ function GatePassTab({ lookups }: { lookups: Lookups }) {
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
-          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Gate Pass No', 'Date', 'Type', 'Site', 'Item', 'Qty', 'Vehicle', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['GP No', 'Date', 'Direction', 'Site', 'Item Code', 'Material', 'Qty', 'Vehicle', 'Purpose', 'Authorized By', 'Outward GP', 'Remarks', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
             {records.map(r => (
               <tr key={r.id} className="hover:bg-[#141920]">
@@ -544,9 +613,14 @@ function GatePassTab({ lookups }: { lookups: Lookups }) {
                 <td className="py-2 px-3 text-[#8899aa] font-mono">{r.gatePassDate?.split('T')[0]}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.type}</td>
                 <td className="py-2 px-3 text-[#e2e8f0]">{r.site?.siteCode}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.itemCode || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa] max-w-[160px] truncate">{r.itemDescription}</td>
                 <td className="py-2 px-3 text-[#8899aa] font-mono">{r.qty}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.vehicleNo || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa] max-w-[140px] truncate">{r.purpose || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.authorizedBy || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.outwardGpNo ? `${r.outwardGpNo}${r.outwardDate ? ' · ' + String(r.outwardDate).split('T')[0] : ''}` : '—'}</td>
+                <td className="py-2 px-3 text-[#5a6878] max-w-[160px] truncate">{r.remarks || '—'}</td>
                 <td className="py-2 px-3"><Badge text={r.status} tone={r.status === 'Open' ? 'warn' : 'ok'} /></td>
                 <td className="py-2 px-3">
                   <div className="flex gap-1.5 items-center">
@@ -556,7 +630,7 @@ function GatePassTab({ lookups }: { lookups: Lookups }) {
                 </td>
               </tr>
             ))}
-            {records.length === 0 && <tr><td colSpan={9} className="py-8 text-center text-[#5a6878]">No gate passes yet</td></tr>}
+            {records.length === 0 && <tr><td colSpan={14} className="py-8 text-center text-[#5a6878]">No gate passes yet</td></tr>}
           </tbody>
         </table>
         </div>
@@ -567,12 +641,16 @@ function GatePassTab({ lookups }: { lookups: Lookups }) {
           <div className="grid grid-cols-2 gap-3">
             <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
             <div><label className={lbl}>Type</label><select className={inp} value={f.type} onChange={e => setF({ ...f, type: e.target.value })}>{['Outward', 'Inward', 'Returnable', 'Non-Returnable'].map(t => <option key={t}>{t}</option>)}</select></div>
-            <div className="col-span-2"><label className={lbl}>Item Description *</label><input className={inp} value={f.itemDescription} onChange={e => setF({ ...f, itemDescription: e.target.value })} /></div>
+            <div className="col-span-2"><label className={lbl}>Item Code (from item master)</label><select className={inp + ' appearance-none'} value={f.itemCode} onChange={e => { const it = lookups.items.find(i => i.sku === e.target.value); setF({ ...f, itemCode: e.target.value, itemDescription: f.itemDescription || (it ? `${it.sku} — ${it.name}` : f.itemDescription) }); }}><option value="">— Free text (unregistered material) —</option>{lookups.items.map(i => <option key={i.id} value={i.sku}>{i.sku} — {i.name}</option>)}</select></div>
+            <div className="col-span-2"><label className={lbl}>Material / Item Description *</label><input className={inp} value={f.itemDescription} onChange={e => setF({ ...f, itemDescription: e.target.value })} placeholder="e.g. Welding Rod 7018 x 3.15" /></div>
             <div><label className={lbl}>Qty</label><input type="number" className={inp} value={f.qty} onChange={e => setF({ ...f, qty: e.target.value })} /></div>
             <div><label className={lbl}>Vehicle No</label><input className={inp} value={f.vehicleNo} onChange={e => setF({ ...f, vehicleNo: e.target.value })} /></div>
             <div><label className={lbl}>Driver Name</label><input className={inp} value={f.driverName} onChange={e => setF({ ...f, driverName: e.target.value })} /></div>
             <div><label className={lbl}>Authorized By</label><input className={inp} value={f.authorizedBy} onChange={e => setF({ ...f, authorizedBy: e.target.value })} /></div>
+            <div><label className={lbl}>Outward GP No (for returnable)</label><input className={inp} value={f.outwardGpNo} onChange={e => setF({ ...f, outwardGpNo: e.target.value })} placeholder="GP/…" /></div>
+            <div><label className={lbl}>Outward Date</label><input type="date" className={inp} value={f.outwardDate} onChange={e => setF({ ...f, outwardDate: e.target.value })} /></div>
             <div className="col-span-2"><label className={lbl}>Purpose</label><input className={inp} value={f.purpose} onChange={e => setF({ ...f, purpose: e.target.value })} /></div>
+            <div className="col-span-2"><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
           </div>
           <ModalFooter onCancel={() => setFormOpen(false)} onSave={save} saving={saving} label="Create Gate Pass" />
         </Modal>
@@ -587,7 +665,7 @@ function EquipmentTab({ lookups }: { lookups: Lookups }) {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState({ name: '', type: '', siteId: '', operatorName: '' });
+  const [f, setF] = useState({ name: '', type: '', siteId: '', operatorName: '', make: '', srNo: '', capacity: '', location: '', validityDate: '', lastService: '', nextService: '', remarks: '' });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -596,7 +674,7 @@ function EquipmentTab({ lookups }: { lookups: Lookups }) {
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openNew = () => { setF({ name: '', type: '', siteId: '', operatorName: '' }); setFormOpen(true); };
+  const openNew = () => { setF({ name: '', type: '', siteId: '', operatorName: '', make: '', srNo: '', capacity: '', location: '', validityDate: '', lastService: '', nextService: '', remarks: '' }); setFormOpen(true); };
   const save = async () => {
     if (!f.name || !f.siteId) { toast.error('Name and site are required'); return; }
     setSaving(true);
@@ -614,20 +692,26 @@ function EquipmentTab({ lookups }: { lookups: Lookups }) {
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
-          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Code', 'Name', 'Type', 'Site', 'Operator', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Equipment ID', 'Equipment Name', 'Make', 'Sr. No', 'Capacity', 'Location', 'Site', 'Validity', 'Last Service', 'Next Service', 'Operator', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
             {records.map(r => (
               <tr key={r.id} className="hover:bg-[#141920]">
                 <td className="py-2 px-3 text-[#f5a623] font-mono">{r.equipmentCode}</td>
                 <td className="py-2 px-3 text-[#e2e8f0]">{r.name}</td>
-                <td className="py-2 px-3 text-[#8899aa]">{r.type || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.make || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.srNo || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.capacity || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.location || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.site?.siteCode}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.validityDate ? String(r.validityDate).split('T')[0] : '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.lastService ? String(r.lastService).split('T')[0] : '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.nextService ? String(r.nextService).split('T')[0] : '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.operatorName || '—'}</td>
                 <td className="py-2 px-3"><Badge text={r.status} tone={r.status === 'Active' ? 'ok' : r.status === 'Under Maintenance' ? 'warn' : 'muted'} /></td>
                 <td className="py-2 px-3"><DeleteButton onClick={() => remove(r.id)} /></td>
               </tr>
             ))}
-            {records.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-[#5a6878]">No equipment registered yet</td></tr>}
+            {records.length === 0 && <tr><td colSpan={13} className="py-8 text-center text-[#5a6878]">No equipment registered yet</td></tr>}
           </tbody>
         </table>
         </div>
@@ -636,10 +720,18 @@ function EquipmentTab({ lookups }: { lookups: Lookups }) {
       {formOpen && (
         <Modal title="Register New Equipment" onClose={() => setFormOpen(false)}>
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2"><label className={lbl}>Name *</label><input className={inp} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="e.g. Farana Crane" /></div>
+            <div className="col-span-2"><label className={lbl}>Equipment Name *</label><input className={inp} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="e.g. Farana Crane" /></div>
+            <div><label className={lbl}>Make</label><input className={inp} value={f.make} onChange={e => setF({ ...f, make: e.target.value })} placeholder="e.g. ElectroMech" /></div>
+            <div><label className={lbl}>Sr. No</label><input className={inp} value={f.srNo} onChange={e => setF({ ...f, srNo: e.target.value })} /></div>
+            <div><label className={lbl}>Capacity</label><input className={inp} value={f.capacity} onChange={e => setF({ ...f, capacity: e.target.value })} placeholder="e.g. 50 Ton" /></div>
             <div><label className={lbl}>Type</label><input className={inp} value={f.type} onChange={e => setF({ ...f, type: e.target.value })} placeholder="e.g. Crane" /></div>
+            <div><label className={lbl}>Location</label><input className={inp} value={f.location} onChange={e => setF({ ...f, location: e.target.value })} placeholder="e.g. Main Store / Yard" /></div>
             <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
+            <div><label className={lbl}>Validity</label><input type="date" className={inp} value={f.validityDate} onChange={e => setF({ ...f, validityDate: e.target.value })} /></div>
+            <div><label className={lbl}>Last Service</label><input type="date" className={inp} value={f.lastService} onChange={e => setF({ ...f, lastService: e.target.value })} /></div>
+            <div><label className={lbl}>Next Service</label><input type="date" className={inp} value={f.nextService} onChange={e => setF({ ...f, nextService: e.target.value })} /></div>
             <div className="col-span-2"><label className={lbl}>Operator</label><input className={inp} value={f.operatorName} onChange={e => setF({ ...f, operatorName: e.target.value })} /></div>
+            <div className="col-span-2"><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
           </div>
           <ModalFooter onCancel={() => setFormOpen(false)} onSave={save} saving={saving} label="Register Equipment" />
         </Modal>
@@ -654,7 +746,9 @@ function ScrapTab({ lookups }: { lookups: Lookups }) {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState({ siteId: '', jobId: '', itemId: '', description: '', qty: '', unit: 'Nos', estimatedValue: '' });
+  const [f, setF] = useState({ siteId: '', jobId: '', itemId: '', description: '', qty: '', unit: 'Nos', estimatedValue: '', scrapType: 'Scrap', location: '' });
+  const [disposing, setDisposing] = useState<number | null>(null);
+  const [disposedTo, setDisposedTo] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -663,7 +757,7 @@ function ScrapTab({ lookups }: { lookups: Lookups }) {
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openNew = () => { setF({ siteId: '', jobId: '', itemId: '', description: '', qty: '', unit: 'Nos', estimatedValue: '' }); setFormOpen(true); };
+  const openNew = () => { setF({ siteId: '', jobId: '', itemId: '', description: '', qty: '', unit: 'Nos', estimatedValue: '', scrapType: 'Scrap', location: '' }); setFormOpen(true); };
   const save = async () => {
     if (!f.siteId || !f.description) { toast.error('Site and description are required'); return; }
     setSaving(true);
@@ -675,8 +769,8 @@ function ScrapTab({ lookups }: { lookups: Lookups }) {
   };
   const markDisposed = async (id: number) => {
     try {
-      const j = await fetch('/api/store/scrap', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, disposalStatus: 'Disposed', actor: getCurrentUserEmail() }) }).then(r => r.json());
-      if (j.success) { toast.success('Marked disposed'); await fetchData(); } else toast.error(j.error || 'Failed');
+      const j = await fetch('/api/store/scrap', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, disposalStatus: 'Disposed', disposedTo: disposedTo || null, actor: getCurrentUserEmail() }) }).then(r => r.json());
+      if (j.success) { toast.success('Marked disposed'); setDisposing(null); setDisposedTo(''); await fetchData(); } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); }
   };
   const remove = async (id: number) => { if (await deleteRecord('/api/store/scrap', id, 'scrap entry')) await fetchData(); };
@@ -688,26 +782,29 @@ function ScrapTab({ lookups }: { lookups: Lookups }) {
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
-          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Scrap No', 'Date', 'Site', 'Description', 'Qty', 'Est. Value', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Scrap No', 'Date', 'Site', 'Type', 'Material', 'Location', 'Qty', 'Est. Value', 'Status', 'Disposed To', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
             {records.map(r => (
               <tr key={r.id} className="hover:bg-[#141920]">
                 <td className="py-2 px-3 text-[#f5a623] font-mono">{r.scrapNo}</td>
                 <td className="py-2 px-3 text-[#8899aa] font-mono">{r.scrapDate?.split('T')[0]}</td>
                 <td className="py-2 px-3 text-[#e2e8f0]">{r.site?.siteCode}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.scrapType || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa] max-w-[160px] truncate">{r.description}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.location || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa] font-mono">{r.qty} {r.unit}</td>
                 <td className="py-2 px-3 text-[#8899aa] font-mono">{fmt(r.estimatedValue)}</td>
                 <td className="py-2 px-3"><Badge text={r.disposalStatus} tone={r.disposalStatus === 'Disposed' ? 'ok' : r.disposalStatus === 'Sold' ? 'ok' : 'warn'} /></td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.disposedTo || '—'}</td>
                 <td className="py-2 px-3">
                   <div className="flex gap-1.5 items-center">
-                    {r.disposalStatus === 'Pending' && <button onClick={() => markDisposed(r.id)} className="px-2 py-1 rounded bg-[#5a6878]/15 text-[#8899aa] text-[10px] font-semibold hover:bg-[#5a6878]/25">Mark Disposed</button>}
+                    {r.disposalStatus === 'Pending' && <button onClick={() => { setDisposing(r.id); setDisposedTo(''); }} className="px-2 py-1 rounded bg-[#5a6878]/15 text-[#8899aa] text-[10px] font-semibold hover:bg-[#5a6878]/25">Mark Disposed</button>}
                     <DeleteButton onClick={() => remove(r.id)} />
                   </div>
                 </td>
               </tr>
             ))}
-            {records.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-[#5a6878]">No scrap entries yet</td></tr>}
+            {records.length === 0 && <tr><td colSpan={11} className="py-8 text-center text-[#5a6878]">No scrap entries yet</td></tr>}
           </tbody>
         </table>
         </div>
@@ -718,12 +815,20 @@ function ScrapTab({ lookups }: { lookups: Lookups }) {
           <div className="grid grid-cols-2 gap-3">
             <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
             <div><label className={lbl}>Job</label><select className={inp} value={f.jobId} onChange={e => setF({ ...f, jobId: e.target.value })}><option value="">— None —</option>{lookups.jobs.filter(j => !f.siteId || j.siteId === Number(f.siteId)).map(j => <option key={j.id} value={j.id}>{j.jobCode}</option>)}</select></div>
-            <div className="col-span-2"><label className={lbl}>Description *</label><input className={inp} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} placeholder="e.g. Cut-offs from fabrication" /></div>
+            <div className="col-span-2"><label className={lbl}>Description (Material) *</label><input className={inp} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} placeholder="e.g. Cut-offs from fabrication" /></div>
+            <div><label className={lbl}>Type</label><select className={inp + ' appearance-none'} value={f.scrapType} onChange={e => setF({ ...f, scrapType: e.target.value })}>{['Scrap', 'Damaged', 'Lost'].map(t => <option key={t}>{t}</option>)}</select></div>
+            <div><label className={lbl}>Location</label><input className={inp} value={f.location} onChange={e => setF({ ...f, location: e.target.value })} placeholder="e.g. Yard / Main Store" /></div>
             <div><label className={lbl}>Related Item</label><select className={inp} value={f.itemId} onChange={e => setF({ ...f, itemId: e.target.value })}><option value="">— None —</option>{lookups.items.map(i => <option key={i.id} value={i.id}>{i.sku} — {i.name}</option>)}</select></div>
             <div className="grid grid-cols-2 gap-2"><div><label className={lbl}>Qty</label><input type="number" className={inp} value={f.qty} onChange={e => setF({ ...f, qty: e.target.value })} /></div><div><label className={lbl}>Unit</label><input className={inp} value={f.unit} onChange={e => setF({ ...f, unit: e.target.value })} /></div></div>
             <div><label className={lbl}>Estimated Value (₹)</label><input type="number" className={inp} value={f.estimatedValue} onChange={e => setF({ ...f, estimatedValue: e.target.value })} /></div>
           </div>
           <ModalFooter onCancel={() => setFormOpen(false)} onSave={save} saving={saving} label="Record Scrap" />
+        </Modal>
+      )}
+      {disposing !== null && (
+        <Modal title="Mark as Disposed/Sold" onClose={() => setDisposing(null)}>
+          <div><label className={lbl}>Disposed To</label><input autoFocus className={inp} value={disposedTo} onChange={e => setDisposedTo(e.target.value)} placeholder="e.g. Vendor name / scrap dealer / site disposal" /></div>
+          <ModalFooter onCancel={() => setDisposing(null)} onSave={() => markDisposed(disposing)} saving={saving} label="Confirm Disposed" />
         </Modal>
       )}
     </div>
@@ -826,6 +931,354 @@ function PvTab({ lookups }: { lookups: Lookups }) {
   );
 }
 
+// ── Stock Register (per-item, with running balance + min stock) ──────
+function StockRegisterTab({ lookups }: { lookups: Lookups }) {
+  const [index, setIndex] = useState<any[]>([]);
+  const [selected, setSelected] = useState('');
+  const [data, setData] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  const loadIndex = useCallback(async () => {
+    setLoading(true);
+    try { const j = await fetch('/api/store/stock-register').then(r => r.json()); if (j.success) setIndex(j.data); } catch { toast.error('Failed to load stock register'); } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { loadIndex(); }, [loadIndex]);
+  useEffect(() => {
+    if (!selected) { setData(null); return; }
+    setLoadingDetail(true);
+    fetch(`/api/store/stock-register?itemCode=${encodeURIComponent(selected)}`).then(r => r.json()).then(j => { if (j.success) setData(j.data); else toast.error(j.error || 'Failed'); }).catch(() => toast.error('Network error')).finally(() => setLoadingDetail(false));
+  }, [selected]);
+
+  const lowStock = index.filter(i => i.belowMin);
+
+  if (loading) return <Spinner />;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="text-[12px] font-semibold text-[#e2e8f0]">Stock Register <span className="text-[#5a6878] font-normal">({index.length} items)</span></div>
+        <select className={inp + ' !w-[280px] ml-auto appearance-none'} value={selected} onChange={e => setSelected(e.target.value)}>
+          <option value="">— Select item —</option>
+          {index.map(i => <option key={i.itemCode} value={i.itemCode}>{i.itemCode} — {i.itemName}</option>)}
+        </select>
+        <button onClick={loadIndex} className="p-1.5 text-[#5a6878] hover:text-[#e2e8f0]" title="Refresh"><RefreshCw size={14} /></button>
+      </div>
+
+      {lowStock.length > 0 && (
+        <div className="bg-[#ff3d3d]/10 border border-[#ff3d3d]/30 rounded-lg px-3 py-2 text-[10px] text-[#ff9c9c]">
+          <span className="font-bold text-[#ff3d3d]">Below minimum stock:</span> {lowStock.map(i => `${i.itemCode} (${i.balance} < ${i.reorderLevel})`).join(' · ')}
+        </div>
+      )}
+
+      {!selected ? (
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+          <div className="px-4 py-2 border-b border-[#252e3a] text-[11px] font-bold text-[#e2e8f0]">Index (all items)</div>
+          <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
+            <table className="w-full text-[11px]">
+              <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12] sticky top-0">{['Item Code', 'Item Details', 'Unit', 'Received', 'Issued', 'Closing Stock', 'Min Stock', 'Status'].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+              <tbody className="divide-y divide-[#1a2028]">
+                {index.map(i => (
+                  <tr key={i.itemCode} className="hover:bg-[#141920] cursor-pointer" onClick={() => setSelected(i.itemCode)}>
+                    <td className="py-2 px-3 text-[#f5a623] font-mono">{i.itemCode}</td>
+                    <td className="py-2 px-3 text-[#e2e8f0]">{i.itemName}</td>
+                    <td className="py-2 px-3 text-[#8899aa]">{i.unit}</td>
+                    <td className="py-2 px-3 text-[#00e676] font-mono">{i.totalIn}</td>
+                    <td className="py-2 px-3 text-[#ff3d3d] font-mono">{i.totalOut}</td>
+                    <td className="py-2 px-3 text-[#e2e8f0] font-mono font-bold">{i.balance}</td>
+                    <td className="py-2 px-3 text-[#8899aa] font-mono">{i.reorderLevel}</td>
+                    <td className="py-2 px-3">{i.belowMin ? <Badge text="Below Min" tone="bad" /> : <Badge text="OK" tone="ok" />}</td>
+                  </tr>
+                ))}
+                {index.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-[#5a6878]">No stock movements yet — post a GRN or issue to build the register</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : loadingDetail ? <Spinner /> : !data ? <div className="text-[12px] text-[#5a6878] text-center py-8">No data</div> : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-4 gap-3">
+            <StatCard label="Current Balance" value={`${data.totals.balance} ${data.item.unit}`} sub={data.belowMin ? 'Below minimum stock' : 'Above minimum stock'} />
+            <StatCard label="Min Stock" value={`${data.reorderLevel} ${data.item.unit}`} sub={`Reorder level`} />
+            <StatCard label="Total Received" value={String(data.totals.received)} sub="GRN receipts" />
+            <StatCard label="Total Returned" value={String(data.totals.returned ?? 0)} sub="Returns from issue" />
+            <StatCard label="Total Issued" value={String(data.totals.issued)} sub="Issues" />
+          </div>
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[#252e3a]">
+              <div className="text-[11px] font-bold text-[#e2e8f0] truncate">{data.item.itemCode} — {data.item.name} <span className="text-[#5a6878] font-normal">({data.entries.length} entries)</span></div>
+              <button onClick={() => setSelected('')} className="text-[10px] text-[#5a6878] hover:text-[#e2e8f0]">← Index</button>
+            </div>
+            <div className="overflow-x-auto max-h-[460px] overflow-y-auto">
+              <table className="w-full text-[11px]">
+                <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12] sticky top-0">{['Date', 'Reference', 'PO Number', 'Job Code', 'Site', 'Opening', 'Received', 'Issued', 'Closing', 'Remarks'].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+                <tbody className="divide-y divide-[#1a2028]">
+                  {data.entries.map((e: any) => (
+                    <tr key={e.id} className="hover:bg-[#141920]">
+                      <td className="py-2 px-3 text-[#8899aa] font-mono">{String(e.date).split('T')[0]}</td>
+                      <td className="py-2 px-3 text-[#f5a623] font-mono">{e.referenceNo}<span className="text-[#5a6878]"> · {e.referenceType}</span></td>
+                      <td className="py-2 px-3 text-[#8899aa] font-mono">{e.poNo || '—'}</td>
+                      <td className="py-2 px-3 text-[#8899aa] font-mono">{e.jobCode || '—'}</td>
+                      <td className="py-2 px-3 text-[#8899aa]">{e.siteCode || '—'}</td>
+                      <td className="py-2 px-3 text-[#8899aa] font-mono">{e.opening}</td>
+                      <td className="py-2 px-3 text-[#00e676] font-mono">{e.received > 0 ? `+${e.received}` : '—'}</td>
+                      <td className="py-2 px-3 text-[#ff3d3d] font-mono">{e.issued > 0 ? `-${e.issued}` : '—'}</td>
+                      <td className="py-2 px-3 text-[#e2e8f0] font-mono font-bold">{e.closing}</td>
+                      <td className="py-2 px-3 text-[#5a6878] max-w-[220px] truncate">{e.remarks || '—'}</td>
+                    </tr>
+                  ))}
+                  {data.entries.length === 0 && <tr><td colSpan={10} className="py-8 text-center text-[#5a6878]">No movements for this item yet</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Diesel Register ─────────────────────────────────────────────────
+function DieselTab({ lookups }: { lookups: Lookups }) {
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [f, setF] = useState({ logDate: new Date().toISOString().split('T')[0], vehicle: '', siteId: '', opening: '', received: '', consumed: '', operatorName: '', remarks: '' });
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try { const j = await fetch('/api/store/diesel').then(r => r.json()); if (j.success) setRecords(j.data); } catch { toast.error('Failed to load diesel log'); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const closing = (Number(f.opening) || 0) + (Number(f.received) || 0) - (Number(f.consumed) || 0);
+
+  const openNew = () => { setF({ logDate: new Date().toISOString().split('T')[0], vehicle: '', siteId: '', opening: '', received: '', consumed: '', operatorName: '', remarks: '' }); setFormOpen(true); };
+  const save = async () => {
+    if (!f.siteId || !f.vehicle.trim()) { toast.error('Site and Vehicle/Equipment are required'); return; }
+    setSaving(true);
+    try {
+      const j = await fetch('/api/store/diesel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, siteId: Number(f.siteId), opening: Number(f.opening) || 0, received: Number(f.received) || 0, consumed: Number(f.consumed) || 0, actor: getCurrentUserEmail() }) }).then(r => r.json());
+      if (j.success) { toast.success(`Diesel log ${j.data.logNo} recorded`); setFormOpen(false); await fetchData(); } else toast.error(j.error || 'Failed');
+    } catch { toast.error('Network error'); } finally { setSaving(false); }
+  };
+  const remove = async (id: number) => { if (await deleteRecord('/api/store/diesel', id, 'diesel log entry')) await fetchData(); };
+
+  if (loading) return <Spinner />;
+  return (
+    <div>
+      <TableHeader title="Diesel Register" count={records.length} onNew={openNew} newLabel="New Entry" />
+      <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+        <table className="w-full text-[11px]">
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Log No', 'Date', 'Vehicle/Equipment', 'Opening', 'Received', 'Consumed', 'Closing', 'Operator', 'Remarks', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <tbody className="divide-y divide-[#1a2028]">
+            {records.map(r => (
+              <tr key={r.id} className="hover:bg-[#141920]">
+                <td className="py-2 px-3 text-[#f5a623] font-mono">{r.logNo}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.logDate?.split('T')[0]}</td>
+                <td className="py-2 px-3 text-[#e2e8f0]">{r.vehicle}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.opening}</td>
+                <td className="py-2 px-3 text-[#00e676] font-mono">+{r.received}</td>
+                <td className="py-2 px-3 text-[#ff3d3d] font-mono">-{r.consumed}</td>
+                <td className="py-2 px-3 text-[#e2e8f0] font-mono font-bold">{r.closing}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.operatorName || '—'}</td>
+                <td className="py-2 px-3 text-[#5a6878] max-w-[160px] truncate">{r.remarks || '—'}</td>
+                <td className="py-2 px-3"><DeleteButton onClick={() => remove(r.id)} /></td>
+              </tr>
+            ))}
+            {records.length === 0 && <tr><td colSpan={10} className="py-8 text-center text-[#5a6878]">No diesel entries yet</td></tr>}
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      {formOpen && (
+        <Modal title="New Diesel Log Entry" onClose={() => setFormOpen(false)}>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lbl}>Date *</label><input type="date" className={inp} value={f.logDate} onChange={e => setF({ ...f, logDate: e.target.value })} /></div>
+            <div><label className={lbl}>Vehicle / Equipment *</label><input className={inp} value={f.vehicle} onChange={e => setF({ ...f, vehicle: e.target.value })} placeholder="e.g. Hydra, Pickup, Excavator" /></div>
+            <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
+            <div><label className={lbl}>Operator</label><input className={inp} value={f.operatorName} onChange={e => setF({ ...f, operatorName: e.target.value })} /></div>
+            <div><label className={lbl}>Opening (L)</label><input type="number" className={inp} value={f.opening} onChange={e => setF({ ...f, opening: e.target.value })} /></div>
+            <div><label className={lbl}>Received (L)</label><input type="number" className={inp} value={f.received} onChange={e => setF({ ...f, received: e.target.value })} /></div>
+            <div><label className={lbl}>Consumed (L)</label><input type="number" className={inp} value={f.consumed} onChange={e => setF({ ...f, consumed: e.target.value })} /></div>
+            <div><label className={lbl}>Closing (L) <span className="text-[#00e676]">auto</span></label><input type="number" className={inp} value={closing} readOnly /></div>
+            <div className="col-span-2"><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
+          </div>
+          <ModalFooter onCancel={() => setFormOpen(false)} onSave={save} saving={saving} label="Save Entry" />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ── Gas Cylinder Register ───────────────────────────────────────────
+const GAS_TYPES = ['O2', 'DA', 'Argon', 'CO2', 'N2', 'Acetylene', 'LPG'];
+function GasCylinderTab({ lookups }: { lookups: Lookups }) {
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const emptyForm = { logDate: new Date().toISOString().split('T')[0], siteId: '', gasType: 'O2', cylinderNo: '', direction: 'Received', qty: '1', issuedTo: '', condition: 'Good', emptyReturnDate: '', returnChallanNo: '', remarks: '' };
+  const [f, setF] = useState(emptyForm);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try { const j = await fetch('/api/store/gas-cylinders').then(r => r.json()); if (j.success) setRecords(j.data); } catch { toast.error('Failed to load gas cylinder log'); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const openNew = () => { setF({ ...emptyForm, logDate: new Date().toISOString().split('T')[0] }); setFormOpen(true); };
+  const save = async () => {
+    if (!f.siteId) { toast.error('Site is required'); return; }
+    setSaving(true);
+    try {
+      const j = await fetch('/api/store/gas-cylinders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, siteId: Number(f.siteId), qty: Number(f.qty) || 1, actor: getCurrentUserEmail() }) }).then(r => r.json());
+      if (j.success) { toast.success(`Entry ${j.data.logNo} recorded`); setFormOpen(false); await fetchData(); } else toast.error(j.error || 'Failed');
+    } catch { toast.error('Network error'); } finally { setSaving(false); }
+  };
+  const remove = async (id: number) => { if (await deleteRecord('/api/store/gas-cylinders', id, 'gas cylinder entry')) await fetchData(); };
+
+  if (loading) return <Spinner />;
+  return (
+    <div>
+      <TableHeader title="Gas Cylinder Register" count={records.length} onNew={openNew} newLabel="New Entry" />
+      <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+        <table className="w-full text-[11px]">
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Log No', 'Date', 'Gas Type', 'Cylinder No', 'Direction', 'Qty', 'Issued To', 'Condition', 'Empty Return', 'Challan No', 'Remarks', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <tbody className="divide-y divide-[#1a2028]">
+            {records.map(r => (
+              <tr key={r.id} className="hover:bg-[#141920]">
+                <td className="py-2 px-3 text-[#f5a623] font-mono">{r.logNo}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.logDate?.split('T')[0]}</td>
+                <td className="py-2 px-3 text-[#e2e8f0]">{r.gasType}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.cylinderNo || '—'}</td>
+                <td className="py-2 px-3"><Badge text={r.direction} tone={r.direction === 'Received' ? 'ok' : 'warn'} /></td>
+                <td className="py-2 px-3 text-[#e2e8f0] font-mono">{r.qty}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.issuedTo || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.condition || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.emptyReturnDate ? String(r.emptyReturnDate).split('T')[0] : '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.returnChallanNo || '—'}</td>
+                <td className="py-2 px-3 text-[#5a6878] max-w-[160px] truncate">{r.remarks || '—'}</td>
+                <td className="py-2 px-3"><DeleteButton onClick={() => remove(r.id)} /></td>
+              </tr>
+            ))}
+            {records.length === 0 && <tr><td colSpan={12} className="py-8 text-center text-[#5a6878]">No gas cylinder entries yet</td></tr>}
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      {formOpen && (
+        <Modal title="New Gas Cylinder Entry" onClose={() => setFormOpen(false)}>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lbl}>Date *</label><input type="date" className={inp} value={f.logDate} onChange={e => setF({ ...f, logDate: e.target.value })} /></div>
+            <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
+            <div><label className={lbl}>Gas Type *</label><select className={inp + ' appearance-none'} value={f.gasType} onChange={e => setF({ ...f, gasType: e.target.value })}>{GAS_TYPES.map(g => <option key={g}>{g}</option>)}</select></div>
+            <div><label className={lbl}>Cylinder No</label><input className={inp} value={f.cylinderNo} onChange={e => setF({ ...f, cylinderNo: e.target.value })} placeholder="10804" /></div>
+            <div><label className={lbl}>Direction</label><select className={inp + ' appearance-none'} value={f.direction} onChange={e => setF({ ...f, direction: e.target.value })}>{['Received', 'Issued'].map(d => <option key={d}>{d}</option>)}</select></div>
+            <div><label className={lbl}>Qty</label><input type="number" className={inp} value={f.qty} onChange={e => setF({ ...f, qty: e.target.value })} /></div>
+            {f.direction === 'Issued' && <div className="col-span-2"><label className={lbl}>Issued To</label><input className={inp} value={f.issuedTo} onChange={e => setF({ ...f, issuedTo: e.target.value })} placeholder="Name of the person taking the cylinder" /></div>}
+            <div><label className={lbl}>Condition</label><select className={inp + ' appearance-none'} value={f.condition} onChange={e => setF({ ...f, condition: e.target.value })}>{['Good', 'Empty', 'Damaged'].map(c => <option key={c}>{c}</option>)}</select></div>
+            <div><label className={lbl}>Empty Return Date</label><input type="date" className={inp} value={f.emptyReturnDate} onChange={e => setF({ ...f, emptyReturnDate: e.target.value })} /></div>
+            <div><label className={lbl}>Return Challan No</label><input className={inp} value={f.returnChallanNo} onChange={e => setF({ ...f, returnChallanNo: e.target.value })} /></div>
+            <div className="col-span-2"><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
+          </div>
+          <ModalFooter onCancel={() => setFormOpen(false)} onSave={save} saving={saving} label="Save Entry" />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ── Daily Issue Register ────────────────────────────────────────────
+function DailyIssueTab({ lookups }: { lookups: Lookups }) {
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const emptyForm = { issueDate: new Date().toISOString().split('T')[0], siteId: '', itemName: '', itemCode: '', qty: '1', unit: 'Nos', receiverName: '', mobileNumber: '', purposeLocation: '', returned: false, remarks: '' };
+  const [f, setF] = useState(emptyForm);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try { const j = await fetch('/api/store/daily-issues').then(r => r.json()); if (j.success) setRecords(j.data); } catch { toast.error('Failed to load daily issues'); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const openNew = () => { setF({ ...emptyForm, issueDate: new Date().toISOString().split('T')[0] }); setFormOpen(true); };
+  const save = async () => {
+    if (!f.siteId || !f.itemName.trim() || !f.receiverName.trim()) { toast.error('Site, Item Name and Receiver Name are required'); return; }
+    setSaving(true);
+    try {
+      const j = await fetch('/api/store/daily-issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, siteId: Number(f.siteId), qty: Number(f.qty) || 0, actor: getCurrentUserEmail() }) }).then(r => r.json());
+      if (j.success) { toast.success(`Entry ${j.data.issueNo} recorded`); setFormOpen(false); await fetchData(); } else toast.error(j.error || 'Failed');
+    } catch { toast.error('Network error'); } finally { setSaving(false); }
+  };
+  const remove = async (id: number) => { if (await deleteRecord('/api/store/daily-issues', id, 'daily issue entry')) await fetchData(); };
+  const toggleReturn = async (r: any) => {
+    try {
+      const j = await fetch('/api/store/daily-issues', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, returned: !r.returned, actor: getCurrentUserEmail() }) }).then(x => x.json());
+      if (j.success) await fetchData(); else toast.error(j.error || 'Failed');
+    } catch { toast.error('Network error'); }
+  };
+
+  if (loading) return <Spinner />;
+  return (
+    <div>
+      <TableHeader title="Daily Issue Register" count={records.length} onNew={openNew} newLabel="New Entry" />
+      <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+        <table className="w-full text-[11px]">
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Issue No', 'Date', 'Item Code', 'Item Name', 'Qty', 'Receiver', 'Mobile', 'Purpose/Location', 'Return', 'Remarks', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <tbody className="divide-y divide-[#1a2028]">
+            {records.map(r => (
+              <tr key={r.id} className="hover:bg-[#141920]">
+                <td className="py-2 px-3 text-[#f5a623] font-mono">{r.issueNo}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.issueDate?.split('T')[0]}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.itemCode || '—'}</td>
+                <td className="py-2 px-3 text-[#e2e8f0]">{r.itemName}</td>
+                <td className="py-2 px-3 text-[#e2e8f0] font-mono">{r.qty} {r.unit || ''}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.receiverName}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.mobileNumber || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa] max-w-[180px] truncate">{r.purposeLocation || '—'}</td>
+                <td className="py-2 px-3"><button onClick={() => toggleReturn(r)} className={`px-2 py-0.5 rounded text-[9px] font-semibold ${r.returned ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#f5a623]/15 text-[#f5a623]'}`}>{r.returned ? 'Returned' : 'Pending'}</button></td>
+                <td className="py-2 px-3 text-[#5a6878] max-w-[160px] truncate">{r.remarks || '—'}</td>
+                <td className="py-2 px-3"><DeleteButton onClick={() => remove(r.id)} /></td>
+              </tr>
+            ))}
+            {records.length === 0 && <tr><td colSpan={11} className="py-8 text-center text-[#5a6878]">No entries yet today</td></tr>}
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      {formOpen && (
+        <Modal title="New Daily Issue Entry" onClose={() => setFormOpen(false)}>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lbl}>Date *</label><input type="date" className={inp} value={f.issueDate} onChange={e => setF({ ...f, issueDate: e.target.value })} /></div>
+            <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
+            <div className="col-span-2"><label className={lbl}>Item (from master)</label><select className={inp + ' appearance-none'} value={f.itemCode} onChange={e => { const it = lookups.items.find(i => i.sku === e.target.value); setF({ ...f, itemCode: e.target.value, itemName: it ? it.name : f.itemName }); }}><option value="">— Free text —</option>{lookups.items.map(i => <option key={i.id} value={i.sku}>{i.sku} — {i.name}</option>)}</select></div>
+            <div className="col-span-2"><label className={lbl}>Item Name *</label><input className={inp} value={f.itemName} onChange={e => setF({ ...f, itemName: e.target.value })} placeholder="Item name" /></div>
+            <div><label className={lbl}>Qty</label><input type="number" className={inp} value={f.qty} onChange={e => setF({ ...f, qty: e.target.value })} /></div>
+            <div><label className={lbl}>Unit</label><input className={inp} value={f.unit} onChange={e => setF({ ...f, unit: e.target.value })} placeholder="Nos" /></div>
+            <div><label className={lbl}>Receiver Name *</label><input className={inp} value={f.receiverName} onChange={e => setF({ ...f, receiverName: e.target.value })} placeholder="Who received it" /></div>
+            <div><label className={lbl}>Mobile Number</label><input className={inp} value={f.mobileNumber} onChange={e => setF({ ...f, mobileNumber: e.target.value })} placeholder="+91-…" /></div>
+            <div className="col-span-2"><label className={lbl}>Purpose / Location</label><input className={inp} value={f.purposeLocation} onChange={e => setF({ ...f, purposeLocation: e.target.value })} placeholder="e.g. Welding bay 3 / AAP issue" /></div>
+            <div className="col-span-2"><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
+          </div>
+          <ModalFooter onCancel={() => setFormOpen(false)} onSave={save} saving={saving} label="Save Entry" />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 // ── Monthly Report ───────────────────────────────────────────────────
 function ReportTab({ lookups }: { lookups: Lookups }) {
   const [siteId, setSiteId] = useState('');
@@ -858,46 +1311,53 @@ function ReportTab({ lookups }: { lookups: Lookups }) {
       ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-4 gap-3">
-            <StatCard label="Material Received" value={fmt(data.materialReceived.value)} sub={`${data.materialReceived.count} GRN(s)`} />
-            <StatCard label="Material Issued" value={fmt(data.materialIssued.value)} sub={`${data.materialIssued.count} issue(s)`} />
-            <StatCard label="Scrap Value" value={fmt(data.scrap.value)} sub={`${data.scrap.count} entries`} />
-            <StatCard label="Material Returned" value={String(data.materialReturned.count)} sub="return notes" />
+            <StatCard label="Material Received" value={fmt(data.summary.materialReceived.value)} sub={`${data.summary.materialReceived.count} GRN(s)`} />
+            <StatCard label="Material Issued" value={fmt(data.summary.materialIssued.value)} sub={`${data.summary.materialIssued.count} issue(s)`} />
+            <StatCard label="Material Returned" value={String(data.summary.materialReturned.count)} sub="return notes" />
+            <StatCard label="Scrap Generated" value={`${data.summary.scrap.qty ?? data.summary.scrap.count}`} sub={`${fmt(data.summary.scrap.value)} · ${data.summary.scrap.count} entries (incl. ${data.summary.scrap.damagedLostQty ?? 0} damaged/lost)`} />
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
-              <div className="text-[11px] font-bold text-[#e2e8f0] mb-3">MRS Status</div>
-              <Row k="Pending" v={data.mrs.pending} /><Row k="Approved" v={data.mrs.approved} /><Row k="Rejected" v={data.mrs.rejected} />
+              <div className="text-[11px] font-bold text-[#e2e8f0] mb-3">Pending Material (MRS)</div>
+              <Row k="Pending" v={data.summary.mrs.pending} /><Row k="Approved / Issued" v={data.summary.mrs.approved} /><Row k="Rejected" v={data.summary.mrs.rejected} />
             </div>
             <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
-              <div className="text-[11px] font-bold text-[#e2e8f0] mb-3">Tool &amp; Equipment Status</div>
-              <Row k="Tools Issued" v={data.tools.issued} /><Row k="Tools Available" v={data.tools.available} /><Row k="Under Repair / Lost" v={data.tools.underRepair + data.tools.lost} />
+              <div className="text-[11px] font-bold text-[#e2e8f0] mb-3">Tools &amp; Equipment Status</div>
+              <Row k="Tools Issued" v={data.summary.tools.issued} /><Row k="Tools Available" v={data.summary.tools.available} /><Row k="Under Repair / Lost" v={data.summary.tools.underRepair + data.summary.tools.lost} />
             </div>
             <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
               <div className="text-[11px] font-bold text-[#e2e8f0] mb-3">Gate Passes &amp; Verification</div>
-              <Row k="Gate Passes (Open)" v={`${data.gatePasses.count} (${data.gatePasses.open})`} /><Row k="Verifications" v={data.physicalVerification.count} /><Row k="Items with Variance" v={data.physicalVerification.itemsWithVariance} />
+              <Row k="Gate Passes (Open)" v={`${data.summary.gatePasses.count} (${data.summary.gatePasses.open})`} /><Row k="Verifications" v={data.summary.physicalVerification.count} /><Row k="Items with Variance" v={data.summary.physicalVerification.itemsWithVariance} />
             </div>
           </div>
           <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-[#252e3a] text-[11px] font-bold text-[#e2e8f0]">Item-wise Movement — {month}</div>
+            <div className="px-4 py-2.5 border-b border-[#252e3a] text-[11px] font-bold text-[#e2e8f0]">Item-wise Monthly Report — {month}</div>
             <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
-              <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['SKU', 'Item', 'Received', 'Issued', 'Returned'].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+              <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Sl.No', 'Item Code', 'Item Details', 'Opening Stock', 'Material Received', 'Material Issued', 'Material Returned', 'Closing Stock', 'Scrap', 'Damaged/Lost', 'Variance', 'Stock Value'].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">{h}</th>)}</tr></thead>
               <tbody className="divide-y divide-[#1a2028]">
-                {data.itemMovement.map((r: any) => (
-                  <tr key={r.itemId} className="hover:bg-[#141920]">
-                    <td className="py-2 px-3 text-[#f5a623] font-mono">{r.sku}</td>
-                    <td className="py-2 px-3 text-[#e2e8f0]">{r.name}</td>
+                {data.items.map((r: any, i: number) => (
+                  <tr key={r.itemCode} className="hover:bg-[#141920]">
+                    <td className="py-2 px-3 text-[#5a6878] font-mono">{i + 1}</td>
+                    <td className="py-2 px-3 text-[#f5a623] font-mono">{r.itemCode}</td>
+                    <td className="py-2 px-3 text-[#e2e8f0]">{r.itemName}</td>
+                    <td className="py-2 px-3 text-[#8899aa] font-mono">{r.opening}</td>
                     <td className="py-2 px-3 text-[#00e676] font-mono">{r.received}</td>
                     <td className="py-2 px-3 text-[#ff3d3d] font-mono">{r.issued}</td>
                     <td className="py-2 px-3 text-[#00d4ff] font-mono">{r.returned}</td>
+                    <td className="py-2 px-3 text-[#e2e8f0] font-mono font-bold">{r.closing}</td>
+                    <td className="py-2 px-3 text-[#8899aa] font-mono">{r.scrapQty}</td>
+                    <td className="py-2 px-3 text-[#8899aa] font-mono">{r.damagedLostQty}</td>
+                    <td className="py-2 px-3 text-[#8899aa] font-mono">{r.varianceCount || '—'}</td>
+                    <td className="py-2 px-3 text-[#e2e8f0] font-mono">{fmt(r.stockValue)}</td>
                   </tr>
                 ))}
-                {data.itemMovement.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-[#5a6878]">No movement this month</td></tr>}
+                {data.items.length === 0 && <tr><td colSpan={12} className="py-6 text-center text-[#5a6878]">No movement this month</td></tr>}
               </tbody>
             </table>
             </div>
           </div>
-          <p className="text-[10px] text-[#5a6878]">Note: this reports material movement for the month (received/issued/returned/scrapped). Opening/closing stock balances require a running stock ledger, which is a separate follow-up.</p>
+          <p className="text-[10px] text-[#5a6878]">Opening/Received/Issued/Returned/Closing come straight from the stock ledger; closing = opening + received + returns − issued. Damaged/Lost counts scrap entries of type Damaged or Lost. Minimum-stock position is on the Stock Register tab.</p>
         </div>
       )}
     </div>
@@ -916,10 +1376,10 @@ function TableHeader({ title, count, onNew, newLabel }: { title: string; count: 
   );
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#161c24] border border-[#f5a623]/25 rounded-xl p-4 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <div className={`bg-[#161c24] border border-[#f5a623]/25 rounded-xl p-4 w-full ${wide ? 'max-w-4xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto`}>
         <div className="flex items-center justify-between mb-3"><h4 className="text-[13px] font-bold text-[#e2e8f0]">{title}</h4><button onClick={onClose}><X size={15} className="text-[#5a6878]" /></button></div>
         {children}
       </div>
@@ -973,18 +1433,75 @@ function WizardFooter({ step, totalSteps, onBack, onNext, onCancel, onFinish, sa
   );
 }
 
-function LinesEditor({ lines, setLines, items, addLine, removeLine, qtyKey, withCondition }: { lines: any[]; setLines: (l: any[]) => void; items: ItemRef[]; addLine: () => void; removeLine: (i: number) => void; qtyKey: string; withCondition?: boolean }) {
+function GrnLinesEditor({ lines, setLines, items, addLine, removeLine }: { lines: any[]; setLines: (l: any[]) => void; items: ItemRef[]; addLine: () => void; removeLine: (i: number) => void }) {
+  const update = (i: number, patch: Record<string, any>) => { const u = [...lines]; u[i] = { ...u[i], ...patch }; setLines(u); };
+  const ordered = (l: any) => Number(l.qtyOrdered) || 0;
+  const received = (l: any) => Number(l.qtyReceived) || 0;
+  const accepted = (l: any) => Number(l.qtyAccepted ?? l.qtyReceived) || 0;
+  const shortExcess = (l: any) => received(l) - ordered(l);
+  const totals = lines.reduce((s, l) => ({ ordered: s.ordered + ordered(l), received: s.received + received(l), accepted: s.accepted + accepted(l) }), { ordered: 0, received: 0, accepted: 0 });
+  const cell = 'bg-[#0a0d12] border border-[#252e3a] rounded px-1.5 py-1 text-[11px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none';
+  const th = 'py-2 px-2 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] text-left';
   return (
     <div className="mt-3">
-      <label className={lbl}>Item Lines</label>
-      {lines.map((l, i) => (
-        <div key={i} className={`grid ${withCondition ? 'grid-cols-[1fr_90px_110px_28px]' : 'grid-cols-[1fr_90px_28px]'} gap-2 mb-2 items-end`}>
+      <div className="flex items-center justify-between mb-2">
+        <label className={lbl}>Items (GRN Soft-Copy format)</label>
+        <button onClick={addLine} className="text-[11px] text-[#f5a623] hover:underline flex items-center gap-1"><Plus size={12} /> Add line</button>
+      </div>
+      <div className="overflow-x-auto border border-[#252e3a] rounded-lg">
+        <table className="w-full text-[11px] whitespace-nowrap">
+          <thead><tr className="bg-[#0a0d12]">
+            <th className={th}>Category</th><th className={th}>Item</th><th className={th}>Ordered</th><th className={th}>Received</th><th className={th}>Accepted</th><th className={th}>Short/Excess</th><th className={th}>Rate</th><th className={th}>Batch/Heat</th><th className={th}>Damage (Y/N)</th><th className={th}>Inspection</th><th className={th}></th>
+          </tr></thead>
+          <tbody className="divide-y divide-[#1a2028]">
+            {lines.map((l, i) => (
+              <tr key={i}>
+                <td className="py-1.5 px-2"><select className={cell + ' w-[150px] appearance-none'} value={l.materialCategory} onChange={e => update(i, { materialCategory: e.target.value })}>{['CONSUMABLE ITEM', 'TOOLS & TACKLES', "PPE'S", 'POWER & MACHINE'].map(c => <option key={c}>{c}</option>)}</select></td>
+                <td className="py-1.5 px-2"><select className={cell + ' w-[220px] appearance-none'} value={l.itemId} onChange={e => update(i, { itemId: e.target.value })}><option value="">— Item —</option>{items.map(it => <option key={it.id} value={it.id}>{it.sku} — {it.name}</option>)}</select></td>
+                <td className="py-1.5 px-2"><input type="number" className={cell + ' w-[70px]'} placeholder="0" value={l.qtyOrdered ?? ''} onChange={e => update(i, { qtyOrdered: e.target.value })} /></td>
+                <td className="py-1.5 px-2"><input type="number" className={cell + ' w-[70px]'} placeholder="0" value={l.qtyReceived ?? ''} onChange={e => update(i, { qtyReceived: e.target.value, qtyAccepted: l.qtyAccepted ?? e.target.value })} /></td>
+                <td className="py-1.5 px-2"><input type="number" className={cell + ' w-[70px]'} placeholder="0" value={l.qtyAccepted ?? l.qtyReceived ?? ''} onChange={e => update(i, { qtyAccepted: e.target.value })} /></td>
+                <td className="py-1.5 px-2 text-[#8899aa] font-mono">{shortExcess(l) >= 0 ? `+${shortExcess(l)}` : shortExcess(l)}</td>
+                <td className="py-1.5 px-2"><input type="number" className={cell + ' w-[80px]'} placeholder="0.00" value={l.rate ?? ''} onChange={e => update(i, { rate: e.target.value })} /></td>
+                <td className="py-1.5 px-2"><input className={cell + ' w-[90px]'} placeholder="HN-12345" value={l.batchHeatNo ?? ''} onChange={e => update(i, { batchHeatNo: e.target.value })} /></td>
+                <td className="py-1.5 px-2"><select className={cell + ' w-[110px] appearance-none'} value={l.damageTransit ?? 'No'} onChange={e => update(i, { damageTransit: e.target.value })}>{['No', 'Yes'].map(c => <option key={c}>{c}</option>)}</select></td>
+                <td className="py-1.5 px-2"><select className={cell + ' w-[110px] appearance-none'} value={l.inspectionStatus ?? 'Accepted'} onChange={e => update(i, { inspectionStatus: e.target.value })}>{['Accepted', 'Pending', 'Rejected'].map(c => <option key={c}>{c}</option>)}</select></td>
+                <td className="py-1.5 px-2"><button onClick={() => removeLine(i)} className="text-[#ff3d3d] hover:opacity-80"><X size={14} /></button></td>
+              </tr>
+            ))}
+            {lines.length === 0 && <tr><td colSpan={11} className="py-6 text-center text-[#5a6878]">No items — click “Add line”</td></tr>}
+          </tbody>
+          <tfoot><tr className="bg-[#0a0d12] border-t border-[#252e3a]"><td className={th} colSpan={2}>Totals</td><td className="py-2 px-2 text-[#e2e8f0] font-mono">{totals.ordered}</td><td className="py-2 px-2 text-[#e2e8f0] font-mono">{totals.received}</td><td className="py-2 px-2 text-[#00e676] font-mono">{totals.accepted}</td><td className="py-2 px-2" colSpan={6}></td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function LinesEditor({ lines, setLines, items, addLine, removeLine, qtyKey, withCondition, stockIndex }: { lines: any[]; setLines: (l: any[]) => void; items: ItemRef[]; addLine: () => void; removeLine: (i: number) => void; qtyKey: string; withCondition?: boolean; stockIndex?: Record<string, { balance: number; reorderLevel: number; unit: string; belowMin: boolean }> }) {
+  const grid = stockIndex ? (withCondition ? 'grid-cols-[1fr_70px_100px_130px_78px_28px]' : 'grid-cols-[1fr_70px_130px_78px_28px]') : (withCondition ? 'grid-cols-[1fr_90px_110px_28px]' : 'grid-cols-[1fr_90px_28px]');
+  return (
+    <div className="mt-3">
+      <label className={lbl}>Item Lines{stockIndex ? ' (Current Stock / Min Stock from ledger)' : ''}</label>
+      {lines.map((l, i) => {
+        const item = items.find(it => String(it.id) === String(l.itemId));
+        const stock = item && stockIndex ? stockIndex[item.sku] : undefined;
+        return (
+        <div key={i} className={`grid ${grid} gap-2 mb-2 items-end`}>
           <select className={inp} value={l.itemId} onChange={e => { const u = [...lines]; u[i] = { ...u[i], itemId: e.target.value }; setLines(u); }}><option value="">— Item —</option>{items.map(it => <option key={it.id} value={it.id}>{it.sku} — {it.name}</option>)}</select>
           <input type="number" className={inp} placeholder="Qty" value={l[qtyKey]} onChange={e => { const u = [...lines]; u[i] = { ...u[i], [qtyKey]: e.target.value }; setLines(u); }} />
           {withCondition && <select className={inp} value={l.condition} onChange={e => { const u = [...lines]; u[i] = { ...u[i], condition: e.target.value }; setLines(u); }}>{['Good', 'Damaged'].map(c => <option key={c}>{c}</option>)}</select>}
+          {stockIndex && (
+            <div className="text-[11px] font-mono text-[#8899aa] text-center leading-tight">
+              <div className={stock?.belowMin ? 'text-[#ff3d3d] font-bold' : 'text-[#00e676]'}>{stock ? `Current: ${stock.balance} ${stock.unit}` : 'Current: —'}</div>
+              <div>{stock ? `Min: ${stock.reorderLevel} ${stock.unit}` : 'Min: —'}</div>
+            </div>
+          )}
+          {stockIndex && <div className="text-center">{stock?.belowMin && <span className="vc-badge bg-[#ff3d3d]/15 text-[#ff3d3d]">Below min</span>}</div>}
           <button onClick={() => removeLine(i)} className="text-[#ff3d3d] hover:opacity-80"><X size={14} /></button>
         </div>
-      ))}
+        );
+      })}
       <button onClick={addLine} className="text-[11px] text-[#f5a623] hover:underline flex items-center gap-1"><Plus size={12} /> Add line</button>
     </div>
   );

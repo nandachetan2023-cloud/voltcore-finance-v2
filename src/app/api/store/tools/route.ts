@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { nextPrefixedCode } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,8 +31,7 @@ export async function POST(request: NextRequest) {
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create tools' }, { status: 403 })
     let toolCode = body.toolCode
     if (!toolCode) {
-      const count = (await pdb.finTool.count()) + 1
-      toolCode = `TL-${String(count).padStart(4, '0')}`
+      toolCode = await nextPrefixedCode(pdb, 'finTool', 'toolCode', `TL-`, 4)
     }
     const record = await pdb.finTool.create({
       data: {
@@ -56,10 +56,11 @@ export async function PUT(request: NextRequest) {
     const denied = await assertPermission(pdb, body.actor || '', 'INVENTORY_EDIT', { request, module: 'Inventory', entityId: String(id) })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit tools' }, { status: 403 })
 
-    // issueLog: { issuedTo, expectedReturnDate } -> creates a log row + marks tool Issued
+    // issueLog: { issuedTo, expectedReturnDate, qty } -> creates a log row + marks tool Issued
     // issueLog: { returnLogId, returnDate, condition } -> closes a log row + marks tool Available
     if (issueLog?.issuedTo) {
-      await pdb.finToolIssueLog.create({ data: { toolId: Number(id), issuedTo: issueLog.issuedTo, issueDate: new Date(), expectedReturnDate: issueLog.expectedReturnDate ? new Date(issueLog.expectedReturnDate) : null } })
+      const issueNo = await nextPrefixedCode(pdb, 'finToolIssueLog', 'issueNo', `TI/${new Date().getFullYear()}/`, 4)
+      await pdb.finToolIssueLog.create({ data: { toolId: Number(id), issuedTo: issueLog.issuedTo, issueNo, issueDate: new Date(), expectedReturnDate: issueLog.expectedReturnDate ? new Date(issueLog.expectedReturnDate) : null, qty: Number(issueLog.qty) || 1, remarks: issueLog.remarks || null } })
       await pdb.finTool.update({ where: { id: Number(id) }, data: { status: 'Issued' } })
     } else if (issueLog?.returnLogId) {
       await pdb.finToolIssueLog.update({ where: { id: Number(issueLog.returnLogId) }, data: { returnDate: new Date(), condition: issueLog.condition || 'Good', remarks: issueLog.remarks || null } })

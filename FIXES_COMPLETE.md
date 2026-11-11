@@ -64,7 +64,6 @@ These modules return empty arrays until models are added to schema:
 - Incidents
 - Permits
 - Expenses
-- Subcontractors
 - Support
 - Knowledgebase
 - Training

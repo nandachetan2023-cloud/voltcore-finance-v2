@@ -60,7 +60,7 @@ Two flagged "issues" were checked and dismissed as false positives:
 - registered under Reports in the store + module-registry.
 
 ### Still not covered (intentionally deferred)
-Projects, Assets, and Procurement modules have no reports yet. These live on separate
+Projects, Assets, and Purchase Management modules have no reports yet. These live on separate
 feature branches (`feature/new-modules`) and aren't on `main`, so adding reports for
 them belongs with that work, not here.
 

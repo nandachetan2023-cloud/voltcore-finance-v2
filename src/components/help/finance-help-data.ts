@@ -682,7 +682,7 @@ Use this alongside **Site Invoices** to see margin per site.`,
     summary: "Record work orders issued/received for a scope of work.",
     body: `### Work Orders
 
-A **Work Order** documents an agreed scope of work (often with a subcontractor
+A **Work Order** documents an agreed scope of work (often with a contractor
 or vendor) and its value.
 
 **Steps**
@@ -1059,7 +1059,7 @@ Draft ──submit──▶ Pending Approval ──▶ Approved
 |---|---|
 | 1 | Site Engineer |
 | 2 | Project Manager |
-| 3 | Procurement |
+| 3 | Purchase |
 | 4 | Finance |
 
 Open a PR and use **Submit for Approval**, then **Approve Next** / **Reject**.

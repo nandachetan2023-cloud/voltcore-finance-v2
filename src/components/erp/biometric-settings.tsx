@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, Save, X, Wifi, WifiOff, Eye, EyeOff, Settings2 } from 'lucide-react';
+import { readJsonSafe } from '@/lib/safe-json';
 
 interface BiometricSiteConfig {
   id: number;
@@ -121,8 +122,8 @@ export default function BiometricSettings() {
     setTestResults(r => ({ ...r, [siteId]: null }));
     try {
       const res = await fetch(`/api/biometric/test?siteId=${siteId}`);
-      const data = await res.json();
-      const siteResult = data.data?.[0];
+      const data = await readJsonSafe(res);
+      const siteResult = (data.data as any[])?.[0];
       const ok = siteResult?.format1?.success || siteResult?.format2?.success;
       setTestResults(r => ({ ...r, [siteId]: ok ? 'ok' : 'fail' }));
     } catch {

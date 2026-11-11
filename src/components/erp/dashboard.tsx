@@ -28,7 +28,6 @@ interface DashboardData {
   leaves: { pending: number; recent: { id: string; type: string; days: number; status: string; employee: { name: string } }[] };
   incidents: { total: number; open: number };
   equipment: { total: number; operational: number };
-  subcontractors: { total: number };
   recruitment: { openPositions: number };
   invoices: { overdue: number };
   payroll: { paid: number; totalDisbursed: number; totalGross: number };

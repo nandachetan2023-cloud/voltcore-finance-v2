@@ -35,7 +35,7 @@ const CATEGORIES: Category[] = [
     ],
   },
   {
-    id: 'procurement', label: 'Procurement', icon: ShoppingCart,
+    id: 'procurement', label: 'Purchase Management', icon: ShoppingCart,
     screens: [
       { key: 'procurement-pr', label: 'PR Module' },
       { key: 'procurement-rfq', label: 'RFQ Management' },

@@ -10,6 +10,7 @@ import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
 import { FormField, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
 import { FilterBar, type ListFilters } from './_list-filter-bar';
+import { useContractors } from './_contractor-master';
 import { StatusBadge } from './_status-badge';
 
 interface APRecord {
@@ -31,7 +32,7 @@ interface JobRef { id: number; jobCode: string; description: string | null; site
 
 interface FormData {
   billNo: string; vendor: string; vendorCode: string; invoiceRef: string;
-  invoiceDate: string; dueDate: string; totalAmount: number; status: string;
+  dueDate: string; totalAmount: number; status: string;
   description: string; poReference: string;
   siteId: string; partyId: string; poId: string; jobCode: string;
   costCenter: string; department: string; projectManager: string;
@@ -59,7 +60,7 @@ const AP_COLUMNS: ExportColumn<APRecord>[] = [
   { header: 'Remarks', accessor: 'remarks' },
 ];
 
-const EMPTY_FORM: FormData = { billNo: '', vendor: '', vendorCode: '', invoiceRef: '', invoiceDate: '', dueDate: '', totalAmount: 0, status: 'Pending', description: '', poReference: '', siteId: '', partyId: '', poId: '', jobCode: '', costCenter: '', department: '', projectManager: '' };
+const EMPTY_FORM: FormData = { billNo: '', vendor: '', vendorCode: '', invoiceRef: '', dueDate: '', totalAmount: 0, status: 'Pending', description: '', poReference: '', siteId: '', partyId: '', poId: '', jobCode: '', costCenter: '', department: '', projectManager: '' };
 
 const AP_IMPORT_FIELDS: ImportField[] = [
   { key: 'billNo', label: 'Bill No', required: true },
@@ -105,6 +106,14 @@ export default function AccountsPayable() {
   const [sites, setSites] = useState<SiteRef[]>([]);
   const [parties, setParties] = useState<PartyRef[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PoRef[]>([]);
+
+  // Contractor master (Contractors Management) drives the vendor dropdown —
+  // a bill can only be raised against a contractor that exists in the master.
+  const { optionsWith } = useContractors();
+  const vendorOptions = useMemo(
+    () => optionsWith(records.map(r => r.vendor)),
+    [optionsWith, records],
+  );
   const [jobs, setJobs] = useState<JobRef[]>([]);
   const { triggerCreate } = useERPStore();
 
@@ -173,7 +182,7 @@ export default function AccountsPayable() {
   const openCreate = () => { setEditTarget(null); setForm({ ...EMPTY_FORM, billNo: generateBillNo() }); setFormErrors({}); setLines([{ id: 1, description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]); setView('form'); };
   const openEdit = (r: APRecord) => {
     setEditTarget(r);
-    setForm({ billNo: r.billNo, vendor: r.vendor, vendorCode: r.vendorCode || '', invoiceRef: r.invoiceRef || '', invoiceDate: '', dueDate: r.dueDate?.split('T')[0] || '', totalAmount: r.totalAmount, status: r.status, description: r.description || '', poReference: '', siteId: r.siteId ? String(r.siteId) : '', partyId: r.partyId ? String(r.partyId) : '', poId: r.poId ? String(r.poId) : '', jobCode: r.jobCode || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' });
+    setForm({ billNo: r.billNo, vendor: r.vendor, vendorCode: r.vendorCode || '', invoiceRef: r.invoiceRef || '', dueDate: r.dueDate?.split('T')[0] || '', totalAmount: r.totalAmount, status: r.status, description: r.description || '', poReference: '', siteId: r.siteId ? String(r.siteId) : '', partyId: r.partyId ? String(r.partyId) : '', poId: r.poId ? String(r.poId) : '', jobCode: r.jobCode || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' });
     setFormErrors({});
     setLines([{ id: 1, description: r.description || '', glAccount: '', costCenter: '', quantity: 1, unitPrice: r.amount }]);
     setView('form');
@@ -274,16 +283,16 @@ export default function AccountsPayable() {
                     placeholder={form.vendor || 'Select vendor...'}
                   />
                 </FormField>
-                <FormField label="Vendor Name" required error={formErrors.vendor} hint="Free-text fallback if not in the party master">
-                  <input value={form.vendor} onChange={e => setField('vendor', e.target.value)} placeholder="Vendor name" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
+                <FormField label="Vendor Name" required error={formErrors.vendor} hint="From Contractors Management master">
+                  <select value={form.vendor} onChange={e => setField('vendor', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none">
+                    <option value="">Select contractor…</option>
+                    {vendorOptions.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+                  </select>
                 </FormField>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <FormField label="Invoice #" required error={formErrors.billNo}>
                   <input value={form.billNo} readOnly placeholder="Auto-generated" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] opacity-60 placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
-                </FormField>
-                <FormField label="Invoice Date">
-                  <input type="date" value={form.invoiceDate} onChange={e => setField('invoiceDate', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" />
                 </FormField>
                 <FormField label="Due Date" required error={formErrors.dueDate}>
                   <input type="date" value={form.dueDate} onChange={e => setField('dueDate', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" />

@@ -1,5 +1,5 @@
-﻿'use client';
-import { useState, useEffect, useCallback } from 'react';
+'use client';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ShoppingCart, Plus, Pencil, Trash2, Loader2, Upload, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -7,26 +7,27 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
-import { FormField, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
+import { FormField, SearchableSelect, DatalistField, useFormValidation, required } from './_form-controls';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useCompanyProfile } from '@/hooks/use-company-profile';
+import { useContractors } from './_contractor-master';
 
 interface PO {
-  id: number; poNo: string; vendorName: string; siteId: number; jobCode: string | null; date: string; totalAmount: number; status: string; site?: { name: string }; descriptionOfWork: string | null; costCenter: string | null; department: string | null; projectManager: string | null;
+  id: number; poNo: string; vendorName: string; siteId: number; jobCode: string | null; date: string; totalAmount: number; status: string; site?: { name: string }; descriptionOfWork: string | null;
   vendorAddress?: string | null; billTo?: string | null; termsConditions?: string | null; subtotal?: number | null; taxAmount?: number | null;
 }
 interface Site { id: number; name: string; }
-interface FormData { poNo: string; vendorId: string; vendorName: string; siteId: number; jobCode: string; date: string; descriptionOfWork: string; totalAmount: number; status: string; costCenter: string; department: string; projectManager: string; }
-const EMPTY: FormData = { poNo: '', vendorId: '', vendorName: '', siteId: 0, jobCode: '', date: '', descriptionOfWork: '', totalAmount: 0, status: 'Draft', costCenter: '', department: '', projectManager: '' };
+interface FormData { poNo: string; vendorId: string; vendorName: string; siteId: number; jobCode: string; date: string; descriptionOfWork: string; totalAmount: number; status: string }
+const EMPTY: FormData = { poNo: '', vendorId: '', vendorName: '', siteId: 0, jobCode: '', date: '', descriptionOfWork: '', totalAmount: 0, status: 'Draft' };
 
 function generateMockPOs(): PO[] {
   return [
-    { id: 1, poNo: 'PO/2024-25/001', vendorName: 'Bharat Heavy Electricals Ltd', siteId: 1, jobCode: null, date: '2024-11-15T00:00:00', totalAmount: 18500000, status: 'Approved', site: { name: 'NTPC Rihand Dam Project' }, descriptionOfWork: 'Turbine maintenance and overhaul', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma' },
-    { id: 2, poNo: 'PO/2024-25/002', vendorName: 'Tata Projects Ltd', siteId: 2, jobCode: null, date: '2024-12-01T00:00:00', totalAmount: 32000000, status: 'Approved', site: { name: 'BALCO Aluminium Smelter' }, descriptionOfWork: 'Expansion of potline capacity', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'A. Verma' },
-    { id: 3, poNo: 'PO/2024-25/003', vendorName: 'Larsen & Toubro Ltd', siteId: 3, jobCode: null, date: '2025-01-10T00:00:00', totalAmount: 45000000, status: 'Draft', site: { name: 'Coal India Eastern Coalfield' }, descriptionOfWork: 'Coal handling plant upgradation', costCenter: 'CC-SIT-003', department: 'Operations', projectManager: 'P. Iyer' },
-    { id: 4, poNo: 'PO/2024-25/004', vendorName: 'Adani Defence Systems', siteId: 4, jobCode: null, date: '2025-02-20T00:00:00', totalAmount: 12500000, status: 'Approved', site: { name: 'Vedanta Jharsuguda Smelter' }, descriptionOfWork: 'Security infrastructure setup', costCenter: 'CC-SIT-004', department: 'Projects', projectManager: 'S. Rao' },
-    { id: 5, poNo: 'PO/2024-25/005', vendorName: 'Reliance Infrastructure', siteId: 5, jobCode: null, date: '2025-03-05T00:00:00', totalAmount: 8750000, status: 'Pending', site: { name: 'Hindalco Mahan Aluminium' }, descriptionOfWork: 'Electrical substation commissioning', costCenter: 'CC-SIT-005', department: 'Projects', projectManager: 'M. Khan' },
-    { id: 6, poNo: 'PO/2024-25/006', vendorName: 'UltraTech Cement Ltd', siteId: 6, jobCode: null, date: '2025-04-12T00:00:00', totalAmount: 22000000, status: 'Approved', site: { name: 'Tata Steel Bhamapah Project' }, descriptionOfWork: 'Cement plant civil works', costCenter: 'CC-SIT-006', department: 'Site Execution', projectManager: 'R. Sharma' },
+    { id: 1, poNo: 'PO/2024-25/001', vendorName: 'Bharat Heavy Electricals Ltd', siteId: 1, jobCode: null, date: '2024-11-15T00:00:00', totalAmount: 18500000, status: 'Approved', site: { name: 'NTPC Rihand Dam Project' }, descriptionOfWork: 'Turbine maintenance and overhaul', },
+    { id: 2, poNo: 'PO/2024-25/002', vendorName: 'Tata Projects Ltd', siteId: 2, jobCode: null, date: '2024-12-01T00:00:00', totalAmount: 32000000, status: 'Approved', site: { name: 'BALCO Aluminium Smelter' }, descriptionOfWork: 'Expansion of potline capacity', },
+    { id: 3, poNo: 'PO/2024-25/003', vendorName: 'Larsen & Toubro Ltd', siteId: 3, jobCode: null, date: '2025-01-10T00:00:00', totalAmount: 45000000, status: 'Draft', site: { name: 'Coal India Eastern Coalfield' }, descriptionOfWork: 'Coal handling plant upgradation', },
+    { id: 4, poNo: 'PO/2024-25/004', vendorName: 'Adani Defence Systems', siteId: 4, jobCode: null, date: '2025-02-20T00:00:00', totalAmount: 12500000, status: 'Approved', site: { name: 'Vedanta Jharsuguda Smelter' }, descriptionOfWork: 'Security infrastructure setup', },
+    { id: 5, poNo: 'PO/2024-25/005', vendorName: 'Reliance Infrastructure', siteId: 5, jobCode: null, date: '2025-03-05T00:00:00', totalAmount: 8750000, status: 'Pending', site: { name: 'Hindalco Mahan Aluminium' }, descriptionOfWork: 'Electrical substation commissioning', },
+    { id: 6, poNo: 'PO/2024-25/006', vendorName: 'UltraTech Cement Ltd', siteId: 6, jobCode: null, date: '2025-04-12T00:00:00', totalAmount: 22000000, status: 'Approved', site: { name: 'Tata Steel Bhamapah Project' }, descriptionOfWork: 'Cement plant civil works', },
   ];
 }
 
@@ -36,9 +37,6 @@ const PO_COLUMNS: ExportColumn<PO>[] = [
   { header: 'Site', accessor: (r: any) => r.site?.name || '' },
   { header: 'Site ID', accessor: (r: any) => r.site?.id ?? '' },
   { header: 'Job Code', accessor: 'jobCode' },
-  { header: 'Cost Center', accessor: 'costCenter' },
-  { header: 'Department', accessor: 'department' },
-  { header: 'Project Manager', accessor: 'projectManager' },
   { header: 'Date', accessor: (r) => r.date?.split('T')[0] ?? '' },
   { header: 'Description', accessor: 'descriptionOfWork' },
   { header: 'Amount', accessor: 'totalAmount' },
@@ -50,15 +48,12 @@ const PO_IMPORT_FIELDS: ImportField[] = [
   { key: 'vendorName', label: 'Vendor', required: true },
   { key: 'siteId', label: 'Site ID', type: 'number' },
   { key: 'jobCode', label: 'Job Code' },
-  { key: 'costCenter', label: 'Cost Center' },
-  { key: 'department', label: 'Department' },
-  { key: 'projectManager', label: 'Project Manager' },
   { key: 'date', label: 'Date', type: 'date' },
   { key: 'descriptionOfWork', label: 'Description' },
   { key: 'totalAmount', label: 'Amount', type: 'number' },
   { key: 'status', label: 'Status' },
 ];
-const PO_SAMPLE_ROW = { poNo: 'PO-2026-001', vendorName: 'Siemens India Ltd', siteId: 1, jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', date: '2026-01-05', descriptionOfWork: 'Circuit Breaker supply', totalAmount: 850000, status: 'Active' };
+const PO_SAMPLE_ROW = { poNo: 'PO-2026-001', vendorName: 'Siemens India Ltd', siteId: 1, jobCode: 'JOB-2026-001', date: '2026-01-05', descriptionOfWork: 'Circuit Breaker supply', totalAmount: 850000, status: 'Active' };
 
 function numToWords(n: number): string {
   if (n === 0) return 'Zero';
@@ -101,6 +96,13 @@ export default function FinPurchaseOrders() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
+  // Contractor master (Contractors Management) drives the vendor dropdown.
+  const { optionsWith } = useContractors();
+  const vendorOptions = useMemo(
+    () => optionsWith(records.map(r => r.vendorName)),
+    [optionsWith, records],
+  );
+
   const filtered = records.filter(r => statusFilter === 'All' || r.status === statusFilter);
   const tc = useTableControls(filtered, (r) => `${r.poNo} ${r.vendorName} ${r.site?.name ?? ''} ${r.descriptionOfWork ?? ''} ${r.status}`);
   const pageIds = tc.pageItems.map(r => r.id);
@@ -138,19 +140,16 @@ export default function FinPurchaseOrders() {
     siteId: (v) => (!v) ? 'Site Code is required' : undefined,
     jobCode: required('Job Code'),
     date: required('Date'),
-    costCenter: required('Cost Center'),
-    department: required('Department'),
-    projectManager: required('Project Manager'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
 
-  const openEdit = (r: PO) => { setEditTarget(r); setForm({ poNo: r.poNo, vendorId: '', vendorName: r.vendorName, siteId: r.siteId, jobCode: r.jobCode || '', date: r.date?.split('T')[0] || '', descriptionOfWork: r.descriptionOfWork || '', totalAmount: r.totalAmount, status: r.status, costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' }); setFormErrors({}); setFormOpen(true); };
+  const openEdit = (r: PO) => { setEditTarget(r); setForm({ poNo: r.poNo, vendorId: '', vendorName: r.vendorName, siteId: r.siteId, jobCode: r.jobCode || '', date: r.date?.split('T')[0] || '', descriptionOfWork: r.descriptionOfWork || '', totalAmount: r.totalAmount, status: r.status }); setFormErrors({}); setFormOpen(true); };
 
   const handleSubmit = async () => {
     if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
     setSubmitting(true);
-    try { const method = editTarget ? 'PUT' : 'POST'; const payload = { ...form, costCenter: form.costCenter || null, department: form.department || null, projectManager: form.projectManager || null, date: new Date(form.date) }; const body = editTarget ? { id: editTarget.id, ...payload } : payload; const r = await fetch('/api/fin/purchase-orders', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json(); if (j.success) { toast.success(editTarget ? 'Updated' : 'Created'); setFormOpen(false); await fetch_(); } else toast.error(j.error || 'Failed'); } catch { toast.error('Network error'); } finally { setSubmitting(false); }
+    try { const method = editTarget ? 'PUT' : 'POST'; const payload = { ...form, date: new Date(form.date) }; const body = editTarget ? { id: editTarget.id, ...payload } : payload; const r = await fetch('/api/fin/purchase-orders', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json(); if (j.success) { toast.success(editTarget ? 'Updated' : 'Created'); setFormOpen(false); await fetch_(); } else toast.error(j.error || 'Failed'); } catch { toast.error('Network error'); } finally { setSubmitting(false); }
   };
 
   const handleDelete = async () => { if (!deleteTarget) return; try { const r = await fetch(`/api/fin/purchase-orders?id=${deleteTarget.id}`, { method: 'DELETE' }); const j = await r.json(); if (j.success) { toast.success('Deleted'); setDeleteOpen(false); await fetch_(); } else toast.error(j.error); } catch { toast.error('Network error'); } };
@@ -268,9 +267,7 @@ export default function FinPurchaseOrders() {
         <div class="addr-box">
           <h3>Shipping &amp; Billing</h3>
           <div class="name">${esc(r.billTo || r.site?.name || 'Central Store')}</div>
-          <p>Cost Center: ${esc(r.costCenter || '—')}</p>
-          <p>Dept: ${esc(r.department || '—')}</p>
-          <p>Project Manager: ${esc(r.projectManager || '—')}</p>
+
         </div>
       </div>
 
@@ -343,7 +340,7 @@ export default function FinPurchaseOrders() {
   return (
     <div className="space-y-4 p-6">
       <div className="vc-panel"><div className="vc-panel-header"><ShoppingCart size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Purchase Orders</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{filtered.length}</span><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} className="ml-2 vc-input w-auto text-[11px] py-1"><option value="All">All Statuses</option>{PO_STATUSES.filter(s=>s!=='All').map(s=><option key={s} value={s}>{s}</option>)}</select><div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search POs..." /></div>{selected.size>0&&<button onClick={()=>setBulkDeleteOpen(true)} className="vc-btn-danger flex items-center gap-1.5 ml-2 text-[11px]"><Trash2 size={13} /> Delete ({selected.size})</button>}<button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button>
-          <ExportButton records={records} columns={PO_COLUMNS} filename="fin-purchase-orders" /><button onClick={() => { setEditTarget(null); setForm({ ...EMPTY, poNo: '' }); setFormErrors({}); setFormOpen(true); }} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New PO</button></div>
+          <ExportButton records={records} columns={PO_COLUMNS} filename="fin-purchase-orders" /><button onClick={() => { setEditTarget(null); setForm({ ...EMPTY, poNo: '' }); setFormErrors({}); setFormOpen(true); }} className="vc-btn-primary flex items-center gap-1.5 ml-2 shrink-0"><Plus size={13} /> New PO</button></div>
         <div className="overflow-x-auto"><div className="max-h-[520px] overflow-y-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
         <th className="w-8 px-2"><Checkbox checked={allPageSelected} onCheckedChange={toggleAllOnPage} className="border-[#2a3542] data-[state=checked]:bg-[#f5a623] data-[state=checked]:border-[#f5a623]" /></th>
         <SortableTh label="PO No" sortKey="poNo" accessor={(r: PO) => r.poNo} sort={tc.sort} toggleSort={tc.toggleSort} />
@@ -362,7 +359,12 @@ export default function FinPurchaseOrders() {
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <FormField label="PO No" hint="Generated automatically when you save"><input value={form.poNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated on save"/></FormField>
-            <FormField label="Vendor Name" required error={formErrors.vendorName}><input value={form.vendorName} onChange={e=>setField('vendorName', e.target.value)} className="vc-input"/></FormField>
+            <FormField label="Vendor Name" required error={formErrors.vendorName} hint="From Contractors Management master">
+              <select value={form.vendorName} onChange={e=>setField('vendorName', e.target.value)} className="vc-input">
+                <option value="">Select contractor…</option>
+                {vendorOptions.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+              </select>
+            </FormField>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Site Code" required error={formErrors.siteId}>
@@ -372,7 +374,6 @@ export default function FinPurchaseOrders() {
           </div>
           <FormField label="Description of Work"><input value={form.descriptionOfWork} onChange={e=>setField('descriptionOfWork', e.target.value)} className="vc-input"/></FormField>
           <FormField label="Job Code" required error={formErrors.jobCode} hint="Flows this PO into Job-wise costing"><DatalistField id="po-job-code" value={form.jobCode} onChange={v=>setField('jobCode', v)} options={[...new Set(records.map(r => r.jobCode).filter(Boolean) as string[])]} placeholder="JOB-2026-001" /></FormField>
-          <CostingFields prefix="po" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Total Amount (₹)"><input type="number" value={form.totalAmount||''} onChange={e=>setField('totalAmount', Number(e.target.value))} className="vc-input"/></FormField>
             <FormField label="Status"><select value={form.status} onChange={e=>setField('status', e.target.value)} className="vc-input appearance-none"><option value="Draft">Draft</option><option value="Approved">Approved</option><option value="Closed">Closed</option></select></FormField>

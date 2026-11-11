@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { nextPrefixedCode } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,15 +29,16 @@ export async function POST(request: NextRequest) {
     let gatePassNo = body.gatePassNo
     if (!gatePassNo) {
       const year = new Date().getFullYear()
-      const count = (await pdb.finGatePass.count()) + 1
-      gatePassNo = `GP/${year}/${String(count).padStart(4, '0')}`
+      gatePassNo = await nextPrefixedCode(pdb, 'finGatePass', 'gatePassNo', `GP/${year}/`, 4)
     }
     const record = await pdb.finGatePass.create({
       data: {
         gatePassNo, gatePassDate: new Date(body.gatePassDate || Date.now()), type: body.type || 'Outward',
-        siteId: Number(body.siteId), itemDescription: body.itemDescription, qty: Number(body.qty) || 0,
+        siteId: Number(body.siteId), itemDescription: body.itemDescription, itemCode: body.itemCode || null, qty: Number(body.qty) || 0,
         vehicleNo: body.vehicleNo || null, driverName: body.driverName || null, purpose: body.purpose || null,
         authorizedBy: body.authorizedBy || null, status: body.status || 'Open',
+        outwardGpNo: body.outwardGpNo || null, outwardDate: body.outwardDate ? new Date(body.outwardDate) : null,
+        remarks: body.remarks || null,
       },
       include: INCLUDE,
     })
@@ -57,7 +59,13 @@ export async function PUT(request: NextRequest) {
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit gate passes' }, { status: 403 })
     const record = await pdb.finGatePass.update({
       where: { id: Number(id) },
-      data: { ...(data.status !== undefined ? { status: data.status } : {}) },
+      data: {
+        ...(data.status !== undefined ? { status: data.status } : {}),
+        ...(data.itemCode !== undefined ? { itemCode: data.itemCode } : {}),
+        ...(data.outwardGpNo !== undefined ? { outwardGpNo: data.outwardGpNo || null } : {}),
+        ...(data.outwardDate !== undefined ? { outwardDate: data.outwardDate ? new Date(data.outwardDate) : null } : {}),
+        ...(data.remarks !== undefined ? { remarks: data.remarks } : {}),
+      },
       include: INCLUDE,
     })
     return NextResponse.json({ success: true, data: record })

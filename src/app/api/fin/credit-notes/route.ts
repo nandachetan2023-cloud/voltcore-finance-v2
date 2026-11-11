@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
 import { notifyFinance, deriveFinYear, FIN_TEAM, inr } from '@/lib/notification-bus'
+import { nextPrefixedCode } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,8 +31,7 @@ export async function POST(request: NextRequest) {
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create credit notes' }, { status: 403 })
     if (!body.creditNoteNo) {
       const year = new Date().getFullYear()
-      const count = (await pdb.finCreditNote.count()) + 1
-      body.creditNoteNo = `CN/${year}/${String(count).padStart(4, '0')}`
+      body.creditNoteNo = await nextPrefixedCode(pdb, 'finCreditNote', 'creditNoteNo', `CN/${year}/`, 4)
     }
     const { actor: _actor, ...createData } = body
     const record = await pdb.finCreditNote.create({ data: createData })

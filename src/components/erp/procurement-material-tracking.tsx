@@ -7,6 +7,8 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { Skeleton } from '@/components/ui/skeleton';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { useContractors } from './_contractor-master';
+import { useERPStore } from '@/store/erp-store';
 
 interface MaterialItem {
   id: number;
@@ -71,6 +73,20 @@ function generateMockMaterialItems(): MaterialItem[] {
     { id:6, poNo:'PO-2026-006', vendor:'ABB India', project:'Hindalco', site:'Main Plant', material:'11kV Switchgear Panel', category:'Switchgear', unit:'sets', qtyRequired:5, qtyStock:1, qtyInTransit:2, scheduledDate:d(-5), expectedDate:d(10), status:'On-Time', daysOverdue:0 },
     { id:7, poNo:'PO-2026-007', vendor:'Schneider Electric', project:'Coal India', site:'Coal Handling', material:'LV Control Panel MCC', category:'Control Panels', unit:'pcs', qtyRequired:8, qtyStock:2, qtyInTransit:4, scheduledDate:d(5), expectedDate:d(20), status:'Upcoming', daysOverdue:0 },
     { id:8, poNo:'PO-2026-008', vendor:'Prysmian Group', project:'Coal India', site:'Switchyard', material:'33kV Cable Trays Perforated', category:'Cable Trays', unit:'m', qtyRequired:1200, qtyStock:300, qtyInTransit:500, scheduledDate:d(-15), expectedDate:d(0), status:'On-Time', daysOverdue:0 },
+    { id:9, poNo:'PO-2026-009', vendor:'JSW Steel Ltd.', project:'JSW', site:'Raw Water Intake', material:'MS Angle 75x75x6', category:'Structural Steel', unit:'MT', qtyRequired:300, qtyStock:120, qtyInTransit:80, scheduledDate:d(-40), expectedDate:d(-25), status:'Overdue', daysOverdue:25 },
+    { id:10, poNo:'PO-2026-010', vendor:'ACC Cement', project:'JSW', site:'Main Plant', material:'PPC Cement Grade 43', category:'Cement', unit:'bags', qtyRequired:4000, qtyStock:1500, qtyInTransit:0, scheduledDate:d(0), expectedDate:d(12), status:'On-Time', daysOverdue:0 },
+    { id:11, poNo:'PO-2026-011', vendor:'Havells India', project:'NTPC', site:'Workshop', material:'LT Power Cable 4Cx95sqmm', category:'HV Cables', unit:'m', qtyRequired:3000, qtyStock:900, qtyInTransit:1200, scheduledDate:d(-8), expectedDate:d(7), status:'On-Time', daysOverdue:0 },
+    { id:12, poNo:'PO-2026-012', vendor:'Crompton Greaves', project:'BALCO', site:'Switchyard', material:'Distribution Transformer 2 MVA', category:'Transformers', unit:'units', qtyRequired:4, qtyStock:1, qtyInTransit:1, scheduledDate:d(20), expectedDate:d(35), status:'Upcoming', daysOverdue:0 },
+    { id:13, poNo:'PO-2026-013', vendor:'Maharashtra Seamless', project:'Coal India', site:'Boiler Area', material:'Alloy Steel Pipe 8" Sch80', category:'Pipes', unit:'m', qtyRequired:800, qtyStock:200, qtyInTransit:300, scheduledDate:d(-25), expectedDate:d(-10), status:'Overdue', daysOverdue:10 },
+    { id:14, poNo:'PO-2026-014', vendor:'Kirloskar Brothers', project:'Hindalco', site:'Cooling Towers', material:'Pump Motor Assembly 75 kW', category:'Motors', unit:'units', qtyRequired:6, qtyStock:2, qtyInTransit:2, scheduledDate:d(-3), expectedDate:d(14), status:'On-Time', daysOverdue:0 },
+    { id:15, poNo:'PO-2026-015', vendor:'L&T Switchgear', project:'JSW', site:'Main Plant', material:'VCB 11kV 630A', category:'Switchgear', unit:'sets', qtyRequired:10, qtyStock:4, qtyInTransit:3, scheduledDate:d(7), expectedDate:d(21), status:'Upcoming', daysOverdue:0 },
+    { id:16, poNo:'PO-2026-016', vendor:'Schneider Electric', project:'BALCO', site:'Turbine Building', material:'PLC Control Panel', category:'Control Panels', unit:'pcs', qtyRequired:6, qtyStock:2, qtyInTransit:1, scheduledDate:d(-12), expectedDate:d(3), status:'On-Time', daysOverdue:0 },
+    { id:17, poNo:'PO-2026-017', vendor:'Legrand India', project:'NTPC', site:'Coal Handling', material:'GI Cable Tray 600mm', category:'Cable Trays', unit:'m', qtyRequired:900, qtyStock:250, qtyInTransit:400, scheduledDate:d(-6), expectedDate:d(9), status:'On-Time', daysOverdue:0 },
+    { id:18, poNo:'PO-2026-018', vendor:'Astral Ltd.', project:'Hindalco', site:'Workshop', material:'PVC Conduit 25mm', category:'Conduits', unit:'m', qtyRequired:5000, qtyStock:1800, qtyInTransit:0, scheduledDate:d(4), expectedDate:d(18), status:'Upcoming', daysOverdue:0 },
+    { id:19, poNo:'PO-2026-019', vendor:'Ashlok Safe Earthing', project:'Coal India', site:'Raw Water Intake', material:'Copper Bonded Earth Rod 3m', category:'Earthing Materials', unit:'sets', qtyRequired:150, qtyStock:60, qtyInTransit:40, scheduledDate:d(-35), expectedDate:d(-20), status:'Overdue', daysOverdue:20 },
+    { id:20, poNo:'PO-2026-020', vendor:'Supreme Industries', project:'JSW', site:'Cooling Towers', material:'HDPE Pipe 315mm PN10', category:'Pipes', unit:'m', qtyRequired:600, qtyStock:0, qtyInTransit:600, scheduledDate:d(-2), expectedDate:d(11), status:'On-Time', daysOverdue:0 },
+    { id:21, poNo:'PO-2026-021', vendor:'CG Power', project:'NTPC', site:'Main Plant', material:'HT Motor 3.3kV 500kW', category:'Motors', unit:'units', qtyRequired:3, qtyStock:1, qtyInTransit:0, scheduledDate:d(25), expectedDate:d(42), status:'Upcoming', daysOverdue:0 },
+    { id:22, poNo:'PO-2026-022', vendor:'Bharat Forge', project:'BALCO', site:'Boiler Area', material:'Gate Valve 6" 150# CS', category:'Valves', unit:'pcs', qtyRequired:40, qtyStock:15, qtyInTransit:10, scheduledDate:d(-18), expectedDate:d(-3), status:'Overdue', daysOverdue:3 },
   ];
 }
 
@@ -81,7 +97,6 @@ const UNITS: Record<string, string> = {
   'Pipes': 'm', 'Valves': 'pcs', 'Motors': 'units', 'Switchgear': 'sets',
   'Control Panels': 'pcs', 'Cable Trays': 'm', 'Conduits': 'm', 'Earthing Materials': 'sets',
 };
-const VENDORS = ['Tata Steel Ltd.', 'Ultratech Cement', 'KEC International', 'Siemens Ltd.', 'Jindal Pipes', 'Forbes & Company', 'ABB India', 'Schneider Electric', 'L&T Electrical', 'Prysmian Group', 'Bharat Bijlee', 'Crompton Greaves', 'Ajay Industrial', 'Havells India', 'Godrej E&I', 'Ratnam Steel', 'Kirloskar Brothers', 'Reliance Pipes'];
 const SITES = ['Main Plant', 'Switchyard', 'Coal Handling', 'Cooling Towers', 'Workshop', 'Turbine Building', 'Boiler Area', 'Raw Water Intake'];
 
 const DAY = 86400000;
@@ -125,6 +140,14 @@ export default function ProcurementMaterialTracking() {
   const [siteFilter, setSiteFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [importOpen, setImportOpen] = useState(false);
+
+  // Contractor master (Contractors Management) drives the vendor dropdown.
+  const setActiveModule = useERPStore(s => s.setActiveModule);
+  const { optionsWith } = useContractors();
+  const vendorOptions = useMemo(
+    () => optionsWith(records.map(r => r.vendor)),
+    [optionsWith, records],
+  );
 
   useEffect(() => {
     fetch('/api/procurement/material-tracking')
@@ -175,7 +198,7 @@ export default function ProcurementMaterialTracking() {
     const { status, daysOverdue } = computeStatus(form.scheduledDate, form.expectedDate, form.qtyStock, form.qtyRequired);
     try {
       if (editTarget) {
-        const res = await fetch(`/api/procurement/material-tracking/${editTarget.id}`, {
+        const res = await fetch(`/api/procurement/material-tracking?id=${editTarget.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...form, status, daysOverdue }),
@@ -213,7 +236,7 @@ export default function ProcurementMaterialTracking() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const res = await fetch(`/api/procurement/material-tracking/${deleteTarget.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/procurement/material-tracking?id=${deleteTarget.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
         setRecords(prev => prev.filter(r => r.id !== deleteTarget.id));
@@ -314,7 +337,7 @@ export default function ProcurementMaterialTracking() {
             <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${viewMode === 'list' ? 'bg-[#f5a623] text-[#0a0d12]' : 'text-[#8899aa] hover:text-[#e2e8f0]'}`}><List size={13} className="inline mr-1" />List</button>
             <button onClick={() => setViewMode('dashboard')} className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${viewMode === 'dashboard' ? 'bg-[#f5a623] text-[#0a0d12]' : 'text-[#8899aa] hover:text-[#e2e8f0]'}`}><LayoutDashboard size={13} className="inline mr-1" />Dashboard</button>
           </div>
-          <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={MATERIAL_COLUMNS} filename="procurement-material-tracking" />
+          <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={MATERIAL_COLUMNS} filename="purchase-material-tracking" />
           <button onClick={openCreate} className="vc-btn-primary ml-2 flex items-center gap-1.5"><Plus size={13} /> New Entry</button>
         </div>
 
@@ -468,10 +491,15 @@ export default function ProcurementMaterialTracking() {
               <input value={form.poNo} onChange={e => setForm({...form, poNo: e.target.value})} className="vc-input" />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Vendor</label>
+              <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Contractor / Vendor</label>
               <select value={form.vendor} onChange={e => setForm({...form, vendor: e.target.value})} className="vc-input">
-                {VENDORS.map(v => <option key={v} value={v}>{v}</option>)}
+                <option value="">Select contractor…</option>
+                {vendorOptions.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
               </select>
+              <div className="text-[10px] text-[#5a6878] mt-1 flex items-center justify-between gap-2">
+                <span>From Contractors Management master.</span>
+                <button type="button" onClick={() => { setFormOpen(false); setActiveModule('procurement-vendors'); }} className="text-[#f5a623] hover:underline whitespace-nowrap">+ New contractor</button>
+              </div>
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Project</label>

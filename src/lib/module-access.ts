@@ -19,10 +19,10 @@
 export const MODULE_GROUPS: Record<string, string[]> = {
   organization: ['departments', 'designations', 'payroll-sites', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents', 'roles-access'],
   hrms: ['employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
-  procurement: ['purchases', 'expenses'],
+  procurement: ['procurement-pr', 'procurement-rfq', 'procurement-po-register', 'procurement-vendors', 'procurement-material-tracking', 'po-approval-stepper', 'rfq-comparison-matrix', 'grn-3way-match'],
   finance: ['finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'taxation', 'budget', 'financial-reports'],
   projects: ['project-list', 'sites'],
-  assets: ['equipment', 'permits', 'safety', 'subcontractors'],
+  assets: ['equipment', 'permits', 'safety'],
   system: ['reports', 'settings', 'user-management', 'onboarding-approvals', 'requests', 'notice-board'],
   reports: ['report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
   'self-service': ['my-dashboard', 'my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],

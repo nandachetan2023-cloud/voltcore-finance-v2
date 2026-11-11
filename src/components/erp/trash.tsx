@@ -5,6 +5,16 @@ import { Trash2, RotateCcw, AlertTriangle, FileText, Shield, Calendar, Building2
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { readJsonSafe } from '@/lib/safe-json';
+
+const TRASH_ENDPOINTS: Record<string, string> = {
+  'leave-policy': 'leave-policies',
+  'attendance-rule': 'attendance-rules',
+  holiday: 'holidays',
+  department: 'departments',
+  designation: 'designations',
+  employee: 'employees',
+};
 
 interface DeletedItem {
   id: number;
@@ -39,19 +49,22 @@ export default function TrashModule() {
         fetch('/api/trash/employees'),
       ]);
 
+      // readJsonSafe never throws on an HTML error page (a missing route answers
+      // with Next's 404 document, which used to crash the screen with
+      // "Unexpected token '<' … is not valid JSON").
       const [policiesData, rulesData, holidaysData, deptsData, desigData, empsData] = await Promise.all([
-        policiesRes.json(),
-        rulesRes.json(),
-        holidaysRes.json(),
-        deptsRes.json(),
-        desigRes.json(),
-        empsRes.json(),
+        readJsonSafe(policiesRes),
+        readJsonSafe(rulesRes),
+        readJsonSafe(holidaysRes),
+        readJsonSafe(deptsRes),
+        readJsonSafe(desigRes),
+        readJsonSafe(empsRes),
       ]);
 
       const allItems: DeletedItem[] = [];
 
-      if (policiesData.success) {
-        policiesData.data.forEach((p: any) => {
+      if (policiesData.success && policiesData.data) {
+        (policiesData.data as any[]).forEach((p: any) => {
           allItems.push({
             id: p.id,
             name: p.name,
@@ -62,8 +75,8 @@ export default function TrashModule() {
         });
       }
 
-      if (rulesData.success) {
-        rulesData.data.forEach((r: any) => {
+      if (rulesData.success && rulesData.data) {
+        (rulesData.data as any[]).forEach((r: any) => {
           allItems.push({
             id: r.id,
             name: r.name,
@@ -74,8 +87,8 @@ export default function TrashModule() {
         });
       }
 
-      if (holidaysData.success) {
-        holidaysData.data.forEach((h: any) => {
+      if (holidaysData.success && holidaysData.data) {
+        (holidaysData.data as any[]).forEach((h: any) => {
           allItems.push({
             id: h.id,
             name: h.name,
@@ -86,8 +99,8 @@ export default function TrashModule() {
         });
       }
 
-      if (deptsData.success) {
-        deptsData.data.forEach((d: any) => {
+      if (deptsData.success && deptsData.data) {
+        (deptsData.data as any[]).forEach((d: any) => {
           allItems.push({
             id: d.id,
             name: d.name,
@@ -98,8 +111,8 @@ export default function TrashModule() {
         });
       }
 
-      if (desigData.success) {
-        desigData.data.forEach((d: any) => {
+      if (desigData.success && desigData.data) {
+        (desigData.data as any[]).forEach((d: any) => {
           allItems.push({
             id: d.id,
             name: d.name,
@@ -110,8 +123,8 @@ export default function TrashModule() {
         });
       }
 
-      if (empsData.success) {
-        empsData.data.forEach((e: any) => {
+      if (empsData.success && empsData.data) {
+        (empsData.data as any[]).forEach((e: any) => {
           allItems.push({
             id: e.id,
             name: e.name,
@@ -137,21 +150,13 @@ export default function TrashModule() {
     if (!selectedItem) return;
     setSubmitting(true);
     try {
-      const endpointMap: Record<string, string> = {
-        'leave-policy': 'leave-policies',
-        'attendance-rule': 'attendance-rules',
-        'holiday': 'holidays',
-        'department': 'departments',
-        'designation': 'designations',
-        'employee': 'employees',
-      };
-      const endpoint = `/api/trash/${endpointMap[selectedItem.type]}`;
+      const endpoint = `/api/trash/${TRASH_ENDPOINTS[selectedItem.type]}`;
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: selectedItem.id }),
       });
-      const json = await res.json();
+      const json = await readJsonSafe(res);
       if (json.success) {
         toast.success(`${selectedItem.name} restored successfully`);
         setRestoreOpen(false);
@@ -170,13 +175,13 @@ export default function TrashModule() {
     if (!selectedItem) return;
     setSubmitting(true);
     try {
-      const endpoint = `/api/trash/${selectedItem.type === 'leave-policy' ? 'leave-policies' : selectedItem.type === 'attendance-rule' ? 'attendance-rules' : 'holidays'}`;
+      const endpoint = `/api/trash/${TRASH_ENDPOINTS[selectedItem.type]}`;
       const res = await fetch(endpoint, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: selectedItem.id }),
       });
-      const json = await res.json();
+      const json = await readJsonSafe(res);
       if (json.success) {
         toast.success(`${selectedItem.name} permanently deleted`);
         setDeleteOpen(false);

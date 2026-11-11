@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { nextPrefixedCode } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,14 +33,15 @@ export async function POST(request: NextRequest) {
     let scrapNo = body.scrapNo
     if (!scrapNo) {
       const year = new Date().getFullYear()
-      const count = (await pdb.finScrapEntry.count()) + 1
-      scrapNo = `SCR/${year}/${String(count).padStart(4, '0')}`
+      scrapNo = await nextPrefixedCode(pdb, 'finScrapEntry', 'scrapNo', `SCR/${year}/`, 4)
     }
     const record = await pdb.finScrapEntry.create({
       data: {
         scrapNo, scrapDate: new Date(body.scrapDate || Date.now()), siteId: Number(body.siteId),
         jobId: body.jobId ? Number(body.jobId) : null, itemId: body.itemId ? Number(body.itemId) : null,
-        description: body.description, qty: Number(body.qty) || 0, unit: body.unit || 'Nos',
+        description: body.description, scrapType: body.scrapType || null, location: body.location || null,
+        disposedTo: body.disposedTo || null,
+        qty: Number(body.qty) || 0, unit: body.unit || 'Nos',
         estimatedValue: Number(body.estimatedValue) || 0, disposalStatus: body.disposalStatus || 'Pending',
         remarks: body.remarks || null,
       },
@@ -62,7 +64,7 @@ export async function PUT(request: NextRequest) {
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit scrap entries' }, { status: 403 })
     const record = await pdb.finScrapEntry.update({
       where: { id: Number(id) },
-      data: { ...(data.disposalStatus !== undefined ? { disposalStatus: data.disposalStatus } : {}), ...(data.remarks !== undefined ? { remarks: data.remarks } : {}) },
+      data: { ...(data.disposalStatus !== undefined ? { disposalStatus: data.disposalStatus } : {}), ...(data.remarks !== undefined ? { remarks: data.remarks } : {}), ...(data.disposedTo !== undefined ? { disposedTo: data.disposedTo } : {}) },
       include: INCLUDE,
     })
     return NextResponse.json({ success: true, data: record })

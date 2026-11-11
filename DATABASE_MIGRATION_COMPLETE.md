@@ -62,7 +62,7 @@ Successfully removed CRM module tables from both tenant databases while preservi
 ### Active Modules (8):
 1. Organization
 2. HRMS
-3. Procurement
+3. Purchase Management
 4. Finance
 5. Projects
 6. Assets

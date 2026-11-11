@@ -4,18 +4,23 @@ import { getDbForRequest } from '@/lib/db'
 export const dynamic = 'force-dynamic'
 
 /**
- * Site Store — monthly report (the "Monthly Report" tab in site-store.tsx).
+ * Site Store — Monthly Report (client "Mechanical_Store_Registers_Formats"
+ * Monthly Report format):
+ *
+ *   Sl.No | Item Code | Item Details | Opening Stock | Material Received |
+ *   Material Issued | Material Returned | Closing Stock | Scrap Generated |
+ *   Damaged/Lost Material | Pending Material | Tools & Equipment Status |
+ *   Inventory Variance | Stock Value
+ *
+ * Movement figures are read straight from FinStockLedger (posted by GRN create
+ * / post, store issue and material return), so they always reconcile with the
+ * per-item Stock Register.
  *
  * GET ?siteId=<id>&month=YYYY-MM
- *
- * Movement figures cover documents dated inside the month:
- *  - received  = accepted qty/value on GRNs that aren't Rejected
- *  - issued    = store issues that aren't Reversed
- *  - returned  = material return notes
- *  - scrap     = scrap entries (estimated value)
- * MRS, gate-pass and verification counts are for the month; tool status is the
- * site's current position, since tools have no per-month state.
  */
+const round2 = (n: number) => Math.round(n * 100) / 100
+const round3 = (n: number) => Math.round(n * 1000) / 1000
+
 export async function GET(request: NextRequest) {
   try {
     const db = getDbForRequest(request)
@@ -33,26 +38,25 @@ export async function GET(request: NextRequest) {
     const from = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1))
     const to = new Date(Date.UTC(Number(m[1]), Number(m[2]), 1))
 
-    const site = await db.finSite.findUnique({ where: { id: siteId }, select: { id: true } })
+    const site = await db.finSite.findUnique({ where: { id: siteId }, select: { id: true, siteCode: true, name: true } })
     if (!site) return NextResponse.json({ success: false, error: 'Site not found' }, { status: 404 })
 
-    const item = { select: { id: true, sku: true, name: true } }
-    const [grns, issues, returns, scrap, mrs, tools, gatePasses, verifications] = await Promise.all([
+    const [grns, issues, returns, scrap, mrs, tools, gatePasses, verifications, storeItems] = await Promise.all([
       db.finStoreGrn.findMany({
         where: { siteId, grnDate: { gte: from, lt: to }, status: { not: 'Rejected' } },
-        select: { lines: { select: { itemId: true, qtyAccepted: true, amount: true, item } } },
+        select: { id: true, lines: { select: { amount: true } } },
       }),
       db.finStoreIssue.findMany({
         where: { siteId, issueDate: { gte: from, lt: to }, status: { not: 'Reversed' } },
-        select: { lines: { select: { itemId: true, qty: true, amount: true, item } } },
+        select: { id: true, lines: { select: { amount: true } } },
       }),
       db.finMaterialReturn.findMany({
         where: { siteId, returnDate: { gte: from, lt: to } },
-        select: { lines: { select: { itemId: true, qty: true, item } } },
+        select: { id: true, lines: { select: { itemId: true, qty: true } } },
       }),
       db.finScrapEntry.findMany({
         where: { siteId, scrapDate: { gte: from, lt: to } },
-        select: { estimatedValue: true },
+        select: { id: true, itemId: true, qty: true, scrapType: true, estimatedValue: true },
       }),
       db.finMaterialRequisition.groupBy({
         by: ['status'],
@@ -66,34 +70,127 @@ export async function GET(request: NextRequest) {
       }),
       db.finPhysicalVerification.findMany({
         where: { siteId, verificationDate: { gte: from, lt: to } },
-        select: { lines: { select: { variance: true } } },
+        select: { id: true, lines: { select: { itemId: true, variance: true } } },
+      }),
+      db.item.findMany({
+        where: { isActive: true },
+        select: { id: true, sku: true, name: true, reorderLevel: true, Uom_Item_uomIdToUom: { select: { code: true } } },
       }),
     ])
 
-    // Item-wise movement
-    type Mv = { itemId: number; sku: string; name: string; received: number; issued: number; returned: number }
-    const movement = new Map<number, Mv>()
-    const row = (it: { id: number; sku: string; name: string }) => {
-      let r = movement.get(it.id)
-      if (!r) movement.set(it.id, (r = { itemId: it.id, sku: it.sku, name: it.name, received: 0, issued: 0, returned: 0 }))
+    // Ledger entries for this site (ledger keys off itemCode/siteCode, not ids)
+    const siteCode = site.siteCode
+    const [ledgerBefore, ledgerMonth] = await Promise.all([
+      db.finStockLedger.findMany({
+        where: { siteCode, postingDate: { lt: from } },
+        select: { itemCode: true, qtyIn: true, qtyOut: true, rate: true },
+      }),
+      db.finStockLedger.findMany({
+        where: { siteCode, postingDate: { gte: from, lt: to } },
+        select: { itemCode: true, itemName: true, qtyIn: true, qtyOut: true, rate: true, referenceType: true, valueIn: true, valueOut: true },
+      }),
+    ])
+
+    // Per-item aggregation
+    const byItem = new Map<string, {
+      itemCode: string
+      itemName: string
+      unit: string
+      opening: number
+      received: number
+      issued: number
+      returnedQty: number
+      scrapQty: number
+      damagedLostQty: number
+      varianceCount: number
+      latestRate: number
+      valueIn: number
+      valueOut: number
+    }>()
+
+    const row = (code: string, nameFallback?: string) => {
+      let r = byItem.get(code)
+      if (!r) {
+        const storeItem = storeItems.find(i => i.sku === code)
+        byItem.set(code, r = {
+          itemCode: code,
+          itemName: storeItem?.name ?? nameFallback ?? code,
+          unit: storeItem?.Uom_Item_uomIdToUom?.code ?? 'Nos',
+          opening: 0,
+          received: 0,
+          issued: 0,
+          returnedQty: 0,
+          scrapQty: 0,
+          damagedLostQty: 0,
+          varianceCount: 0,
+          latestRate: 0,
+          valueIn: 0,
+          valueOut: 0,
+        })
+      }
       return r
     }
-    let receivedValue = 0
-    for (const g of grns) for (const l of g.lines) {
-      row(l.item).received += l.qtyAccepted
-      receivedValue += l.amount
-    }
-    let issuedValue = 0
-    for (const i of issues) for (const l of i.lines) {
-      row(l.item).issued += l.qty
-      issuedValue += l.amount
-    }
-    for (const r of returns) for (const l of r.lines) row(l.item).returned += l.qty
 
-    const round = (n: number) => Math.round(n * 100) / 100
-    const itemMovement = [...movement.values()]
-      .map((r) => ({ ...r, received: round(r.received), issued: round(r.issued), returned: round(r.returned) }))
-      .sort((a, b) => a.sku.localeCompare(b.sku))
+    for (const e of ledgerBefore) {
+      const r = row(e.itemCode)
+      r.opening += e.qtyIn - e.qtyOut
+      r.latestRate = e.rate || r.latestRate
+    }
+    for (const e of ledgerMonth) {
+      const r = row(e.itemCode, e.itemName)
+      if (e.referenceType === 'Stock Receipt') r.received += e.qtyIn
+      else if (e.referenceType === 'Stock Return') r.returnedQty += e.qtyIn
+      else r.issued += e.qtyOut
+      r.valueIn += e.valueIn
+      r.valueOut += e.valueOut
+      r.latestRate = e.rate || r.latestRate
+    }
+    // Per-item scrap / damaged-lost / variance — keyed off itemId, mapped via store SKU
+    const skuById = new Map(storeItems.map(i => [i.id, i.sku]))
+    for (const s of scrap) {
+      if (!s.itemId) continue
+      const code = skuById.get(s.itemId)
+      if (!code) continue
+      const r = row(code)
+      r.scrapQty += s.qty
+      const t = (s.scrapType || 'Scrap').toLowerCase()
+      if (t === 'damaged' || t === 'lost') r.damagedLostQty += s.qty
+    }
+    for (const v of verifications) {
+      for (const l of v.lines) {
+        if (l.variance === 0) continue
+        const code = skuById.get(l.itemId)
+        if (!code) continue
+        row(code).varianceCount += 1
+      }
+    }
+    const items = [...byItem.values()]
+      .map(r => ({
+        itemId: storeItems.find(i => i.sku === r.itemCode)?.id ?? null,
+        itemCode: r.itemCode,
+        itemName: r.itemName,
+        unit: r.unit,
+        opening: round3(r.opening),
+        received: round3(r.received),
+        issued: round3(r.issued),
+        returned: round3(r.returnedQty),
+        closing: round3(r.opening + r.received + r.returnedQty - r.issued),
+        scrapQty: round3(r.scrapQty),
+        damagedLostQty: round3(r.damagedLostQty),
+        varianceCount: r.varianceCount,
+        stockValue: round2(round3(r.opening + r.received + r.returnedQty - r.issued) * r.latestRate),
+        rate: r.latestRate,
+        reorderLevel: Number(storeItems.find(i => i.sku === r.itemCode)?.reorderLevel ?? 0),
+      }))
+      .filter(r => r.opening !== 0 || r.received !== 0 || r.issued !== 0 || r.returned !== 0 || r.scrapQty !== 0 || r.varianceCount !== 0)
+      .sort((a, b) => a.itemCode.localeCompare(b.itemCode))
+
+    const round = round2
+    const receivedValue = grns.reduce((s, g) => s + g.lines.reduce((x, l) => x + l.amount, 0), 0)
+    const issuedValue = issues.reduce((s, i) => s + i.lines.reduce((x, l) => x + l.amount, 0), 0)
+    const scrapValue = scrap.reduce((s, x) => s + x.estimatedValue, 0)
+    const scrapQtyTotal = scrap.reduce((s, x) => s + x.qty, 0)
+    const damagedLostQtyTotal = scrap.filter(s => { const t = (s.scrapType || '').toLowerCase(); return t === 'damaged' || t === 'lost' }).reduce((s, x) => s + x.qty, 0)
 
     const mrsCount = (...statuses: string[]) =>
       mrs.filter((g) => statuses.includes(g.status)).reduce((s, g) => s + g._count._all, 0)
@@ -103,24 +200,26 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         month,
-        materialReceived: { count: grns.length, value: round(receivedValue) },
-        materialIssued: { count: issues.length, value: round(issuedValue) },
-        materialReturned: { count: returns.length },
-        scrap: { count: scrap.length, value: round(scrap.reduce((s, x) => s + x.estimatedValue, 0)) },
-        // Drafts haven't been decided yet, so they count as pending; Issued MRSs were approved first.
-        mrs: { pending: mrsCount('Draft', 'Pending'), approved: mrsCount('Approved', 'Issued'), rejected: mrsCount('Rejected') },
-        tools: {
-          issued: toolCount('Issued'),
-          available: toolCount('Available'),
-          underRepair: toolCount('Under Repair'),
-          lost: toolCount('Lost'),
+        site: { id: site.id, siteCode: site.siteCode, name: site.name },
+        summary: {
+          materialReceived: { count: grns.length, value: round(receivedValue) },
+          materialIssued: { count: issues.length, value: round(issuedValue) },
+          materialReturned: { count: returns.length },
+          scrap: { count: scrap.length, value: round(scrapValue), qty: round3(scrapQtyTotal), damagedLostQty: round3(damagedLostQtyTotal) },
+          mrs: { pending: mrsCount('Draft', 'Pending'), approved: mrsCount('Approved', 'Issued'), rejected: mrsCount('Rejected') },
+          tools: {
+            issued: toolCount('Issued'),
+            available: toolCount('Available'),
+            underRepair: toolCount('Under Repair'),
+            lost: toolCount('Lost'),
+          },
+          gatePasses: { count: gatePasses.length, open: gatePasses.filter((g) => g.status === 'Open').length },
+          physicalVerification: {
+            count: verifications.length,
+            itemsWithVariance: verifications.reduce((s, v) => s + v.lines.filter((l) => l.variance !== 0).length, 0),
+          },
         },
-        gatePasses: { count: gatePasses.length, open: gatePasses.filter((g) => g.status === 'Open').length },
-        physicalVerification: {
-          count: verifications.length,
-          itemsWithVariance: verifications.reduce((s, v) => s + v.lines.filter((l) => l.variance !== 0).length, 0),
-        },
-        itemMovement,
+        items,
       },
     })
   } catch (error) {

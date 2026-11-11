@@ -26,7 +26,7 @@ import {
 
 export interface HelpArea {
   id: string;
-  /** Shown in the header, e.g. "Procurement" → "Procurement Help". */
+  /** Shown in the header, e.g. "Purchase Management" → "Purchase Management Help". */
   name: string;
   greeting: string;
   placeholder: string;
@@ -123,17 +123,15 @@ const AREA_DEFS: HelpArea[] = [
   },
   {
     id: 'procurement',
-    name: 'Procurement',
+    name: 'Purchase Management',
     greeting:
-      "Hi! I'm your **Procurement** helper. Ask about requisitions, RFQs, purchase orders, vendors or GRN matching — e.g. *\"how do I award an RFQ\"*.",
+      "Hi! I'm your **Purchase Management** helper. Ask about requisitions, RFQs, purchase orders, vendors or GRN matching — e.g. *\"how do I award an RFQ\"*.",
     placeholder: 'Ask - e.g. "how do I raise a purchase requisition"',
     entries: PROCUREMENT_HELP_ENTRIES,
     assistant: false,
     moduleIds: [
       'procurement',
-      'purchase',
       'purchases',
-      'expenses',
       'procurement-pr',
       'procurement-rfq',
       'procurement-po-register',
@@ -195,7 +193,7 @@ const AREA_DEFS: HelpArea[] = [
     placeholder: 'Ask - e.g. "how do I log a safety incident"',
     entries: ASSETS_HELP_ENTRIES,
     assistant: false,
-    moduleIds: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
+    moduleIds: ['assets', 'equipment', 'permits', 'safety'],
   },
   {
     id: 'master-setup',
@@ -282,7 +280,7 @@ const DASHBOARD_OVERVIEW: HelpEntry = {
 Pick a module tile on the dashboard (or from the sidebar):
 
 - **Organization** — departments, designations, holidays, leave & attendance rules, roles
-- **Procurement / Purchase** — requisitions, RFQs, POs, vendors, GRN matching
+- **Purchase Management** — requisitions, RFQs, POs, vendors, GRN matching
 - **Inventory** — site store, receipts, issues to WIP, stock ledger, scrap
 - **Sales & Billing** — quotations, orders, GST invoices, RA bills, receipts, tenders, pipeline
 - **Finance & Accounts** — ledger, journals, AR/AP, bank, GST/TDS, P&L, Tally sync
@@ -293,12 +291,12 @@ Pick a module tile on the dashboard (or from the sidebar):
 - **MIS** — drill-downs, PO cost tree, customer profitability
 - **Login & Role / System** — access control, users, settings, notices
 
-**Suggested first-time order:** Master Setup → Projects → Procurement → Inventory → Sales & Billing → Finance.
+**Suggested first-time order:** Master Setup → Projects → Purchase Management → Inventory → Sales & Billing → Finance.
 
 Ask me a question, or tell me to create an entry — e.g. *"raise an invoice of 2 lakh to L&T at site NTPC Rihand"*. Inside a module I'll answer for that module first.`,
   links: [
     { label: 'Master Setup', moduleId: 'master-setup' },
-    { label: 'Procurement', moduleId: 'procurement' },
+    { label: 'Purchase Management', moduleId: 'procurement' },
     { label: 'Sales & Billing', moduleId: 'sales-billing' },
     { label: 'Finance & Accounts', moduleId: 'finance-accounts' },
   ],

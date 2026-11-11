@@ -325,7 +325,7 @@ Cash Issued → Expense Voucher → Bill Upload → Approval → Petty Cash Sett
 
 ---
 
-### 4.14 Procurement Support Models
+### 4.14 Purchase Management Support Models
 
 | Model | Purpose | Key Fields |
 |-------|---------|-----------|

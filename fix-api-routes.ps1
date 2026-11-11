@@ -75,7 +75,6 @@ $stubRoutes = @(
   "incidents",
   "permits",
   "expenses",
-  "subcontractors",
   "support",
   "knowledgebase",
   "journal-entries",

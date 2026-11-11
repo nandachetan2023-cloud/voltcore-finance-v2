@@ -47,7 +47,6 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   equipment: () => import('@/components/erp/equipment'),
   permits: () => import('@/components/erp/permits'),
   safety: () => import('@/components/erp/safety'),
-  subcontractors: () => import('@/components/erp/subcontractors'),
   reports: () => import('@/components/erp/reports'),
   settings: () => import('@/components/erp/settings'),
   organization: () => import('@/components/erp/organization'),

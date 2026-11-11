@@ -20,6 +20,7 @@ export const NUMBER_SERIES = {
   invoice:  () => ({ model: 'finInvoice',       field: 'invoiceNo', prefix: `INV-${year()}-`, pad: 3 }),
   po:       () => ({ model: 'finPurchaseOrder', field: 'poNo',      prefix: `PO-${year()}-`,  pad: 3 }),
   ar:       () => ({ model: 'accountsReceivable', field: 'invoiceNo', prefix: `AR-${year()}-`, pad: 3 }),
+  ap:       () => ({ model: 'accountsPayable', field: 'billNo', prefix: `AP-${year()}-`, pad: 3 }),
   claim:    () => ({ model: 'finExpenseClaim',  field: 'claimNo',   prefix: `EC-${year()}-`,  pad: 3 }),
   rfq:      () => ({ model: 'finRFQ',           field: 'rfqNo',     prefix: `RFQ/${year()}/`, pad: 3 }),
   subcontract: () => ({ model: 'finSubcontract', field: 'subcontractNo', prefix: `SC-${year()}-`, pad: 3 }),
@@ -30,6 +31,11 @@ export type SeriesKind = keyof typeof NUMBER_SERIES
 /** Next code in a prefixed series, e.g. JOB-2026-012. */
 export async function nextSeriesCode(db: any, kind: SeriesKind): Promise<string> {
   const { model, field, prefix, pad } = NUMBER_SERIES[kind]()
+  return nextPrefixedCode(db, model, field, prefix, pad)
+}
+
+/** Next code for an ad-hoc prefix, e.g. JE/<year>/0001. */
+export async function nextPrefixedCode(db: any, model: string, field: string, prefix: string, pad = 4): Promise<string> {
   const rows: any[] = await db[model].findMany({
     where: { [field]: { startsWith: prefix } },
     select: { [field]: true },
@@ -96,11 +102,12 @@ export const isBlank = (v: unknown) => v === undefined || v === null || String(v
  * other NUMBER_SERIES entries follow. A blank/unresolved category falls back
  * to the safe generic ITM- segment.
  *
- * Format: <CATEGORY-3>-<4 digits>, e.g. ELC-0007 (generic fallback ITM-0007).
- * Category segments are exactly 3 uppercase letters (see /api/fin/item-categories).
+ * Format: <CATEGORY-PREFIX>-<3 digits>, e.g. CON-001, P&M-001, T&T-001
+ * (generic fallback ITM-001). Category prefixes are up to 4 uppercase
+ * letters/digits/& (see /api/fin/item-categories).
  */
 export async function nextItemCode(db: any, categoryCode?: string | null): Promise<string> {
-  const seg = (categoryCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const seg = (categoryCode || '').toUpperCase().replace(/[^A-Z0-9&]/g, '')
   const prefix = seg ? `${seg}-` : 'ITM-'
   const rows: Array<{ itemCode: string }> = await db.finItem.findMany({
     where: { itemCode: { startsWith: prefix } },
@@ -111,5 +118,5 @@ export async function nextItemCode(db: any, categoryCode?: string | null): Promi
     const m = String(r.itemCode).slice(prefix.length).match(/^\d+/)
     if (m) max = Math.max(max, parseInt(m[0], 10))
   }
-  return `${prefix}${String(max + 1).padStart(4, '0')}`
+  return `${prefix}${String(max + 1).padStart(3, '0')}`
 }

@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   FileText, Plus, Upload, Pencil, Trash2, Search, Loader2, X, ChevronRight,
-  CheckCircle2, XCircle, Clock, IndianRupee, Download, FileSpreadsheet, Printer,
+  CheckCircle2, XCircle, Clock, IndianRupee, Download, FileSpreadsheet,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -13,8 +13,7 @@ import {
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
-
-const PRINT_CSS = '@media print{@page{margin:12mm;size:A4 portrait}body{background:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}.vc-panel,.vc-stat-card{border:1px solid #ccc!important;background:#fff!important}table{border-collapse:collapse;width:100%;font-size:10pt}th{background:#f0f0f0!important;color:#333!important;font-weight:700;padding:6px 8px;border:1px solid #ddd;text-align:left}td{padding:5px 8px;border:1px solid #ddd;color:#333!important}h1{font-size:18pt;margin:0 0 4pt;color:#111}.text-\\[#e2e8f0\\],.text-\\[#f5a623\\],.text-\\[#00e676\\],.text-\\[#ff3d3d\\],.text-\\[#00d4ff\\],.text-\\[#8899aa\\],.text-\\[#5a6878\\]{color:#333!important}.bg-\\[#0a0d12\\],.bg-\\[#0f1318\\],.bg-\\[#161c24\\],.bg-\\[#1a2028\\]{background:#fff!important}button,.vc-btn-ghost,.vc-btn-primary,[role=dialog]{overflow:visible!important}}';
+import { readJsonSafe } from '@/lib/safe-json';
 
 /* ── Types ────────────────────────────────────────── */
 interface PRLineItem {
@@ -24,7 +23,19 @@ interface PRLineItem {
   unit: string;
   estCost: number;
   total: number;
+  // Transient picker state — never sent to the API (it stores description/qty/unit/estCost/total).
+  categoryId?: number | '';
+  itemId?: number;
 }
+
+interface ItemCategory { id: number; code: string; name: string; }
+interface MasterItem {
+  id: number; itemCode: string; name: string; specification: string | null;
+  uom: string; rate: number; categoryId: number | null;
+  category?: { id: number; code: string; name: string } | null;
+}
+
+const descOf = (m: MasterItem) => `${m.name}${m.specification ? ' — ' + m.specification : ''}`;
 
 interface ApprovalStep {
   id?: number;
@@ -77,7 +88,7 @@ const UNITS = ['pcs', 'kg', 'mtr', 'ltr', 'hr'];
 const APPROVAL_TEMPLATE: ApprovalStep[] = [
   { role: 'site_engineer', label: 'Site Engineer', status: 'Pending' },
   { role: 'project_manager', label: 'Project Manager', status: 'Pending' },
-  { role: 'procurement', label: 'Procurement', status: 'Pending' },
+  { role: 'procurement', label: 'Purchase', status: 'Pending' },
   { role: 'finance', label: 'Finance', status: 'Pending' },
 ];
 
@@ -148,10 +159,28 @@ function statusIcon(status: string) {
 }
 
 /* ── Line Item Editor ──────────────────────────── */
-function LineItemsTable({ items, onChange }: {
+function LineItemsTable({ items, onChange, categories, masterItems }: {
   items: PRLineItem[];
   onChange: (items: PRLineItem[]) => void;
+  categories: ItemCategory[];
+  masterItems: MasterItem[];
 }) {
+  const unitOptions = useMemo(
+    () => [...new Set([...UNITS, ...masterItems.map(m => m.uom).filter(Boolean)])],
+    [masterItems],
+  );
+
+  // Item dropdown value for a line — item id when it came from the master,
+  // otherwise a synthetic "custom:<text>" so legacy/manual rows stay visible.
+  const valueOf = (it: PRLineItem): string => {
+    if (it.itemId) return String(it.itemId);
+    if (it.description) {
+      const matched = masterItems.find(m => descOf(m) === it.description);
+      return matched ? String(matched.id) : `custom:${it.description}`;
+    }
+    return '';
+  };
+
   const updateItem = (id: string, field: keyof PRLineItem, value: string | number) => {
     const next = items.map(it => {
       if (it.id !== id) return it;
@@ -160,6 +189,34 @@ function LineItemsTable({ items, onChange }: {
       return updated;
     });
     onChange(next);
+  };
+
+  const setCategory = (id: string, categoryId: number | '') => {
+    onChange(items.map(it => {
+      if (it.id !== id) return it;
+      // Clear the picked item when it falls outside the chosen category.
+      const stillValid = it.itemId ? masterItems.find(m => m.id === it.itemId)?.categoryId === (categoryId || null) : true;
+      return categoryId === '' ? { ...it, categoryId: '' } : { ...it, categoryId, ...(stillValid ? {} : { itemId: undefined, description: '' }) };
+    }));
+  };
+
+  const applyMasterItem = (id: string, raw: string) => {
+    onChange(items.map(it => {
+      if (it.id !== id) return it;
+      if (!raw) return { ...it, itemId: undefined, description: '' };
+      const m = masterItems.find(x => String(x.id) === raw);
+      if (!m) return it; // "(existing)" option — keep the stored text as-is
+      const estCost = Number(m.rate) || 0;
+      return {
+        ...it,
+        itemId: m.id,
+        categoryId: m.categoryId ?? '',
+        description: descOf(m),
+        unit: m.uom || it.unit || 'Nos',
+        estCost,
+        total: (Number(it.qty) || 0) * estCost,
+      };
+    }));
   };
 
   const addRow = () => {
@@ -198,18 +255,29 @@ function LineItemsTable({ items, onChange }: {
             {items.map(it => (
               <tr key={it.id} className="hover:bg-[#141920] transition-colors">
                 <td className="py-1.5 px-3">
-                  <input type="text" value={it.description} onChange={e => updateItem(it.id, 'description', e.target.value)}
-                    placeholder="Item description" className="bg-[#0a0d12] border border-[#252e3a] rounded px-2 py-1 text-[11px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none w-full" />
+                  <div className="flex gap-1.5">
+                    <select value={it.categoryId ?? ''} onChange={e => setCategory(it.id, e.target.value ? Number(e.target.value) : '')}
+                      title="Category (from Item Setup)" className="bg-[#0a0d12] border border-[#252e3a] rounded px-1.5 py-1 text-[10px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none w-[92px] appearance-none">
+                      <option value="">All categories</option>
+                      {categories.map(c => <option key={c.id} value={c.id}>{c.code}</option>)}
+                    </select>
+                    <select value={valueOf(it)} onChange={e => applyMasterItem(it.id, e.target.value)}
+                      title="Item description comes from Item Setup — maintained in Item Code Generator" className="bg-[#0a0d12] border border-[#252e3a] rounded px-2 py-1 text-[11px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none flex-1 min-w-0 appearance-none">
+                      <option value="">Select item from setup…</option>
+                      {masterItems.filter(m => !it.categoryId || m.categoryId === Number(it.categoryId)).map(m => <option key={m.id} value={String(m.id)}>{descOf(m)}</option>)}
+                      {valueOf(it).startsWith('custom:') && <option value={valueOf(it)}>{it.description} (existing)</option>}
+                    </select>
+                  </div>
                 </td>
                 <td className="py-1.5 px-3">
                   <input type="number" value={it.qty ?? ''} onChange={e => updateItem(it.id, 'qty', e.target.value === '' ? 0 : Number(e.target.value))}
                     className="bg-[#0a0d12] border border-[#252e3a] rounded px-2 py-1 text-[11px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none w-[50px]" min="0" step="1" />
                 </td>
                 <td className="py-1.5 px-3">
-                  <select value={it.unit} onChange={e => updateItem(it.id, 'unit', e.target.value)}
-                    className="bg-[#0a0d12] border border-[#252e3a] rounded px-2 py-1 text-[11px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none w-[60px] appearance-none">
-                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                    <select value={it.unit} onChange={e => updateItem(it.id, 'unit', e.target.value)}
+                      className="bg-[#0a0d12] border border-[#252e3a] rounded px-2 py-1 text-[11px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none w-[60px] appearance-none">
+                      {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
                 </td>
                 <td className="py-1.5 px-3">
                   <input type="number" value={it.estCost ?? ''} onChange={e => updateItem(it.id, 'estCost', e.target.value === '' ? 0 : Number(e.target.value))}
@@ -287,6 +355,19 @@ export default function ProcurementPR() {
   // Delete confirmation
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PurchaseRequisition | null>(null);
+
+  // Item Setup (Item Code Generator) — categories and items drive the PR line-item picker.
+  const [itemCategories, setItemCategories] = useState<ItemCategory[]>([]);
+  const [masterItems, setMasterItems] = useState<MasterItem[]>([]);
+  // Projects / Jobs (WBS) from setup for the Project / WBS picker.
+  const [projects, setProjects] = useState<Array<{ id: string | number; code: string; name: string }>>([]);
+  const [jobs, setJobs] = useState<Array<{ id: number; jobCode: string; description: string | null }>>([]);
+  useEffect(() => {
+    fetch('/api/fin/item-categories').then(r => readJsonSafe(r)).then(j => { if (j.success) setItemCategories(j.data ?? []); });
+    fetch('/api/fin/items').then(r => readJsonSafe(r)).then(j => { if (j.success) setMasterItems(j.data ?? []); });
+    fetch('/api/projects').then(r => readJsonSafe(r)).then(j => { if (j.success) setProjects(j.data ?? []); });
+    fetch('/api/fin/jobs').then(r => readJsonSafe(r)).then(j => { if (j.success) setJobs(j.data ?? []); });
+  }, []);
 
   // Fetch data
   const fetchPRs = useCallback(() => {
@@ -530,9 +611,6 @@ export default function ProcurementPR() {
   }
 
   return (
-    <>
-    <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
-
     <div className="space-y-5 p-6">
 
       {/* ══════════════════════════════════════════════
@@ -540,7 +618,7 @@ export default function ProcurementPR() {
          ══════════════════════════════════════════════ */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#f5a623]/15 flex items-center justify-center no-print">
+          <div className="w-10 h-10 rounded-xl bg-[#f5a623]/15 flex items-center justify-center">
             <FileText size={20} className="text-[#f5a623]" />
           </div>
           <div>
@@ -550,11 +628,7 @@ export default function ProcurementPR() {
             <p className="text-[11px] text-[#5a6878]">Manage and track material requisitions across projects</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 ml-auto flex-wrap no-print">
-          <button onClick={() => window.print()}
-            className="h-9 px-4 rounded-lg border border-[#252e3a] text-[#8899aa] hover:text-[#e2e8f0] hover:border-[#3a4858] transition-all text-[11px] font-medium flex items-center gap-1.5">
-            <Printer size={13} /> Print
-          </button>
+        <div className="flex items-center gap-2 ml-auto flex-wrap">
           <button onClick={() => setUploadOpen(true)}
             className="h-9 px-4 rounded-lg border border-[#252e3a] text-[#8899aa] hover:text-[#e2e8f0] hover:border-[#3a4858] transition-all text-[11px] font-medium flex items-center gap-1.5">
             <Upload size={13} /> Upload Excel
@@ -627,7 +701,7 @@ export default function ProcurementPR() {
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Requisition Register</span>
           <span className="ml-auto flex items-center gap-2">
             <span className="text-[9px] text-[#5a6878] font-medium">{tc.total} records</span>
-            <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={PR_COLUMNS} filename="procurement-pr" />
+            <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={PR_COLUMNS} filename="purchase-pr" />
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -776,7 +850,7 @@ export default function ProcurementPR() {
                 </div>
 
                 {/* Line Items */}
-                <LineItemsTable items={editLines} onChange={setEditLines} />
+                <LineItemsTable items={editLines} onChange={setEditLines} categories={itemCategories} masterItems={masterItems} />
               </>
             )}
           </div>
@@ -809,9 +883,19 @@ export default function ProcurementPR() {
               </div>
               <div>
                 <label className="text-[9px] uppercase tracking-wider text-[#5a6878] font-semibold mb-1.5 block">Project / WBS *</label>
-                <input value={newPRForm.project} onChange={e => setNewPRForm({...newPRForm, project: e.target.value})}
-                  className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none transition-colors"
-                  placeholder="Enter project or WBS code" />
+                <select value={newPRForm.project} onChange={e => setNewPRForm({...newPRForm, project: e.target.value})} required
+                  className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none transition-colors appearance-none">
+                  <option value="">Select project or job…</option>
+                  <optgroup label="Projects">
+                    {projects.map(p => <option key={p.id} value={`${p.code} — ${p.name}`}>{p.code} — {p.name}</option>)}
+                  </optgroup>
+                  <optgroup label="Jobs / WBS">
+                    {jobs.map(j => <option key={j.id} value={`${j.jobCode} — ${j.description ?? ''}`}>{j.jobCode} — {j.description ?? ''}</option>)}
+                  </optgroup>
+                  {newPRForm.project && !projects.some(p => `${p.code} — ${p.name}` === newPRForm.project) && !jobs.some(j => `${j.jobCode} — ${j.description ?? ''}` === newPRForm.project) && (
+                    <option value={newPRForm.project}>{newPRForm.project} (existing)</option>
+                  )}
+                </select>
               </div>
               <div>
                 <label className="text-[9px] uppercase tracking-wider text-[#5a6878] font-semibold mb-1.5 block">Required On-Site By</label>
@@ -819,7 +903,7 @@ export default function ProcurementPR() {
                   className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none transition-colors" />
               </div>
             </div>
-            <LineItemsTable items={newPRForm.items} onChange={items => setNewPRForm({...newPRForm, items})} />
+            <LineItemsTable items={newPRForm.items} onChange={items => setNewPRForm({...newPRForm, items})} categories={itemCategories} masterItems={masterItems} />
           </div>
           <DialogFooter className="border-t border-[#252e3a] pt-4">
             <button onClick={() => setNewPROpen(false)} className="h-9 px-4 rounded-lg border border-[#252e3a] text-[#8899aa] hover:text-[#e2e8f0] transition-all text-[11px] font-medium">Cancel</button>
@@ -930,6 +1014,5 @@ export default function ProcurementPR() {
       </AlertDialog>
 
     </div>
-    </>
   );
 }

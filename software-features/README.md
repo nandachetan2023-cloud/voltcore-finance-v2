@@ -8,7 +8,7 @@ This folder documents all implemented modules and sub-modules of the VoltCore ER
 |---|---|
 | [01-organization.md](./01-organization.md) | Organization |
 | [02-hrms.md](./02-hrms.md) | HRMS (Human Resource Management) |
-| [03-procurement.md](./03-procurement.md) | Procurement |
+| [03-purchase-management.md](./03-purchase-management.md) | Purchase Management |
 | [04-my-portal.md](./04-my-portal.md) | My Portal (Employee Self-Service) |
 
 ## Architecture Notes

@@ -7,6 +7,10 @@ export const dynamic = 'force-dynamic'
 interface ImportRecord {
   itemCode?: string
   name: string
+  specification?: string
+  makeBrand?: string
+  modelNo?: string
+  sizeCapacity?: string
   description?: string
   category?: string
   uom?: string
@@ -23,7 +27,7 @@ function parseNum(v: unknown): number {
 
 // Commits rows already mapped and reviewed client-side (Upload → Map → Preview
 // wizard). Upserts by itemCode. Rows with a blank itemCode get a server-side,
-// category-segmented code (ELC-0001…); ITM-XXXX for uncategorised rows.
+// category-segmented code (CON-001…); ITM-001 for uncategorised rows.
 export async function POST(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
@@ -54,6 +58,10 @@ export async function POST(request: NextRequest) {
         }
         const data = {
           name: String(r.name).trim(),
+          specification: r.specification || null,
+          makeBrand: r.makeBrand || null,
+          modelNo: r.modelNo || null,
+          sizeCapacity: r.sizeCapacity || null,
           description: r.description || null,
           // Category omitted from the sheet → leave it untouched on update
           // (null only when explicitly resolved to an uncategorised row on create).

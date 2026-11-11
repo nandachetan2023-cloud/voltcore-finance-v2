@@ -5,18 +5,14 @@
 
 ---
 
-## Procurement
+## Purchase Management
 
-**Currently:** Purchase Orders, Expenses
+**Currently:** PR Module, RFQ Management, Quotation Comparison, PO Register, Purchase Orders, PO Approval, GRN 3-Way Match, Purchase Bills (AP), Material Tracking, Contractors Management
 
 | Submodule | Purpose |
 |---|---|
-| Vendors / Suppliers | Vendor master — contact info, payment terms, ratings, blacklist status |
-| Quotations (RFQ) | Request for Quotation workflow — send RFQ, compare quotes, approve |
-| Goods Receipt (GRN) | Record goods received against a PO, flag discrepancies |
 | Purchase Returns | Return items to vendor, track credit notes |
 | Contracts | Vendor contracts with start/end dates, renewal alerts |
-| Approval Workflows | Multi-level PO approval chains by amount threshold |
 
 ---
 
@@ -69,7 +65,7 @@
 
 ## Assets
 
-**Currently:** Equipment, Work Permits, Safety & HSE, Subcontractors
+**Currently:** Equipment, Work Permits, Safety & HSE
 
 | Submodule | Purpose |
 |---|---|

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Package, Plus, Pencil, Trash2, Loader2, Upload, Tags } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, Loader2, Upload, Tags, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -8,20 +8,25 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { readJsonSafe } from '@/lib/safe-json';
 
 interface ItemCategory { id: number; code: string; name: string; itemCount?: number; }
-interface Item { id: number; itemCode: string; name: string; description: string | null; categoryId: number | null; category?: { id: number; code: string; name: string } | null; uom: string; hsn: string | null; reorderLevel: number; rate: number; isActive: boolean; }
-interface FormData { name: string; description: string; categoryId: string; uom: string; hsn: string; reorderLevel: string; rate: string; status: string; }
+interface Item { id: number; itemCode: string; name: string; specification: string | null; makeBrand: string | null; modelNo: string | null; sizeCapacity: string | null; description: string | null; categoryId: number | null; category?: { id: number; code: string; name: string } | null; uom: string; hsn: string | null; reorderLevel: number; rate: number; isActive: boolean; }
+interface FormData { name: string; specification: string; makeBrand: string; modelNo: string; sizeCapacity: string; description: string; categoryId: string; uom: string; hsn: string; reorderLevel: string; rate: string; status: string; }
 
-const EMPTY: FormData = { name: '', description: '', categoryId: '', uom: 'Nos', hsn: '', reorderLevel: '', rate: '', status: 'Active' };
-const UOMS = ['Nos', 'MT', 'KG', 'Gm', 'Mtr', 'MM', 'Ltr', 'Box', 'Pkt', 'Roll', 'Set', 'Job', 'Day'];
+const EMPTY: FormData = { name: '', specification: '', makeBrand: '', modelNo: '', sizeCapacity: '', description: '', categoryId: '', uom: 'Nos', hsn: '', reorderLevel: '', rate: '', status: 'Active' };
+const UOMS = ['Nos', 'Kg', 'Gm', 'MT', 'Pair', 'Mtr', 'MM', 'Ltr', 'Box', 'Pkt', 'Roll', 'Set', 'Job', 'Day'];
 
 const ITEM_COLUMNS: ExportColumn<Item>[] = [
   { header: 'Item Code', accessor: 'itemCode' },
-  { header: 'Name', accessor: 'name' },
+  { header: 'Item Name', accessor: 'name' },
+  { header: 'Specification', accessor: (r) => r.specification ?? '' },
+  { header: 'Make/Brand', accessor: (r) => r.makeBrand ?? '' },
+  { header: 'Model No.', accessor: (r) => r.modelNo ?? '' },
+  { header: 'Size/Capacity', accessor: (r) => r.sizeCapacity ?? '' },
   { header: 'Description', accessor: (r) => r.description ?? '' },
   { header: 'Category', accessor: (r) => r.category?.name ?? '' },
-  { header: 'UOM', accessor: 'uom' },
+  { header: 'Unit', accessor: 'uom' },
   { header: 'HSN', accessor: (r) => r.hsn ?? '' },
   { header: 'Reorder Level', accessor: 'reorderLevel' },
   { header: 'Rate', accessor: 'rate' },
@@ -30,16 +35,20 @@ const ITEM_COLUMNS: ExportColumn<Item>[] = [
 
 const ITEM_IMPORT_FIELDS: ImportField[] = [
   { key: 'itemCode', label: 'Item Code' },
-  { key: 'name', label: 'Name', required: true },
+  { key: 'name', label: 'Item Name', required: true },
+  { key: 'specification', label: 'Specification' },
+  { key: 'makeBrand', label: 'Make/Brand' },
+  { key: 'modelNo', label: 'Model No.' },
+  { key: 'sizeCapacity', label: 'Size/Capacity' },
   { key: 'description', label: 'Description' },
   { key: 'category', label: 'Category' },
-  { key: 'uom', label: 'UOM' },
+  { key: 'uom', label: 'Unit' },
   { key: 'hsn', label: 'HSN' },
   { key: 'reorderLevel', label: 'Reorder Level', type: 'number' },
   { key: 'rate', label: 'Rate', type: 'number' },
   { key: 'status', label: 'Status' },
 ];
-const ITEM_SAMPLE_ROW = { itemCode: '', name: '33kV XLPE Cable 3Cx400sqmm', description: 'HT cable for switchyard', category: 'ELC', uom: 'Mtr', hsn: '8544', reorderLevel: 500, rate: 4850, status: 'Active' };
+const ITEM_SAMPLE_ROW = { itemCode: '', name: 'Welding Electrode', specification: 'E7018 Low Hydrogen', makeBrand: 'ESAB', modelNo: 'OK 48.00', sizeCapacity: '4 mm', description: 'Welding Consumable', category: 'CON', uom: 'Kg', hsn: '', reorderLevel: 0, rate: 0, status: 'Active' };
 
 export default function FinItems() {
   const [records, setRecords] = useState<Item[]>([]);
@@ -57,9 +66,12 @@ export default function FinItems() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [catOpen, setCatOpen] = useState(false);
   const [catForm, setCatForm] = useState({ code: '', name: '' });
+  const [nextCode, setNextCode] = useState('');
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   const filtered = records.filter(r => catFilter === 'All' || r.category?.code === catFilter);
-  const tc = useTableControls(filtered, (r) => `${r.itemCode} ${r.name} ${r.description ?? ''} ${r.category?.name ?? ''} ${r.uom} ${r.hsn ?? ''}`);
+  const tc = useTableControls(filtered, (r) => `${r.itemCode} ${r.name} ${r.specification ?? ''} ${r.makeBrand ?? ''} ${r.modelNo ?? ''} ${r.sizeCapacity ?? ''} ${r.description ?? ''} ${r.category?.name ?? ''} ${r.uom} ${r.hsn ?? ''}`);
   const pageIds = tc.pageItems.map(r => r.id);
   const allPageSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id));
   const toggleRow = (id: number) => setSelected(s => { const next = new Set(s); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -69,16 +81,43 @@ export default function FinItems() {
     try {
       setLoading(true);
       const [r, rc] = await Promise.all([fetch('/api/fin/items'), fetch('/api/fin/item-categories')]);
-      const j = await r.json(); const jc = await rc.json();
-      if (j.success) setRecords(j.data); else toast.error(j.error || 'Failed to load items');
-      if (jc.success) setCategories(jc.data);
+      const j = await readJsonSafe(r); const jc = await readJsonSafe(rc);
+      if (j.success) setRecords(j.data ?? []); else toast.error(j.error || 'Failed to load items');
+      if (jc.success) setCategories(jc.data ?? []);
     } catch { toast.error('Network error'); } finally { setLoading(false); }
   }, []);
   useEffect(() => { fetch_(); }, [fetch_]);
 
+  // Auto-generate preview: the server owns the numbering, the form only shows
+  // which code the next save will get (re-checked on every category change).
+  const loadNextCode = useCallback(async (categoryId: string) => {
+    setCodeLoading(true);
+    setCodeError(null);
+    try {
+      const qs = categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : '';
+      const res = await fetch(`/api/fin/items/next-code${qs}`);
+      const json = await readJsonSafe(res);
+      if (json.success) setNextCode(json.data?.code ?? '');
+      else { setNextCode(''); setCodeError(json.error || 'Could not generate a code'); }
+    } catch {
+      setNextCode('');
+      setCodeError('Could not generate a code');
+    } finally {
+      setCodeLoading(false);
+    }
+  }, []);
+
+  const openNew = () => {
+    setEditTarget(null);
+    setForm(EMPTY);
+    setFormOpen(true);
+    loadNextCode('');
+  };
+
   const openEdit = (r: Item) => {
     setEditTarget(r);
-    setForm({ name: r.name, description: r.description || '', categoryId: r.categoryId ? String(r.categoryId) : '', uom: r.uom || 'Nos', hsn: r.hsn || '', reorderLevel: String(r.reorderLevel ?? ''), rate: String(r.rate ?? ''), status: r.isActive ? 'Active' : 'Inactive' });
+    setForm({ name: r.name, specification: r.specification || '', makeBrand: r.makeBrand || '', modelNo: r.modelNo || '', sizeCapacity: r.sizeCapacity || '', description: r.description || '', categoryId: r.categoryId ? String(r.categoryId) : '', uom: r.uom || 'Nos', hsn: r.hsn || '', reorderLevel: String(r.reorderLevel ?? ''), rate: String(r.rate ?? ''), status: r.isActive ? 'Active' : 'Inactive' });
+    setNextCode(r.itemCode);
     setFormOpen(true);
   };
 
@@ -87,11 +126,11 @@ export default function FinItems() {
     setSubmitting(true);
     try {
       const method = editTarget ? 'PUT' : 'POST';
-      const body: Record<string, unknown> = { name: form.name.trim(), description: form.description || null, uom: form.uom, hsn: form.hsn || null, reorderLevel: Number(form.reorderLevel) || 0, rate: Number(form.rate) || 0, status: form.status };
+      const body: Record<string, unknown> = { name: form.name.trim(), specification: form.specification || null, makeBrand: form.makeBrand || null, modelNo: form.modelNo || null, sizeCapacity: form.sizeCapacity || null, description: form.description || null, uom: form.uom, hsn: form.hsn || null, reorderLevel: Number(form.reorderLevel) || 0, rate: Number(form.rate) || 0, status: form.status };
       if (editTarget) body.id = editTarget.id; else { body.itemCode = ''; body.categoryId = form.categoryId ? Number(form.categoryId) : null; }
       if (form.categoryId) body.categoryId = Number(form.categoryId);
       const res = await fetch('/api/fin/items', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const j = await res.json();
+      const j = await readJsonSafe(res);
       if (j.success) { toast.success(editTarget ? 'Updated' : `Created — code ${j.data?.itemCode}`); setFormOpen(false); await fetch_(); } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); } finally { setSubmitting(false); }
   };
@@ -99,15 +138,15 @@ export default function FinItems() {
   const handleDelete = async (ids: string) => {
     try {
       const res = await fetch(`/api/fin/items?ids=${ids}`, { method: 'DELETE' });
-      const j = await res.json();
-      if (j.success) { toast.success(`Deleted ${j.deleted ?? 1} item${(j.deleted ?? 1) === 1 ? '' : 's'}`); setDeleteOpen(false); setBulkDeleteOpen(false); setSelected(new Set()); await fetch_(); } else toast.error(j.error);
+      const j = await readJsonSafe(res);
+      if (j.success) { const deleted = (j.data as any)?.deleted ?? 1; toast.success(`Deleted ${deleted} item${deleted === 1 ? '' : 's'}`); setDeleteOpen(false); setBulkDeleteOpen(false); setSelected(new Set()); await fetch_(); } else toast.error(j.error);
     } catch { toast.error('Network error'); }
   };
 
   const addCategory = async () => {
     try {
       const res = await fetch('/api/fin/item-categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(catForm) });
-      const j = await res.json();
+      const j = await readJsonSafe(res);
       if (j.success) { toast.success(`Category ${j.data.code} added`); setCatForm({ code: '', name: '' }); await fetch_(); } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); }
   };
@@ -118,33 +157,37 @@ export default function FinItems() {
 
   return (
     <div className="space-y-4 p-6">
-      <div className="vc-panel"><div className="vc-panel-header"><Package size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Item Code Generator</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{filtered.length}</span><select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="vc-input !w-auto !py-1 !px-2 ml-2 text-[11px] appearance-none"><option value="All">All Categories</option>{categories.map(c => <option key={c.id} value={c.code}>{c.code} — {c.name}</option>)}</select><button onClick={() => setCatOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px] ml-2"><Tags size={13} /> Categories</button><div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search items by code, name, HSN..." /></div>{selected.size > 0 && <div className="flex items-center gap-2 ml-2"><span className="text-[10px] text-[#8899aa]">{selected.size} selected</span><button onClick={() => setSelected(new Set())} className="text-[11px] text-[#5a6878] hover:text-[#e2e8f0] underline">Clear</button><button onClick={() => setBulkDeleteOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px] !text-[#ff3d3d] hover:!bg-[#ff3d3d]/10"><Trash2 size={13} /> Delete</button></div>}<div className="flex items-center gap-2 ml-2"><button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={ITEM_COLUMNS} filename="fin-items" /></div><button onClick={() => { setEditTarget(null); setForm(EMPTY); setFormOpen(true); }} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Item</button></div>
+      <div className="vc-panel"><div className="vc-panel-header"><Package size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Item Code Generator</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{filtered.length}</span><select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="vc-input !w-auto !py-1 !px-2 ml-2 text-[11px] appearance-none"><option value="All">All Categories</option>{categories.map(c => <option key={c.id} value={c.code}>{c.code} — {c.name}</option>)}</select><button onClick={() => setCatOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px] ml-2"><Tags size={13} /> Categories</button><div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search items by code, name, brand, model..." /></div>{selected.size > 0 && <div className="flex items-center gap-2 ml-2"><span className="text-[10px] text-[#8899aa]">{selected.size} selected</span><button onClick={() => setSelected(new Set())} className="text-[11px] text-[#5a6878] hover:text-[#e2e8f0] underline">Clear</button><button onClick={() => setBulkDeleteOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px] !text-[#ff3d3d] hover:!bg-[#ff3d3d]/10"><Trash2 size={13} /> Delete</button></div>}<div className="flex items-center gap-2 ml-2"><button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={records} columns={ITEM_COLUMNS} filename="fin-items" /></div><button onClick={openNew} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New Item</button></div>
         <div className="overflow-x-auto"><div className="max-h-[520px] overflow-y-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
           <th className="py-2 px-3 w-8"><Checkbox checked={allPageSelected} onCheckedChange={toggleAllOnPage} /></th>
-          <SortableTh label="Code" sortKey="itemCode" accessor={(r: Item) => r.itemCode} sort={tc.sort} toggleSort={tc.toggleSort} />
-          <SortableTh label="Name" sortKey="name" accessor={(r: Item) => r.name} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Item Code" sortKey="itemCode" accessor={(r: Item) => r.itemCode} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Item Name" sortKey="name" accessor={(r: Item) => r.name} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Specification" sortKey="specification" accessor={(r: Item) => r.specification} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Make/Brand" sortKey="makeBrand" accessor={(r: Item) => r.makeBrand} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Model No." sortKey="modelNo" accessor={(r: Item) => r.modelNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Size/Capacity" sortKey="sizeCapacity" accessor={(r: Item) => r.sizeCapacity} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Unit" sortKey="uom" accessor={(r: Item) => r.uom} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="Category" sortKey="categoryId" accessor={(r: Item) => r.category?.name} sort={tc.sort} toggleSort={tc.toggleSort} />
-          <SortableTh label="UOM" sortKey="uom" accessor={(r: Item) => r.uom} sort={tc.sort} toggleSort={tc.toggleSort} />
-          <SortableTh label="HSN" sortKey="hsn" accessor={(r: Item) => r.hsn} sort={tc.sort} toggleSort={tc.toggleSort} />
-          <SortableTh label="Reorder" sortKey="reorderLevel" accessor={(r: Item) => r.reorderLevel} sort={tc.sort} toggleSort={tc.toggleSort} />
-          <SortableTh label="Rate" sortKey="rate" accessor={(r: Item) => r.rate} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="Status" sortKey="isActive" accessor={(r: Item) => r.isActive} sort={tc.sort} toggleSort={tc.toggleSort} />
           <th className="py-2 px-3"></th>
-        </tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => <tr key={r.id} className="hover:bg-[#141920]"><td className="py-2.5 px-3"><Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggleRow(r.id)} /></td><td className="py-2.5 px-3 text-[#f5a623] font-mono">{r.itemCode}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-medium">{r.name}{r.description && <span className="text-[#8899aa]"> — {r.description}</span>}</td><td className="py-2.5 px-3">{catBadge(r)}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.uom}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.hsn || '—'}</td><td className="py-2.5 px-3 text-center text-[#8899aa] font-mono">{r.reorderLevel || '—'}</td><td className="py-2.5 px-3 text-right text-[#8899aa] font-mono">{r.rate ? r.rate.toLocaleString('en-IN') : '—'}</td><td className="py-2.5 px-3"><span className={`vc-badge ${r.isActive ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#ff3d3d]/15 text-[#ff3d3d]'}`}>{r.isActive ? 'Active' : 'Inactive'}</span></td><td className="py-2.5 px-3"><div className="flex gap-1"><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button><button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button></div></td></tr>)}{tc.pageItems.length === 0 && <tr><td colSpan={10} className="py-8 text-center text-[#5a6878]">No matching items</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
+        </tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => <tr key={r.id} className="hover:bg-[#141920]"><td className="py-2.5 px-3"><Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggleRow(r.id)} /></td><td className="py-2.5 px-3 text-[#f5a623] font-mono">{r.itemCode}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-medium">{r.name}{r.description && <span className="text-[#8899aa]"> — {r.description}</span>}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.specification || '—'}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.makeBrand || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.modelNo || '—'}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.sizeCapacity || '—'}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.uom}</td><td className="py-2.5 px-3">{catBadge(r)}</td><td className="py-2.5 px-3"><span className={`vc-badge ${r.isActive ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#ff3d3d]/15 text-[#ff3d3d]'}`}>{r.isActive ? 'Active' : 'Inactive'}</span></td><td className="py-2.5 px-3"><div className="flex gap-1"><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button><button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button></div></td></tr>)}{tc.pageItems.length === 0 && <tr><td colSpan={11} className="py-8 text-center text-[#5a6878]">No matching items</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle className="text-[#f5a623]">{editTarget ? 'Edit Item' : 'New Item'}</DialogTitle></DialogHeader><div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3"><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Item Code</label><input value={editTarget?.itemCode ?? ''} readOnly placeholder={editTarget ? '' : 'Auto-generated'} className="vc-input opacity-60" /></div><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Category</label><select value={form.categoryId} onChange={e => setForm(p => ({ ...p, categoryId: e.target.value }))} className="vc-input" disabled={!!editTarget}><option value="">— Uncategorised (ITM-) —</option>{categories.map(c => <option key={c.id} value={String(c.id)}>{c.code} — {c.name}</option>)}</select></div></div>
-        <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Name *</label><input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className="vc-input" placeholder="33kV XLPE Cable 3Cx400sqmm" /></div>
-        <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Description</label><input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} className="vc-input" /></div>
-        <div className="grid grid-cols-3 gap-3"><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">UOM</label><select value={form.uom} onChange={e => setForm(p => ({ ...p, uom: e.target.value }))} className="vc-input">{UOMS.map(u => <option key={u}>{u}</option>)}</select></div><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">HSN Code</label><input value={form.hsn} onChange={e => setForm(p => ({ ...p, hsn: e.target.value }))} className="vc-input" placeholder="8544" /></div><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label><select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className="vc-input"><option>Active</option><option>Inactive</option></select></div></div>
+        <div className="grid grid-cols-2 gap-3"><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Item Code</label><div className="flex items-center gap-1.5"><input value={editTarget?.itemCode ?? nextCode} readOnly placeholder={editTarget ? '' : 'Auto-generated'} className="vc-input opacity-60 font-mono" />{!editTarget && <button type="button" title="Regenerate preview" onClick={() => loadNextCode(form.categoryId)} disabled={codeLoading} className="vc-btn-ghost !px-2 !py-2 disabled:opacity-50">{codeLoading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}</button>}</div>{!editTarget && codeError && <p className="text-[10px] text-[#ff3d3d] mt-1">{codeError}</p>}</div><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Category *</label><select value={form.categoryId} onChange={e => { const v = e.target.value; setForm(p => ({ ...p, categoryId: v })); if (!editTarget) loadNextCode(v); }} className="vc-input" disabled={!!editTarget}><option value="">— Uncategorised (ITM-) —</option>{categories.map(c => <option key={c.id} value={String(c.id)}>{c.code} — {c.name}</option>)}</select></div></div>
+        <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Item Name *</label><input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className="vc-input" placeholder="Welding Electrode" /></div>
+        <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Specification</label><input value={form.specification} onChange={e => setForm(p => ({ ...p, specification: e.target.value }))} className="vc-input" placeholder="E7018 Low Hydrogen" /></div>
+        <div className="grid grid-cols-2 gap-3"><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Make/Brand</label><input value={form.makeBrand} onChange={e => setForm(p => ({ ...p, makeBrand: e.target.value }))} className="vc-input" placeholder="ESAB" /></div><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Model No.</label><input value={form.modelNo} onChange={e => setForm(p => ({ ...p, modelNo: e.target.value }))} className="vc-input" placeholder="OK 48.00" /></div></div>
+        <div className="grid grid-cols-2 gap-3"><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Size/Capacity</label><input value={form.sizeCapacity} onChange={e => setForm(p => ({ ...p, sizeCapacity: e.target.value }))} className="vc-input" placeholder="4 mm" /></div><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Unit</label><select value={form.uom} onChange={e => setForm(p => ({ ...p, uom: e.target.value }))} className="vc-input">{UOMS.map(u => <option key={u}>{u}</option>)}</select></div></div>
+        <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Description</label><input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} className="vc-input" placeholder="Welding Consumable" /></div>
+        <div className="grid grid-cols-2 gap-3"><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">HSN Code</label><input value={form.hsn} onChange={e => setForm(p => ({ ...p, hsn: e.target.value }))} className="vc-input" placeholder="8544" /></div><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Status</label><select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className="vc-input"><option>Active</option><option>Inactive</option></select></div></div>
         <div className="grid grid-cols-2 gap-3"><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Reorder Level</label><input type="number" value={form.reorderLevel} onChange={e => setForm(p => ({ ...p, reorderLevel: e.target.value }))} className="vc-input" min="0" /></div><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Rate (₹)</label><input type="number" value={form.rate} onChange={e => setForm(p => ({ ...p, rate: e.target.value }))} className="vc-input" min="0" step="0.01" /></div></div>
-        <p className="text-[10px] text-[#5a6878]">Code is assigned by the server per category segment (ELC-0001…); deleted codes are never reused. The code is immutable after creation so PRs and stock records always match.</p>
+        <p className="text-[10px] text-[#5a6878]">Select a category and the item code is generated automatically as <span className="font-mono text-[#f5a623]">PREFIX-001</span> (e.g. CON-001, P&amp;M-001, GAS-002). The code shown above is the live preview of the next number in that category's series; the server assigns the final code on save, never reuses a code after delete, and keeps it immutable so PRs and stock records always match.</p>
       </div><DialogFooter><button onClick={() => setFormOpen(false)} className="vc-btn-ghost">Cancel</button><button onClick={handleSubmit} disabled={submitting} className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">{submitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}{editTarget ? 'Update' : 'Create'}</button></DialogFooter></DialogContent></Dialog>
 
       <Dialog open={catOpen} onOpenChange={setCatOpen}><DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-md"><DialogHeader><DialogTitle className="text-[#f5a623]">Item Categories</DialogTitle></DialogHeader><div className="space-y-3">
         <div className="space-y-1.5 max-h-40 overflow-y-auto">{categories.map(c => <div key={c.id} className="flex items-center gap-2 text-[11px] bg-[#0f1318] border border-[#252e3a] rounded-lg px-3 py-2"><span className="text-[#f5a623] font-mono font-semibold">{c.code}</span><span className="text-[#e2e8f0]">{c.name}</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{c.itemCount ?? 0} items</span></div>)}</div>
-        <div className="grid grid-cols-[90px_1fr_auto] gap-2 items-end"><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Code</label><input value={catForm.code} onChange={e => setCatForm(p => ({ ...p, code: e.target.value.toUpperCase() }))} className="vc-input" maxLength={4} placeholder="ELC" /></div><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Name</label><input value={catForm.name} onChange={e => setCatForm(p => ({ ...p, name: e.target.value }))} className="vc-input" placeholder="Electrical" /></div><button onClick={addCategory} disabled={submitting} className="vc-btn-primary flex items-center gap-1.5"><Plus size={13} /> Add</button></div>
-        <p className="text-[10px] text-[#5a6878]">Every item in this category gets codes from the category segment (e.g. <span className="font-mono text-[#f5a623]">ELC-0001</span>…).</p>
+        <div className="grid grid-cols-[90px_1fr_auto] gap-2 items-end"><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Code</label><input value={catForm.code} onChange={e => setCatForm(p => ({ ...p, code: e.target.value.toUpperCase() }))} className="vc-input" maxLength={4} placeholder="CON" /></div><div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Name</label><input value={catForm.name} onChange={e => setCatForm(p => ({ ...p, name: e.target.value }))} className="vc-input" placeholder="Electrical" /></div><button onClick={addCategory} disabled={submitting} className="vc-btn-primary flex items-center gap-1.5"><Plus size={13} /> Add</button></div>
+        <p className="text-[10px] text-[#5a6878]">Every item in this category gets codes from the category prefix (e.g. <span className="font-mono text-[#f5a623]">CON-001</span>…). Use the register prefix master: CON, P&amp;M, T&amp;T, PPE, GAS, ELE, WEL, MIN, LFT, SAF.</p>
       </div></DialogContent></Dialog>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}><AlertDialogContent className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0]"><AlertDialogHeader><AlertDialogTitle className="text-[#ff3d3d]">Delete Item</AlertDialogTitle><AlertDialogDescription className="text-[#8899aa]">Delete <strong className="text-[#f5a623]">{deleteTarget?.itemCode} — {deleteTarget?.name}</strong>? Its code will not be reused by future items.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="vc-btn-ghost">Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(String(deleteTarget?.id))} className="bg-[#ff3d3d] hover:bg-[#cc2020] text-white rounded-lg">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>

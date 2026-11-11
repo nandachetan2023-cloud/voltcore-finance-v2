@@ -7,6 +7,7 @@ import { Building2, Users, Fingerprint, Shield, LogOut, Plus, Pencil, Trash2,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { toast } from 'sonner';
+import { readJsonSafe } from '@/lib/safe-json';
 import TrashTab from './trash-tab';
 import ModuleSelect from './module-select';
 
@@ -756,8 +757,8 @@ function BiometricTab({ configs, tenants, onRefresh }: { configs: BiometricConfi
     setTesting(c.id);
     try {
       const res = await fetch(`/api/biometric/test?siteId=${c.siteId}`);
-      const data = await res.json();
-      const ok = data.data?.[0]?.format1?.success || data.data?.[0]?.format2?.success;
+      const data = await readJsonSafe(res);
+      const ok = (data.data as any[])?.[0]?.format1?.success || (data.data as any[])?.[0]?.format2?.success;
       setTestResult(r => ({ ...r, [c.id]: ok ? 'ok' : 'fail' }));
       toast[ok ? 'success' : 'error'](ok ? `${c.siteName} connected` : `${c.siteName} connection failed`);
     } catch {

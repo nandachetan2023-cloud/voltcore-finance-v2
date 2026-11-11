@@ -1,6 +1,6 @@
 /**
- * Procurement & Purchase Help — Knowledge Base
- * Covers the Procurement and Purchase menus (PR → RFQ → PO → GRN → bill).
+ * Purchase Management Help — Knowledge Base
+ * Covers the Purchase Management menus (PR → RFQ → PO → GRN → bill).
  */
 
 import type { HelpEntry } from '../finance-help-data';
@@ -8,25 +8,25 @@ import type { HelpEntry } from '../finance-help-data';
 export const PROCUREMENT_HELP_ENTRIES: HelpEntry[] = [
   {
     id: 'proc-overview',
-    title: "What's in Procurement & Purchase?",
+    title: "What's in Purchase Management?",
     popular: true,
     relatedModule: 'procurement',
     keywords: [
-      'procurement', 'purchase', 'overview', 'menu', 'sections', 'what is', 'features',
+      'procurement', 'purchase', 'purchase management', 'overview', 'menu', 'sections', 'what is', 'features',
       'where is', 'list', 'navigate',
     ],
-    summary: 'Map of the procurement and purchase screens.',
-    body: `### Procurement & Purchase
+    summary: 'Map of the purchase management screens.',
+    body: `### Purchase Management
 
 **📝 Request & source**
-- **Purchase Requisition** — raise and approve material requests
+- **PR Module** — raise and approve material requests
 - **RFQ Management** — invite vendors, record bids, award
 - **Quotation Comparison** — line-by-line bid comparison
 
 **🛒 Order**
-- **PO Register** — all purchase orders with filters, preview and PDF
+- **PO Register** — master-driven purchase orders with filters, preview and PDF
 - **PO Approval** — step a PO through its approval stages
-- **Purchase Orders** — quick register to raise a PO
+- **Purchase Orders** — register to raise a PO
 
 **📦 Receive & pay**
 - **GRN 3-Way Match** — PO vs goods received vs invoice
@@ -34,13 +34,12 @@ export const PROCUREMENT_HELP_ENTRIES: HelpEntry[] = [
 - **Purchase Bills (AP)** — vendor bills (Finance & Accounts)
 
 **🤝 Vendors & contracts**
-- **Vendor Management** — vendor directory, rating, compliance
-- **Contractor Register** — contracts and progress claims
-- **Expenses** — expense claims
+- **Contractors Management** — contractor directory, rating, compliance
+- **Contracts & Claims** — contracts, milestones, retention releases
 
 The typical flow is **PR → RFQ → PO → GRN → Bill → Payment**.`,
     links: [
-      { label: 'Purchase Requisition', moduleId: 'procurement-pr' },
+      { label: 'PR Module', moduleId: 'procurement-pr' },
       { label: 'RFQ Management', moduleId: 'procurement-rfq' },
       { label: 'PO Register', moduleId: 'procurement-po-register' },
     ],
@@ -57,7 +56,7 @@ The typical flow is **PR → RFQ → PO → GRN → Bill → Payment**.`,
     summary: 'PR → RFQ → PO → GRN → bill → payment.',
     body: `### Procure-to-pay
 
-1. **Purchase Requisition** — a site engineer raises a PR; it goes through approval.
+1. **PR Module** — a site engineer raises a PR; it goes through approval.
 2. **RFQ** — invite vendors, record each vendor's bid, compare, and **award** (this creates the PO).
 3. **Purchase Order** — approve the PO (Draft → Pending Approval → Approved → Converted).
 4. **GRN** — record goods received against the PO (Inventory → Material Receipt / Site Store).
@@ -80,15 +79,15 @@ Each step links back to the same **project / job**, so cost tracking stays intac
       'requisition register', 'approve pr', 'upload excel', 'bulk upload', 'template', 'wbs',
     ],
     summary: 'Create, approve and bulk-import purchase requisitions.',
-    body: `### Purchase Requisitions
+    body: `### PR Module
 
-1. Open **Procurement → Purchase Requisition** → **New PR**.
+1. Open **Purchase Management → PR Module** → **New PR**.
 2. Fill **Requester** and **Project / WBS** (required) and **Required On-Site By**.
 3. Under **Line Items** use **Add Item** — description, qty, unit and estimated cost; the **Total Est. Cost** updates.
 4. Save. The PR appears in the **Requisition Register** as *Draft*.
 
 **Approval**
-Open a PR to see its **Approval Workflow** — Site Engineer → Project Manager → Procurement → Finance. Approvers use **Approve Next** or **Reject** (a rejection needs a reason).
+Open a PR to see its **Approval Workflow** — Site Engineer → Project Manager → Purchase → Finance. Approvers use **Approve Next** or **Reject** (a rejection needs a reason).
 
 **Statuses:** Draft · Pending Approval · Approved · Converted.
 
@@ -177,20 +176,21 @@ Select a purchase order on the left and advance it through:
   },
   {
     id: 'proc-purchases',
-    title: 'Raising a quick Purchase Order',
-    relatedModule: 'purchases',
+    title: 'Raising a Purchase Order',
+    relatedModule: 'fin-purchase-orders',
     keywords: [
-      'raise po', 'new purchase order', 'purchase order register', 'grn status', 'po status',
-      'vendor', 'delivery date', 'delete po', 'create po',
+      'raise po', 'new purchase order', 'purchase order register', 'po status',
+      'vendor', 'delivery date', 'delete po', 'create po', 'description of work', 'job code',
     ],
-    summary: 'Raise a PO with vendor, item, amount, delivery date and project.',
-    body: `### Purchase Order Register
+    summary: 'Raise a PO with vendor, site, job code, amount and description of work.',
+    body: `### Purchase Orders
 
-1. **Procurement → Purchase Orders** → **Raise PO**.
-2. Enter **Vendor**, **Item**, **Amount (₹)**, **Delivery Date** and **Project** — all required.
-3. Save. The register shows **PO Status** and **GRN Status** per row.
+1. **Purchase Management → Purchase Orders** → **New PO**.
+2. Enter **Vendor**, **Site**, **Job Code**, **Date**, **Description of Work**, **Total Amount** and **Status** — vendor, site, date, description and amount are required.
+3. Save. The register lists **PO No**, **Vendor**, **Site**, **Job Code**, **Amount** and **Status**, with search, status filter and bulk delete.
 
-Delete a PO from its row — confirm the prompt (it can't be undone).`,
+Use **Import** to bulk-load POs from a sheet and **Export** to download the register. For the master-driven PO register with line items and PDF preview, see **PO Register**.`,
+    links: [{ label: 'Purchase Orders', moduleId: 'fin-purchase-orders' }],
   },
   {
     id: 'proc-grn',
@@ -214,14 +214,14 @@ If the list is empty it says *"No lines to match"* — post a GRN first (Invento
   },
   {
     id: 'proc-vendors',
-    title: 'Vendor management',
+    title: 'Contractors management',
     relatedModule: 'procurement-vendors',
     keywords: [
       'vendor', 'vendors', 'supplier', 'vendor master', 'new vendor', 'preferred',
       'blacklisted', 'rating', 'compliance', 'otd', 'on time delivery', 'contact person',
     ],
     summary: 'Vendor directory with rating, compliance and on-time delivery.',
-    body: `### Vendor Management
+    body: `### Contractors Management
 
 The **Vendor Directory** lists vendors with **Region**, **Rating**, **Compliance** and **OTD** (on-time delivery).
 
@@ -251,26 +251,27 @@ Two views: **List** and **Dashboard**.
   },
   {
     id: 'proc-subcontracts',
-    title: 'Contractor register & progress claims',
+    title: 'Contracts & progress claims',
     relatedModule: 'procurement-subcontracts',
     keywords: [
       'subcontract', 'subcontracts', 'subcontractor', 'contract', 'progress claim',
       'claim', 'retention', 'scope', '% complete', 'work done',
     ],
     summary: 'Track contracts, retention and progress claims.',
-    body: `### Contractor Register
+    body: `### Contracts — Contracts & Claims
 
-- **New Contractor** — contract no., vendor/contractor, project/site, scope summary, value, start & end dates, **retention %**, status.
+- **New Contract** — contract no., contractor, project/site, scope summary, value, start & end dates, **retention %**, status.
 - Open a contract to see **% Complete**, scope and retention held.
 - **New Progress Claim** — claim no., date and amount claimed; submit it against the contract.
+- **New Contractor** — adds the contractor to the Contractors Management master (Master Setup).
 
-For contractor compliance (PF/ESI/licences) see **Assets → Contractors**.`,
-    links: [{ label: 'Contractors', moduleId: 'subcontractors' }],
+For contractor master data see **Master Setup → Contractors Management**.`,
+    links: [{ label: 'Contractors Management', moduleId: 'procurement-vendors' }],
   },
   {
     id: 'proc-expenses',
     title: 'Expense claims',
-    relatedModule: 'expenses',
+    relatedModule: 'fin-expense-claims',
     keywords: [
       'expense', 'expenses', 'expense claim', 'claim', 'reimbursement', 'new claim',
       'reject claim', 'approve claim', 'category',
@@ -278,7 +279,7 @@ For contractor compliance (PF/ESI/licences) see **Assets → Contractors**.`,
     summary: 'Submit and approve expense claims.',
     body: `### Expense Claims
 
-1. **Expenses → New Claim**.
+1. **Finance & Accounts → Expense Claims** → **New Claim**.
 2. Pick the **Site**, **Category**, **Amount (₹)** and **Date** (all required); add a **Job Code** if the cost belongs to a job. *Submitted By* fills from your login.
 3. Submit — an approver can **approve** or **reject** it from the list.
 
@@ -290,8 +291,8 @@ Booked claims flow into the Finance module's Expense Claims and Site Expenses.`,
     title: 'About this helper',
     keywords: ['help', 'about', 'assistant', 'guide', 'support', 'who are you', 'what can you do'],
     summary: 'What this helper does.',
-    body: `### Procurement Help
+    body: `### Purchase Management Help
 
-I'm a **self-contained guide** for Procurement & Purchase. Ask *"how do I award an RFQ"* or *"what is a 3-way match"*, or tap a suggested question. Use the **Open module** chips to jump to a screen.`,
+I'm a **self-contained guide** for Purchase Management. Ask *"how do I award an RFQ"* or *"what is a 3-way match"*, or tap a suggested question. Use the **Open module** chips to jump to a screen.`,
   },
 ];

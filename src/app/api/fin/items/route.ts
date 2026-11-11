@@ -60,6 +60,10 @@ export async function POST(request: NextRequest) {
     }
     const data = {
       name: String(body.name).trim(),
+      specification: body.specification || null,
+      makeBrand: body.makeBrand || null,
+      modelNo: body.modelNo || null,
+      sizeCapacity: body.sizeCapacity || null,
       description: body.description || null,
       categoryId,
       uom: body.uom || 'Nos',
@@ -99,6 +103,10 @@ export async function PUT(request: NextRequest) {
     const pdb = getDbForRequest(request)
     const data: Record<string, unknown> = {}
     if (rest.name !== undefined) data.name = String(rest.name).trim()
+    if (rest.specification !== undefined) data.specification = rest.specification || null
+    if (rest.makeBrand !== undefined) data.makeBrand = rest.makeBrand || null
+    if (rest.modelNo !== undefined) data.modelNo = rest.modelNo || null
+    if (rest.sizeCapacity !== undefined) data.sizeCapacity = rest.sizeCapacity || null
     if (rest.description !== undefined) data.description = rest.description || null
     if (rest.categoryId !== undefined) data.categoryId = isBlank(rest.categoryId) ? null : Number(rest.categoryId)
     if (rest.uom !== undefined) data.uom = rest.uom

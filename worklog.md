@@ -137,7 +137,7 @@ Completely rewrote 5 ERP module components with production-quality code and real
 
 2. **training.tsx** (`/api/training`)
    - Replaced hardcoded mock data with real API GET (combined certs + training)
-   - 4 stat cards computed dynamically: Valid Certs, Expiring ≤30d (date calculation), Training This Month, Avg Training Hours
+   - 4 stat cards computed dynamically: Valid Certs, Expiring â‰¤30d (date calculation), Training This Month, Avg Training Hours
    - Tabs component (shadcn Tabs): Certifications | Training Sessions
    - Certifications tab: full table with empId, employee name + avatar, cert name, issued by, issue/expiry dates, status badge (Valid=green, Expiring=red, Expired=gray), edit/delete actions
    - Training tab: full table with title, site, trainer, date, duration, attendees, status badge (Scheduled=cyan, Completed=green, Cancelled=red), edit/delete actions
@@ -149,12 +149,12 @@ Completely rewrote 5 ERP module components with production-quality code and real
 
 3. **reports.tsx** (multi-API)
    - Grid of 6 report cards, each with "Generate" button that fetches real data:
-     - Manpower Report → /api/employees: count by site, trade, status in Dialog with summary
-     - Attendance Report → /api/attendance: present/absent/OT summary by date range
-     - Payroll Report → /api/payroll: gross/net/PF/ESI/TDS totals with currency formatting
-     - HSE Report → /api/incidents: incident counts by type/severity/status
-     - Equipment Report → /api/equipment: operational vs maintenance/breakdown breakdown
-     - Expense Report → /api/expenses: pending/approved/rejected with amounts
+     - Manpower Report â†’ /api/employees: count by site, trade, status in Dialog with summary
+     - Attendance Report â†’ /api/attendance: present/absent/OT summary by date range
+     - Payroll Report â†’ /api/payroll: gross/net/PF/ESI/TDS totals with currency formatting
+     - HSE Report â†’ /api/incidents: incident counts by type/severity/status
+     - Equipment Report â†’ /api/equipment: operational vs maintenance/breakdown breakdown
+     - Expense Report â†’ /api/expenses: pending/approved/rejected with amounts
    - Each "Generate" button shows a Dialog with computed summary tables and breakdowns
    - Date range inputs for filtering (applied to attendance report)
    - Loading spinner per button while generating
@@ -212,15 +212,15 @@ Completely rewrote 7 ERP module components with full interactive CRUD functional
    - POST/PATCH/DELETE to /api/leave
 
 2. **expenses.tsx** (`/api/expenses`, `/api/employees`)
-   - 4 stat cards: Pending Claims, Approved MTD (₹ formatted), Total Amount (₹ formatted), Rejected (all computed)
-   - Table: claimNo (amber), employee name with role, category with icon, amount (₹ format), project, date, status badge, actions
+   - 4 stat cards: Pending Claims, Approved MTD (â‚¹ formatted), Total Amount (â‚¹ formatted), Rejected (all computed)
+   - Table: claimNo (amber), employee name with role, category with icon, amount (â‚¹ format), project, date, status badge, actions
    - Create Expense dialog: employee dropdown, category (6 options: Travel & Accommodation/Tools & Consumables/Medical/Communication/Transport/Misc), amount, project, date
    - Approve/Reject buttons per pending row (PATCH /api/expenses with status)
    - Delete with confirmation
    - POST/PATCH/DELETE to /api/expenses
 
 3. **invoices.tsx** (`/api/invoices`)
-   - 4 stat cards: Total Invoices, Received YTD (₹Cr/₹L auto-format), Outstanding, Under Review (all computed)
+   - 4 stat cards: Total Invoices, Received YTD (â‚¹Cr/â‚¹L auto-format), Outstanding, Under Review (all computed)
    - Table: invNo (amber), client, project, amount, date, dueDate, status badge (Under Review=cyan, Paid=green, Partially Paid=amber, Overdue=red), edit/delete actions
    - Create Invoice dialog: client, project, amount, date, dueDate, status select
    - Edit dialog: pre-filled from selected invoice
@@ -228,17 +228,17 @@ Completely rewrote 7 ERP module components with full interactive CRUD functional
    - POST/PUT/DELETE to /api/invoices
 
 4. **purchases.tsx** (`/api/purchases`)
-   - 4 stat cards: Open POs, Total Value (₹ formatted), Pending GRN, Overdue (all computed)
-   - Table: poNo (amber), vendor, item, amount (₹ formatted), project, delivery, GRN badge (Awaited=amber, Received=green, Partial=amber), status badge, edit/delete actions
+   - 4 stat cards: Open POs, Total Value (â‚¹ formatted), Pending GRN, Overdue (all computed)
+   - Table: poNo (amber), vendor, item, amount (â‚¹ formatted), project, delivery, GRN badge (Awaited=amber, Received=green, Partial=amber), status badge, edit/delete actions
    - Create PO dialog: vendor, item, amount, project, delivery date, status (Open/Partial/Closed/Overdue)
    - Edit dialog: includes GRN status dropdown (Awaited/Received/Partial) and PO status
    - Delete with confirmation
    - POST/PUT/DELETE to /api/purchases
 
 5. **permits.tsx** (`/api/permits`)
-   - 4 stat cards: Active, Expiring Soon (≤48h computed), Expired, Total Created
+   - 4 stat cards: Active, Expiring Soon (â‰¤48h computed), Expired, Total Created
    - Alert banner: animated pulsing red banner for permits expiring within 48h with time-remaining labels
-   - Table: permitNo (amber), type with emoji (🔥Hot Work, 🔒LOTO, 🧗Height Work, 🕳️Confined Space, ⛏️Excavation, ⚡Electrical), location, issuedTo, expiry with countdown, status badge
+   - Table: permitNo (amber), type with emoji (ðŸ”¥Hot Work, ðŸ”’LOTO, ðŸ§—Height Work, ðŸ•³ï¸Confined Space, â›ï¸Excavation, âš¡Electrical), location, issuedTo, expiry with countdown, status badge
    - Expiring rows highlighted in red with time-remaining badges
    - Create Permit dialog: type, location, issuedTo, expiry (datetime-local), description, precautions, status
    - Edit dialog with all fields including status (Active/Draft/Expired/Revoked/Closed)
@@ -256,7 +256,7 @@ Completely rewrote 7 ERP module components with full interactive CRUD functional
 
 7. **recruitment.tsx** (`/api/recruitment`, `/api/sites`)
    - 4 stat cards: Open Positions, Total Applications (computed sum), Offers Sent (Filled count), Hired (Filled openings sum)
-   - Table: position, site, openings, applications count (cyan), priority badge (Urgent=red with ⚡ icon, High=amber, Medium=amber, Low=gray), status badge (Open=green, Shortlisting=cyan, Closed=gray, Filled=purple), edit/delete actions
+   - Table: position, site, openings, applications count (cyan), priority badge (Urgent=red with âš¡ icon, High=amber, Medium=amber, Low=gray), status badge (Open=green, Shortlisting=cyan, Closed=gray, Filled=purple), edit/delete actions
    - Create Job Opening dialog: position, site dropdown (from /api/sites), openings, priority (Urgent/High/Medium/Low), status
    - Edit dialog with all fields
    - Delete with confirmation
@@ -296,7 +296,7 @@ Work Log:
   - Reports: Generate reports from real API data
   - Settings: Real API persistence (no more fake save)
   - Dashboard: Dynamic alerts, clickable navigation
-- Fixed lint error: setState in effect → requestAnimationFrame
+- Fixed lint error: setState in effect â†’ requestAnimationFrame
 - Verified: All CRUD operations work (POST sites 201, POST employees 201, GET dashboard 200)
 
 Stage Summary:
@@ -387,7 +387,7 @@ Task: Fix "+ New" button not working in topbar
 
 Work Log:
 - Identified issue: `<button className="vc-btn-primary">+ New</button>` on line 186 of page.tsx had no onClick handler
-- Added `triggerCreate` (number) and `triggerCreateDialog()` to Zustand store (erp-store.ts) — increments counter when called
+- Added `triggerCreate` (number) and `triggerCreateDialog()` to Zustand store (erp-store.ts) â€” increments counter when called
 - Updated Topbar in page.tsx to: (a) destructure `triggerCreateDialog` from store, (b) call it on button click, (c) hide button on Dashboard/Reports/Settings (modules without create dialogs) via `NO_CREATE_MODULES` list
 - Added `useERPStore` import and `triggerCreate` listener to all 16 module components:
   - 15 standard modules: `useEffect(() => { if (triggerCreate > 0) setCreateOpen(true); }, [triggerCreate]);`
@@ -410,7 +410,7 @@ Replaced 3 placeholder stub components with fully interactive modules:
 
 1. **crm.tsx** (`/api/crm`)
    - 4 stat cards: Total Contacts (#f5a623), Leads (#f5a623), Proposals (#b388ff), Clients (#00e676) with pipeline value display
-   - Full pipeline table: Name (with status dot), Company, Designation, Email (with Mail icon), Phone (with Phone icon), Source badge (color-coded: Existing Client=green, Referral=purple, Industry Event=cyan, Website=amber, Cold Outreach=gray), Stage badge (Lead=amber, Qualification=cyan, Proposal=purple, Negotiation=amber, Client=green), Deal Value (₹ formatted with Cr/L/K auto-scaling), Last Contact date, Status badge (Active=green, Inactive=gray, Lost=red), edit/delete actions
+   - Full pipeline table: Name (with status dot), Company, Designation, Email (with Mail icon), Phone (with Phone icon), Source badge (color-coded: Existing Client=green, Referral=purple, Industry Event=cyan, Website=amber, Cold Outreach=gray), Stage badge (Lead=amber, Qualification=cyan, Proposal=purple, Negotiation=amber, Client=green), Deal Value (â‚¹ formatted with Cr/L/K auto-scaling), Last Contact date, Status badge (Active=green, Inactive=gray, Lost=red), edit/delete actions
    - Create Contact dialog: 10 fields in 2-column grid - name, company, designation, email, phone, source (5 options), stage (5 options), value, lastContact date, status, notes textarea
    - Edit dialog: pre-filled from selected contact with all fields editable
    - Delete dialog with confirmation
@@ -419,7 +419,7 @@ Replaced 3 placeholder stub components with fully interactive modules:
 2. **support.tsx** (`/api/support`)
    - 4 stat cards: Total Tickets (#f5a623), Open (#f5a623), In Progress (#00d4ff), Resolved (#00e676)
    - Tickets table: Ticket No (amber monospace, clickable to view), Title (clickable), Raised By (with User icon), Category (color-coded text), Priority badge (Low=gray, Medium=amber, High=red, Critical=red with animate-pulse), Status badge (Open=amber, In Progress=cyan, Resolved=green, Closed=gray), Assigned To, Created date
-   - Inline status actions: "Start" button (cyan) on Open tickets → PATCH to In Progress, "Resolve" button (green) on In Progress tickets → PATCH to Resolved
+   - Inline status actions: "Start" button (cyan) on Open tickets â†’ PATCH to In Progress, "Resolve" button (green) on In Progress tickets â†’ PATCH to Resolved
    - Create Ticket dialog: title, raisedBy, category (Technical/Finance/HR/Feature Request/General), priority (Low/Medium/High/Critical), assignedTo, description textarea
    - Edit dialog: includes Status field (Open/In Progress/Resolved/Closed)
    - View dialog: shows ticketNo, status/priority badges, title, raised by, category, assigned to, created date, description panel, resolution panel
@@ -459,7 +459,7 @@ Replaced 3 placeholder stub components with fully interactive modules:
 
 **API Route Fixes:**
 1. **inventory/route.ts** - Fixed POST/PUT/DELETE for movements: changed from `itemId` requirement to `itemCode`/`itemName` (matching Prisma schema). Removed edit/delete for movements (audit trail). Only items can be edited/deleted.
-2. **sales/route.ts** - Fixed POST for orders: changed from `customerId` + `items` array to flat fields (`customer`, `project`, `item`, `quantity`, `unitPrice`) matching Prisma schema. Auto-calculates `amount = quantity × unitPrice`. Auto-generates SO number (SO-XXXXX). PUT also recalculates amount when quantity/unitPrice changes.
+2. **sales/route.ts** - Fixed POST for orders: changed from `customerId` + `items` array to flat fields (`customer`, `project`, `item`, `quantity`, `unitPrice`) matching Prisma schema. Auto-calculates `amount = quantity Ã— unitPrice`. Auto-generates SO number (SO-XXXXX). PUT also recalculates amount when quantity/unitPrice changes.
 
 **Components Built:**
 
@@ -467,7 +467,7 @@ Replaced 3 placeholder stub components with fully interactive modules:
    - Tab switching: Departments | Designations (custom TabButton component)
    - 4 stat cards: Total Departments (#f5a623), Active (#00e676), Total Designations (#00d4ff), Employee Count (#a78bfa)
    - Departments tab: full table with Name, Head, Location (with MapPin icon), Employee Count (cyan), Status badge (Active=green, Inactive=gray), edit/delete actions
-   - Designations tab: full table with Title, Department (with Building2 icon), Level, Min Salary (₹), Max Salary (₹), Status badge, edit/delete actions
+   - Designations tab: full table with Title, Department (with Building2 icon), Level, Min Salary (â‚¹), Max Salary (â‚¹), Status badge, edit/delete actions
    - Create/Edit Department dialogs: name, head, location, status (Active/Inactive)
    - Create/Edit Designation dialogs: title, department (dropdown from live data), level (L1-L6), minSalary, maxSalary, status
    - Delete dialogs with confirmation for both types
@@ -477,7 +477,7 @@ Replaced 3 placeholder stub components with fully interactive modules:
 2. **inventory.tsx** (`/api/inventory`)
    - Tab switching: Items | Stock Movements
    - 4 stat cards: Total Items (#f5a623), In Stock (#00e676), Low Stock (#ff3d3d), Total Value (#00d4ff with Cr/L auto-format)
-   - Items tab: full table with Item Code (amber monospace), Name, Category, Unit, Current Stock (red if low), Min Stock, Unit Cost (₹), Warehouse (with icon), Status badge (In Stock=green, Low Stock=red, Out of Stock=gray), edit/delete actions. Low stock rows highlighted with red background tint.
+   - Items tab: full table with Item Code (amber monospace), Name, Category, Unit, Current Stock (red if low), Min Stock, Unit Cost (â‚¹), Warehouse (with icon), Status badge (In Stock=green, Low Stock=red, Out of Stock=gray), edit/delete actions. Low stock rows highlighted with red background tint.
    - Movements tab: audit trail table with Item Code (amber), Item Name, Type badge with icon (Inward=green+ArrowDown, Issue=amber+ArrowUp, Transfer=cyan+ArrowLeftRight), Quantity (cyan), From, To, Reference, Date, Remarks. No edit/delete (audit trail).
    - Create Item dialog: 10 fields - itemCode, name, category (6 options: Raw Materials, Consumables, Electrical, Safety, Mechanical, Civil), unit (8 options), currentStock, minStock, maxStock, unitCost, warehouse, status
    - Create Movement dialog: itemCode dropdown (from items), itemName auto-filled on change, type (Inward/Issue/Transfer), quantity, fromWarehouse, toWarehouse, reference, date, remarks
@@ -489,7 +489,7 @@ Replaced 3 placeholder stub components with fully interactive modules:
    - Customers tab - 4 stat cards: Total Customers (#f5a623), Active (#00e676), Total Orders (#00d4ff), Total Revenue (#a78bfa with Cr/L auto-format)
    - Customers tab table: Code (amber monospace), Name, Contact Person, Email, Phone, City, State, GST, Orders (cyan), Revenue (green with Cr/L), Status badge, edit/delete actions
    - Orders tab - 4 stat cards: Total Orders (#f5a623), In Progress (#00d4ff), Completed (#00e676), Total Value (#a78bfa)
-   - Orders tab table: SO No (amber monospace), Customer, Project, Item, Qty (cyan), Unit Price (₹), Amount (₹), Order Date, Delivery Date, Status badge (Pending=amber, In Progress=cyan, Completed=green, Cancelled=red), edit/delete actions
+   - Orders tab table: SO No (amber monospace), Customer, Project, Item, Qty (cyan), Unit Price (â‚¹), Amount (â‚¹), Order Date, Delivery Date, Status badge (Pending=amber, In Progress=cyan, Completed=green, Cancelled=red), edit/delete actions
    - Create Customer dialog: 9 fields - name, contactPerson, email, phone, gst, city, state, address, status
    - Create Order dialog: customer dropdown (active customers only), project, item, quantity, unitPrice, orderDate, deliveryDate, status
    - Edit/Delete dialogs for both customers and orders
@@ -543,18 +543,18 @@ Task: Fix left sidebar navigation not showing for Inventory, Sales, CRM, Support
 
 Work Log:
 - Analyzed screenshot: confirmed Inventory page showing with sidebar only displaying "Dashboard" link, no module context
-- Root cause: `resolveParent()` in erp-store.ts only checked EXPANDABLE_MODULES and PARENT_MAP — PAGE_MODULES like inventory/sales/crm resolved to 'dashboard' parent
+- Root cause: `resolveParent()` in erp-store.ts only checked EXPANDABLE_MODULES and PARENT_MAP â€” PAGE_MODULES like inventory/sales/crm resolved to 'dashboard' parent
 - Added `PAGE_MODULES` check to `resolveParent()` so standalone page modules return themselves as parent
 - Added `MAIN_MODULE_MAP` export for quick lookup of module icon/label
 - Rewrote Sidebar component with 3 navigation modes:
-  1. **Sub-nav mode**: parent is expandable (HRMS, Finance, etc.) → shows sibling sub-modules
-  2. **Page module mode**: active module is standalone page (Inventory, Sales, CRM, Support, Knowledgebase) → shows ← All Modules back button, module header, and the module highlighted as "Active"
-  3. **Dashboard mode**: grid overview → only shows "Dashboard" link
+  1. **Sub-nav mode**: parent is expandable (HRMS, Finance, etc.) â†’ shows sibling sub-modules
+  2. **Page module mode**: active module is standalone page (Inventory, Sales, CRM, Support, Knowledgebase) â†’ shows â† All Modules back button, module header, and the module highlighted as "Active"
+  3. **Dashboard mode**: grid overview â†’ only shows "Dashboard" link
 - Zero lint errors, server responding 200
 
 Stage Summary:
 - Left sidebar now properly shows context for all 5 standalone page modules
-- Navigation flow: Dashboard grid → Inventory → sidebar shows "← All Modules" + "INVENTORY" header + "📦 Inventory (Active)"
+- Navigation flow: Dashboard grid â†’ Inventory â†’ sidebar shows "â† All Modules" + "INVENTORY" header + "ðŸ“¦ Inventory (Active)"
 - Same pattern works for Sales, CRM, Support, Knowledgebase
 ---
 Task ID: 12
@@ -567,7 +567,7 @@ Work Log:
 - Created /src/components/erp/employee-analytics.tsx (full analytics dashboard)
 - Added 'employee-analytics' to ModuleId type in erp-store.ts
 - Added HR Dashboard as first item in HRMS sub-modules list (BarChart3 icon)
-- Added MODULE_CONFIG entry: { title: 'HR Dashboard', breadcrumb: 'HRMS › Employee Analytics' }
+- Added MODULE_CONFIG entry: { title: 'HR Dashboard', breadcrumb: 'HRMS â€º Employee Analytics' }
 - Added dynamic import in page.tsx + MODULE_COMPONENTS mapping
 - Added to NO_CREATE_MODULES list
 
@@ -599,7 +599,7 @@ Created 2 new files and updated 1 existing file for the Finance Dashboard module
 - Calculates 20+ KPIs: Total Revenue, AR Pending/Received/Overdue, AP Pending/Paid/Overdue, Bank Balance, Expenses, Payroll, PO Value, Budget Planned/Actual/Variance
 - Returns monthly trend data (last 6 months) with revenue, expenses, payroll, cashIn, cashOut
 - Returns AP summary, AR summary, budget items, bank accounts, and 20 recent journal entries
-- Helper function `parseIndianAmount()` to parse Indian format invoice amounts (e.g., "₹12,45,00,000")
+- Helper function `parseIndianAmount()` to parse Indian format invoice amounts (e.g., "â‚¹12,45,00,000")
 - Uses `export const dynamic = 'force-dynamic'` pattern
 
 **File 2: `/src/components/erp/finance-dashboard.tsx` (550+ lines)**
@@ -630,8 +630,8 @@ Created 2 new files and updated 1 existing file for the Finance Dashboard module
 **Verification:**
 - Lint: 0 errors, 1 pre-existing warning (font loading - non-blocking)
 - API: GET /api/finance-dashboard returns 200 with all data:
-  - Total Revenue: ₹8.08 Cr, AR Pending: ₹27.76 Cr, AP Pending: ₹2.22 Cr
-  - Bank Balance: ₹1.12 Cr, Budget Variance: ₹14.20 L (under budget)
+  - Total Revenue: â‚¹8.08 Cr, AR Pending: â‚¹27.76 Cr, AP Pending: â‚¹2.22 Cr
+  - Bank Balance: â‚¹1.12 Cr, Budget Variance: â‚¹14.20 L (under budget)
   - 6 monthly trend data points, 8 budget items, 4 bank accounts, 10 journal entries
 - Main page renders without errors
 - finance-dashboard already registered in erp-store.ts (ModuleId, SUB_MODULES, MODULE_CONFIG, NO_CREATE_MODULES in page.tsx)
@@ -646,7 +646,7 @@ Work Log:
 - Verified main dashboard.tsx is UNCHANGED (proper overall ERP dashboard)
 - Changed label from "HR Dashboard" to "Employee Analytics" in erp-store.ts (SUB_MODULES + MODULE_CONFIG)
 - Fixed critical payroll month format bug: DB stores "2026-04" but component expected "Apr 2026"
-  - Added normalizeMonth() function to convert "YYYY-MM" → "Mon YYYY" format
+  - Added normalizeMonth() function to convert "YYYY-MM" â†’ "Mon YYYY" format
   - Payroll trend chart now correctly displays gross pay data
 - Updated Attendance interface to include nested employee data from API
 ---
@@ -660,11 +660,11 @@ Work Log:
 - Payroll kept in Finance sub-modules too (shared across both)
 - Fixed PARENT_MAP building: changed to first-parent-wins logic so payroll resolves to HRMS
 - Updated payroll MODULE_CONFIG breadcrumb from "Finance" to "HRMS"
-- Added timesheet MODULE_CONFIG entry: { title: 'Timesheet', breadcrumb: 'HRMS › Weekly Timesheet' }
-- Created /src/components/erp/timesheet.tsx — full weekly timesheet grid component:
+- Added timesheet MODULE_CONFIG entry: { title: 'Timesheet', breadcrumb: 'HRMS â€º Weekly Timesheet' }
+- Created /src/components/erp/timesheet.tsx â€” full weekly timesheet grid component:
   - Week navigator (prev/next, current week badge)
   - 4 stat cards: Present Entries, Absent, On Leave, Total OT Hours
-  - Full timesheet grid: employees × 7 days (Mon-Sun)
+  - Full timesheet grid: employees Ã— 7 days (Mon-Sun)
   - Per-cell: time in/out, hours calculated, OT hours, status badges
   - Row totals: Total hours, OT hours, Days present
   - Site filter dropdown
@@ -683,7 +683,7 @@ Stage Summary:
 
 Stage Summary:
 - Employee Analytics Dashboard is a SEPARATE component from main Dashboard (unchanged)
-- Navigation: HRMS (grid) → Employee Analytics card → Full analytics page
+- Navigation: HRMS (grid) â†’ Employee Analytics card â†’ Full analytics page
 - Label changed from "HR Dashboard" to "Employee Analytics"
 - Payroll trend chart now shows real data (month format fixed)
 - All 7 API endpoints returning 200 with real data
@@ -724,7 +724,7 @@ Created 4 files with full CRUD functionality for Finance module's Journal Entrie
    - Account dropdown with 22 pre-defined accounts (Cash, Bank-HDFC, Bank-SBI, Salary & Wages, Rent, Sales Revenue, etc.)
    - Create/Edit dialogs: date, account (select), debit, credit (number inputs), description, reference, status
    - Delete AlertDialog with confirmation
-   - Currency formatting: ₹ Cr/L auto-scaling, Share Tech Mono for numbers
+   - Currency formatting: â‚¹ Cr/L auto-scaling, Share Tech Mono for numbers
    - triggerCreate pattern from useERPStore
 
 4. **`bank-cash.tsx`** (380+ lines)
@@ -761,32 +761,32 @@ Create Ledger Management, Accounts Payable, and Accounts Receivable components +
 Created 6 files (3 API routes + 3 frontend components) for the Finance module:
 
 **API Routes Created:**
-1. `/api/ledger/route.ts` — Full CRUD (GET/POST/PUT/DELETE) for LedgerAccount model. Auto-generates accountCode (ACC-001 format). Validates required fields (name, group, type). Converts balance to float on PUT. Error handling with P2002 duplicate detection.
-2. `/api/accounts-payable/route.ts` — Full CRUD for AccountsPayable model. Auto-generates billNo (AP-001 format). Allows setting paidDate and status to 'Paid' on update. Converts amount to float.
-3. `/api/accounts-receivable/route.ts` — Full CRUD for AccountsReceivable model. Auto-generates invoiceNo (AR-001 format). Allows setting receivedDate and status to 'Received' on update.
+1. `/api/ledger/route.ts` â€” Full CRUD (GET/POST/PUT/DELETE) for LedgerAccount model. Auto-generates accountCode (ACC-001 format). Validates required fields (name, group, type). Converts balance to float on PUT. Error handling with P2002 duplicate detection.
+2. `/api/accounts-payable/route.ts` â€” Full CRUD for AccountsPayable model. Auto-generates billNo (AP-001 format). Allows setting paidDate and status to 'Paid' on update. Converts amount to float.
+3. `/api/accounts-receivable/route.ts` â€” Full CRUD for AccountsReceivable model. Auto-generates invoiceNo (AR-001 format). Allows setting receivedDate and status to 'Received' on update.
 
 **Components Created:**
 
-1. **ledger.tsx** — Chart of Accounts management
+1. **ledger.tsx** â€” Chart of Accounts management
    - 4 stat cards: Total Accounts, Active Accounts, Total Debit Balance, Total Credit Balance
-   - Table with columns: Code (amber monospace), Name, Group (color-coded badge), Type (color-coded badge), Balance (₹ formatted), Status badge (Active=green, Inactive=gray, Frozen=blue)
+   - Table with columns: Code (amber monospace), Name, Group (color-coded badge), Type (color-coded badge), Balance (â‚¹ formatted), Status badge (Active=green, Inactive=gray, Frozen=blue)
    - Create dialog: Account Name, Group dropdown (7 options: Current Assets, Current Liabilities, Fixed Assets, Equity, Income, Direct Costs, Overheads), Type dropdown (5 options: Asset, Liability, Equity, Revenue, Expense), Initial Balance, Status
    - Edit dialog with all fields pre-filled
    - Delete with AlertDialog confirmation
    - Loading skeleton, empty state, triggerCreate pattern
 
-2. **accounts-payable.tsx** — Accounts Payable management
+2. **accounts-payable.tsx** â€” Accounts Payable management
    - 4 stat cards: Total Bills, Total Payable, Overdue Amount, Paid This Month (computed from data with current month filtering)
-   - Table: Bill No (amber), Vendor, Description (truncated), Amount (₹ formatted), Due Date, Paid Date, Status badge, Actions
+   - Table: Bill No (amber), Vendor, Description (truncated), Amount (â‚¹ formatted), Due Date, Paid Date, Status badge, Actions
    - Overdue rows highlighted with red background tint
    - Quick "Mark as Paid" action button on Pending/Approved bills (inline status change)
    - Create dialog: Vendor, Description, Amount, Due Date
    - Edit dialog: all fields + Status dropdown (6 options) + conditional Paid Date field
    - Status badges: Pending=amber, Approved=cyan, Paid=green, Overdue=red, Partially Paid=purple, Cancelled=gray
 
-3. **accounts-receivable.tsx** — Accounts Receivable management
+3. **accounts-receivable.tsx** â€” Accounts Receivable management
    - 4 stat cards: Total Invoices, Total Receivable, Overdue, Collected This Month (current month filtering)
-   - Table: Invoice No (amber), Client, Description, Amount (₹ formatted), Due Date, Received Date, Status, Actions
+   - Table: Invoice No (amber), Client, Description, Amount (â‚¹ formatted), Due Date, Received Date, Status, Actions
    - Overdue rows highlighted with red background tint
    - Quick "Mark as Received" action button on Pending/Approved invoices
    - Create dialog: Client, Description, Amount, Due Date
@@ -831,7 +831,7 @@ Created all 5 files following the exact invoices.tsx CRUD pattern and VoltCore d
 
 3. **`/src/components/erp/taxation.tsx`** (~430 lines)
    - 4 stat cards: Total Tax Liability, Paid YTD, Pending Amount, Overdue (all computed from data)
-   - Full table: Tax Type, Period, Amount (₹ formatted with Cr/L), Due Date, Paid Date, Status, Actions
+   - Full table: Tax Type, Period, Amount (â‚¹ formatted with Cr/L), Due Date, Paid Date, Status, Actions
    - Status badges with icons: Paid (green + CheckCircle2), Pending (amber + Clock), Overdue (red + AlertTriangle), Filed (cyan + FileWarning)
    - Overdue rows highlighted with red background tint
    - "X days left" labels on pending items due within 7 days
@@ -840,9 +840,9 @@ Created all 5 files following the exact invoices.tsx CRUD pattern and VoltCore d
    - Delete dialog: AlertDialog with confirmation showing tax type and period
    - Calendar-style upcoming due dates sidebar panel:
      - Sorted by due date (soonest first)
-     - Cards with days-remaining badges (red for overdue, amber for ≤7 days, cyan for normal)
+     - Cards with days-remaining badges (red for overdue, amber for â‰¤7 days, cyan for normal)
      - Tax type, period, amount, and due date per card
-   - Compliance summary: 2×2 grid showing Paid/Filed/Pending/Overdue counts
+   - Compliance summary: 2Ã—2 grid showing Paid/Filed/Pending/Overdue counts
    - Tax type breakdown: list of GST/TDS/PF/ESI/Prof Tax/Income Tax with totals
    - Auto-seeds 13 records on first empty load (GST quarterly, TDS quarterly, PF, ESI, Prof Tax, Income Tax)
    - triggerCreate integration from Zustand store
@@ -851,7 +851,7 @@ Created all 5 files following the exact invoices.tsx CRUD pattern and VoltCore d
    - 4 stat cards: Total Budget, Total Spent, Remaining, Variance % (color changes: green <80%, amber 80-100%, red >100%)
    - Overall Budget Utilization bar: full-width progress bar with percentage label and color coding
    - Legend showing Under 80% / 80-100% / Over 100% thresholds
-   - Full table: Category, Description, Planned (₹), Actual (₹, green if under, red if over), Variance (±₹), % Used (with progress bar), Period, Status, Actions
+   - Full table: Category, Description, Planned (â‚¹), Actual (â‚¹, green if under, red if over), Variance (Â±â‚¹), % Used (with progress bar), Period, Status, Actions
    - Visual progress bar per row: BudgetBar component (green <80%, amber 80-100%, red >100%)
    - Status badges: On Track (green), Over Budget (red), Under Budget (cyan), Completed (gray)
    - Over-budget rows highlighted with red background tint
@@ -871,16 +871,16 @@ Created all 5 files following the exact invoices.tsx CRUD pattern and VoltCore d
    - 8 report sections in vc-panel with vc-panel-header:
 
      1. **Balance Sheet Summary**: 3 cards (Total Assets green, Total Liabilities red, Equity cyan) + Net Worth progress bar
-     2. **Income Statement**: Horizontal BarChart (recharts) — Planned vs Actual by budget category
-     3. **Cash Flow Trend**: LineChart (recharts) — Inflow vs Outflow by month (12 months)
-     4. **Budget Performance**: Horizontal BarChart — Planned vs Actual by category (top 8)
+     2. **Income Statement**: Horizontal BarChart (recharts) â€” Planned vs Actual by budget category
+     3. **Cash Flow Trend**: LineChart (recharts) â€” Inflow vs Outflow by month (12 months)
+     4. **Budget Performance**: Horizontal BarChart â€” Planned vs Actual by category (top 8)
      5. **Receivables & Payables Aging**: Donut PieChart with 4 aging buckets (0-30d, 31-60d, 61-90d, 90+ days) + total outstanding
      6. **Tax Compliance Overview**: Donut PieChart with 4 status buckets + paid/pending summary cards + overdue alert
      7. **Budget Utilization by Category**: Progress bars per category with planned/actual/pct
      8. **Tax Summary by Type**: Table with Total/Paid/Pending/Compliance % per tax type + totals row
 
    - Custom Recharts tooltip (CustomTooltip) with dark theme styling
-   - Indian currency formatting (₹ Lakhs/Crores auto-scaling)
+   - Indian currency formatting (â‚¹ Lakhs/Crores auto-scaling)
    - Loading skeleton for initial load
    - "No data" fallback messages when APIs return empty arrays
    - Uses recharts: PieChart, BarChart, LineChart, Bar, Line, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -934,7 +934,7 @@ Diagnosed and fixed 3 issues in `/src/components/erp/finance-dashboard.tsx`:
 1. **Unused `Legend` import from recharts** (line 10)
    - `Legend` was imported but never used anywhere in the component
    - Removed from the import statement to eliminate potential build warnings/errors
-   - Changed: `import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'` → removed `Legend`
+   - Changed: `import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'` â†’ removed `Legend`
 
 2. **Tooltip `formatter` type mismatch with recharts v2.15.4** (lines 211, 439, 494)
    - Recharts v2 Tooltip `formatter` callback expects `(value: ValueType, name: NameType, ...)` where `ValueType = string | number | Array<string | number>` and `NameType = string | number`
@@ -944,23 +944,23 @@ Diagnosed and fixed 3 issues in `/src/components/erp/finance-dashboard.tsx`:
 
 3. **CRITICAL BUG: Wrong data source for AP values in AR/AP Donut Chart** (lines 319-320)
    - `arApData` array for "Receivables vs Payables" donut chart referenced `arSummary.paid` and `arSummary.pending` for AP data
-   - However, the API returns `arSummary` with `{ pending, received, overdue, total }` — no `paid` field
-   - And `apSummary` with `{ pending, paid, overdue, total }` — no `received` field
+   - However, the API returns `arSummary` with `{ pending, received, overdue, total }` â€” no `paid` field
+   - And `apSummary` with `{ pending, paid, overdue, total }` â€” no `received` field
    - This meant `arSummary.paid` was `undefined` (showing as 0 in chart) and AP Pending used AR's pending value
-   - Fixed: Changed `arSummary.paid` → `apSummary.paid` and `arSummary.pending` → `apSummary.pending`
+   - Fixed: Changed `arSummary.paid` â†’ `apSummary.paid` and `arSummary.pending` â†’ `apSummary.pending`
 
 **Verification:**
 - Ran ESLint: 0 errors (1 pre-existing font warning in layout.tsx)
 - Cleared `.next` cache and started dev server
 - Tested API: `GET /api/finance-dashboard` returns HTTP 200 with valid data
-  - 20 KPI keys populated (totalRevenue: ₹80,750,000, totalBankBalance: ₹11,175,000)
-  - AR: pending ₹277,560,000, received ₹80,750,000
-  - AP: pending ₹22,160,000, paid ₹6,550,000 (now correctly referenced from apSummary)
+  - 20 KPI keys populated (totalRevenue: â‚¹80,750,000, totalBankBalance: â‚¹11,175,000)
+  - AR: pending â‚¹277,560,000, received â‚¹80,750,000
+  - AP: pending â‚¹22,160,000, paid â‚¹6,550,000 (now correctly referenced from apSummary)
   - 6 months of trend data, 8 budget items, 6 bank accounts, 14 journal entries
 - Navigation verified: Finance sub-modules list includes Dashboard with correct icon mapping
 - Dynamic import path confirmed: `@/components/erp/finance-dashboard` with `ssr: false`
 - MODULE_COMPONENTS mapping confirmed: `'finance-dashboard': FinanceDashboard`
-- MODULE_CONFIG confirmed: `{ title: 'Finance Dashboard', breadcrumb: 'Finance › Overview' }`
+- MODULE_CONFIG confirmed: `{ title: 'Finance Dashboard', breadcrumb: 'Finance â€º Overview' }`
 
 Note: Dev server process dies in sandbox when compiling the full page (30+ dynamic imports exceed memory limits), but individual API routes compile and serve correctly.
 ---
@@ -997,7 +997,7 @@ Work Log:
 - Confirmed db client already configured at src/lib/db.ts
 - Pushed schema to ensure database in sync
 - Created prisma/seed.ts with comprehensive seed data for Indian construction company
-- Fixed Prisma client model name: kbArticle → kBArticle for KBArticle model
+- Fixed Prisma client model name: kbArticle â†’ kBArticle for KBArticle model
 - Removed skipDuplicates option (not supported in SQLite with this Prisma version)
 - Added clearAll() function to wipe existing data before seeding
 - Added "db:seed" script to package.json
@@ -1013,7 +1013,7 @@ Seed Data Summary:
 - Attendance: 870 records (2 months, all active employees, realistic patterns)
 - Leave Requests: 20 records (various types and statuses)
 - Shift Schedules: 28 records (2 weeks, 15 workers)
-- Payroll: 174 records (30 employees × 6 months, realistic Indian salary structures)
+- Payroll: 174 records (30 employees Ã— 6 months, realistic Indian salary structures)
 - Expenses: 25 records (various categories and amounts)
 - Certifications: 10 records (PMP, NEBOSH, ITI, CA, etc.)
 - Work Permits: 8 records (Hot Work, Confined Space, Height, Electrical, etc.)
@@ -1023,7 +1023,7 @@ Seed Data Summary:
 - Job Openings: 7 records (various positions and priorities)
 - Training Sessions: 8 records (safety, quality, ERP, equipment training)
 - Purchase Orders: 15 records (various vendors and items)
-- Invoices: 15 records (Indian format amounts: ₹12,45,00,000)
+- Invoices: 15 records (Indian format amounts: â‚¹12,45,00,000)
 - Inventory Items: 20 records (cement, steel, cables, safety equipment, etc.)
 - Stock Movements: 35 records (inward, outward, transfers)
 - Customers: 8 records (MMRDA, DLF, Infosys, NHAI, etc.)
@@ -1033,11 +1033,11 @@ Seed Data Summary:
 - KB Articles: 8 records (HR, Finance, Safety, Procurement guides)
 - Ledger Accounts: 22 records (Assets, Liabilities, Equity, Income, Expenses)
 - Bank Accounts: 4 records (SBI, HDFC, ICICI, Bank of Baroda)
-- Accounts Payable: 12 records (₹3.96Cr pending, ₹46.8L overdue)
-- Accounts Receivable: 12 records (₹7.78Cr pending, ₹4.2Cr received)
+- Accounts Payable: 12 records (â‚¹3.96Cr pending, â‚¹46.8L overdue)
+- Accounts Receivable: 12 records (â‚¹7.78Cr pending, â‚¹4.2Cr received)
 - Journal Entries: 25 records (3 months of double-entry transactions)
 - Tax Records: 10 records (GST, TDS, PF, ESI, Professional Tax)
-- Budget Items: 12 records (₹42Cr planned, ₹32.3Cr actual with variances)
+- Budget Items: 12 records (â‚¹42Cr planned, â‚¹32.3Cr actual with variances)
 
 Total: ~1,500+ records across 34 database tables
 
@@ -1058,14 +1058,14 @@ Created `/home/z/my-project/database/voltcore_erp_mysql.sql` - a complete MySQL 
 - **Database**: `voltcore_erp` with `utf8mb4` charset and `utf8mb4_unicode_ci` collation
 - **34 CREATE TABLE statements** with InnoDB engine, DATETIME(3) millisecond precision, proper defaults
 - **240 mock data rows** across all 34 tables with realistic Indian power plant EPC contractor data
-- **Foreign key constraints** on Attendance, LeaveRequest, Payroll, Expense (→Employee.id) with ON DELETE CASCADE
+- **Foreign key constraints** on Attendance, LeaveRequest, Payroll, Expense (â†’Employee.id) with ON DELETE CASCADE
 - **Indexes** on foreign key columns and frequently queried fields
 - **25-char hex string IDs** matching Prisma cuid format (e.g., 'cl...')
 - **Well-commented structure** with section headers for every table
 
 Data Context: VoltCore Engineering Pvt Ltd - Indian power plant EPC contractor
 - Sites across Gujarat, Maharashtra, Tamil Nadu, Rajasthan, Madhya Pradesh, Karnataka
-- Projects: EPC, O&M, BoP type power plant construction (₹125 Cr to ₹850 Cr)
+- Projects: EPC, O&M, BoP type power plant construction (â‚¹125 Cr to â‚¹850 Cr)
 - 15 employees (Staff + Contract, trades: Electrician, Welder, Fitter, Rigger, Engineer, Safety Officer, etc.)
 - Financial data in Indian Rupees with realistic corporate clients (NTPC, Tata Power, Adani, RVUNL, NLC)
 - Full double-entry bookkeeping in Journal Entries (15 entries with debit/credit pairs)
@@ -1081,8 +1081,8 @@ Task: Create MySQL-compatible mock database script for VoltCore ERP
 Work Log:
 - Analyzed complete Prisma schema (34 models) covering all ERP modules
 - Created `/home/z/my-project/database/voltcore_erp_mysql.sql` (1,056 lines, 96KB)
-- Converted all Prisma types to MySQL equivalents: String→VARCHAR(255), Float→DOUBLE, Int→INT, DateTime→DATETIME(3), TEXT for long content
-- Added proper foreign key constraints (Attendance, LeaveRequest, Payroll, Expense → Employee) with ON DELETE CASCADE
+- Converted all Prisma types to MySQL equivalents: Stringâ†’VARCHAR(255), Floatâ†’DOUBLE, Intâ†’INT, DateTimeâ†’DATETIME(3), TEXT for long content
+- Added proper foreign key constraints (Attendance, LeaveRequest, Payroll, Expense â†’ Employee) with ON DELETE CASCADE
 - Added indexes on FK columns and frequently queried fields
 - Created realistic Indian power plant contractor mock data (200+ records across 34 tables)
 - Data context: VoltCore Engineering Pvt Ltd, power plant EPC/O&M across Gujarat, Maharashtra, Tamil Nadu, Rajasthan, MP, Karnataka
@@ -1100,10 +1100,10 @@ Agent: Main Agent
 Task: Fix "All projects not working" - Projects module navigation broken
 
 Work Log:
-- Investigated: Projects component fetches /api/projects → API returns 200 with 8 project records
+- Investigated: Projects component fetches /api/projects â†’ API returns 200 with 8 project records
 - Root cause found: In erp-store.ts, the Projects sub-module "All Projects" had `id: 'projects'` which is the SAME as the parent module ID
-- When user clicks "Projects" from main grid → SubModuleGrid renders (correct)
-- When user clicks "All Projects" from sub-grid → setActiveModule('projects') is called but activeModule is already 'projects' → NO state change → nothing renders (BUG)
+- When user clicks "Projects" from main grid â†’ SubModuleGrid renders (correct)
+- When user clicks "All Projects" from sub-grid â†’ setActiveModule('projects') is called but activeModule is already 'projects' â†’ NO state change â†’ nothing renders (BUG)
 - Fixed erp-store.ts: Changed sub-module id from 'projects' to 'project-list', added to ModuleId type, added MODULE_CONFIG entry
 - Fixed page.tsx: Added 'project-list': Projects to MODULE_COMPONENTS mapping
 - Also fixed Inventory POST bug: Changed discriminator field name from 'type' to 'recordType' to avoid collision with StockMovement.type field
@@ -1125,31 +1125,31 @@ Fix two issues with the Projects module: (1) contractValue field in seed data st
 
 ### Work Summary
 
-**Issue 1 — contractValue NaN:**
-- Root cause: `prisma/seed.ts` stored contractValue as formatted strings like `'₹2,450,00,00,000'` instead of plain numbers. The `formatCurrency()` in `projects.tsx` calls `parseFloat()` on these strings, returning NaN.
-- Fix: Updated all 8 project entries in `seedProjects()` to store contractValue as plain numeric strings in Lakhs (e.g., `"2450"` for ₹2,450 Crore, `"185"` for ₹185 Lakhs). The `formatCurrency()` function correctly handles these: values ≥100 display as `₹X,XXCr`, values <100 display as `₹XL`.
-- The `totalContract` stat computation (`projects.reduce((sum, p) => sum + (parseFloat(p.contractValue) || 0), 0)`) now works correctly, producing `₹6,625Cr` for all 8 projects.
+**Issue 1 â€” contractValue NaN:**
+- Root cause: `prisma/seed.ts` stored contractValue as formatted strings like `'â‚¹2,450,00,00,000'` instead of plain numbers. The `formatCurrency()` in `projects.tsx` calls `parseFloat()` on these strings, returning NaN.
+- Fix: Updated all 8 project entries in `seedProjects()` to store contractValue as plain numeric strings in Lakhs (e.g., `"2450"` for â‚¹2,450 Crore, `"185"` for â‚¹185 Lakhs). The `formatCurrency()` function correctly handles these: values â‰¥100 display as `â‚¹X,XXCr`, values <100 display as `â‚¹XL`.
+- The `totalContract` stat computation (`projects.reduce((sum, p) => sum + (parseFloat(p.contractValue) || 0), 0)`) now works correctly, producing `â‚¹6,625Cr` for all 8 projects.
 
-**Issue 1b — Project types:**
+**Issue 1b â€” Project types:**
 - Root cause: Seed data used types like `'Infrastructure'`, `'Residential'`, `'Commercial'`, `'Industrial'`, `'Energy'` which don't match the form dropdown options.
 - Fix: Updated all project types to match valid options: Thermal, Solar, Transmission, Substation, Maintenance. Also updated project names and clients to be plant/power-industry relevant (e.g., "Mumbai Thermal Plant 500MW" with client "NTPC Limited").
 
-**Issue 1c — Status values:**
+**Issue 1c â€” Status values:**
 - Root cause: Seed data had `'Slight Delay'` and `'On Hold'` which don't match frontend status badge options.
-- Fix: Changed `'Slight Delay'` → `'Delayed'` (PRJ-004) and `'On Hold'` → `'At Risk'` (PRJ-006). Also changed PRJ-008 from `'Completed'` to `'Near Done'` (92% progress is more accurate).
+- Fix: Changed `'Slight Delay'` â†’ `'Delayed'` (PRJ-004) and `'On Hold'` â†’ `'At Risk'` (PRJ-006). Also changed PRJ-008 from `'Completed'` to `'Near Done'` (92% progress is more accurate).
 
-**Issue 2 — formatCurrency and totalContract verification:**
-- `formatCurrency("2450")` → `parseFloat("2450")` = 2450 → `₹2,450Cr` ✓
-- `formatCurrency("185")` → `parseFloat("185")` = 185 → `₹185Cr` ✓
-- `totalContract` = 2450+890+560+1200+780+340+220+185 = 6625 → `₹6,625Cr` ✓
-- No changes needed in `projects.tsx` — the existing code handles numeric strings correctly.
+**Issue 2 â€” formatCurrency and totalContract verification:**
+- `formatCurrency("2450")` â†’ `parseFloat("2450")` = 2450 â†’ `â‚¹2,450Cr` âœ“
+- `formatCurrency("185")` â†’ `parseFloat("185")` = 185 â†’ `â‚¹185Cr` âœ“
+- `totalContract` = 2450+890+560+1200+780+340+220+185 = 6625 â†’ `â‚¹6,625Cr` âœ“
+- No changes needed in `projects.tsx` â€” the existing code handles numeric strings correctly.
 
 **Additional work:**
 - Created API route at `/src/app/api/sync/seed/route.ts` (POST) that invokes the seed script via `execSync` for database re-seeding.
 
 **Files modified:**
-1. `prisma/seed.ts` — Updated `seedProjects()` data with fixed contractValue, type, status, and plant-relevant names/clients
-2. `src/app/api/sync/seed/route.ts` — NEW: Seed API endpoint
+1. `prisma/seed.ts` â€” Updated `seedProjects()` data with fixed contractValue, type, status, and plant-relevant names/clients
+2. `src/app/api/sync/seed/route.ts` â€” NEW: Seed API endpoint
 
 **Verification:**
 - `npm run lint`: 0 errors, 1 pre-existing warning (font loading)
@@ -1185,7 +1185,7 @@ Task: Fix all projects not working - restore VoltCore ERP
 
 Work Log:
 - Diagnosed: Dev server not running, .config file blocking Prisma generate
-- Fixed: Moved .config (JSON file) to .config_backup.json — Prisma was trying to use it as a directory
+- Fixed: Moved .config (JSON file) to .config_backup.json â€” Prisma was trying to use it as a directory
 - Generated Prisma Client v6.19.2 successfully
 - Verified Prisma schema in sync with SQLite database (29 models)
 - Seeded database with comprehensive Indian power plant contractor data:
@@ -1212,24 +1212,24 @@ Stage Summary:
 ---
 Task ID: 13
 Agent: Main Agent
-Task: Fix "All employee, department data vanished" — server crash preventing data display
+Task: Fix "All employee, department data vanished" â€” server crash preventing data display
 
 Work Log:
 - Investigated: Database has 30 employees, 10 departments, 8 sites, 8 projects (data NOT missing)
 - Root cause: Next.js 16 Turbopack dev server crashing silently during/after page compilation
-- The full page.tsx had 35+ `next/dynamic()` imports causing OOM/crash — module-registry.tsx fix was lost
+- The full page.tsx had 35+ `next/dynamic()` imports causing OOM/crash â€” module-registry.tsx fix was lost
 - Recreated module-registry.tsx with runtime dynamic imports (useEffect-based lazy loading)
 - Split page.tsx (300+ lines) into thin wrapper + erp-layout.tsx to reduce compilation cost
-- Discovered `bun` runtime was causing additional crashes — switched to `npx next dev` with NODE_OPTIONS='--max-old-space-size=4096'
+- Discovered `bun` runtime was causing additional crashes â€” switched to `npx next dev` with NODE_OPTIONS='--max-old-space-size=4096'
 - Created serve.sh with automatic route warmup (pre-compiles all 34 API routes sequentially)
 - After warmup, all routes serve from cache in <15ms, server is stable
 
 Stage Summary:
-- Employee data: 30 records ✅
-- Department data: 10 departments, 15 designations ✅
-- Sites: 8, Projects: 8, Payroll: 174, Inventory: 20 items + 35 movements ✅
-- Page loads: HTTP 200 ✅
-- Server stability: Stable with pre-compiled cache ✅
+- Employee data: 30 records âœ…
+- Department data: 10 departments, 15 designations âœ…
+- Sites: 8, Projects: 8, Payroll: 174, Inventory: 20 items + 35 movements âœ…
+- Page loads: HTTP 200 âœ…
+- Server stability: Stable with pre-compiled cache âœ…
 - Files modified: page.tsx (thin wrapper), erp-layout.tsx (new), module-registry.tsx (rewritten), serve.sh (new warmup script)
 ---
 Task ID: 3b
@@ -1237,7 +1237,7 @@ Agent: Main Agent
 Task: Fix Monthly Payroll Trend chart showing all zeros in Employee Analytics
 
 Work Log:
-- Diagnosed: payrollTrend generation used `new Date()` to compute "last 6 months from now", but seed data only has payroll for Jan-Jun 2025 — all lookups missed, resulting in all-zero bars
+- Diagnosed: payrollTrend generation used `new Date()` to compute "last 6 months from now", but seed data only has payroll for Jan-Jun 2025 â€” all lookups missed, resulting in all-zero bars
 - Replaced the `for (let i = 5; i >= 0; i--)` loop (lines 389-400) in employee-analytics.tsx with new logic:
   - Collects sorted month keys from `payrollByMonth` (chronological sort by year then month index)
   - Takes last 6 (or fewer) entries via `slice(-6)`
@@ -1267,7 +1267,7 @@ Stage Summary:
 
 ---
 
-## Task #4 — Add Charts to Reports Page
+## Task #4 â€” Add Charts to Reports Page
 
 **Date:** 2026-04-08 16:23 UTC
 
@@ -1277,12 +1277,12 @@ Added interactive recharts bar/pie charts to all 6 report types in the VoltCore 
 ### Changes
 - Added recharts imports: `BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie`
 - Added `CHART_COLORS` palette constant (8 colors)
-- **Manpower Report**: Vertical BarChart — headcount by site (after "By Status" section)
-- **Attendance Report**: Horizontal BarChart — Present/Absent/On Leave (after "Total OT Hours")
-- **Payroll Report**: Vertical BarChart — Gross/Net/PF/ESI/TDS with ₹ formatter (after stat grid)
-- **HSE Report**: Vertical BarChart — Incidents by type (after "By Type" list)
-- **Equipment Report**: Donut PieChart — Operational/Maintenance/Breakdown distribution (after stat grid)
-- **Expenses Report**: Vertical BarChart — Pending/Approved/Total amounts with ₹ formatter (after amount list)
+- **Manpower Report**: Vertical BarChart â€” headcount by site (after "By Status" section)
+- **Attendance Report**: Horizontal BarChart â€” Present/Absent/On Leave (after "Total OT Hours")
+- **Payroll Report**: Vertical BarChart â€” Gross/Net/PF/ESI/TDS with â‚¹ formatter (after stat grid)
+- **HSE Report**: Vertical BarChart â€” Incidents by type (after "By Type" list)
+- **Equipment Report**: Donut PieChart â€” Operational/Maintenance/Breakdown distribution (after stat grid)
+- **Expenses Report**: Vertical BarChart â€” Pending/Approved/Total amounts with â‚¹ formatter (after amount list)
 
 ### Files Modified
 - `src/components/erp/reports.tsx`
@@ -1298,7 +1298,7 @@ Task: Fix graph bars not visible across all dashboard/report charts
 Work Log:
 - Investigated: All chart components use recharts (BarChart, PieChart, LineChart)
 - Found DB has plenty of data (30 employees, 174 payroll, 12 budget items, etc.)
-- Root cause: finance-dashboard API generated monthly trends for "last 6 months from now" (Nov 2025-Apr 2026), but seed data months are Jan-Jun 2025 — no overlap = all zeros
+- Root cause: finance-dashboard API generated monthly trends for "last 6 months from now" (Nov 2025-Apr 2026), but seed data months are Jan-Jun 2025 â€” no overlap = all zeros
 - Fixed finance-dashboard API: Changed trend generation to detect actual data months instead of computing from current date
 - Fixed employee-analytics: Changed payroll trend to use actual payroll month data instead of current-date-based months
 - Added recharts bar/pie charts to all 6 report types in reports.tsx (was missing charts entirely)
@@ -1307,7 +1307,7 @@ Work Log:
 
 Stage Summary:
 - 3 files fixed: finance-dashboard/route.ts, employee-analytics.tsx, reports.tsx
-- Monthly trends now display real data: Jan 2025 (₹18.7L expenses) through Jun 2025 (₹17M revenue)
+- Monthly trends now display real data: Jan 2025 (â‚¹18.7L expenses) through Jun 2025 (â‚¹17M revenue)
 - Reports page now has proper bar charts for: Manpower (site headcount), Attendance (present/absent), Payroll (gross/net/PF/ESI/TDS), HSE (incidents by type), Equipment (status pie chart), Expenses (amounts by status)
 ---
 
@@ -1620,7 +1620,7 @@ Remove the redundant top-level Purchase module (full subset of Procurement).
 
 ### Analysis
 - Purchase had 8 sub-modules, all present in Procurement (which also has Material Tracking + Contractors Management)
-- Access control (MODULE_GROUPS, module-select) never offered 'purchase' � no user/role depends on it
+- Access control (MODULE_GROUPS, module-select) never offered 'purchase' ï¿½ no user/role depends on it
 - No setActiveModule/activeModule checks referenced it
 
 ### Changes
@@ -1664,3 +1664,473 @@ Sync Purchase Order Register with master data (vendors/sites/jobs/items); replac
 - All PO Register dropdowns now driven by master data
 - jobCode persisted end-to-end (schema -> API -> UI -> print)
 - tsc/eslint/next build all pass
+
+---
+
+## Task ID: 27 - Rename Procurement Management to Purchase Management
+
+### Work Task
+Rename the top-level "Procurement" module to "Purchase Management" and sync every dependent surface: nav labels, sub-module sections, page titles, breadcrumbs, help widget, superadmin module picker, PR approval chain, schema/seed comments and docs. HRMS left untouched.
+
+### Analysis
+- The module **key** stays `procurement`: it is persisted in tenant/role access strings (Tenant.enabledModules, OrgRole.moduleAccess) and prefixes the API routes (/api/procurement/*). Renaming the key would require re-writing every stored grant and would break live API consumers â€” so this is a label rename, matching the earlier "Item Master â†’ Item Code Generator" refactor.
+- The only DB-persisted *label* tied to the module is `FinPRApproval.label` (the PR approval step). Renaming it in code alone would leave old chains showing "Procurement" next to new ones showing "Purchase", so a migration script was added.
+- HRMS was deliberately left alone (per instruction), including the seeded "Procurement" department, the "Procurement Officer" designation and the client contact role "Procurement Head" â€” those are organisation master data, not the module.
+- Legacy MySQL reference dumps under `database/` were left as-is: that frozen design already carries both a "Procurement" (module_11) and a "Purchase Management" (module_12) module, so renaming inside it would collide with its own taxonomy.
+
+### Changes
+1. **src/store/erp-store.ts** - MAIN_MODULES label â†’ 'Purchase Management'; all 10 procurement sub-items section â†’ 'Purchase Management'; MODULE_CONFIG title/breadcrumb â†’ 'Purchase Management'; breadcrumbs for procurement-pr / procurement-rfq / procurement-po-register / procurement-vendors / procurement-material-tracking / procurement-subcontracts / purchases
+2. **src/components/superadmin/module-select.tsx** - module label â†’ 'Purchase Management'
+3. **src/components/erp/tabbed-dashboard.tsx** - procurement tab label â†’ 'Purchase Management'
+4. **src/components/help/help-registry.ts** - help area name + greeting, dashboard overview bullet, suggested first-time order, module link label, header comment
+5. **src/components/help/data/procurement-help.ts** - entry title & body headings, in-app nav references (Purchase Management â†’ ...), approval chain text; vendor/contractor wording realigned with the current 'Contractors Management' nav labels
+6. **src/components/help/data/projects-assets-help.ts** + **src/components/help/finance-help-data.ts** - cross-module references (incl. PR approval step table)
+7. **PR approval step label** 'Procurement' â†’ 'Purchase' in three places that must agree: src/components/erp/procurement-pr.tsx (mock chain), src/app/api/procurement/requisitions/approve/route.ts (APPROVAL_TEMPLATE), prisma/seed.ts (APPROVAL_CHAIN)
+8. **scripts/migrate-purchase-module-rename.mjs** (new) - idempotent `UPDATE "FinPRApproval" SET "label" = 'Purchase' WHERE "label" = 'Procurement'` run against every tenant DB
+9. **src/components/erp/procurement-dashboard.tsx**, **src/lib/assistant/engine.ts**, **src/hooks/use-company-profile.ts**, **prisma/schema.prisma** - module-name copy and section comments
+10. **Docs** - API_ROUTES_STATUS.md, FIX_API_ROUTES.md, MODULE_REMOVAL_SUMMARY.md, DATABASE_MIGRATION_COMPLETE.md, EMPLOYEE_DASHBOARD_AND_REPORTS.md, docs/finance-accounts-database-design.md, software-features/README.md, software-features/MODULE_SUBMODULE_SUGGESTIONS.md, download/README.md
+
+### Kept
+- Module key `procurement`, API route prefix `/api/procurement/*`, component file names, help search keyword 'procurement' (users still type it)
+- HRMS files, the 'Procurement' department/designation, vendor emails and the "Engineering, Procurement, Construction" industry phrase
+
+### Stage Summary
+- The module reads "Purchase Management" everywhere a user sees it, with every dependent label synced
+- No schema change, no permission migration, no API breakage - saved grants and routes keep working
+- eslint clean on all touched files; tsc reports only pre-existing errors (biometric, user-management, attendance utils)
+- Run `node scripts/migrate-purchase-module-rename.mjs` to relabel PR approval rows that already exist
+
+---
+
+## Task ID: 28 - Purchase Management: audit for missed rename items and fix
+
+### Work Task
+Re-sweep the repo for anything the module rename (Task 27) left behind - stale screen names, wrong breadcrumbs, dead module ids, leftover access-tree entries - and fix them.
+
+### What Was Missed (and fixed)
+1. **src/store/erp-store.ts - breadcrumbs of 4 Purchase Management screens still said "Finance"**
+   - 'fin-purchase-orders' (title "Purchase Orders (Finance)", breadcrumb "Finance â€º Purchase Orders")
+   - 'po-approval-stepper' ("PO Approval Stepper" / "Finance â€º Purchase â€º Approval Stepper")
+   - 'rfq-comparison-matrix' ("RFQ Comparison Matrix" / "Finance â€º Purchase â€º RFQ Matrix")
+   - 'grn-3way-match' ("Finance â€º Purchase â€º GRN Match")
+   All four live in the Purchase Management nav, so titles/breadcrumbs now match their nav path.
+   - 'procurement-vendors' breadcrumb corrected to its real path (Master Setup â€º Contractors Management).
+2. **src/lib/module-access.ts - server-side access tree for the module was stale**
+   - `procurement: ['purchases', 'expenses']` still pointed at the *deleted* Purchase module's keys, so `expandAccess('procurement')` (used by the tenant-cap / role intersection) granted nothing real. Now lists the 8 live Purchase Management sub-modules, matching MODULE_TREE in the store.
+3. **src/components/superadmin/module-select.tsx - superadmin/tenant module picker could not grant the module's screens**
+   - The "Purchase Management" group offered only `purchases` (the deleted module's leftover key). Now lists PR Module, RFQ Management, Quotation Comparison, PO Register, Purchase Orders, PO Approval, GRN 3-Way Match, Contractors Management, Material Tracking, Contracts & Claims.
+4. **Export file names were user-visible with the old naming** - procurement-pr / procurement-rfq / procurement-material-tracking / procurement-subcontracts -> purchase-pr / purchase-rfq / purchase-material-tracking / purchase-subcontracts.
+5. **Help widget pointed at dead screens / stale labels**
+   - Purchase Management area still mapped the deleted `purchase` and `expenses` module ids -> removed.
+   - "Raising a quick Purchase Order" entry documented the orphan `purchases` screen (not in the nav); rewritten against the live **Purchase Orders** screen (vendor, site, job code, date, description of work, amount, status + import/export).
+   - Overview list refreshed to the real nav labels (PR Module, PO Register, Purchase Orders, Purchase Bills (AP), Contractors Management, Contracts & Claims) and the dead "Expenses" bullet dropped.
+   - PR entry path "Purchase Management â†’ Purchase Requisition" -> "Purchase Management â†’ PR Module"; "Contractor register & progress claims" -> "Contracts & progress claims"; Expense Claims path -> Finance & Accounts â†’ Expense Claims, relatedModule 'expenses' -> 'fin-expense-claims'.
+6. **software-features/MODULE_SUBMODULE_SUGGESTIONS.md** - the Purchase Management section still listed "Currently: Purchase Orders, Expenses" (the deleted module's contents); now lists the module's real sub-modules and the suggestion table only keeps what is still missing.
+7. **Approval-step label** - PR chain step "Procurement" -> "Purchase" (component, API template, seed) + scripts/migrate-purchase-module-rename.mjs for existing rows.
+
+### Left As-Is (deliberate)
+- Module key `procurement`, /api/procurement/* routes, component file names (they mirror the module key)
+- The "Procurement" *department* on PO forms and DEPARTMENT_SUGGESTIONS, "Procurement Officer"/"Chief Procurement Officer" titles - organisation master data, not the module
+- `purchases` (src/components/erp/purchases.tsx) stays registered but is nav-invisible: it is the legacy quick-PO screen left over from the deleted Purchase module; the live equivalent is `fin-purchase-orders`. Flagged for a follow-up decision (delete vs re-expose).
+- HRMS files untouched
+
+### Stage Summary
+- No stale "Procurement" module naming left in the app; the only remaining hits are org department values and client job titles
+- Access control now grants the module's real screens from both the client tree and the server tree
+- eslint + tsc clean on every touched file (tsc still reports only pre-existing errors elsewhere)
+
+---
+
+## Task ID: 29 - Contractors Management: create wizard + full CRUD + master-driven dropdowns
+
+### Work Task
+Turn Contractors Management into the single owner of contractor records: a guided create/edit wizard that captures every contractor detail, working CRUD around it, and every other module reading that master for its vendor dropdowns (read-only â€” no module may create a contractor).
+
+### Schema
+- **prisma/schema.prisma** â€” FinVendor extended with the fields the wizard captures: legalName, tradeName, vendorCode, vendorType, registeredOn, gstin, pan, tan, msmeRegistered, taxDeduction, contactDesignation, alternatePhone, website, country, state, city, pincode, bankName, bankAccountName, bankAccountNumber, bankIfsc, paymentTerms, creditDays + `@@index([vendorCode])`.
+- `npx prisma db push --accept-data-less` â†’ DB in sync. The follow-up `prisma generate` failed with `EPERM ... query_engine-windows.dll.node` because the dev server and Prisma Studio held the engine DLL â€” killing those processes and re-running `prisma generate` fixed it.
+
+### Contractor wizard (new)
+- **src/components/erp/contractor-wizard.tsx** â€” 5-step wizard, used for both create and edit:
+  1. Contractor â€” name, code, legal/trade name, type, region, status, registered on, trade categories
+  2. Contact â€” contact person, designation, phone, alternate phone, email, website, registered address, country/state/city/PIN
+  3. Compliance â€” GSTIN, PAN, TAN, MSME, TDS section, certificate rows (name, no., issued, expiry) with live expiry warnings
+  4. Banking & Terms â€” bank, account holder, account no, IFSC, payment terms, credit days
+  5. Review â€” rating, OTD %, quality, price competitiveness, notes, plus a full read-back of everything entered
+- Per-step validation client-side, mirrored by the API; every step is validated again on save, and the wizard jumps to the first step that still has an error.
+
+### CRUD (Contractors Management)
+- **src/components/erp/procurement-vendors.tsx** rewritten around the wizard:
+  - New Contractor / Edit now open the wizard (the old form dialog and its random certificate-generation are gone)
+  - Detail dialog rebuilt with Profile / Compliance / Scorecard / Blacklist tabs, status toggles, blacklist entry add, Edit and Delete actions (Delete was previously dead code â€” no button ever opened it)
+  - Grid/list views now show contractor code, type and city; search covers code and city
+- **src/app/api/fin/vendors/route.ts** rewritten:
+  - GET list + `?id=` single record
+  - POST/PUT with per-mode validation â€” `create` requires name + region; `update` validates only the fields actually sent, so a partial update (flipping status) can no longer blank the other columns
+  - Duplicate contractor name (case-insensitive) and duplicate vendor code rejected with 409 and a field-level message
+  - DELETE refuses (409) when the contractor is referenced by a purchase order, RFQ bid, contract or purchase bill, naming what holds it
+
+### Master-driven dropdowns in the other modules
+- **src/components/erp/_contractor-master.ts** (new) â€” `useContractors()` hook: the single read path for the master (contractors, names, byName, options, optionsWith(existing) which keeps historic values selectable, loading, reload).
+- Applied to: procurement-subcontracts, procurement-material-tracking, procurement-rfq (mock vendor list kept as `LEGACY_VENDORS` and merged with the master), accounts-payable, fin-purchase-orders. procurement-po-register and rfq-comparison-matrix were already master-driven.
+- Every one of those screens now *selects* a contractor; none of them can create one.
+
+### Data
+- **prisma/vendor-master-data.ts** (new) â€” single source of truth for the seeded contractors' master details (code, type, legal name, tax ids, location, banking, terms).
+- **prisma/seed.ts** uses that map when creating contractors; **scripts/backfill-contractor-master.ts** applies it to an existing database without a destructive reseed (idempotent, fills only empty fields).
+
+### Verification
+- **scripts/smoke-contractors.mjs** (new) â€” drives the wizard's request cycle against the running app: create with every field â†’ read back â†’ field-by-field persistence checks â†’ update â†’ partial update keeps other fields â†’ invalid create rejected with field errors â†’ duplicate name â†’ duplicate code â†’ delete â†’ 404 after delete â†’ a contractor in use cannot be deleted.
+- Result: **21 passed, 0 failed** (`node scripts/smoke-contractors.mjs http://localhost:3000`).
+- Read paths re-checked: `/api/procurement/subcontracts`, `/api/procurement/material-tracking`, `/api/procurement/rfqs`, `/api/procurement/po-register`, `/api/accounts-payable`, `/api/fin/purchase-orders`, `/api/fin/vendors` â€” all 200 with `success:true`.
+- `npx next build` â†’ compiled successfully; eslint clean on every touched file; tsc clean on the touched files (repo still has the pre-existing unrelated errors).
+
+### Stage Summary
+- Contractors Management is now the only place a contractor can be created, edited, blacklisted or deleted â€” through a wizard that captures the complete contractor record
+- Every other module reads that master for its dropdowns, so a vendor picked on a PO, RFQ, contract, bill or material-tracking row is always a contractor with a full master record behind it
+- CRUD verified end-to-end at the API layer: create, read, update, partial update, validation, duplicate rejection, delete and the in-use delete guard
+
+
+---
+
+## Task ID: 30 - Finance / Purchase / Inventory: make every form and CRUD actually work
+
+### Work Task
+Verify each form in Finance, Purchase and Inventory works end-to-end against the running app, fix every broken CRUD path, and finish the import-sample / mock-row sync audit.
+
+### CRUD smoke suite (new)
+- **scripts/smoke-crud.mjs** - drives GET/POST/PUT/DELETE for every in-scope screen: sites, jobs, parties, item categories, items, invoices, credit notes, purchase orders, payment advices, expense claims, PO register, RA bills, petty cash (+approve), receipts, payments, stock ledger, material issues, material receipts, scrap, site expenses, requisitions, RFQs, PO register (purchase), material tracking, subcontracts, ledger, budget, taxation, profit & loss, client follow-up, journal entries, bank/cash + bank reconciliation, accounts payable, accounts receivable, plus the Inventory (store) documents tools, equipment, scrap, gate pass, returns, MRS, physical verification and GRN.
+- It temporarily grants the QA actor a DIRECTOR role (FINANCE_MGR deliberately lacks CREATE/EDIT/DELETE) and cleans up every row and the role assignment afterwards.
+- Result: **182 passed, 0 failed**; run twice in a row with no failures, which also proves the numbering fixes below.
+
+### Real bugs found and fixed
+- **src/app/api/fin/stock-ledger/route.ts** - `Number(body.valueIn) ?? qty*rate` produced `NaN` for any blank input (NaN is not nullish), so every stock-ledger create from the UI returned 500. Now only uses the supplied value when it is actually provided.
+- **src/app/api/procurement/material-tracking/route.ts** - POST/PUT now coerce `scheduledDate`/`expectedDate` to `Date`, drop an empty `expectedDate`, coerce qty/`daysOverdue`, and return 400 when `scheduledDate` is missing (was a 500).
+- **src/app/api/procurement/rfqs/route.ts** + **rfqs/[id]/route.ts** - POST/PUT now coerce `issueDate`/`responseDeadline`, normalise `vendorIds` and map `lineItems` explicitly; 400 on missing dates.
+- **prisma/schema.prisma** - `FinRFQ.vendorIds Int[] @default([])` added: the RFQ form read/wrote it but the column did not exist (silent data loss / Prisma validation error).
+- **src/components/erp/procurement-material-tracking.tsx** - PUT/DELETE called `/api/procurement/material-tracking/<id>`, a route that does not exist; now `?id=<id>`.
+- **src/app/api/fin/petty-cash/route.ts** - POST/PUT date falls back to now unless the supplied value parses.
+- **src/app/api/accounts-payable/route.ts** - bill number was `AP-<year>-<count+1>`, which collides as soon as a bill is deleted (500 on create). Now uses the shared highest-suffix series via `nextSeriesCode(pdb, 'ap')`.
+- **src/components/erp/accounts-payable.tsx**, **accounts-receivable.tsx** - both forms had a dead "Invoice Date" input: neither model has an `invoiceDate` column and the value was never sent to the API, so it silently discarded whatever the user typed. Removed the field (form state, empty form and edit-back state included).
+- **src/components/erp/fin-credit-notes.tsx** - import sample row was missing `receivedDate` and `reason` from the template; added.
+
+### Document numbering (same bug class, systemic)
+`count()+1` numbering collides after any delete (the count drops below the highest existing suffix), producing a P2002 500 on the next create. Added a shared helper and switched every generator:
+- **src/lib/auto-number.ts** - new `nextPrefixedCode(db, model, field, prefix, pad)` (highest existing suffix + 1); `nextSeriesCode` now delegates to it; new `ap` series.
+- Switched: AP bills, credit notes (`CN/<year>/`), petty cash (`PV/<year>/`), petty-cash sync (`PO|EX/PV/<year>/`), RFQs (`RFQ/<year>/`), journal entries (`JE/<year>/`), GL auto-posting (`<prefix>/<year>/`, replaces the attempt-offset count hack in **src/lib/gl-posting.ts**), and Inventory store routes: tools, equipment, scrap, returns, MRS, gate pass, GRN, store issue, physical verification.
+- Residual limitation (documented, not fixed): highest-suffix + 1 still reuses the number of the most recently deleted row. The prior code comment claimed deletes never free a number, which only holds for mid-series gaps. Truly never reusing a suffix needs a sequence table; flagged as a follow-up rather than a schema change in this task.
+
+### Verification
+- `node scripts/smoke-crud.mjs` -> 182 passed, 0 failed (twice consecutively).
+- `node scripts/smoke-contractors.mjs` unaffected (21/21, from Task 29).
+- Import template audit (`check-mock-sync.js`): 27 modules checked, **no sample-row/template mismatches**.
+- `npx tsc --noEmit` and `npx eslint` clean on every touched file (repo keeps only the pre-existing unrelated errors).
+
+### Stage Summary
+- Every Finance, Purchase and Inventory form now saves through its real API; all 182 CRUD operations pass against the live app.
+- Two dead form fields were removed and nine API paths fixed (dates, numerics, FK arrays, wrong URLs, numbering collisions).
+- Import sample rows are back in sync with their templates, so "download sample -> fill -> import" round-trips.
+
+---
+
+## Task ID: 31 - Remove legacy Subcontractor module; route "New Contractor" to Contractors Management; expand Material Tracking sample data
+
+### Work Task (3 user requests, in order)
+1. Material Tracking - add more mock/sample data.
+2. New Contractor button should route to Master Setup > Contractors Management.
+3. Remove Subcontractor entirely and make it Contractor (consolidate to the Contractors Management master).
+
+### What changed
+
+#### 1. Material Tracking sample data
+- src/components/erp/procurement-material-tracking.tsx - generateMockMaterialItems() grew from 8 to 22 rows, covering every category (Structural Steel, Cement, HV Cables, Transformers, Pipes, Valves, Motors, Switchgear, Control Panels, Cable Trays, Conduits, Earthing Materials), every project (BALCO, NTPC, Hindalco, Coal India, JSW), all sites, realistic vendors (JSW Steel, ACC, Havells, CG Power, Bharat Forge ...) and a mix of Overdue / On-Time / Upcoming statuses.
+- Vendor dropdown now shows a "+ New contractor" link next to "From Contractors Management master." that navigates to Master Setup > Contractors Management (procurement-vendors).
+- Mock data is a fallback only - when /api/procurement/material-tracking returns rows, those are shown instead.
+- The Purchase > Subcontracts screen is unchanged here.
+
+#### 2. "New Contractor" button routes to Contractors Management
+- src/components/erp/procurement-subcontracts.tsx - the primary action is now:
+  - "New Contractor" -> navigates to Master Setup > Contractors Management (procurement-vendors); "New Subcontract" -> "New Contract"
+  - "New Subcontract" -> opens the existing subcontract form (this is the subcontract create path, unchanged)
+- The dialog that was titled "New Contractor" / "Edit Contractor" is now "New Subcontract" / "Edit Subcontract"; "Contractor No" -> "Subcontract No"; "Contractor Details" -> "Subcontract Details"; delete dialog "Delete Contractor" -> "Delete Subcontract"; toasts updated; panel header "Contractors Management" -> "Subcontracts".
+- src/store/erp-store.ts - nav label "Contractors Management" -> "Contracts" for Purchase Management > Subcontracts; breadcrumb "Purchase Management > Subcontracts".
+- src/components/superadmin/module-select.tsx - label 'Contracts & Claims' -> 'Subcontracts'.
+- src/components/erp/procurement-material-tracking.tsx - "+ New contractor" link (see above).
+- Only one "Contractors Management" remains in the app: Master Setup > Contractors Management (procurement-vendors, the master, backed by FinVendor).
+
+#### 3. Remove legacy Subcontractor module (Operations > Contractors)
+- Deleted: src/components/erp/subcontractors.tsx (the Operations > Contractors screen) and src/app/api/subcontractors/route.ts.
+- prisma/schema.prisma - `model Subcontractor` dropped (db push applied; database in sync).
+- Migration: legacy rows were checked with a one-off script BEFORE dropping the model - it found 0 rows, so nothing to copy; the Contractors Management master is the only contractor register.
+- Removed from: src/components/erp/module-registry.tsx (lazy loader), src/store/erp-store.ts (assets group, ModuleId union, MODULES, MODULE_META), src/lib/module-access.ts (assets), src/components/superadmin/module-select.tsx (Assets sub-module), src/components/help/help-registry.ts (Assets helper moduleIds), src/components/help/data/projects-assets-help.ts (Assets overview no longer lists Contractors; removed the "Contractor register & compliance" article), src/components/help/data/procurement-help.ts (Subcontracts article now points to Master Setup > Contractors Management), src/app/api/dashboard/route.ts (subcontractor count), src/components/erp/dashboard.tsx (interface field), src/lib/asset-api.ts (comment), serve.sh (warm-up list).
+- Kept on purpose: Purchase Management > Subcontracts (/api/procurement/subcontracts*) - that is the subcontract/contract register (FinSubcontract) and is now named Subcontracts.
+
+### Verification already done
+- npx next build - compiles, no errors; /api/subcontractors no longer in the route list.
+- node scripts/smoke-crud.mjs - 182 passed, 0 failed (Finance/Purchase/Inventory CRUD + numbering).
+- npx tsc --noEmit - no NEW errors (only the pre-existing unrelated ones, e.g. biometric examples, HRMS, superadmin/dashboard.tsx, components/erp/dashboard.tsx line 650 pre-existing).
+- eslint - no NEW issues; src/components/erp/module-registry.tsx still reports its pre-existing react-hooks/static-components warning.
+- Migration run output: "Found 0 legacy subcontractor row(s)".
+
+### Manual tracking checklist (do these one by one)
+[ ] 1. Open Purchase Management > Subcontracts. Check the header reads "Subcontracts" and breadcrumb reads "Purchase Management > Subcontracts" (not "Contractors Management").
+[ ] 2. Check the two action buttons: "New Contractor" (ghost style) and "New Subcontract" (primary). Click "New Contractor" -> you land on Master Setup > Contractors Management (Contractor wizard / list, not a subcontract form).
+[ ] 3. Click "New Subcontract" -> a dialog titled "New Subcontract" opens; Contractor dropdown lists contractors from the master; fill and save -> a subcontract is created; toast says "Subcontract created".
+[ ] 4. Open an existing subcontract -> detail dialog titled "Subcontract Details" with "Subcontract No"; edit a milestone -> toast "Subcontract details updated".
+[ ] 5. In the table, column header reads "Subcontract No" (not "Contractor No"); empty state reads "No matching subcontracts found".
+[ ] 6. Export button produces filename purchase-subcontracts.csv.
+[ ] 7. Open Purchase Management > Material Tracking. List/dashboard both work; table shows up to 22 sample rows when the API has no data.
+[ ] 8. Filter by Project = JSW, Site = Workshop, Status = Overdue/Upcoming - each filter works and counts update.
+[ ] 9. Open New Entry (the "+ New Entry" button). Under the Contractor/Vendor field there is a "+ New contractor" link; clicking it closes the dialog and lands on Master Setup > Contractors Management.
+[ ] 10. In Master Setup > Contractors Management, the "New Contractor" button opens the 5-step wizard; create a test contractor; the vendor dropdowns across Purchase (Material Tracking, Subcontracts, PO Register, Purchase Orders, RFQ, Accounts Payable) show the new contractor after a reload of that screen.
+[ ] 11. Operations section no longer has "Contractors" (it had "Safety & HSE" and "Work Permits" only). Sidebar/nav does not list "Contractors" under Operations; breadcrumb "Operations > Contractor Management" is gone.
+[ ] 12. In the help assistant, ask about contractors - answer references Master Setup > Contractors Management and Subcontracts (Purchase Management), never "Assets > Contractors".
+[ ] 13. Superadmin > Module access (module-select): Assets group no longer has a "Contractors" sub-module; Purchase Management group shows "Subcontracts".
+[ ] 14. Dashboard API: GET /api/dashboard returns no "subcontractors" key (only sites/equipment/incidents/...).
+[ ] 15. DB check: \d "Subcontractor" in psql says "Did not find any relation"; table FinVendor still exists and contains your contractors.
+[ ] 16. API check: GET http://localhost:3000/api/subcontractors returns 404/route not found; GET /api/procurement/subcontracts returns success:true.
+[ ] 17. grep check: rg -i "subcontractor" src prisma serve.sh - the only hits are intentional prose: finance-help-data ("a subcontractor" in a work-order description), procurement-help keywords ("subcontractor" as a search term pointing at the Subcontracts article). No code, route, model or nav entry references the removed legacy module.
+[ ] 18. Run: node scripts/smoke-crud.mjs -> expect 182 passed, 0 failed.
+[ ] 19. Delete the test contractor you created in step 10 (its delete guard will refuse if it is now referenced by a subcontract/PO - that is expected; delete the referencing row first).
+
+### Files changed
+- src/components/erp/procurement-material-tracking.tsx (mock rows, + New contractor link)
+- src/components/erp/procurement-subcontracts.tsx (rename Contractor -> Subcontract, New Contractor button -> master, header)
+- src/store/erp-store.ts (assets tree/union/MODULES/MODULE_META; Subcontracts label/breadcrumb)
+- src/lib/module-access.ts (assets)
+- src/components/superadmin/module-select.tsx (Assets: remove Contractors; Subcontracts label)
+- src/components/erp/module-registry.tsx (drop lazy loader)
+- src/components/help/help-registry.ts (Assets moduleIds)
+- src/components/help/data/projects-assets-help.ts (Assets overview + removed article)
+- src/components/help/data/procurement-help.ts (Subcontracts article, link to master)
+- src/app/api/dashboard/route.ts (drop subcontractor count)
+- src/components/erp/dashboard.tsx (drop interface field)
+- src/lib/asset-api.ts (comment)
+- serve.sh (warm-up list)
+- prisma/schema.prisma (model Subcontractor dropped; db pushed, generated)
+- Deleted: src/components/erp/subcontractors.tsx, src/app/api/subcontractors/route.ts
+
+### Stage Summary
+- One contractor register remains: Master Setup > Contractors Management (FinVendor, wizard-driven).
+- "New Contractor" everywhere routes there; subcontract work stays in Purchase Management > Subcontracts.
+- Legacy Operations > Contractors register is gone end-to-end (UI, API, navigation, help, dashboard metric, DB model).
+
+---
+
+## Task ID: 32 - Purchase > Contracts unified into Master Setup > Contractors Management
+
+### Work Task
+User: "sync Contracts (Purchase Management > Contracts) to Master Setup > Contractors Management." After analysing the two modules (separate screens, API and DB tables), unification was chosen: the Purchase entry now opens the single Contractors Management master.
+
+### What changed
+- src/store/erp-store.ts - Purchase Management nav entry for the old "Contracts" screen removed; an entry "Contractors Management" (id: procurement-vendors) added to Purchase Management that opens the same master screen as Master Setup > Contractors Management. Breadcrumb/meta kept for the deprecated procurement-subcontracts key.
+- src/lib/module-access.ts - procurement group no longer expands to procurement-subcontracts (so the Purchase module grant no longer silently enables the old screen).
+- src/store/erp-store.ts MODULE_TREE - same: procurement no longer includes procurement-subcontracts.
+- src/components/superadmin/module-select.tsx - Purchase group no longer lists a grantable "Contracts" module (it was removed from nav); master-setup "Contractors Management" remains the grant path.
+- Kept intact (deliberate): procurement-subcontracts module id in ModuleId union, MODULE_META breadcrumb, MODULE_REGISTRY (its screen & /api/procurement/subcontracts contract CRUD stay for saved navigations/grants) - hidden but not destroyed; the FinSubcontract model/table/routes are untouched.
+- Docs & scripts that still mentioned the removed legacy Subcontractor module were cleaned: API_ROUTES_STATUS.md, FINAL_FIXES.md, FIXES_COMPLETE.md, FIX_API_ROUTES.md, software-features/MODULE_SUBMODULE_SUGGESTIONS.md, download/README.md, fix-api-routes.ps1, fix-all-api-routes.sh; download/voltcore_erp_prisma_schema.prisma regenerated from current schema; stale Assets nav/module-select/help/breadcrumb/dashboard references removed in Task 31; SQL dumps under database/ and download/ kept as historical archive (they describe the old MySQL instance, not this app).
+
+### Stage Summary
+There is now exactly one Contractors Management master (Master Setup), reachable from Purchase Management too; the separate "Contracts" nav entry and grantable module are gone, so the two paths cannot drift apart. Legacy SQL/schema archives were left untouched as archival artefacts.
+
+---
+
+## Task ID: 33 - Contractors Management: light/dark mode colour parity
+
+### Work Task
+User: "Contractors Management / Master Setup > Contractors Management background need to fix ... both mode."
+
+### Fix
+- src/app/globals.css - added light-mode mappings for the two hexes only used here: .text-[#38bdf8] (sky, sibling of 00d4ff) and .text-[#94a3b8] (slate, sibling of 8899aa).
+- src/components/erp/procurement-vendors.tsx - all inline style hex colours (style={{ color }}, style={{ backgroundColor }}) converted to Tailwind arbitrary-value classes (text-[#...], bg-[#...]/10, etc.) so the existing html:not(.dark) light-mode override layer can flip them. Category pills, compliance dots/badges, overall-compliance labels, OTD % values and the scorecard accent values are now class-based; no inline colour styles remain. Empty/full stars already used class-based colours.
+- Panels/cards already used vc-panel / border / text tokens or classes that have light overrides.
+
+### Verification
+- npx next build passes.
+- npx eslint + tsc clean on the touched files.
+- Class-vs-CSS audit: every hex class used by procurement-vendors.tsx resolves to a light-mode override in globals.css (spot-checked by substring match, backslashes accounted for).
+
+---
+
+## Task ID: 34 - Consolidated manual verification guide (Tasks 30-33)
+
+Everything below is one linear checklist to verify the whole session's work by hand in the running app (dev server on :3000).
+
+### A. Material Tracking (Task 30, 31)
+[ ] 1. Open Purchase Management > Material Tracking (List + Dashboard both render and all numbers look right).
+[ ] 2. With no DB rows the screen shows sample data (22 rows across all categories/projects/sites); with rows present it shows API data.
+[ ] 3. Filter by every Project / Site / Status; counts update; search finds material/PO/vendor.
+[ ] 4. New Entry -> Contractor/Vendor dropdown lists contractors from the master; the small "+ New contractor" link jumps to Master Setup > Contractors Management.
+[ ] 5. Export produces purchase-material-tracking.csv; Import opens the wizard with the sample row.
+
+### B. Purchase Management nav (Task 32)
+[ ] 6. Purchase Management nav shows: PR Module, RFQ Management, Quotation Comparison, PO Register, Purchase Orders, PO Approval, GRN 3-Way Match, Contractors Management, Material Tracking.
+[ ] 7. Clicking Purchase Management > Contractors Management opens the SAME contractor master as Master Setup > Contractors Management (same data, same wizard).
+[ ] 8. There is NO nav item called "Contracts" or "Subcontracts" in Purchase.
+
+### C. Master Setup > Contractors Management (Tasks 29, 32, 33)
+[ ] 9. Header shows "Contractors Management" with count badge, "New Contractor" primary button, search, grid/list toggle and category chips (Electrical/Mechanical/Civil/Labour/Services).
+[ ] 10. New Contractor -> 5-step wizard (Contractor, Contact, Compliance, Banking & Terms, Review) -> create -> record appears immediately.
+[ ] 11. Open a contractor (card/row) -> detail dialog: Profile (Edit, status pills Standard/Preferred/Blacklisted, notes), Compliance (certificates with expiry badges), Scorecard (OTD /5 metrics), Blacklist (add entry) -> Edit button opens the wizard, Delete is blocked with a message when referenced by a PO/RFQ/bill.
+[ ] 12. Edit values in wizard, save, confirm they persist (reload page to double-check).
+[ ] 13. Light mode: toggle the theme switch -> text readable on white, badges/pills/charts legible, no neon-on-white clashes anywhere in this screen.
+[ ] 14. Dark mode: toggle back -> same screen is crisp (amber accent, no washed-out text).
+[ ] 15. Other Master Setup screens (sites, jobs, items, clients) unaffected.
+
+### D. Operations section & Superadmin (Tasks 31, 32)
+[ ] 16. Operations no longer lists "Contractors" (was Operations > Contractors).
+[ ] 17. Superadmin module access: Assets group no longer has a Contractors entry; Purchase group shows Contractors Management / Material Tracking (grants apply).
+[ ] 18. Help assistant: ask about contractors -> answers cite Master Setup > Contractors Management; ask about contracts -> cites Purchase Management > Contracts article which mentions the master.
+
+### E. Contracts register is retired but data is not lost (Task 32)
+[ ] 19. Saved navigations/grants to module id procurement-subcontracts still render (legacy path); /api/procurement/subcontracts + FinSubcontract tables untouched; the Purchase nav no longer surfaces them.
+[ ] 20. grep: rg -i "subcontractor" src prisma serve.sh -> only intentional prose (help keywords, work-order "a contractor" gloss) ; rg "procurement-subcontracts" src -> only union/registry/help legacy references.
+
+### F. Dev checks (already run, re-run if desired)
+- node scripts/smoke-crud.mjs -> 182 passed, 0 failed (Finance/Purchase/Inventory CRUD + numbering).
+- node scripts/smoke-contractors.mjs -> 21 passed, 0 failed (wizard end-to-end).
+- npx next build -> compiles; eslint + tsc clean on touched files.
+
+## Task ID: 35 - Item Code Generator: docx "Item Code Master Register" format + auto-generator
+
+### Work Task
+User: Item Code Generator form format didn't match `C:\work\erp\fnancialappdata\ERP Inventory\ERP\Item code.docx` â€” app had Name/UOM/HSN/Reorder/Rate but not the register columns. Follow the docx: pick Category â†’ server auto-generates the code; Item Name, Specification, Brand, Model, Capacity, Description and Unit maintained alongside. Then: "create a skill who will take the content ... and generate the code", "place skill", "create a script who build or generate with all rules", "after finish update worklog".
+
+### Fix â€” schema & rules
+- prisma/schema.prisma (`FinItem`) â€” added `specification`, `makeBrand`, `modelNo`, `sizeCapacity` (String?); docx register column order: Item Name, Specification, Make/Brand, Model No., Size/Capacity, Description, Unit.
+- src/lib/auto-number.ts (`nextItemCode`) â€” format now `<PREFIX>-<NNN>` (3-digit pad, was 4); prefix segment keeps `&` (`^A-Z0-9&` after sanitise, was A-Z0-9 only). Same rules as before: server-side, highest suffix + 1, deletes never free a code, no reuse, ITM-### fallback, withCodeRetry.
+- src/app/api/fin/item-categories/route.ts â€” code validation relaxed to 2â€“4 chars A-Z/0-9/& (was exactly 3 A-Z, which rejected docx prefixes P&M / T&T).
+
+### Fix â€” API
+- src/app/api/fin/items/route.ts â€” POST/PUT accept & persist `specification`, `makeBrand`, `modelNo`, `sizeCapacity`.
+- src/app/api/fin/items/import/route.ts â€” same fields in the import wizard mapping; sample row now a register example (Welding Electrode / ESAB / CON).
+- itemCode stays immutable; auto-assigned only when blank.
+
+### Fix â€” UI (src/components/erp/fin-items.tsx)
+- Form relaid out per register: Category + auto Item Code â†’ Item Name â†’ Specification â†’ Make/Brand + Model No. â†’ Size/Capacity + Unit â†’ Description â†’ (HSN, Status, Reorder, Rate kept as purchase-side extras).
+- Table columns now: Item Code | Item Name (description inline) | Specification | Make/Brand | Model No. | Size/Capacity | Unit | Category | Status.
+- Export columns, import fields, search string, placeholders, UOMS (+Kg, +Pair) updated; colSpan bumped for the new column set.
+
+### New â€” skill & generator script
+- .opencode/skills/item-code-generator/SKILL.md â€” project skill embedding the full register (sample items, dropdown list, Category Prefix Master, auto-generated examples), the golden rules, the repo generate flow, and gotchas (ELCâ†”ELE clash, pad-3 vs legacy 4-digit codes, tenant ALTER pattern, prisma EPERM while dev server runs).
+- scripts/generate-item-register.mjs (+ npm run item:register / item:register:dry) â€” builds/repairs the register in every DB (superadmin Tenant registry + DATABASE_URL): ensures the 4 columns, upserts the prefix master, seeds the docx sample items with auto-generated codes (honours docx codes when free, else next in series; idempotent â€” skips existing on category+name+specification). `--dry-run` previews.
+
+### Verification
+- Local dev DB (erp_finance_dev): 4 columns added via idempotent ALTER; prefix master upserted (CON, P&M, T&T, PPE, GAS, WEL, MIN, LFT + legacy rows kept; ELE skipped â€” name clash with legacy ELC = 'Electrical', ELE code stays free until a manual rename/merge).
+- Dry run then real run of the generator: CON-001 Welding Electrode, P&M-001 Grinding Machine, T&T-001 Chain Block, PPE-001 Safety Shoe, GAS-001 Oxygen Cylinder, GAS-002 DA Cylinder, GAS-003 Argon Cylinder, GAS-004 COâ‚‚ Cylinder created (exactly the docx codes on a fresh DB). Registry has no tenant rows â€” only the dev DB was touched.
+- `prisma generate` OK (after dev server stopped â€” EPERM while next dev holds the query engine DLL).
+- `tsc --noEmit` clean for all touched files (repo still has pre-existing errors in examples/ and prisma/seed-sales.ts â€” untouched). `eslint` clean on all touched files.
+
+### Stage Summary
+Item Code Generator now matches the docx register end-to-end (schema â†’ API â†’ UI â†’ import/export â†’ seeded data). Codes are per-category PREFIX-NNN, server-generated, never reused. The register itself is reproducible in any environment via `npm run item:register`, and the rules + register content live in the project skill `item-code-generator`. Legacy codes (ELC-0001â€¦) are left untouched; ELE prefix blocked only by the pre-existing 'Electrical' name clash.
+
+---
+
+## Task ID: 36 - Console SyntaxError "Unexpected token '<'" (HTML parsed as JSON) + Item Code auto-generate preview
+
+### Work Task
+User (browser console): `SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON` â€” plus a request for the Item Code Generator auto-generate system.
+
+### Root cause
+`res.json()` was called on responses that are **HTML pages**, not JSON. Next answers an unmatched `/api/*` path with its HTML 404 document, so every such fetch blew up inside a `Promise.all` and took the whole screen down. Swept every `fetch('/api/...')` in `src/` against the route tree and hit every route over HTTP â€” 7 client fetch URLs had **no route behind them**:
+- `/api/trash/departments`, `/api/trash/designations`, `/api/trash/employees` (HRMS > Trash/Recycle Bin fetched all three, then parsed them as JSON â†’ the reported crash)
+- `/api/biometric/test?siteId=` (Biometric Settings + Superadmin > Biometric "Test" button)
+- `/api/sales/clients/<id>/contacts[/<contactId>]` (Sales > Client Accounts, add/edit/delete contact)
+- `/api/sales/tenders/<id>` (Sales > Tender Register, edit / delete / detail refresh)
+
+### Fix â€” missing routes added
+- `src/app/api/trash/departments/route.ts`, `.../designations/route.ts` â€” departments/designations are hard-deleted (no soft-delete flag), so the bin is empty for them; the routes exist so the client never asks for a 404.
+- `src/app/api/trash/employees/route.ts` â€” real recycle bin: lists `isDeleted` employees (with the derived `name`, department), restores them (un-mangles the `.deleted.<ts>` email/code suffix when the original is still free), hard-deletes on DELETE.
+- `src/app/api/biometric/test/route.ts` â€” resolves the site config (superadmin DB, else the .env legacy sites) and probes both punch-data formats, answering `data[0].format1/format2.success`; a device that is down reports `success:false`, never an exception.
+- `src/app/api/sales/clients/[clientId]/contacts/route.ts` + `[contactId]/route.ts` â€” list / add / update / delete a client's contacts (`FinClientContact`).
+- `src/app/api/sales/tenders/[id]/route.ts` â€” get / update (documents, bid team, evaluation) / delete one tender.
+
+### Fix â€” client can never crash on an HTML body again
+- New `src/lib/safe-json.ts` â€” `readJsonSafe(res)` / `fetchJsonSafe()`: read the body as text, check the content type, and return `{ ok, success, status, data, error, html }` instead of throwing. A non-JSON body is logged to the **console** (`console.warn`) with the offending URL and shown as a toast.
+- Used in: `trash.tsx`, `fin-items.tsx`, `sales-tender-register.tsx`, `biometric-settings.tsx`, `superadmin/dashboard.tsx`.
+
+### Fix â€” Trash screen bugs found on the way
+- Permanent delete used a hard-coded ternary that sent **every** type to `/api/trash/holidays` â€” a department/designation/employee delete would have deleted the wrong record. Now one `TRASH_ENDPOINTS` map drives restore *and* permanent delete.
+
+### Auto-generate system (Item Code Generator)
+- New `GET /api/fin/items/next-code?categoryId=` â€” server-side preview of the code the next save will get (`{ code, prefix, categoryCode, categoryName }`; no category â†’ the `ITM-` fallback series).
+- `fin-items.tsx` â€” the Item Code field now shows the **live preview** (mono font) with a refresh button; it reloads whenever the category changes and when the New Item dialog opens. The server still assigns the final code on save (`nextItemCode` + `withCodeRetry`), so a race can never produce a duplicate.
+- Skill `.opencode/skills/item-code-generator/SKILL.md` documents the preview endpoint and the new numbering.
+
+### Verification
+- Live against the dev server on :3000: `/api/fin/items/next-code` â†’ `ITM-001`, `?categoryId=24` â†’ `CON-002`; `/api/trash/{departments,designations,employees}` â†’ JSON 200; `/api/biometric/test` â†’ JSON 200 (`success:false` + reason); `/api/sales/clients/1/contacts` â†’ JSON 200; `/api/sales/tenders/1` â†’ JSON 404 (route exists, no such tender).
+- Route sweep after the fix: **no client fetch URL resolves to an HTML 404 any more**.
+- `npx tsc --noEmit` clean for every touched file (the one remaining error in `superadmin/dashboard.tsx`, `createdBySuperadmin`, is pre-existing â€” verified by stashing the change). `npx eslint` clean on all touched files.
+- `npm run item:register:dry` still green: prefix master upserted, docx sample items already present and skipped (never renumbered).
+
+### Stage Summary
+The console crash was not a JSON bug â€” it was an HTML 404 page being parsed as JSON. Seven client fetch URLs had no API route behind them; all seven routes now exist, and every affected screen reads responses through `readJsonSafe`, which logs to the console and shows a toast instead of throwing. The Item Code Generator now previews the auto-generated code live (Category â†’ `CON-001`) while the server keeps ownership of the numbering.
+
+---
+
+## Task ID: 37 - Site Store Management: align forms with the client's Excel registers + live Stock Register
+
+### Work Task
+User: "Site Store Management forms need to match with the excel forms check analyze and fix" + client files:
+`C:\work\erp\fnancialappdata\ERP Inventory\ERP\` — Consumable/P&M/T&T Stock Registers, Mechanical_Store_Registers_Formats (Monthly Report, GRN Soft Copy + Register, Issue-receipt stock register, Material Return, Tool Box, Gate Pass, Damaged/Lost, Diesel, Gas Cylinder, Equipment, Daily Issue, MRS site/store slips).
+
+### Analysis (what the app had vs what the client sends)
+- GRN form was a lean header-only form; GRNs posted via the UI never wrote to any stock ledger, so no per-item running balance existed.
+- MRS lacked Required By date / Reason for Requirement and never showed current-stock/min-stock against items.
+- Returns lacked Received By; tools showed a status table, not the client's issue-log register; gate pass lacked item code + returnable outward link; equipment lacked Make/Sr.No/Capacity/Location/Validity/service dates; scrap lacked Type/Location/Disposed To.
+- No Diesel / Gas Cylinder / Daily Issue registers; no per-item Stock Register tab; the Monthly Report only reported document counts (no opening/closing balances, no stock value).
+
+### Fix — schema (db push + prisma generate; dev server stopped for the DLL swap)
+- FinStoreGrn += timeOfReceipt, projectName, siteLocation, gateEntryNo, vehicleNo, lrDetails, storeLocation, receivedBy
+- FinStoreGrnLine += materialCategory, batchHeatNo, damageTransit, inspectionStatus
+- FinMaterialRequisition += requiredByDate, reasonForRequirement · FinMaterialReturn += receivedBy
+- FinGatePass += itemCode, outwardGpNo, outwardDate, remarks · FinEquipment += make, srNo, capacity, location, validityDate, lastService, nextService
+- FinScrapEntry += scrapType, location, disposedTo · FinToolIssueLog += issueNo (TI/<year>/), qty
+- New: FinDieselLog, FinGasCylinderLog, FinDailyIssue (+ FinSite back-relations)
+
+### Fix — stock ledger (the heart of the alignment)
+- New src/lib/store-ledger.ts — shared postGrnLinesToLedger / postIssueLinesToLedger / postReturnLinesToLedger; deterministic entryNo SL-<voucher>-L<lineId> so replays never double-count.
+- GRN POST now creates inside a transaction and posts accepted lines when status=Posted (store UI's default); the old /api/store/grn/[id]/post flow uses the same helper.
+- Store Issue route posts qtyOut lines (new — previously issues never touched the ledger); Material Returns post qtyIn; deletes remove their ledger lines by entryNo prefix.
+- New /api/store/stock-register: index mode (all items + balances + min-stock flag) and itemCode mode (per-item register — opening/received/issued/closing + PO/job/site/issued-to enrichment).
+
+### Fix — UI (src/components/erp/site-store.tsx)
+- GRN: 15 soft-copy header fields (pre-fills Store Location from site, Project from job), line grid editor (Category | Item | Ordered | Received | Accepted | Short/Excess | Rate | Batch/Heat | Damage Y/N | Inspection), table gained Time/Challan/Accepted/Store columns.
+- MRS: Required On-Site By + Reason for Requirement (New Work…Regular Requirement), lines show Current Stock / Min Stock from the ledger (red below-min), table gained Required By + Reason columns.
+- Returns: Received By; Tools: flat Tool Box Register (Issue No, Issue Date, Tool ID, Issued To, Qty, Return, Condition) + Tool Master; Gate Pass: Item Code (from master), outward GP/Date links, Remarks; Equipment: Make/Sr No/Capacity/Location/Validity/Last/Next Service; Scrap: Type/Location/Disposed To + dispose dialog.
+- New tabs: Stock Register (index + per-item register + low-stock banner), Diesel Register, Gas Cylinder Register, Daily Issue Register (client column sets).
+- Monthly Report rewritten to the client format: Sl.No | Item Code | Item Details | Opening | Received | Issued | Returned | Closing | Scrap | Damaged/Lost | Variance | Stock Value (+ summary cards & panels for MRS/tools/gate-pass/verification).
+- New routes: /api/store/diesel, /api/store/gas-cylinders, /api/store/daily-issues. /api/store/report + /api/store/stock-register rewritten.
+
+### Verification (live, dev server :3000)
+- POST /api/store/grn (status Posted) -> GRN/2026/0008, ledger line written (CBL-011 0→10); issue SI/2026/0002 -> 10→7; return MRN/2026/0003 -> +2; diesel DS/2026/0001 (closing auto 50+25-20=55); gas GC/2026/0001; daily DI/2026/0001. Report for 2026-11: received 12 (10 GRN + 2 ret), issued 3, closing 9, stockValue 900. Stock Register shows per-item opening→closing. Item General/GRN flow passes.
+- All test rows deleted afterwards; CBL-011 register is back to empty.
+- tsc + eslint clean on touched files. Dev server restarted (was killed for prisma generate).
+
+### Stage Summary
+Site Store now reconciles with the client's Excel formats: every movement hits a shared stock ledger, every register the client ships has a matching tab, and minimum stock flags items to reorder. GRN deleted rows can no longer strand the register.
+
+---
+
+## Task ID: 38 - PR/RFQ Project + Item Description dropdowns from setup; GRN supplier from Contractors; notification console error
+
+### Work Task
+User: "New RFQ add Project dropdown" · "prject dropdown not appearing" (in New PR) · "New RFQ form Description should call from like New Purchase Requisition" · "Vendor dropdown need to sync to contractor dropdown" · "Console TypeError Failed to fetch at fetchNotifications ... fix this".
+
+### Fix — Project / WBS dropdowns (PR + RFQ New forms)
+- procurement-pr.tsx / procurement-rfq.tsx: "Project / WBS" free-text input replaced by one <select> fed from setup — Projects (/api/projects, "PRJ-… — name") in an optgroup and Jobs/WBS (/api/fin/jobs, "JOB-… — description") in a second optgroup; an "(existing)" option keeps legacy free-text values editable.
+
+### Fix — Item Setup description picker (RFQ, mirroring the PR)
+- procurement-rfq.tsx: RFQ "Description" and every Line-Item description are now Category → Item dropdowns fed by /api/fin/item-categories + /api/fin/items (same master the Item Code Generator maintains); select lists item name+specification, shows "(existing)" for legacy text, sets the line unit from the item master. No manual typing required anymore.
+
+### Fix — GRN supplier syncs to Contractors
+- site-store.tsx: the GRN "Supplier / Vendor" free-text field is now a select of the Contractors Management master (/api/fin/vendors — the same source the RFQ/Purchase Order/Vendor dropdowns use); PO select auto-fills the supplier.
+
+### Fix — console TypeError at fetchNotifications
+- erp-layout.tsx fetchNotifications crashed with "TypeError: Failed to fetch" while the dev server was down for prisma generate. It now uses readJsonSafe, logs a one-line console.warn instead of console.error, and defers the first call (setTimeout) so React never sets state synchronously inside the effect (react-hooks/set-state-in-effect rule).
+
+### Verification
+- tsc + eslint clean on all touched files (erp-layout: 0 errors after the effect reorder + deferred call).
+
+### Stage Summary
+Every free-text entry that duplicates a master (project, item description, supplier/contractor) is now a dropdown backed by setup, and the notification bell no longer throws into the console when the dev server restarts.

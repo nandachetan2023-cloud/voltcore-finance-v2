@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client'
+import { VENDOR_DETAILS } from './vendor-master-data'
 
 const db = new PrismaClient()
 const now = new Date()
@@ -82,7 +83,7 @@ async function wipe() {
 }
 
 async function main() {
-  console.log('🌱 Seeding Finance, Procurement & Sales sample data...')
+  console.log('🌱 Seeding Finance, Purchase Management & Sales sample data...')
   await wipe()
 
   // ── Organization & people (reuse if already present) ─────────────
@@ -596,11 +597,11 @@ async function main() {
     })
   }
 
-  // ── Procurement: Purchase Requisitions with live approval chains ──
+  // ── Purchase Management: Purchase Requisitions with live approval chains ──
   const APPROVAL_CHAIN = [
     { role: 'site_engineer', label: 'Site Engineer' },
     { role: 'project_manager', label: 'Project Manager' },
-    { role: 'procurement', label: 'Procurement' },
+    { role: 'procurement', label: 'Purchase' },
     { role: 'finance', label: 'Finance' },
   ]
   const prSeed = [
@@ -629,7 +630,7 @@ async function main() {
     }
   }
 
-  // ── Procurement: RFQ, subcontract, material tracking ─────────────
+  // ── Purchase Management: RFQ, subcontract, material tracking ─────────────
   const rfq = await db.finRFQ.create({ data: { rfqNo: 'RFQ-2026-001', description: 'Safety equipment procurement', issueDate: daysAgo(66), responseDeadline: daysAgo(50), project: S1.name, status: 'Awarded' } })
   const rfqLine = await db.finRFQLineItem.create({ data: { rfqId: rfq.id, description: 'Safety Helmet', qty: 100, unit: 'pcs' } })
   await db.finRFQBid.create({ data: { rfqId: rfq.id, vendorId: VEND.steel.id, lineItemId: rfqLine.id, unitPrice: 850, leadTime: 7, compliant: true } })
@@ -918,7 +919,7 @@ await db.finMaterialIssue.create({ data: { issueNo: 'MI-2026-003', issueDate: da
     }
   }
 
-  // ── Procurement vendors (directory) ──────────────────────────────
+  // ── Purchase Management vendors (directory) ──────────────────────────────
   const vendorSeed = [
     { name: 'ElectroMech Solutions', categories: ['Electrical'], region: 'Maharashtra', status: 'preferred', rating: 4.2, contactPerson: 'Sandeep Joshi', phone: '+91-9876543001', email: 'sjoshi@electromech.in', address: 'Pune, Maharashtra', notes: 'Reliable electrical contractor for mining sites.', certificates: [{ name: 'ISO 9001', certNo: 'ISO-9001-EM-2023', issueDate: '2023-06-15', expiryDate: '2026-06-14' }, { name: 'ISO 14001', certNo: 'ISO-14001-EM-2023', issueDate: '2023-06-15', expiryDate: '2026-06-14' }, { name: 'GST Registration', certNo: 'GST-EM-2021', issueDate: '2021-07-01', expiryDate: '2026-06-30' }], metrics: { onTimeDelivery: 94, qualityRating: 4.3, priceCompetitiveness: 4.0 }, blacklistLog: [] },
     { name: 'PowerTech Industries', categories: ['Electrical', 'Mechanical'], region: 'Gujarat', status: 'standard', rating: 3.8, contactPerson: 'Amit Shah', phone: '+91-9876543002', email: 'amit@powertech.in', address: 'Vadodara, Gujarat', notes: '', certificates: [{ name: 'ISO 9001', certNo: 'ISO-9001-PT-2022', issueDate: '2022-04-01', expiryDate: '2025-03-31' }, { name: 'GST Registration', certNo: 'GST-PT-2021', issueDate: '2021-07-01', expiryDate: '2026-06-30' }], metrics: { onTimeDelivery: 82, qualityRating: 3.8, priceCompetitiveness: 3.5 }, blacklistLog: [] },
@@ -931,7 +932,7 @@ await db.finMaterialIssue.create({ data: { issueNo: 'MI-2026-003', issueDate: da
     { name: 'Pioneer Fabricators', categories: ['Mechanical', 'Civil'], region: 'Chhattisgarh', status: 'standard', rating: 3.0, contactPerson: 'Dilip Verma', phone: '+91-9876543009', email: 'dilip@pioneerfab.in', address: 'Raipur, Chhattisgarh', notes: '', certificates: [{ name: 'ISO 9001', certNo: 'ISO-9001-PF-2022', issueDate: '2022-09-01', expiryDate: '2025-08-31' }], metrics: { onTimeDelivery: 65, qualityRating: 3.2, priceCompetitiveness: 3.0 }, blacklistLog: [] },
     { name: 'Hitech Cables Ltd', categories: ['Electrical'], region: 'Maharashtra', status: 'preferred', rating: 4.3, contactPerson: 'Neha Kulkarni', phone: '+91-9876543010', email: 'neha@hitechcables.in', address: 'Mumbai, Maharashtra', notes: 'Premium cable supplier for all mining electrification projects.', certificates: [{ name: 'ISO 9001', certNo: 'ISO-9001-HCL-2023', issueDate: '2023-04-01', expiryDate: '2026-03-31' }, { name: 'OHSAS 18001', certNo: 'OHSAS-HCL-2024', issueDate: '2024-01-15', expiryDate: '2026-01-14' }, { name: 'GST Registration', certNo: 'GST-HCL-2019', issueDate: '2019-06-01', expiryDate: '2024-05-31' }], metrics: { onTimeDelivery: 96, qualityRating: 4.5, priceCompetitiveness: 3.8 }, blacklistLog: [] },
   ]
-  for (const v of vendorSeed) await db.finVendor.create({ data: v as any })
+  for (const v of vendorSeed) await db.finVendor.create({ data: { ...v, ...(VENDOR_DETAILS[v.name] || {}) } as any })
 
   // ── Purchase Order register (simplified ledger view) ─────────────
   const poRegSeed = [
@@ -969,10 +970,14 @@ await db.finMaterialIssue.create({ data: { issueNo: 'MI-2026-003', issueDate: da
   console.log(`   Site Store: ${grnStoreSeed.length} GRNs · ${mrsSeed.length} MRS · ${toolSeed.length} tools · ${equipSeed.length} equipment · 2 scrap entries · 1 physical verification`)
   console.log(`   Data is anchored to today (${TODAY.toISOString().slice(0, 10)}) so ageing buckets stay meaningful.`)
 
-  // ── Item Master: categories drive the segmented item-code series (ELC-0001…) ──
+  // ── Item Master: categories drive the segmented item-code series (CON-001…) ──
+  // Prefix master per the Item Code Master Register (Item code.docx).
   const catDefs: Array<[string, string]> = [
-    ['ELC', 'Electrical'], ['MEC', 'Mechanical'], ['CIV', 'Civil'],
-    ['SAF', 'Safety'], ['TNL', 'Tools & Consumables'], ['CNS', 'Consultancy & Services'],
+    ['CON', 'Consumable'], ['P&M', 'Power & Machine'], ['T&T', 'Tools & Tackles'],
+    ['PPE', 'PPES'], ['GAS', 'Gas'], ['ELE', 'Electrical'],
+    ['WEL', 'Welding Equipment'], ['MIN', 'Measuring Instrument'], ['LFT', 'Lifting Equipment'],
+    ['SAF', 'Safety Equipment'], ['ELC', 'Electrical'],
+    ['MEC', 'Mechanical'], ['CIV', 'Civil'], ['TNL', 'Tools & Consumables'], ['CNS', 'Consultancy & Services'],
   ]
   for (const [code, name] of catDefs) {
     await db.finItemCategory.upsert({ where: { code }, update: { name }, create: { code, name } })
@@ -1020,7 +1025,7 @@ await db.finMaterialIssue.create({ data: { issueNo: 'MI-2026-003', issueDate: da
     }
   }
 
-  console.log(`   Item Master: ${catDefs.length} categories (ELC/MEC/CIV/SAF/TNL/CNS) + ${seededItems} sample items with segmented codes`)
+  console.log(`   Item Master: ${catDefs.length} categories (CON/P&M/T&T/PPE/GAS/ELE/WEL/MIN/LFT/SAF + legacy) + ${seededItems} sample items with segmented codes`)
 }
 
 main().catch((e) => { console.error(e); process.exit(1) }).finally(async () => { await db.$disconnect() })

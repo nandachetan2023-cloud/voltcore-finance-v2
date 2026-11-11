@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { nextPrefixedCode } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,8 +108,7 @@ export async function POST(request: NextRequest) {
     let entryNo = body.entryNo
     if (!entryNo) {
       const year = new Date(body.date || Date.now()).getFullYear()
-      const count = (await pdb.finJournalEntry.count()) + 1
-      entryNo = `JE/${year}/${String(count).padStart(4, '0')}`
+      entryNo = await nextPrefixedCode(pdb, 'finJournalEntry', 'entryNo', `JE/${year}/`, 4)
     }
 
     const entry = await pdb.finJournalEntry.create({

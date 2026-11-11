@@ -28,7 +28,7 @@ const KPIS: KpiDef[] = [
 interface RecentGrn { id: number; grnNo: string; grnDate: string; vendorName?: string | null; status: string }
 
 /**
- * Procurement module root dashboard (PDF screen 1): KPI cards over the
+ * Purchase Management module root dashboard (PDF screen 1): KPI cards over the
  * sub-module tile grid. Rendered by erp-layout above SubModuleGrid tiles.
  */
 export function ProcurementDashboard() {
@@ -203,7 +203,7 @@ export function ProcurementDashboard() {
 
       <div className="flex items-center gap-1.5 pt-1 text-[10px] text-[#5a6878]">
         <TrendingUp size={11} />
-        <span>Full procurement flow: Purchase Requisition → RFQ → Quotation Comparison → PO Approval → GRN → Inventory posting</span>
+        <span>Full purchase management flow: Purchase Requisition → RFQ → Quotation Comparison → PO Approval → GRN → Inventory posting</span>
       </div>
     </div>
   )

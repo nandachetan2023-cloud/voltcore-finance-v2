@@ -1358,6 +1358,9 @@ budgetItems        BudgetItem[]
   equipment             FinEquipment[]
   scrapEntries          FinScrapEntry[]
   physicalVerifications FinPhysicalVerification[]
+  dieselLogs            FinDieselLog[]
+  gasCylinderLogs       FinGasCylinderLog[]
+  dailyIssues           FinDailyIssue[]
 
   @@index([siteCode])
   @@map("FinSite")
@@ -1728,7 +1731,7 @@ model FinMaterialReceipt {
   @@map("FinMaterialReceipt")
 }
 
-// ── Procurement: Vendor directory ─────────────────────────────────
+// ── Purchase Management: Vendor directory ─────────────────────────────
 model FinVendor {
   id            Int      @id @default(autoincrement())
   name          String
@@ -1744,13 +1747,40 @@ model FinVendor {
   certificates  Json     @default("[]") // [{name,certNo,issueDate,expiryDate}]
   metrics       Json     @default("{}") // {onTimeDelivery,qualityRating,priceCompetitiveness}
   blacklistLog  Json     @default("[]") // [{date,reason,setBy}]
+
+  // ── Contractor master (detail captured by the Contractors Management wizard) ──
+  legalName         String?   // registered entity name (may differ from trade name)
+  tradeName         String?   // trade / brand name
+  vendorCode        String?   // internal contractor code
+  vendorType        String    @default("Contractor") // Contractor | Supplier | Service Provider | Consultant | Material Supplier
+  registeredOn      DateTime? // registration / incorporation date
+  gstin             String?
+  pan               String?
+  tan               String?
+  msmeRegistered    Boolean   @default(false)
+  taxDeduction      String?   // TDS section, e.g. 194C
+  contactDesignation String?
+  alternatePhone    String?
+  website           String?
+  country           String    @default("India")
+  state             String?
+  city              String?
+  pincode           String?
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
+  bankIfsc          String?
+  paymentTerms      String?
+  creditDays        Int?
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  @@index([vendorCode])
   @@map("FinVendor")
 }
 
-// ── Procurement: Purchase Order register (simplified ledger view) ──
+// ── Purchase Management: Purchase Order register (simplified ledger view) ──
 model FinPO {
   id                 Int       @id @default(autoincrement())
   poNo               String    @unique
@@ -2120,9 +2150,11 @@ model FinProject {
 }
 
 // ── Item Master (purchase-side, category-segmented auto codes) ───────
-// itemCode format: <CATEGORY-3>-<SEQ4>, e.g. ELC-0001, CIV-0002, SAF-0001.
+// itemCode format: <CATEGORY-PREFIX>-<SEQ3>, e.g. CON-001, P&M-001, GAS-002.
 // Generated server-side (never typed), max suffix + 1 so deleted rows never
 // free their code, and unique — codes referenced by PRs/GRN/ledger live on.
+// Field order follows the Item Code Master Register: Item Name, Specification,
+// Make/Brand, Model No., Size/Capacity, Description, Unit.
 model FinItemCategory {
   id        Int      @id @default(autoincrement())
   code      String   @unique // 3-letter segment used in item codes, e.g. ELC
@@ -2140,6 +2172,10 @@ model FinItem {
   id           Int      @id @default(autoincrement())
   itemCode     String   @unique
   name         String
+  specification String?
+  makeBrand    String?
+  modelNo      String?
+  sizeCapacity String?
   description  String?
   categoryId   Int?
   uom          String   @default("Nos")
@@ -2820,7 +2856,7 @@ model FinTenderEvaluation {
   @@map("FinTenderEvaluation")
 }
 
-// ── Procurement – Purchase Requisition ───────────────────────────────
+// ── Purchase Management – Purchase Requisition ──────────────────────────
 model FinPurchaseRequisition {
   id           Int       @id @default(autoincrement())
   prNo         String    @unique
@@ -2871,7 +2907,7 @@ model FinPRApproval {
   @@map("FinPRApproval")
 }
 
-// ── Procurement – Request for Quotation ──────────────────────────────
+// ── Purchase Management – Request for Quotation ───────────────────────
 model FinRFQ {
   id               Int      @id @default(autoincrement())
   rfqNo            String   @unique
@@ -2880,6 +2916,7 @@ model FinRFQ {
   responseDeadline DateTime @db.Date
   project          String?
   notes            String?
+  vendorIds        Int[]    @default([]) // contractors invited to quote
   status           String   @default("Draft") // Draft | Sent | Responses Received | Awarded | Cancelled
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -2921,7 +2958,7 @@ model FinRFQBid {
   @@map("FinRFQBid")
 }
 
-// ── Procurement – Subcontract ───────────────────────────────────────
+// ── Purchase Management – Subcontract ─────────────────────────────────
 model FinSubcontract {
   id               Int      @id @default(autoincrement())
   subcontractNo    String   @unique
@@ -2995,7 +3032,7 @@ model FinSubcontractProgressClaim {
   @@map("FinSubcontractProgressClaim")
 }
 
-// ── Procurement – Material Tracking ──────────────────────────────────
+// ── Purchase Management – Material Tracking ─────────────────────────────
 model FinMaterialTrackingItem {
   id            Int       @id @default(autoincrement())
   poNo          String
@@ -3430,8 +3467,17 @@ model FinStoreGrn {
   siteId      Int
   jobId       Int?
   vendorName  String?
-  dcNo        String? // delivery challan no
+  dcNo        String? // delivery challan no / Challan-Invoice No
   invoiceNo   String?
+  // Client GRN Soft Copy header columns
+  timeOfReceipt    String?  // e.g. "05:30 PM"
+  projectName      String?  // Project / contract name
+  siteLocation     String?  // e.g. "Lapanga OD"
+  gateEntryNo      String?  // Gate entry no
+  vehicleNo        String?  // Vehicle No
+  lrDetails        String?  // LR / Transporter details
+  storeLocation    String?  // e.g. "Main Store" / "PPEs Store"
+  receivedBy       String?  // Received By
   status      String    @default("Draft") // Draft | Posted | Rejected
   remarks     String?
   createdAt   DateTime  @default(now())
@@ -3461,6 +3507,11 @@ model FinStoreGrnLine {
   amount       Float    @default(0)
   condition    String   @default("Good") // Good | Damaged | Partial
   remarks      String?
+  // Client GRN Soft Copy line columns
+  materialCategory String? // e.g. CONSUMABLE ITEM | TOOLS & TACKLES | PPE'S
+  batchHeatNo      String? // Batch / Heat No
+  damageTransit    String? // Damage During Transit (Y/N)
+  inspectionStatus String? // Accepted | Rejected | Pending
 
   grn     FinStoreGrn @relation(fields: [grnId], references: [id], onDelete: Cascade)
   item    Item        @relation(fields: [itemId], references: [id])
@@ -3480,6 +3531,9 @@ model FinMaterialRequisition {
   requestedBy  String?
   department   String?
   purpose      String?
+  // Client MRS store-slip columns
+  requiredByDate      DateTime? @db.Date
+  reasonForRequirement String?  // New Work | Stock Replenishment | Emergency Requirement | Replacement of Damaged Material | Additional Scope of Work | Regular Requirement
   status       String   @default("Draft") // Draft | Pending | Approved | Rejected | Issued
   approvedBy   String?
   approvedAt   DateTime?
@@ -3563,6 +3617,7 @@ model FinMaterialReturn {
   siteId      Int
   jobId       Int?
   returnedBy  String?
+  receivedBy  String?
   remarks     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -3614,10 +3669,12 @@ model FinToolIssueLog {
   id                 Int       @id @default(autoincrement())
   toolId             Int
   issuedTo           String
+  issueNo            String?   // Issue No — e.g. TI/2026/0001
   issueDate          DateTime  @db.Date
   expectedReturnDate DateTime? @db.Date
   returnDate         DateTime? @db.Date
-  condition          String? // Good | Damaged | Lost
+  qty                Float     @default(1) // Qty (usually 1 per tool)
+  condition          String?   // Good | Damaged | Lost
   remarks            String?
 
   tool FinTool @relation(fields: [toolId], references: [id], onDelete: Cascade)
@@ -3633,11 +3690,15 @@ model FinGatePass {
   type           String   @default("Outward") // Outward | Inward | Returnable | Non-Returnable
   siteId         Int
   itemDescription String
+  itemCode       String?  // item code from the item master, when the material is registered
   qty            Float    @default(0)
   vehicleNo      String?
   driverName     String?
   purpose        String?
   authorizedBy   String?
+  outwardGpNo    String?  // when this inward pass was later sent out — the outward leg's GP No
+  outwardDate    DateTime? @db.Date
+  remarks        String?
   status         String   @default("Open") // Open | Closed
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -3656,6 +3717,14 @@ model FinEquipment {
   siteId        Int
   status        String   @default("Active") // Active | Under Maintenance | Idle
   operatorName  String?
+  // Client Equipment Register columns
+  make          String?  // Make
+  srNo          String?  // Sr. No
+  capacity      String?  // Capacity
+  location      String?  // Location
+  validityDate  DateTime? @db.Date // Validity
+  lastService   DateTime? @db.Date // Last Service
+  nextService   DateTime? @db.Date // Next Service
   remarks       String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -3690,6 +3759,10 @@ model FinScrapEntry {
   jobId          Int?
   itemId         Int?
   description    String
+  // Client Damaged/Lost Register columns
+  scrapType      String?  // Damaged | Lost | Scrap
+  location       String?  // Location
+  disposedTo     String?  // Disposed To
   qty            Float    @default(0)
   unit           String   @default("Nos")
   estimatedValue Float    @default(0)
@@ -3743,9 +3816,79 @@ model FinPhysicalVerificationLine {
   @@map("FinPhysicalVerificationLine")
 }
 
+// ── Store – Diesel Register ─────────────────────────────────────
+model FinDieselLog {
+  id           Int       @id @default(autoincrement())
+  logNo        String?   @unique // DS/<year>/<seq>
+  logDate      DateTime  @db.Date
+  siteId       Int
+  vehicle      String    // Vehicle / Equipment (e.g. "Hydra", "Pickup")
+  opening      Float     @default(0)
+  received     Float     @default(0)
+  consumed     Float     @default(0)
+  closing      Float     @default(0) // opening + received - consumed
+  operatorName String?   // Operator
+  remarks      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  site FinSite @relation(fields: [siteId], references: [id])
+
+  @@index([siteId])
+  @@map("FinDieselLog")
+}
+
+// ── Store – Gas Cylinder Register ───────────────────────────────
+model FinGasCylinderLog {
+  id              Int       @id @default(autoincrement())
+  logNo           String?   @unique // GC/<year>/<seq>
+  logDate         DateTime  @db.Date
+  siteId          Int
+  gasType         String    // O2 | DA | Argon | CO2 | N2 | Acetylene
+  cylinderNo      String?   // Cylinder No
+  direction       String    @default("Received") // Received | Issued
+  qty             Float     @default(1)
+  issuedTo        String?   // Issued To (when direction = Issued)
+  condition       String?   // Good | Empty | Damaged
+  emptyReturnDate DateTime? @db.Date // Empty Return Date
+  returnChallanNo String?   // Return Challan No
+  remarks         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  site FinSite @relation(fields: [siteId], references: [id])
+
+  @@index([siteId])
+  @@map("FinGasCylinderLog")
+}
+
+// ── Store – Daily Issue Register ────────────────────────────────
+model FinDailyIssue {
+  id              Int       @id @default(autoincrement())
+  issueNo         String?   @unique // DI/<year>/<seq>
+  issueDate       DateTime  @db.Date
+  siteId          Int
+  itemName        String    // Item Name
+  itemCode        String?   // Item Code (optional)
+  qty             Float     @default(0)
+  unit            String?   // Unit
+  receiverName    String    // Receiver Name
+  mobileNumber    String?   // Mobile Number
+  purposeLocation String?   // Purpose/Location
+  returned        Boolean   @default(false) // Return (came back)
+  remarks         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  site FinSite @relation(fields: [siteId], references: [id])
+
+  @@index([siteId])
+  @@map("FinDailyIssue")
+}
+
 // ── Assets & Operations ─────────────────────────────────────────
-// Backing tables for the Assets menu (Equipment, Work Permits, Safety & HSE,
-// Subcontractors). Codes (EQ-/PTW-/INC-) are generated by the API, never typed.
+// Backing tables for the Assets menu (Equipment, Work Permits, Safety & HSE).
+// Codes (EQ-/PTW-/INC-) are generated by the API, never typed.
 // `site` is the site name as shown on screen, not an FK to FinSite.
 
 model Equipment {
@@ -3799,20 +3942,4 @@ model Incident {
 
   @@index([status])
   @@index([date])
-}
-
-model Subcontractor {
-  id         Int      @id @default(autoincrement())
-  name       String
-  trade      String
-  workers    Int      @default(0)
-  site       String
-  pfReg      String   @default("Pending") // Done | Pending | Missing
-  esiReg     String   @default("Pending") // Done | Pending | Missing
-  labourLic  String   @default("Pending") // Valid | Pending | Expired
-  compliance String   @default("Non-Compliant") // Compliant | Non-Compliant
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@index([site])
 }

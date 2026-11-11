@@ -11,12 +11,21 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
+import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
+import { useContractors } from './_contractor-master';
 import ImportWizard, { type ImportField } from './_import-wizard';
+import { readJsonSafe } from '@/lib/safe-json';
 
 interface Vendor { id: number; name: string; }
-interface RFQLineItem { id: number; description: string; qty: number; unit: string; }
+interface ItemCategory { id: number; code: string; name: string; }
+interface MasterItem {
+  id: number; itemCode: string; name: string; specification: string | null;
+  uom: string; rate: number; categoryId: number | null;
+  category?: { id: number; code: string; name: string } | null;
+}
+interface RFQLineItem { id: number; description: string; qty: number; unit: string; categoryId?: number | ''; itemId?: number; }
+const descOf = (m: MasterItem) => `${m.name}${m.specification ? ' — ' + m.specification : ''}`;
 interface VendorBid { vendorId: number; lineItemId: number; unitPrice: number; leadTime: number; notes: string; compliant: boolean; }
 interface RFQ { id: number; rfqNo: string; description: string; issueDate: string; responseDeadline: string; project: string; notes: string; status: string; vendorIds?: number[]; lineItems: RFQLineItem[]; bids: VendorBid[]; }
 
@@ -65,7 +74,7 @@ function generateMockRFQs(): RFQ[] {
   ];
 }
 
-const VENDORS: Vendor[] = [
+const LEGACY_VENDORS: Vendor[] = [
   { id: 1, name: 'ElectroMech Solutions' },
   { id: 2, name: 'PowerTech Industries' },
   { id: 3, name: 'Bharat Heavy Electricals' },
@@ -96,8 +105,6 @@ function deadlineColor(days: number): string {
 function totalBid(vendorId: number, items: RFQLineItem[], bids: VendorBid[]): number {
   return bids.filter(b => b.vendorId === vendorId).reduce((s, b) => s + b.unitPrice * (items.find(i => i.id === b.lineItemId)?.qty ?? 1), 0);
 }
-
-function vendorName(id: number): string { return VENDORS.find(v => v.id === id)?.name ?? 'Unknown'; }
 
 function vendorIdsOf(r: any): number[] {
   if (Array.isArray(r.vendorIds)) return r.vendorIds;
@@ -133,6 +140,20 @@ export default function ProcurementRFQ() {
   const [detailTab, setDetailTab] = useState<'bids' | 'compare'>('bids');
   const [importOpen, setImportOpen] = useState(false);
 
+  // Contractors come from the Contractors Management master — this module
+  // only invites them, it never creates one.
+  const { contractors } = useContractors();
+  const vendorList = useMemo(() => {
+    const usedIds = new Set(contractors.map(c => c.id));
+    const usedNames = new Set(contractors.map(c => c.name.toLowerCase()));
+    const legacy = LEGACY_VENDORS.filter(v => !usedIds.has(v.id) && !usedNames.has(v.name.toLowerCase()));
+    return [...contractors.map(c => ({ id: c.id, name: c.name })), ...legacy];
+  }, [contractors]);
+  const vendorName = useCallback(
+    (id: number) => vendorList.find(v => v.id === id)?.name ?? 'Unknown',
+    [vendorList],
+  );
+
   const fetchRfqs = useCallback(async () => {
     try {
       setLoading(true); setError(null);
@@ -147,13 +168,44 @@ export default function ProcurementRFQ() {
   }, []);
   useEffect(() => { fetchRfqs(); }, [fetchRfqs]);
 
+  // Item Setup (Item Code Generator) — categories and items drive the Description pickers.
+  const [itemCategories, setItemCategories] = useState<ItemCategory[]>([]);
+  const [masterItems, setMasterItems] = useState<MasterItem[]>([]);
+  // Projects / Jobs (WBS) from setup for the Project picker.
+  const [projects, setProjects] = useState<Array<{ id: string | number; code: string; name: string }>>([]);
+  const [jobs, setJobs] = useState<Array<{ id: number; jobCode: string; description: string | null }>>([]);
+  useEffect(() => {
+    fetch('/api/fin/item-categories').then(r => readJsonSafe(r)).then(j => { if (j.success) setItemCategories(j.data ?? []); });
+    fetch('/api/fin/items').then(r => readJsonSafe(r)).then(j => { if (j.success) setMasterItems(j.data ?? []); });
+    fetch('/api/projects').then(r => readJsonSafe(r)).then(j => { if (j.success) setProjects(j.data ?? []); });
+    fetch('/api/fin/jobs').then(r => readJsonSafe(r)).then(j => { if (j.success) setJobs(j.data ?? []); });
+  }, []);
+
   const filtered = rfqs.filter(r => statusFilter === 'All' || r.status === statusFilter);
   const tc = useTableControls(filtered, (r) => r.rfqNo + ' ' + r.description + ' ' + r.project + ' ' + r.status);
 
-  const [form, setForm] = useState({ rfqNo: '', description: '', issueDate: new Date().toISOString().split('T')[0], responseDeadline: '', project: '', notes: '' });
+  const [form, setForm] = useState({ rfqNo: '', description: '', issueDate: new Date().toISOString().split('T')[0], responseDeadline: '', project: '', notes: '', descCategory: '' as number | '' });
   const [formVendors, setFormVendors] = useState<number[]>([]);
   const [formLines, setFormLines] = useState<RFQLineItem[]>([EMPTY_LINE()]);
   const [formSearch, setFormSearch] = useState('');
+
+  const unitOptions = useMemo(
+    () => [...new Set([...UNITS, ...masterItems.map(m => m.uom).filter(Boolean)])],
+    [masterItems],
+  );
+
+  const descValueFor = (d: string) => {
+    const matched = masterItems.find(m => descOf(m) === d);
+    return matched ? String(matched.id) : d ? `custom:${d}` : '';
+  };
+  const lineValue = (it: RFQLineItem) => (it.itemId ? String(it.itemId) : descValueFor(it.description));
+  const applyItemToLine = (idx: number, raw: string) => {
+    const m = masterItems.find(x => String(x.id) === raw);
+    if (!m) return; // "(existing)" option — keep the current text
+    const n = [...formLines];
+    n[idx] = { ...n[idx], itemId: m.id, categoryId: m.categoryId ?? '', description: descOf(m), unit: m.uom || n[idx].unit };
+    setFormLines(n);
+  };
 
   const summary = useMemo(() => ({
     total: rfqs.length, sent: rfqs.filter(r => r.status === 'Sent').length,
@@ -162,23 +214,36 @@ export default function ProcurementRFQ() {
     draft: rfqs.filter(r => r.status === 'Draft').length,
   }), [rfqs]);
 
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { All: rfqs.length };
+    for (const s of STATUSES) if (s !== 'All') counts[s] = rfqs.filter(r => r.status === s).length;
+    return counts;
+  }, [rfqs]);
+
   const generateRfqNo = () => {
     const year = new Date().getFullYear();
+    const prefix = `RFQ-${year}-`;
     const existing = new Set(rfqs.map(r => r.rfqNo));
-    let seq = rfqs.length + 1;
-    let candidate = `RFQ/${year}/${String(seq).padStart(3, '0')}`;
-    while (existing.has(candidate)) { seq += 1; candidate = `RFQ/${year}/${String(seq).padStart(3, '0')}`; }
+    // Next free number in the RFQ-<year>-<NNN> series (the format the register uses)
+    let max = 0;
+    for (const r of rfqs) {
+      const m = String(r.rfqNo).match(new RegExp(`^${prefix}(\\d+)$`));
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    let seq = max + 1;
+    let candidate = `${prefix}${String(seq).padStart(3, '0')}`;
+    while (existing.has(candidate)) { seq += 1; candidate = `${prefix}${String(seq).padStart(3, '0')}`; }
     return candidate;
   };
   const openCreate = () => {
     setEditTarget(null);
-    setForm({ rfqNo: generateRfqNo(), description: '', issueDate: new Date().toISOString().split('T')[0], responseDeadline: '', project: '', notes: '' });
+    setForm({ rfqNo: generateRfqNo(), description: '', issueDate: new Date().toISOString().split('T')[0], responseDeadline: '', project: '', notes: '', descCategory: '' });
     setFormVendors([]); setFormLines([EMPTY_LINE()]); setFormSearch(''); setFormOpen(true);
   };
 
   const openEdit = (r: RFQ) => {
     setEditTarget(r);
-    setForm({ rfqNo: r.rfqNo, description: r.description, issueDate: r.issueDate, responseDeadline: r.responseDeadline, project: r.project, notes: r.notes });
+    setForm({ rfqNo: r.rfqNo, description: r.description, issueDate: r.issueDate, responseDeadline: r.responseDeadline, project: r.project, notes: r.notes, descCategory: '' });
     setFormVendors([...vendorIdsOf(r)]); setFormLines(r.lineItems.map(li => ({ ...li }))); setFormSearch(''); setFormOpen(true);
   };
 
@@ -272,7 +337,7 @@ export default function ProcurementRFQ() {
       .catch(() => toast.error('Failed to create PO'));
   };
 
-  const filteredVendors = VENDORS.filter(v => v.name.toLowerCase().includes(formSearch.toLowerCase()));
+  const filteredVendors = vendorList.filter(v => v.name.toLowerCase().includes(formSearch.toLowerCase()));
   const daysRemaining = detailRfq ? daysUntil(detailRfq.responseDeadline) : 0;
   const recommendId = detailRfq ? recommendVendor(detailRfq) : null;
 
@@ -291,7 +356,13 @@ export default function ProcurementRFQ() {
     );
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
+  const loadingView = (
+    <div className="space-y-4 p-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">{[0, 1, 2, 3, 4].map(i => <Skeleton key={i} className="h-[88px] rounded-xl bg-[#161c24] border border-[#252e3a]" />)}</div>
+      <Skeleton className="h-72 rounded-xl bg-[#161c24] border border-[#252e3a]" />
+    </div>
+  );
+  if (loading) return loadingView;
   if (error) return <div className="flex items-center justify-center h-64 text-[#ff3d3d] text-[13px] font-medium">{error}</div>;
 
   return (
@@ -327,21 +398,25 @@ export default function ProcurementRFQ() {
           <span className="text-[12px] font-semibold text-[#e2e8f0]">RFQ Management</span>
           <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{tc.total}</span>
           <div className="ml-2"><SearchInput value={tc.search} onChange={tc.setSearch} placeholder="Search RFQs..." /></div>
-          <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={rfqs} columns={RFQ_COLUMNS} filename="procurement-rfq" />
+          <button onClick={() => setImportOpen(true)} className="vc-btn-ghost flex items-center gap-1.5 text-[11px]"><Upload size={13} /> Import</button><ExportButton records={rfqs} columns={RFQ_COLUMNS} filename="purchase-rfq" />
           <button onClick={openCreate} className="vc-btn-primary flex items-center gap-1.5 ml-2"><Plus size={13} /> New RFQ</button>
         </div>
-        <div className="flex gap-1.5 px-3 py-2 border-b border-[#252e3a]">
+        <div className="flex gap-1.5 px-3 py-2 border-b border-[#252e3a] flex-wrap">
           {STATUSES.map(s => (
             <button key={s} onClick={() => setStatusFilter(s)}
-              className={'px-3 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-[1px] transition-all ' + (statusFilter === s ? 'bg-[#f5a623] text-[#0f1318]' : 'bg-[#252e3a] text-[#8899aa] hover:text-[#e2e8f0]')}>{s}</button>
+              className={'px-3 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-[1px] transition-all inline-flex items-center gap-1.5 ' + (statusFilter === s ? 'bg-[#f5a623] text-[#0f1318]' : 'bg-[#252e3a] text-[#8899aa] hover:text-[#e2e8f0]')}>{s}<span className={'text-[9px] font-mono ' + (statusFilter === s ? 'text-[#0f1318]/70' : 'text-[#5a6878]')}>{statusCounts[s] ?? 0}</span></button>
           ))}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
-              {['RFQ#', 'Description', 'Vendors', 'Responses', 'Deadline', 'Status', ''].map(h => (
-                <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>
-              ))}
+              <SortableTh label="RFQ#" sortKey="rfqNo" accessor={(r: RFQ) => r.rfqNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Description" sortKey="description" accessor={(r: RFQ) => r.description} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Vendors" sortKey="vendors" accessor={(r: RFQ) => vendorIdsOf(r).length} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Responses" sortKey="responses" accessor={(r: RFQ) => [...new Set(r.bids.map(b => b.vendorId))].length} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Deadline" sortKey="deadline" accessor={(r: RFQ) => new Date(r.responseDeadline).getTime()} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Status" sortKey="status" accessor={(r: RFQ) => r.status} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <th className="py-2 px-3"></th>
             </tr></thead>
             <tbody className="divide-y divide-[#1a2028]">
               {tc.pageItems.map(r => {
@@ -370,7 +445,7 @@ export default function ProcurementRFQ() {
                   </tr>
                 );
               })}
-              {tc.pageItems.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-[#5a6878]">No RFQs found</td></tr>}
+              {tc.pageItems.length === 0 && <tr><td colSpan={7} className="py-10 text-center"><FileText size={28} className="mx-auto text-[#2a3542] mb-2" /><div className="text-[12px] text-[#8899aa] font-medium">No RFQs found</div><div className="text-[10px] text-[#5a6878] mt-0.5">{statusFilter === 'All' ? 'Create the first RFQ to start collecting quotes.' : `No ${statusFilter} RFQs — try another filter or create a new one.`}</div><button onClick={openCreate} className="vc-btn-primary inline-flex items-center gap-1.5 mt-3 mx-auto text-[11px]"><Plus size={13} /> New RFQ</button></td></tr>}
             </tbody>
           </table>
           <PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} />
@@ -379,14 +454,45 @@ export default function ProcurementRFQ() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] w-[52.5vw] sm:max-w-[52.5vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editTarget ? 'Edit' : 'New'} RFQ</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
             <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">RFQ No</label><input value={form.rfqNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated" /></div>
             <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Issue Date</label><input type="date" value={form.issueDate} onChange={e => setForm({...form, issueDate: e.target.value})} className="vc-input" /></div>
-            <div className="col-span-2"><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Description</label><input value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="vc-input" /></div>
+            <div className="col-span-2"><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Description</label>
+              <div className="flex gap-2">
+                <select value={form.descCategory} onChange={e => setForm({...form, descCategory: e.target.value ? Number(e.target.value) : ''})} className="vc-input !w-[120px] appearance-none">
+                  <option value="">All categories</option>
+                  {itemCategories.map(c => <option key={c.id} value={c.id}>{c.code}</option>)}
+                </select>
+                <select value={descValueFor(form.description)} onChange={e => {
+                  const v = e.target.value;
+                  if (!v) { setForm({...form, description: ''}); return; }
+                  const m = masterItems.find(x => String(x.id) === v);
+                  setForm({...form, description: m ? descOf(m) : form.description, descCategory: m?.categoryId ?? form.descCategory});
+                }} className="vc-input flex-1 appearance-none">
+                  <option value="">Select from Item Setup…</option>
+                  {masterItems.filter(m => !form.descCategory || m.categoryId === Number(form.descCategory)).map(m => <option key={m.id} value={String(m.id)}>{descOf(m)}</option>)}
+                  {form.description && !masterItems.some(m => descOf(m) === form.description) && <option value={`custom:${form.description}`}>{form.description} (existing)</option>}
+                </select>
+              </div>
+            </div>
             <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Response Deadline</label><input type="date" value={form.responseDeadline} onChange={e => setForm({...form, responseDeadline: e.target.value})} className="vc-input" /></div>
-            <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Project</label><input value={form.project} onChange={e => setForm({...form, project: e.target.value})} className="vc-input" /></div>
+            <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Project</label>
+              <select value={form.project} onChange={e => setForm({...form, project: e.target.value})} required
+                className="vc-input appearance-none">
+                <option value="">Select project or job…</option>
+                <optgroup label="Projects">
+                  {projects.map(p => <option key={p.id} value={`${p.code} — ${p.name}`}>{p.code} — {p.name}</option>)}
+                </optgroup>
+                <optgroup label="Jobs / WBS">
+                  {jobs.map(j => <option key={j.id} value={`${j.jobCode} — ${j.description ?? ''}`}>{j.jobCode} — {j.description ?? ''}</option>)}
+                </optgroup>
+                {form.project && !projects.some(p => `${p.code} — ${p.name}` === form.project) && !jobs.some(j => `${j.jobCode} — ${j.description ?? ''}` === form.project) && (
+                  <option value={form.project}>{form.project} (existing)</option>
+                )}
+              </select>
+            </div>
             <div className="col-span-2"><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Notes</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="vc-input" rows={3} /></div>
           </div>
           {/* Vendor Selection */}
@@ -416,9 +522,21 @@ export default function ProcurementRFQ() {
                 <tbody className="divide-y divide-[#1a2028]">
                   {formLines.map((it, idx) => (
                     <tr key={it.id} className="hover:bg-[#141920]">
-                      <td className="py-1.5 px-3"><input type="text" value={it.description} onChange={e => { const n = [...formLines]; n[idx] = {...n[idx], description: e.target.value}; setFormLines(n); }} className="bg-[#0a0d12] border border-[#252e3a] rounded px-2 py-1 text-[11px] text-[#e2e8f0] w-full focus:border-[#f5a623] focus:outline-none" placeholder="Item description" /></td>
+                      <td className="py-1.5 px-3">
+                        <div className="flex gap-1.5">
+                          <select value={it.categoryId ?? ''} onChange={e => { const n = [...formLines]; n[idx] = {...n[idx], categoryId: e.target.value ? Number(e.target.value) : ''}; setFormLines(n); }} className="bg-[#0a0d12] border border-[#252e3a] rounded px-1.5 py-1 text-[10px] text-[#e2e8f0] w-[90px] appearance-none focus:border-[#f5a623] focus:outline-none">
+                            <option value="">All categories</option>
+                            {itemCategories.map(c => <option key={c.id} value={c.id}>{c.code}</option>)}
+                          </select>
+                          <select value={lineValue(it)} onChange={e => applyItemToLine(idx, e.target.value)} className="bg-[#0a0d12] border border-[#252e3a] rounded px-2 py-1 text-[11px] text-[#e2e8f0] flex-1 min-w-0 appearance-none focus:border-[#f5a623] focus:outline-none">
+                            <option value="">Select from Item Setup…</option>
+                            {masterItems.filter(m => !it.categoryId || m.categoryId === Number(it.categoryId)).map(m => <option key={m.id} value={String(m.id)}>{descOf(m)}</option>)}
+                            {it.description && !masterItems.some(m => descOf(m) === it.description) && <option value={`custom:${it.description}`}>{it.description} (existing)</option>}
+                          </select>
+                        </div>
+                      </td>
                       <td className="py-1.5 px-3"><input type="number" value={it.qty} onChange={e => { const n = [...formLines]; n[idx] = {...n[idx], qty: Number(e.target.value)}; setFormLines(n); }} className="bg-[#0a0d12] border border-[#252e3a] rounded px-2 py-1 text-[11px] text-[#e2e8f0] w-[50px] focus:border-[#f5a623] focus:outline-none" /></td>
-                      <td className="py-1.5 px-3"><select value={it.unit} onChange={e => { const n = [...formLines]; n[idx] = {...n[idx], unit: e.target.value}; setFormLines(n); }} className="bg-[#0a0d12] border border-[#252e3a] rounded px-2 py-1 text-[11px] text-[#e2e8f0] w-[60px] appearance-none focus:border-[#f5a623] focus:outline-none">{UNITS.map(u => <option key={u} value={u}>{u}</option>)}</select></td>
+                       <td className="py-1.5 px-3"><select value={it.unit} onChange={e => { const n = [...formLines]; n[idx] = {...n[idx], unit: e.target.value}; setFormLines(n); }} className="bg-[#0a0d12] border border-[#252e3a] rounded px-2 py-1 text-[11px] text-[#e2e8f0] w-[60px] appearance-none focus:border-[#f5a623] focus:outline-none">{unitOptions.map(u => <option key={u} value={u}>{u}</option>)}</select></td>
                       <td className="py-1.5 px-3"><button onClick={() => { if (formLines.length > 1) setFormLines(p => p.filter((_, i) => i !== idx)); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d]"><XIcon size={11} /></button></td>
                     </tr>
                   ))}
@@ -434,7 +552,7 @@ export default function ProcurementRFQ() {
       {/* Detail Dialog */}
       {detailRfq && (
         <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-          <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] max-w-6xl max-h-[95vh] overflow-y-auto">
+          <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-6xl max-h-[95vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center justify-between">
                 <DialogTitle className="text-[#f5a623]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{detailRfq.rfqNo} — {detailRfq.project}</DialogTitle>
@@ -502,10 +620,10 @@ export default function ProcurementRFQ() {
                       const hasBid = detailRfq.bids.some(b => b.vendorId === vid);
                       const isActive = activeVendorTab === vid;
                       return (
-                        <button key={vid} onClick={() => openVendorTab(vid)}
-                          className={'px-3 py-1.5 rounded-lg text-[10px] font-medium transition-all flex items-center gap-1.5 ' + (isActive ? 'bg-[#f5a623] text-[#0a0d12]' : hasBid ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#252e3a] text-[#8899aa] hover:text-[#e2e8f0]')}>
-                          {vendorName(vid)} {hasBid && <CheckCircle size={10} />}
-                        </button>
+                         <button key={vid} onClick={() => openVendorTab(vid)}
+                           className={'px-3 py-1.5 rounded-lg text-[10px] font-medium transition-all flex items-center gap-1.5 ' + (isActive ? 'bg-[#f5a623] text-[#0a0d12]' : hasBid ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#252e3a] text-[#8899aa] hover:text-[#e2e8f0]')}>
+                           {vendorName(vid)} {hasBid && <CheckCircle size={10} />}{vid === recommendId && <span className={'text-[8px] uppercase font-bold px-1 py-0.5 rounded ' + (isActive ? 'bg-[#0a0d12] text-[#f5a623]' : 'bg-[#00e676] text-[#0a0d12]')}>Best</span>}
+                         </button>
                       );
                     })}
                   </div>

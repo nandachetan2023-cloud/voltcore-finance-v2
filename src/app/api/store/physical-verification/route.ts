@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { nextPrefixedCode } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,8 +32,7 @@ export async function POST(request: NextRequest) {
     const { lines, ...data } = body
     if (!data.verificationNo) {
       const year = new Date().getFullYear()
-      const count = (await pdb.finPhysicalVerification.count()) + 1
-      data.verificationNo = `PV/${year}/${String(count).padStart(4, '0')}`
+      data.verificationNo = await nextPrefixedCode(pdb, 'finPhysicalVerification', 'verificationNo', `PV/${year}/`, 4)
     }
     const record = await pdb.finPhysicalVerification.create({
       data: {

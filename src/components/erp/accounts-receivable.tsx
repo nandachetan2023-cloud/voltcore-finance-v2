@@ -33,7 +33,7 @@ interface JobRef { id: number; jobCode: string; description: string | null; site
 
 interface FormData {
   invoiceNo: string; client: string; clientCode: string; invoiceRef: string;
-  description: string; invoiceDate: string; dueDate: string; totalAmount: number; status: string;
+  description: string; dueDate: string; totalAmount: number; status: string;
   receivedAmount: number; tdsAmount: number; deductionType: string; otherDeduction: number;
   siteId: string; partyId: string; jobCode: string;
   poNo: string; costCenter: string; department: string; projectManager: string;
@@ -89,7 +89,7 @@ const AR_IMPORT_FIELDS: ImportField[] = [
 ];
 const AR_SAMPLE_ROW = { invoiceNo: 'AR/2024-25/001', client: 'NTPC Ltd', clientCode: 'NTPC-001', invoiceRef: 'REF-001', description: 'Electrical panel installation', siteCode: 'SIT-001', jobCode: 'JOB-2026-001', poNo: 'PO-1001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', amount: 4500000, tax: 810000, totalAmount: 5310000, receivedAmount: 6000000, tdsAmount: 100000, deductionType: 'Retention', otherDeduction: 50000, dueDate: '2025-02-15', status: 'Partially Received' };
 
-const EMPTY_FORM: FormData = { invoiceNo: '', client: '', clientCode: '', invoiceRef: '', description: '', invoiceDate: '', dueDate: '', totalAmount: 0, status: 'Pending', receivedAmount: 0, tdsAmount: 0, deductionType: '', otherDeduction: 0, siteId: '', partyId: '', jobCode: '', poNo: '', costCenter: '', department: '', projectManager: '' };
+const EMPTY_FORM: FormData = { invoiceNo: '', client: '', clientCode: '', invoiceRef: '', description: '', dueDate: '', totalAmount: 0, status: 'Pending', receivedAmount: 0, tdsAmount: 0, deductionType: '', otherDeduction: 0, siteId: '', partyId: '', jobCode: '', poNo: '', costCenter: '', department: '', projectManager: '' };
 const NEW_LINE = (): LineItem => ({ id: Date.now() + Math.random(), description: '', glAccount: '', quantity: 1, unitPrice: 0 });
 
 function generateMockAR(): ARRecord[] {
@@ -181,7 +181,7 @@ export default function AccountsReceivable() {
 
   const openEdit = (r: ARRecord) => {
     setEditTarget(r);
-    setForm({ invoiceNo: r.invoiceNo, client: r.client, clientCode: r.clientCode || '', invoiceRef: r.invoiceRef || '', description: r.description || '', invoiceDate: '', dueDate: r.dueDate?.split('T')[0] || '', totalAmount: r.totalAmount, status: r.status, receivedAmount: r.receivedAmount || 0, tdsAmount: r.tdsAmount || 0, deductionType: r.deductionType || '', otherDeduction: r.otherDeduction || 0, siteId: r.siteId ? String(r.siteId) : '', partyId: r.partyId ? String(r.partyId) : '', jobCode: r.jobCode || '', poNo: r.poNo || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' });
+    setForm({ invoiceNo: r.invoiceNo, client: r.client, clientCode: r.clientCode || '', invoiceRef: r.invoiceRef || '', description: r.description || '', dueDate: r.dueDate?.split('T')[0] || '', totalAmount: r.totalAmount, status: r.status, receivedAmount: r.receivedAmount || 0, tdsAmount: r.tdsAmount || 0, deductionType: r.deductionType || '', otherDeduction: r.otherDeduction || 0, siteId: r.siteId ? String(r.siteId) : '', partyId: r.partyId ? String(r.partyId) : '', jobCode: r.jobCode || '', poNo: r.poNo || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' });
     setFormErrors({});
     setLines([{ id: 1, description: r.description || '', glAccount: '', quantity: 1, unitPrice: r.amount }]);
     setView('form');
@@ -362,9 +362,6 @@ export default function AccountsReceivable() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <FormField label="Invoice No" hint="Generated automatically when you save">
               <input value={form.invoiceNo} readOnly placeholder="Auto-generated on save" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] opacity-60 placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
-            </FormField>
-            <FormField label="Invoice Date">
-              <input type="date" value={form.invoiceDate} onChange={e => setField('invoiceDate', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" />
             </FormField>
             <FormField label="Due Date" required error={formErrors.dueDate}>
               <input type="date" value={form.dueDate} onChange={e => setField('dueDate', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" />

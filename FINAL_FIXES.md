@@ -130,7 +130,6 @@ These modules still return empty data (models don't exist in schema):
 - Incidents
 - Permits
 - Expenses
-- Subcontractors
 - Support
 - Knowledgebase
 - Training

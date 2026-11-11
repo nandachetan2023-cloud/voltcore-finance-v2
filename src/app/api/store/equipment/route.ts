@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { nextPrefixedCode } from '@/lib/auto-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,13 +31,18 @@ export async function POST(request: NextRequest) {
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create equipment' }, { status: 403 })
     let equipmentCode = body.equipmentCode
     if (!equipmentCode) {
-      const count = (await pdb.finEquipment.count()) + 1
-      equipmentCode = `EQ-${String(count).padStart(4, '0')}`
+      equipmentCode = await nextPrefixedCode(pdb, 'finEquipment', 'equipmentCode', `EQ-`, 4)
     }
     const record = await pdb.finEquipment.create({
       data: {
         equipmentCode, name: body.name, type: body.type || null, siteId: Number(body.siteId),
-        status: body.status || 'Active', operatorName: body.operatorName || null, remarks: body.remarks || null,
+        status: body.status || 'Active', operatorName: body.operatorName || null,
+        make: body.make || null, srNo: body.srNo || null, capacity: body.capacity || null,
+        location: body.location || null,
+        validityDate: body.validityDate ? new Date(body.validityDate) : null,
+        lastService: body.lastService ? new Date(body.lastService) : null,
+        nextService: body.nextService ? new Date(body.nextService) : null,
+        remarks: body.remarks || null,
       },
       include: INCLUDE,
     })
@@ -72,6 +78,13 @@ export async function PUT(request: NextRequest) {
           ...(data.siteId !== undefined ? { siteId: Number(data.siteId) } : {}),
           ...(data.status !== undefined ? { status: data.status } : {}),
           ...(data.operatorName !== undefined ? { operatorName: data.operatorName } : {}),
+          ...(data.make !== undefined ? { make: data.make } : {}),
+          ...(data.srNo !== undefined ? { srNo: data.srNo } : {}),
+          ...(data.capacity !== undefined ? { capacity: data.capacity } : {}),
+          ...(data.location !== undefined ? { location: data.location } : {}),
+          ...(data.validityDate !== undefined ? { validityDate: data.validityDate ? new Date(data.validityDate) : null } : {}),
+          ...(data.lastService !== undefined ? { lastService: data.lastService ? new Date(data.lastService) : null } : {}),
+          ...(data.nextService !== undefined ? { nextService: data.nextService ? new Date(data.nextService) : null } : {}),
           ...(data.remarks !== undefined ? { remarks: data.remarks } : {}),
         },
       })

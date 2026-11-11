@@ -18,7 +18,14 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const pdb = getDbForRequest(request)
-    const record = await pdb.finMaterialTrackingItem.create({ data: body })
+    if (!body.scheduledDate) return NextResponse.json({ success: false, error: 'scheduledDate is required' }, { status: 400 })
+    const data: any = { ...body }
+    data.scheduledDate = new Date(data.scheduledDate)
+    if (data.expectedDate) data.expectedDate = new Date(data.expectedDate)
+    else delete data.expectedDate
+    if (data.daysOverdue !== undefined) data.daysOverdue = Number(data.daysOverdue) || 0
+    for (const k of ['qtyRequired', 'qtyStock', 'qtyInTransit']) if (data[k] !== undefined) data[k] = Number(data[k]) || 0
+    const record = await pdb.finMaterialTrackingItem.create({ data })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating material tracking:', error)
@@ -29,9 +36,15 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, ...data } = body
+    const { id, ...raw } = body
     if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 })
     const pdb = getDbForRequest(request)
+    const data: any = { ...raw }
+    if (data.scheduledDate) data.scheduledDate = new Date(data.scheduledDate)
+    if (data.expectedDate) data.expectedDate = new Date(data.expectedDate)
+    else if (data.expectedDate === '') delete data.expectedDate
+    if (data.daysOverdue !== undefined) data.daysOverdue = Number(data.daysOverdue) || 0
+    for (const k of ['qtyRequired', 'qtyStock', 'qtyInTransit']) if (data[k] !== undefined) data[k] = Number(data[k]) || 0
     const record = await pdb.finMaterialTrackingItem.update({ where: { id }, data })
     return NextResponse.json({ success: true, data: record })
   } catch (error) {

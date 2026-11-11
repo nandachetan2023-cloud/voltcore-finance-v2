@@ -33,7 +33,7 @@ The API routes were written for an old schema that had different field names and
 - StockEntryLine
 - StockLedger
 
-### Procurement
+### Purchase Management
 - Vendor
 - PurchaseOrder
 - PurchaseOrderItem
@@ -63,7 +63,6 @@ These API routes reference models that don't exist:
 - Incident
 - Permit
 - Expense
-- Subcontractor
 - Training/Certification
 - Support/Ticket
 - Knowledgebase

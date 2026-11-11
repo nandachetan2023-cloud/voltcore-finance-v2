@@ -160,6 +160,11 @@ const PA_SAMPLE_ROW = {
   billNo: 'BHEL/INV/001',
   invDate: '2024-11-30',
   month: 'Nov-24',
+  invAmount: 2950000,
+  tdsAmount: 37500,
+  amount: 2912500,
+  paidAmount: 2912500,
+  balanceAmount: 0,
 };
 
 function fmt(n: number) { return '₹' + (n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 }); }

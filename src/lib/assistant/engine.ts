@@ -222,7 +222,7 @@ export async function run(request: NextRequest, req: AssistantRequest): Promise<
     return {
       success: false,
       action: 'info',
-      message: `I couldn't match that to a finance/procurement form. I can create: ${FORMS.map((f) => f.title).join(', ')}.`,
+      message: `I couldn't match that to a finance/purchase form. I can create: ${FORMS.map((f) => f.title).join(', ')}.`,
       available: FORMS.map((f) => f.title),
     };
   }

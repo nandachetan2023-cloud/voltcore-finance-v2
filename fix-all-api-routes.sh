@@ -11,7 +11,6 @@ STUB_ROUTES=(
   "incidents"
   "permits"
   "expenses"
-  "subcontractors"
   "support"
   "knowledgebase"
   "journal-entries"

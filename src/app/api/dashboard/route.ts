@@ -41,7 +41,6 @@ export async function GET(request: NextRequest) {
       openIncidents,
       totalEquipment,
       operationalEquipment,
-      totalSubcontractors,
     ] = await Promise.all([
       safe(() => db.employee.count(), 0),
       safe(() => db.employee.count({ where: { employmentStatus: { equals: 'active', mode: 'insensitive' } } }), 0),
@@ -74,7 +73,6 @@ export async function GET(request: NextRequest) {
       safe(() => db.incident.count({ where: { status: { in: ['Investigating', 'Open'] } } }), 0),
       safe(() => db.equipment.count(), 0),
       safe(() => db.equipment.count({ where: { status: 'Operational' } }), 0),
-      safe(() => db.subcontractor.count(), 0),
     ])
 
     // Compute attendance breakdown
@@ -147,9 +145,6 @@ export async function GET(request: NextRequest) {
         equipment: {
           total: totalEquipment,
           operational: operationalEquipment,
-        },
-        subcontractors: {
-          total: totalSubcontractors,
         },
         recruitment: {
           openPositions: openJobOpenings,

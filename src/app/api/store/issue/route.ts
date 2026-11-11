@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { nextPrefixedCode } from '@/lib/auto-number'
+import { postIssueLinesToLedger } from '@/lib/store-ledger'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,8 +53,7 @@ export async function POST(request: NextRequest) {
     const { lines, allowDirectIssue, ...data } = body
     if (!data.issueNo) {
       const year = new Date().getFullYear()
-      const count = (await pdb.finStoreIssue.count()) + 1
-      data.issueNo = `SI/${year}/${String(count).padStart(4, '0')}`
+      data.issueNo = await nextPrefixedCode(pdb, 'finStoreIssue', 'issueNo', `SI/${year}/`, 4)
     }
 
     const record = await pdb.$transaction(async (tx) => {
@@ -93,6 +94,22 @@ export async function POST(request: NextRequest) {
         },
         include: INCLUDE,
       })
+
+      // Post each line to the stock ledger so the running Stock Register (per
+      // item, with opening/received/issued/closing) stays live without a
+      // separate posting step. Same deterministic entryNo trick as the GRN
+      // post — a replay never double-counts.
+      if (issue.lines?.length) {
+        await postIssueLinesToLedger(
+          tx,
+          issue,
+          site?.name ?? null,
+          site?.siteCode ?? null,
+          issue.job?.jobCode ?? null,
+          data.issuedTo || null,
+          data.remarks || null,
+        )
+      }
 
       if (body.mrsId && lines?.length) {
         for (const l of lines) {
@@ -148,6 +165,13 @@ export async function DELETE(request: NextRequest) {
     const actor = request.headers.get('x-actor-email') || ''
     const denied = await assertPermission(pdb, actor, 'INVENTORY_DELETE', { request, module: 'Inventory', entityId: id })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to delete store issues' }, { status: 403 })
+    // Remove the stock-ledger lines this issue posted so the Stock Register
+    // stays consistent after a delete (entryNo is deterministic per line).
+    const issue = await pdb.finStoreIssue.findUnique({ where: { id: Number(id) }, select: { issueNo: true } })
+    if (issue) {
+      const prefix = `SL-${String(issue.issueNo).replace(/[^\w-]/g, '')}-L`
+      await pdb.finStockLedger.deleteMany({ where: { entryNo: { startsWith: prefix } } })
+    }
     await pdb.finStoreIssue.delete({ where: { id: Number(id) } })
     return NextResponse.json({ success: true })
   } catch (error) {

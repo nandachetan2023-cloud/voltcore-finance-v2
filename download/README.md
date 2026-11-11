@@ -85,11 +85,11 @@ bun run start
 |---|--------|-------------|-------------|
 | 1 | **Organization** | Departments & Roles | Organizational structure and role hierarchy |
 | 2 | **HRMS** | Employee Analytics, Employees, Attendance, Leave, Shift Roster, Timesheet, Payroll, Training, Recruitment | Complete HR lifecycle management |
-| 3 | **Procurement** | Purchase Orders, Expenses | Procurement and expense tracking |
+| 3 | **Purchase Management** | Purchase Orders, Expenses | Purchase and expense tracking |
 | 4 | **Finance** | Dashboard, Ledger, AP, AR, Journal Entries, Bank & Cash, Taxation, Budget, Financial Reports | Full financial management |
 | 5 | **Projects** | All Projects, Site Map | Project and site management |
 | 6 | **Inventory** | Items, Stock Movements | Warehouse and inventory control |
-| 7 | **Assets** | Equipment, Work Permits, Safety & HSE, Subcontractors | Asset and safety management |
+| 7 | **Assets** | Equipment, Work Permits, Safety & HSE | Asset and safety management |
 | 8 | **Sales** | Customers, Sales Orders | Sales pipeline management |
 | 9 | **CRM** | Contacts | Customer relationship management |
 | 10 | **System** | Reports, Settings | System administration |

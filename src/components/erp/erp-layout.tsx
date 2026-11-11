@@ -2,6 +2,7 @@
 
 import { useERPStore, MAIN_MODULES, HIDDEN_MAIN_MODULES, SUB_MODULES, MODULE_CONFIG, EXPANDABLE_MODULES, PAGE_MODULES, MAIN_MODULE_MAP, isModuleAllowed, getModuleParents } from '@/store/erp-store';
 import { resolveNotificationTarget as resolveTarget, TYPE_COLOR } from '@/lib/notification-routing';
+import { readJsonSafe } from '@/lib/safe-json';
 import React, { useState, useEffect, Component, type ReactNode } from 'react';
 import { ModuleRenderer as LazyModuleRenderer } from '@/components/erp/module-registry';
 import { ProcurementDashboard } from '@/components/erp/procurement-dashboard';
@@ -428,13 +429,6 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
   const [finUnread, setFinUnread] = useState(0);
   const canSeeFinInbox = isModuleAllowed('notifications-ultra', allowedModules);
 
-  // Fetch notifications on mount and poll every 30s
-  useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
   const fetchNotifications = async () => {
     try {
       let url = '/api/notifications';
@@ -446,19 +440,29 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
       } catch {}
       if (!email) { setNotifications([]); return; }
       const response = await fetch(url, { headers: { 'x-actor-email': email } });
-      const data = await response.json();
+      const data = await readJsonSafe(response);
       if (data.success) {
-        setNotifications(data.data.notifications || []);
+        setNotifications(data.data?.notifications || []);
       }
       if (canSeeFinInbox) {
-        const fin = await fetch('/api/notifications/ultra?status=unread&take=1').then(r => r.json()).catch(() => null);
-        setFinUnread(fin?.success ? fin.data.unreadCount : 0);
+        const fin = await fetch('/api/notifications/ultra?status=unread&take=1').then(r => readJsonSafe(r)).catch(() => null);
+        setFinUnread(fin?.success ? fin.data?.unreadCount ?? 0 : 0);
       }
     } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+      // Transient network failures (e.g. the dev server restarting) shouldn't
+      // surface as a console error — the bell just stays at its last count.
+      console.warn('Notifications unavailable:', error instanceof Error ? error.message : error);
       setNotifications([]);
     }
   };
+
+  // Fetch notifications on mount and poll every 30s (defer the first call so
+  // the effect never sets state synchronously).
+  useEffect(() => {
+    const initial = setTimeout(fetchNotifications, 0);
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => { clearTimeout(initial); clearInterval(interval); };
+  }, []);
 
   const markAllRead = async () => {
     try {

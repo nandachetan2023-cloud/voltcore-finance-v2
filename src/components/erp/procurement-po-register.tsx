@@ -17,6 +17,9 @@ interface LineItem {
   unitPrice: number;
   total: number;
   hsn?: string;
+  // Transient picker state — the register stores the description text, not the master link.
+  categoryId?: number | '';
+  itemId?: number;
 }
 
 interface PORecord {
@@ -43,7 +46,8 @@ interface PORecord {
 interface VendorMaster { id: number; name: string; address?: string | null; status?: string }
 interface SiteMaster { id: number; siteCode: string; name: string; location?: string | null }
 interface JobMaster { id: number; jobCode: string; siteId: number; description?: string | null; site?: { id: number; name: string; siteCode: string } | null }
-interface ItemMaster { id: number; itemCode: string; name: string; uom: string; rate: number; hsn?: string | null }
+interface ItemMaster { id: number; itemCode: string; name: string; specification?: string | null; categoryId?: number | null; category?: { id: number; code: string; name: string } | null; uom: string; rate: number; hsn?: string | null }
+interface ItemCategory { id: number; code: string; name: string; }
 
 const VENDORS = ['SteelMech India Pvt Ltd', 'PowerCables Ltd', 'Transformers & Co', 'Elecon Engineering', 'Kirloskar Brothers', 'Siemens India', 'BHEL', 'ABB India'];
 const PROJECTS = ['BALCO', 'NTPC', 'Hindalco', 'Coal India', 'JSW'];
@@ -153,6 +157,7 @@ const [vendors, setVendors] = useState<VendorMaster[]>([]);
 const [sites, setSites] = useState<SiteMaster[]>([]);
 const [jobs, setJobs] = useState<JobMaster[]>([]);
 const [items, setItems] = useState<ItemMaster[]>([]);
+const [itemCategories, setItemCategories] = useState<ItemCategory[]>([]);
 
   const loadPOs = useCallback(async () => {
     try {
@@ -170,7 +175,13 @@ const [items, setItems] = useState<ItemMaster[]>([]);
     fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success && Array.isArray(j.data)) setSites(j.data); }).catch(() => {});
     fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success && Array.isArray(j.data)) setJobs(j.data); }).catch(() => {});
     fetch('/api/fin/items').then(r => r.json()).then(j => { if (j.success && Array.isArray(j.data)) setItems(j.data); }).catch(() => {});
+    fetch('/api/fin/item-categories').then(r => r.json()).then(j => { if (j.success && Array.isArray(j.data)) setItemCategories(j.data); }).catch(() => {});
   }, []);
+
+  const unitOptions = useMemo(
+    () => [...new Set([...UOMS, ...items.map(i => i.uom).filter(Boolean)])],
+    [items],
+  );
 
   const vendorNames = useMemo(() => {
     const fromMaster = vendors.map(v => v.name);
@@ -200,15 +211,31 @@ const [items, setItems] = useState<ItemMaster[]>([]);
     }
   };
 
-  const pickItemDesc = (index: number, value: string) => {
+  const descOf = (m: ItemMaster) => `${m.name}${m.specification ? ' — ' + m.specification : ''}`;
+  const lineValue = (it: LineItem) => {
+    if (it.itemId) return String(it.itemId);
+    const matched = items.find(m => descOf(m) === it.itemDesc);
+    return matched ? String(matched.id) : it.itemDesc ? `custom:${it.itemDesc}` : '';
+  };
+  const pickLineItem = (index: number, raw: string) => {
     const u = [...formItems];
-    u[index] = { ...u[index], itemDesc: value };
-    const m = items.find(i => i.name === value || i.itemCode === value);
-    if (m) {
-      if (!u[index].unit || u[index].unit === 'Nos') u[index].unit = m.uom || u[index].unit;
-      if (!u[index].unitPrice) u[index].unitPrice = m.rate || 0;
-      if (m.hsn) u[index].hsn = m.hsn;
-    }
+    if (!raw) { u[index] = { ...u[index], itemDesc: '', itemId: undefined }; setFormItems(u); return; }
+    const m = items.find(x => String(x.id) === raw);
+    if (!m) { setFormItems(u); return; } // "(existing)" — keep the current text
+    u[index] = {
+      ...u[index],
+      itemId: m.id,
+      categoryId: m.categoryId ?? '',
+      itemDesc: descOf(m),
+      unit: m.uom || u[index].unit,
+      unitPrice: u[index].unitPrice || m.rate || 0,
+      hsn: m.hsn ?? u[index].hsn,
+    };
+    setFormItems(u);
+  };
+  const setLineCategory = (index: number, categoryId: number | '') => {
+    const u = [...formItems];
+    u[index] = { ...u[index], categoryId };
     setFormItems(u);
   };
 
@@ -681,7 +708,6 @@ const [items, setItems] = useState<ItemMaster[]>([]);
             </div>
 
             {/* Line Items Table */}
-            <datalist id="po-item-master">{items.map(it => <option key={it.id} value={it.name}>{it.itemCode}{it.hsn ? ` · HSN ${it.hsn}` : ''}</option>)}</datalist>
             <div className="overflow-x-auto">
             <table className="w-full text-[10px] border-collapse mb-3">
               <thead>
@@ -702,15 +728,25 @@ const [items, setItems] = useState<ItemMaster[]>([]);
                     <tr key={it.id}>
                       <td className="border border-[#ccc] px-2 py-1 text-[#555] text-center">{i + 1}</td>
                       <td className="border border-[#ccc] px-2 py-1">
-                        <input value={it.itemDesc} onChange={e => pickItemDesc(i, e.target.value)} list="po-item-master" className="w-full bg-transparent outline-none text-[10px]" placeholder="Description of item/service" />
+                        <div className="flex gap-1 items-center">
+                          <select value={it.categoryId ?? ''} onChange={e => setLineCategory(i, e.target.value ? Number(e.target.value) : '')} className="bg-transparent border border-[#ddd] rounded text-[9px] text-[#555] w-[90px] outline-none appearance-none" title="Category (from Item Setup)">
+                            <option value="">All cats</option>
+                            {itemCategories.map(c => <option key={c.id} value={c.id}>{c.code}</option>)}
+                          </select>
+                          <select value={lineValue(it)} onChange={e => pickLineItem(i, e.target.value)} className="flex-1 min-w-0 bg-transparent border border-[#ddd] rounded outline-none text-[10px]" title="Item from Item Setup — maintained in Item Code Generator">
+                            <option value="">Select item from Item Setup…</option>
+                            {items.filter(m => !it.categoryId || m.categoryId === Number(it.categoryId)).map(m => <option key={m.id} value={String(m.id)}>{descOf(m)}</option>)}
+                            {it.itemDesc && !items.some(m => descOf(m) === it.itemDesc) && <option value={`custom:${it.itemDesc}`}>{it.itemDesc} (existing)</option>}
+                          </select>
+                        </div>
                       </td>
                       <td className="border border-[#ccc] px-2 py-1 text-right">
                         <input type="number" value={it.qtyOrdered || ''} onChange={e => { const u = [...formItems]; u[i] = { ...u[i], qtyOrdered: Math.max(0, Number(e.target.value)) }; setFormItems(u); }} className="w-full bg-transparent outline-none text-[10px] text-right font-mono" min={0} />
                       </td>
                       <td className="border border-[#ccc] px-2 py-1 text-right">
-                        <select value={UOMS.includes(it.unit) ? it.unit : ''} onChange={e => { const u = [...formItems]; u[i] = { ...u[i], unit: e.target.value }; setFormItems(u); }} className="w-full bg-transparent outline-none text-[10px] text-right">
-                          {!UOMS.includes(it.unit) && it.unit && <option value="">{it.unit}</option>}
-                          {UOMS.map(u => <option key={u} value={u}>{u}</option>)}
+                        <select value={unitOptions.includes(it.unit) ? it.unit : ''} onChange={e => { const u = [...formItems]; u[i] = { ...u[i], unit: e.target.value }; setFormItems(u); }} className="w-full bg-transparent outline-none text-[10px] text-right">
+                          {!unitOptions.includes(it.unit) && it.unit && <option value="">{it.unit}</option>}
+                          {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
                       </td>
                       <td className="border border-[#ccc] px-2 py-1 text-right">

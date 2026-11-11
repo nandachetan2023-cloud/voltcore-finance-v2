@@ -97,7 +97,7 @@ The following 6 modules have been successfully removed from the VoltCore ERP sys
 The main dashboard now shows 8 modules instead of 14:
 - Organization
 - HRMS
-- Procurement
+- Purchase Management
 - Finance
 - Projects
 - Assets

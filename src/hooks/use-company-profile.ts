@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
  * Shared company profile (logo + registered address + statutory + bank
  * details) — one source of truth, configured once in Settings › Branding
  * and Settings › Registered Address, consumed by every printable document
- * across Finance, Procurement, and Sales (invoices, payment advices,
+ * across Finance, Purchase Management, and Sales (invoices, payment advices,
  * credit notes, POs) instead of each screen hardcoding its own copy.
  *
  * Backed by the existing `CompanySettings` key-value table via /api/settings

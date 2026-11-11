@@ -6,13 +6,13 @@ export type UserRole = 'superadmin' | 'admin' | 'demo';
 export const MODULE_TREE: Record<string, string[]> = {
   organization: ['organization', 'departments', 'designations', 'payroll-sites', 'holidays', 'leave-policies', 'attendance-rules', 'checklist-templates', 'employee-documents', 'roles-access'],
   hrms: ['hrms', 'employee-analytics', 'employees', 'attendance', 'biometric', 'leave', 'tour-requests', 'shift', 'timesheet', 'payroll', 'training', 'recruitment', 'onboarding', 'offboarding', 'exit-management'],
-  procurement: ['procurement', 'procurement-pr', 'procurement-rfq', 'procurement-po-register', 'procurement-material-tracking', 'procurement-subcontracts', 'po-approval-stepper', 'rfq-comparison-matrix', 'grn-3way-match'],
+  procurement: ['procurement', 'procurement-pr', 'procurement-rfq', 'procurement-po-register', 'procurement-material-tracking', 'po-approval-stepper', 'rfq-comparison-matrix', 'grn-3way-match'],
   // Legacy alias: the old "Finance" menu was merged into "Finance & Accounts".
   // Kept so accounts whose saved grants still say 'finance' keep their access.
   finance: ['finance', 'finance-accounts', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'fin-bank-reconciliation', 'taxation', 'budget', 'fin-profit-loss', 'financial-reports', 'tally-sync', 'notifications-ultra'],
   sales: ['sales', 'sales-tax-invoices', 'sales-orders', 'sales-quotations', 'fin-credit-notes', 'sales-opportunity-pipeline', 'sales-tender-register', 'sales-revenue-forecast', 'sales-client-accounts'],
   projects: ['projects', 'project-list', 'project-hierarchy', 'budget', 'boq-entry', 'job-progress', 'sites', 'scrap-entry'],
-  assets: ['assets', 'equipment', 'permits', 'safety', 'subcontractors'],
+  assets: ['assets', 'equipment', 'permits', 'safety'],
   // A dedicated "self-service" group for employees
   'self-service': ['my-dashboard', 'my-attendance', 'my-leave', 'my-tours', 'my-requests', 'my-profile', 'my-notices', 'my-payslips', 'my-documents', 'my-shifts'],
   system: ['system', 'reports', 'settings', 'user-management', 'onboarding-approvals', 'requests', 'notice-board'],
@@ -75,7 +75,7 @@ export type ModuleId =
   | 'employees' | 'attendance' | 'leave' | 'tour-requests' | 'shift' | 'training' | 'recruitment'
   | 'onboarding' | 'offboarding' | 'exit-management' | 'checklist-templates'
   | 'purchases' | 'expenses' | 'invoices'
-  | 'sites' | 'permits' | 'safety' | 'subcontractors'
+  | 'sites' | 'permits' | 'safety'
   | 'reports' | 'settings'
   | 'report-manpower' | 'report-attendance' | 'report-payroll' | 'report-leave'
   | 'report-late-fine' | 'report-onboarding' | 'report-turnover' | 'report-training'
@@ -92,7 +92,7 @@ export type ModuleId =
     | 'fin-purchase-orders' | 'fin-credit-notes' | 'fin-expense-claims' | 'fin-site-expenses' | 'fin-work-orders' | 'fin-client-follow-up'
     | 'fin-petty-cash-custodian' | 'fin-petty-cash-approval-queue' | 'fin-petty-cash-replenishment'
   | 'fin-user-management'
-   // Procurement sub-modules
+   // Purchase Management sub-modules
    | 'procurement-pr' | 'procurement-rfq' | 'procurement-po-register' | 'procurement-vendors' | 'procurement-material-tracking' | 'procurement-subcontracts'
    | 'po-approval-stepper' | 'rfq-comparison-matrix' | 'grn-3way-match' | 'stock-ledger' | 'material-issue-wip' | 'ra-work-slider' | 'scrap-entry' | 'customer-profitability' | 'report-drilldown' | 'po-cost-tree' | 'site-store'
    | 'sales' | 'sales-tax-invoices' | 'sales-orders' | 'sales-quotations'
@@ -166,7 +166,7 @@ export const DEMO_ALLOWED_MODULES: Set<string> = new Set([
 export const MAIN_MODULES: NavItem[] = [
   { id: 'organization', icon: 'Building2', label: 'Organization' },
   { id: 'hrms', icon: 'Users', label: 'HRMS' },
-  { id: 'procurement', icon: 'ShoppingCart', label: 'Procurement' },
+  { id: 'procurement', icon: 'ShoppingCart', label: 'Purchase Management' },
   { id: 'login-role', icon: 'LogIn', label: 'Login & Role' },
   { id: 'master-setup', icon: 'Layers', label: 'Master Setup' },
   { id: 'inventory', icon: 'Package', label: 'Inventory' },
@@ -214,16 +214,16 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'exit-management', icon: 'ArrowLeft', label: 'Exit Management', section: 'Lifecycle' },
   ],
   procurement: [
-    { id: 'procurement-pr', icon: 'FileEdit', label: 'PR Module', section: 'Procurement' },
-    { id: 'procurement-rfq', icon: 'ClipboardList', label: 'RFQ Management', section: 'Procurement' },
-    { id: 'rfq-comparison-matrix', icon: 'BarChart3', label: 'Quotation Comparison', section: 'Procurement' },
-    { id: 'procurement-po-register', icon: 'ShoppingCart', label: 'PO Register', section: 'Procurement' },
-    { id: 'fin-purchase-orders', icon: 'ShoppingBag', label: 'Purchase Orders', section: 'Procurement' },
-    { id: 'po-approval-stepper', icon: 'ListChecks', label: 'PO Approval', section: 'Procurement' },
-    { id: 'grn-3way-match', icon: 'Scale', label: 'GRN 3-Way Match', section: 'Procurement' },
-    { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Purchase Bills (AP)', section: 'Procurement' },
-    { id: 'procurement-material-tracking', icon: 'Package', label: 'Material Tracking', section: 'Procurement' },
-    { id: 'procurement-subcontracts', icon: 'FileText', label: 'Contractors Management', section: 'Procurement' },
+    { id: 'procurement-pr', icon: 'FileEdit', label: 'PR Module', section: 'Purchase Management' },
+    { id: 'procurement-rfq', icon: 'ClipboardList', label: 'RFQ Management', section: 'Purchase Management' },
+    { id: 'rfq-comparison-matrix', icon: 'BarChart3', label: 'Quotation Comparison', section: 'Purchase Management' },
+    { id: 'procurement-po-register', icon: 'ShoppingCart', label: 'PO Register', section: 'Purchase Management' },
+    { id: 'fin-purchase-orders', icon: 'ShoppingBag', label: 'Purchase Orders', section: 'Purchase Management' },
+    { id: 'po-approval-stepper', icon: 'ListChecks', label: 'PO Approval', section: 'Purchase Management' },
+    { id: 'grn-3way-match', icon: 'Scale', label: 'GRN 3-Way Match', section: 'Purchase Management' },
+    { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Purchase Bills (AP)', section: 'Purchase Management' },
+    { id: 'procurement-material-tracking', icon: 'Package', label: 'Material Tracking', section: 'Purchase Management' },
+    { id: 'procurement-vendors', icon: 'Users', label: 'Contractors Management', section: 'Purchase Management' },
   ],
   // Category modules (like HRMS / Organization)
   'login-role': [
@@ -317,7 +317,6 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'equipment', icon: 'Wrench', label: 'Equipment', section: 'Assets' },
     { id: 'permits', icon: 'ShieldAlert', label: 'Work Permits', badge: 2, section: 'Operations' },
     { id: 'safety', icon: 'HardHat', label: 'Safety & HSE', section: 'Operations' },
-    { id: 'subcontractors', icon: 'Handshake', label: 'Contractors', section: 'Operations' },
   ],
   system: [
     { id: 'reports', icon: 'BarChart3', label: 'Reports', section: 'System' },
@@ -364,7 +363,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   dashboard: { title: 'Dashboard', breadcrumb: 'VoltCore ERP › Overview' },
   organization: { title: 'Organization', breadcrumb: 'VoltCore ERP › Organization' },
   hrms: { title: 'HRMS', breadcrumb: 'VoltCore ERP › Human Resources' },
-  procurement: { title: 'Procurement Management', breadcrumb: 'VoltCore ERP › Procurement' },
+  procurement: { title: 'Purchase Management', breadcrumb: 'VoltCore ERP › Purchase Management' },
   finance: { title: 'Finance', breadcrumb: 'VoltCore ERP › Finance' },
   projects: { title: 'Projects', breadcrumb: 'VoltCore ERP › Projects' },
   assets: { title: 'Assets', breadcrumb: 'VoltCore ERP › Assets & Operations' },
@@ -397,15 +396,15 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'exit-management': { title: 'Exit Management', breadcrumb: 'HRMS › Employee Lifecycle › Exit' },
   'checklist-templates': { title: 'Checklist Templates', breadcrumb: 'Organization › Checklist Templates' },
   'employee-documents': { title: 'Employee Documents', breadcrumb: 'Organization › Employee Documents' },
-  purchases: { title: 'Purchase Orders', breadcrumb: 'Procurement › PO' },
+  purchases: { title: 'Purchase Orders', breadcrumb: 'Purchase Management › PO' },
   'fin-expense-claims': { title: 'Expense Claims', breadcrumb: 'Finance › Expense Claims' },
   'fin-site-expenses': { title: 'Site Expenses', breadcrumb: 'Finance › Site Expenses' },
-  'procurement-pr': { title: 'PR Module', breadcrumb: 'Procurement › PR Module' },
-  'procurement-rfq': { title: 'RFQ Management', breadcrumb: 'Procurement › RFQ' },
-  'procurement-po-register': { title: 'PO Register', breadcrumb: 'Procurement › PO Register' },
-  'procurement-vendors': { title: 'Contractors Management', breadcrumb: 'Procurement › Contractors' },
-  'procurement-material-tracking': { title: 'Material Tracking', breadcrumb: 'Procurement › Materials' },
-  'procurement-subcontracts': { title: 'Contractors Management', breadcrumb: 'Procurement › Contractors' },
+  'procurement-pr': { title: 'PR Module', breadcrumb: 'Purchase Management › PR Module' },
+  'procurement-rfq': { title: 'RFQ Management', breadcrumb: 'Purchase Management › RFQ' },
+  'procurement-po-register': { title: 'PO Register', breadcrumb: 'Purchase Management › PO Register' },
+  'procurement-vendors': { title: 'Contractors Management', breadcrumb: 'Master Setup › Contractors Management' },
+  'procurement-material-tracking': { title: 'Material Tracking', breadcrumb: 'Purchase Management › Materials' },
+  'procurement-subcontracts': { title: 'Contracts', breadcrumb: 'Purchase Management > Contracts' },
   payroll: { title: 'Payroll', breadcrumb: 'HRMS › Payroll Processing' },
   // Finance sub-modules
   'finance-dashboard': { title: 'Finance Dashboard', breadcrumb: 'Finance › Overview' },
@@ -416,10 +415,10 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'fin-parties': { title: 'Party Master', breadcrumb: 'Finance › Parties' },
   'fin-clients': { title: 'Clients', breadcrumb: 'Finance › Clients' },
   'fin-invoices': { title: 'Site Invoices', breadcrumb: 'Finance › Invoices' },
-  'fin-purchase-orders': { title: 'Purchase Orders (Finance)', breadcrumb: 'Finance › Purchase Orders' },
-  'po-approval-stepper': { title: 'PO Approval Stepper', breadcrumb: 'Finance › Purchase › Approval Stepper' },
-  'rfq-comparison-matrix': { title: 'RFQ Comparison Matrix', breadcrumb: 'Finance › Purchase › RFQ Matrix' },
-  'grn-3way-match': { title: 'GRN 3-Way Match', breadcrumb: 'Finance › Purchase › GRN Match' },
+  'fin-purchase-orders': { title: 'Purchase Orders', breadcrumb: 'Purchase Management › Purchase Orders' },
+  'po-approval-stepper': { title: 'PO Approval', breadcrumb: 'Purchase Management › PO Approval' },
+  'rfq-comparison-matrix': { title: 'Quotation Comparison', breadcrumb: 'Purchase Management › Quotation Comparison' },
+  'grn-3way-match': { title: 'GRN 3-Way Match', breadcrumb: 'Purchase Management › GRN 3-Way Match' },
   'stock-ledger': { title: 'Stock Ledger', breadcrumb: 'Finance › Inventory › Stock Ledger' },
   'material-issue-wip': { title: 'Material Issue → WIP', breadcrumb: 'Finance › Inventory › Material Issue' },
   'scrap-entry': { title: 'Scrap Entry', breadcrumb: 'Finance › Inventory › Scrap' },
@@ -468,7 +467,6 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   permits: { title: 'Work Permits (PTW)', breadcrumb: 'Operations › Permit to Work' },
   safety: { title: 'Safety & HSE', breadcrumb: 'Operations › HSE Management' },
   equipment: { title: 'Equipment', breadcrumb: 'Operations › Asset Management' },
-  subcontractors: { title: 'Contractors', breadcrumb: 'Operations › Contractor Management' },
   reports: { title: 'Reports', breadcrumb: 'System › Reports' },
   'report-manpower':   { title: 'Manpower Report',         breadcrumb: 'Reports › Manpower' },
   'report-attendance': { title: 'Attendance Report',        breadcrumb: 'Reports › Attendance' },
