@@ -1,0 +1,37 @@
+// Paste these 2 models into voltcore_erp/prisma/schema.prisma (top), then run:
+//   npx prisma migrate dev --name add-tenancy
+// Then add `tenantId String` + relation to each business model incrementally
+// (start with Employee, Attendance, Payroll — see SAAS-PIVOT-CHECKLIST.md).
+
+model Tenant {
+  id        String   @id @default(cuid())
+  slug      String   @unique // e.g. demo-erp, client-xyz
+  name      String
+  plan      String   @default("trial") // trial, starter, growth, suite
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscription Subscription?
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  tenantId  String   @unique
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan      String   @default("trial")
+  seats     Int      @default(10)
+  status    String   @default("trialing") // trialing, active, past_due, cancelled
+  renewsAt  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Example of how to tenant-scope an existing model (apply to ALL models):
+// model Employee {
+//   ...
+//   tenantId String
+//   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+//   @@index([tenantId])
+//   @@index([tenantId, empId])
+// }

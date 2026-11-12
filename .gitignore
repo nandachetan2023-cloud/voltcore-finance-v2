@@ -30,7 +30,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files (keep the committed template, ignore real secrets)
 .env*
 !.env.example
 !.env.production.example
@@ -56,14 +56,27 @@ excels/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-local-*
+/local-*
 .claude
 .z-ai-config
 *.log
 dev.log
 dev.out.log
-test
-prompt
+/test
+/prompt
+
+# package manager: bun is canonical, do not commit the npm lockfile
+/package-lock.json
+
+# local databases (schema lives in prisma/schema.prisma; rebuild with db:push + db:seed)
+*.db
+*.db-journal
+prisma/db/
+
+# infra runtime artifacts
+.accesslog
+.stats
+.config_backup.json
 
 server.log
 
