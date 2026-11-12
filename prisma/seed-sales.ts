@@ -1,6 +1,10 @@
 import { PrismaClient } from '@prisma/client'
 
-const TENANT_DB_URL = 'postgresql://postgres:postgres@localhost:5432/erp_finance_dev?schema=public&sslmode=disable'
+const TENANT_DB_URL = process.env.DATABASE_URL
+
+if (!TENANT_DB_URL) {
+  throw new Error('DATABASE_URL environment variable is not set.')
+}
 
 const db = new PrismaClient()
 const tenantDb = new PrismaClient({ datasources: { db: { url: TENANT_DB_URL } } })
