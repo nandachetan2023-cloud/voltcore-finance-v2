@@ -372,7 +372,7 @@ export default function AccountsReceivable() {
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <FormField label="Description" className="lg:col-span-3">
-              <input value={form.description} onChange={e => setField('description', e.target.value)} placeholder="Work description..." className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
+              <DatalistField id="ar-description" value={form.description} onChange={v => setField('description', v)} options={[...new Set(records.map(r => r.description).filter(Boolean) as string[])]} placeholder="Work description..." />
             </FormField>
             <FormField label="Status">
               <select value={form.status} onChange={e => setField('status', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none"><option value="Pending">Pending</option><option value="Received">Received</option><option value="Partially Received">Partially Received</option><option value="Overdue">Overdue</option></select>
