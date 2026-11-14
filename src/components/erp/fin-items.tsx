@@ -69,8 +69,10 @@ export default function FinItems() {
   const [nextCode, setNextCode] = useState('');
   const [codeLoading, setCodeLoading] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
+  const [registerPick, setRegisterPick] = useState('');
 
   const filtered = records.filter(r => catFilter === 'All' || r.category?.code === catFilter);
+  const registerOptions = form.categoryId ? records.filter(r => r.categoryId === Number(form.categoryId) && r.isActive) : [];
   const tc = useTableControls(filtered, (r) => `${r.itemCode} ${r.name} ${r.specification ?? ''} ${r.makeBrand ?? ''} ${r.modelNo ?? ''} ${r.sizeCapacity ?? ''} ${r.description ?? ''} ${r.category?.name ?? ''} ${r.uom} ${r.hsn ?? ''}`);
   const pageIds = tc.pageItems.map(r => r.id);
   const allPageSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id));
@@ -112,11 +114,13 @@ export default function FinItems() {
     setForm(EMPTY);
     setNextCode('');
     setCodeError(null);
+    setRegisterPick('');
     setFormOpen(true);
   };
 
   const openEdit = (r: Item) => {
     setEditTarget(r);
+    setRegisterPick('');
     setForm({ name: r.name, specification: r.specification || '', makeBrand: r.makeBrand || '', modelNo: r.modelNo || '', sizeCapacity: r.sizeCapacity || '', description: r.description || '', categoryId: r.categoryId ? String(r.categoryId) : '', uom: r.uom || 'Nos', hsn: r.hsn || '', reorderLevel: String(r.reorderLevel ?? ''), rate: String(r.rate ?? ''), status: r.isActive ? 'Active' : 'Inactive' });
     setNextCode(r.itemCode);
     setFormOpen(true);
@@ -175,7 +179,11 @@ export default function FinItems() {
         </tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => <tr key={r.id} className="hover:bg-[#141920]"><td className="py-2.5 px-3"><Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggleRow(r.id)} /></td><td className="py-2.5 px-3 text-[#f5a623] font-mono">{r.itemCode}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-medium">{r.name}{r.description && <span className="text-[#8899aa]"> — {r.description}</span>}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.specification || '—'}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.makeBrand || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.modelNo || '—'}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.sizeCapacity || '—'}</td><td className="py-2.5 px-3 text-[#8899aa]">{r.uom}</td><td className="py-2.5 px-3">{catBadge(r)}</td><td className="py-2.5 px-3"><span className={`vc-badge ${r.isActive ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#ff3d3d]/15 text-[#ff3d3d]'}`}>{r.isActive ? 'Active' : 'Inactive'}</span></td><td className="py-2.5 px-3"><div className="flex gap-1"><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button><button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button></div></td></tr>)}{tc.pageItems.length === 0 && <tr><td colSpan={11} className="py-8 text-center text-[#5a6878]">No matching items</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] sm:max-w-lg max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle className="text-[#f5a623]">{editTarget ? 'Edit Item' : 'New Item'}</DialogTitle></DialogHeader><div className="space-y-3">
-        <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Category{!editTarget && ' *'}</label><select value={form.categoryId} onChange={e => { const v = e.target.value; setForm(p => ({ ...p, categoryId: v })); if (!editTarget) loadNextCode(v); }} className="vc-input" disabled={!!editTarget}><option value="">Select category</option>{categories.map(c => <option key={c.id} value={String(c.id)}>{c.name} ({c.code})</option>)}</select></div>
+        <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Category{!editTarget && ' *'}</label><select value={form.categoryId} onChange={e => { const v = e.target.value; setForm(p => ({ ...p, categoryId: v })); setRegisterPick(''); if (!editTarget) loadNextCode(v); }} className="vc-input" disabled={!!editTarget}><option value="">Select category</option>{categories.map(c => <option key={c.id} value={String(c.id)}>{c.name} ({c.code})</option>)}</select></div>
+        {!editTarget && registerOptions.length > 0 && (
+        <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">From Master Register (auto-fill)</label>
+          <select value={registerPick} onChange={e => { const id = e.target.value; setRegisterPick(id); const src = registerOptions.find(r => String(r.id) === id); if (src) { setForm(f => ({ ...f, name: src.name, specification: src.specification || '', makeBrand: src.makeBrand || '', modelNo: src.modelNo || '', sizeCapacity: src.sizeCapacity || '', description: src.description || '', uom: src.uom || f.uom })); } }} className="vc-input"><option value="">Select to auto-fill…</option>{registerOptions.map(r => <option key={r.id} value={String(r.id)}>{r.itemCode} — {r.name}</option>)}</select></div>
+        )}
         <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Item Code</label><input value={editTarget?.itemCode ?? nextCode} readOnly placeholder={codeLoading ? 'Generating code…' : 'Generated after selecting category'} className="vc-input opacity-70 font-mono" />{!editTarget && codeError && <p className="text-[10px] text-[#ff3d3d] mt-1">{codeError}</p>}<p className="text-[10px] text-[#5a6878] mt-1">Generated automatically from the category prefix, for example CON-001.</p></div>
         <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Item Name *</label><input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className="vc-input" placeholder="Welding Electrode" /></div>
         <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Specification</label><input value={form.specification} onChange={e => setForm(p => ({ ...p, specification: e.target.value }))} className="vc-input" placeholder="E7018 Low Hydrogen" /></div>
