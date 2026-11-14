@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Warehouse, Plus, X, Loader2, RefreshCw, Truck, ClipboardList, PackageCheck, PackageX,
   Wrench, IdCard, Forklift, Recycle, ClipboardCheck, FileBarChart, Check, Ban, Trash2,
@@ -1403,13 +1404,14 @@ function TableHeader({ title, count, onNew, newLabel }: { title: string; count: 
 }
 
 function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4">
       <div className={`bg-[#161c24] border border-[#f5a623]/25 rounded-xl p-4 w-full ${wide ? 'max-w-4xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto`}>
         <div className="flex items-center justify-between mb-3"><h4 className="text-[13px] font-bold text-[#e2e8f0]">{title}</h4><button onClick={onClose}><X size={15} className="text-[#5a6878]" /></button></div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
