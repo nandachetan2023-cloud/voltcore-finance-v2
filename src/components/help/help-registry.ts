@@ -56,6 +56,11 @@ const AREA_DEFS: HelpArea[] = [
       'fin-petty-cash',
       'fin-petty-cash-approval-queue',
       'fin-petty-cash-replenishment',
+      'fin-fund-master',
+      'fin-petty-cash-fund-allocation',
+      'fin-petty-cash-ledger',
+      'fin-petty-cash-reconciliation',
+      'fin-cash-request',
     ],
   },
   {
@@ -284,7 +289,7 @@ Pick a module tile on the dashboard (or from the sidebar):
 - **Inventory** — site store, receipts, issues to WIP, stock ledger, scrap
 - **Sales & Billing** — quotations, orders, GST invoices, RA bills, receipts, tenders, pipeline
 - **Finance & Accounts** — ledger, journals, AR/AP, bank, GST/TDS, P&L, Tally sync
-- **Petty Cash** — vouchers, custodian dashboard, approvals, replenishment
+- **Petty Cash** — vouchers, custodian dashboard, Fund Master & allocation, cash requests, approvals, replenishment, ledger & reconciliation
 - **Master Setup** — sites, jobs, parties, chart of accounts
 - **Projects** — portfolio, job hierarchy, BOQ, progress
 - **Assets** — equipment, permits, safety, contractors
