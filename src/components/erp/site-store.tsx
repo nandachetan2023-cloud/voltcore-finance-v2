@@ -31,6 +31,7 @@ interface ItemRef { id: number; sku: string; name: string; }
 interface PoRef { id: number; poNo: string; vendorName: string; }
 // Contractor master (Contractors Management) — served at /api/fin/vendors.
 interface VendorRef { id: number; name: string; vendorCode: string | null; }
+interface DepartmentRef { id: number; name: string; }
 
 function useLookups() {
   const [sites, setSites] = useState<SiteRef[]>([]);
@@ -38,6 +39,7 @@ function useLookups() {
   const [items, setItems] = useState<ItemRef[]>([]);
   const [pos, setPos] = useState<PoRef[]>([]);
   const [vendors, setVendors] = useState<VendorRef[]>([]);
+  const [departments, setDepartments] = useState<DepartmentRef[]>([]);
   // Live stock position per item (opening/received/issued/closing) — used by
   // the MRS slip (Current Stock / Minimum Stock columns) and the Stock Register.
   const [stockIndex, setStockIndex] = useState<Record<string, { balance: number; reorderLevel: number; unit: string; belowMin: boolean }>>({});
@@ -47,14 +49,19 @@ function useLookups() {
     fetch('/api/items').then(r => r.json()).then(j => { if (j.success) setItems(j.data.map((x: any) => ({ id: x.id, sku: x.sku, name: x.name }))); }).catch(() => {});
     fetch('/api/fin/purchase-orders').then(r => r.json()).then(j => { if (j.success) setPos(j.data.map((x: any) => ({ id: x.id, poNo: x.poNo, vendorName: x.vendorName }))); }).catch(() => {});
     fetch('/api/fin/vendors').then(r => r.json()).then(j => { if (j.success && Array.isArray(j.data)) setVendors(j.data.map((x: any) => ({ id: x.id, name: x.name, vendorCode: x.vendorCode ?? null }))); }).catch(() => {});
+    fetch('/api/departments').then(r => r.json()).then(j => {
+      if (j.success && Array.isArray(j.data)) setDepartments(j.data.map((department: DepartmentRef) => ({ id: department.id, name: department.name })));
+      else { console.error('Failed to load departments:', j.error || 'Invalid response'); toast.error('Failed to load departments'); }
+    }).catch((error) => { console.error('Failed to load departments:', error); toast.error('Failed to load departments'); });
     fetch('/api/store/stock-register').then(r => r.json()).then(j => { if (j.success) setStockIndex(Object.fromEntries(j.data.map((x: any) => [x.itemCode, { balance: x.balance, reorderLevel: x.reorderLevel, unit: x.unit, belowMin: x.belowMin }]))); }).catch(() => {});
   }, []);
-  return { sites, jobs, items, pos, vendors, stockIndex };
+  return { sites, jobs, items, pos, vendors, departments, stockIndex };
 }
 
 const inp = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#f5a623]/60 placeholder:text-[#5a6878]';
 const lbl = 'block text-[10px] font-semibold text-[#5a6878] uppercase tracking-wider mb-1';
 const fmt = (n: number) => '₹' + (n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const TOOL_CATEGORIES = ['Grinding Machine', 'Welding Machine', 'Chain Pulley Block', 'Sling', 'Measuring Tool', 'Other'];
 
 function Badge({ text, tone }: { text: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }) {
   const cls = { ok: 'bg-[#00e676]/15 text-[#00e676]', warn: 'bg-[#ffab40]/15 text-[#ffab40]', bad: 'bg-[#ff3d3d]/15 text-[#ff3d3d]', muted: 'bg-[#5a6878]/15 text-[#8899aa]' }[tone];
@@ -324,7 +331,7 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
               <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
               <div><label className={lbl}>Job</label><select className={inp} value={f.jobId} onChange={e => setF({ ...f, jobId: e.target.value })}><option value="">— None —</option>{lookups.jobs.filter(j => !f.siteId || j.siteId === Number(f.siteId)).map(j => <option key={j.id} value={j.id}>{j.jobCode}</option>)}</select></div>
               <div><label className={lbl}>Requested By</label><input className={inp} value={f.requestedBy} onChange={e => setF({ ...f, requestedBy: e.target.value })} /></div>
-              <div><label className={lbl}>Department</label><input className={inp} value={f.department} onChange={e => setF({ ...f, department: e.target.value })} /></div>
+              <div><label className={lbl}>Department</label><select className={inp} value={f.department} onChange={e => setF({ ...f, department: e.target.value })}><option value="">— Select department —</option>{lookups.departments.map(department => <option key={department.id} value={department.name}>{department.name}</option>)}</select></div>
               <div><label className={lbl}>Required On-Site By</label><input type="date" className={inp} value={f.requiredByDate} onChange={e => setF({ ...f, requiredByDate: e.target.value })} /></div>
               <div><label className={lbl}>Reason for Requirement</label><select className={inp + ' appearance-none'} value={f.reasonForRequirement} onChange={e => setF({ ...f, reasonForRequirement: e.target.value })}>{['New Work', 'Stock Replenishment', 'Emergency Requirement', 'Replacement of Damaged Material', 'Additional Scope of Work', 'Regular Requirement'].map(r => <option key={r}>{r}</option>)}</select></div>
               <div className="col-span-2"><label className={lbl}>Purpose</label><input className={inp} value={f.purpose} onChange={e => setF({ ...f, purpose: e.target.value })} placeholder="Purpose of issue / Work location / Area" /></div>
@@ -543,7 +550,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
         <Modal title="Register New Tool" onClose={() => setFormOpen(false)}>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><label className={lbl}>Name *</label><input className={inp} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="e.g. Grinding Machine" /></div>
-            <div><label className={lbl}>Category</label><input className={inp} value={f.category} onChange={e => setF({ ...f, category: e.target.value })} placeholder="e.g. Welding Machine" /></div>
+            <div><label className={lbl}>Category</label><select className={inp} value={f.category} onChange={e => setF({ ...f, category: e.target.value })}><option value="">— Select category —</option>{TOOL_CATEGORIES.map(category => <option key={category} value={category}>{category}</option>)}</select></div>
             <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
             <div className="col-span-2"><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
           </div>
@@ -718,20 +725,39 @@ function EquipmentTab({ lookups }: { lookups: Lookups }) {
       </div>
 
       {formOpen && (
-        <Modal title="Register New Equipment" onClose={() => setFormOpen(false)}>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2"><label className={lbl}>Equipment Name *</label><input className={inp} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="e.g. Farana Crane" /></div>
-            <div><label className={lbl}>Make</label><input className={inp} value={f.make} onChange={e => setF({ ...f, make: e.target.value })} placeholder="e.g. ElectroMech" /></div>
-            <div><label className={lbl}>Sr. No</label><input className={inp} value={f.srNo} onChange={e => setF({ ...f, srNo: e.target.value })} /></div>
-            <div><label className={lbl}>Capacity</label><input className={inp} value={f.capacity} onChange={e => setF({ ...f, capacity: e.target.value })} placeholder="e.g. 50 Ton" /></div>
-            <div><label className={lbl}>Type</label><input className={inp} value={f.type} onChange={e => setF({ ...f, type: e.target.value })} placeholder="e.g. Crane" /></div>
-            <div><label className={lbl}>Location</label><input className={inp} value={f.location} onChange={e => setF({ ...f, location: e.target.value })} placeholder="e.g. Main Store / Yard" /></div>
-            <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
-            <div><label className={lbl}>Validity</label><input type="date" className={inp} value={f.validityDate} onChange={e => setF({ ...f, validityDate: e.target.value })} /></div>
-            <div><label className={lbl}>Last Service</label><input type="date" className={inp} value={f.lastService} onChange={e => setF({ ...f, lastService: e.target.value })} /></div>
-            <div><label className={lbl}>Next Service</label><input type="date" className={inp} value={f.nextService} onChange={e => setF({ ...f, nextService: e.target.value })} /></div>
-            <div className="col-span-2"><label className={lbl}>Operator</label><input className={inp} value={f.operatorName} onChange={e => setF({ ...f, operatorName: e.target.value })} /></div>
-            <div className="col-span-2"><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
+        <Modal title="Register New Equipment" onClose={() => setFormOpen(false)} wide>
+          <div className="space-y-4">
+            <div>
+              <div className="text-[10px] font-semibold text-[#f5a623] uppercase tracking-wider mb-2">Basic Details</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2"><label className={lbl}>Equipment Name *</label><input className={inp} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="e.g. Farana Crane" /></div>
+                <div><label className={lbl}>Make</label><input className={inp} value={f.make} onChange={e => setF({ ...f, make: e.target.value })} placeholder="e.g. ElectroMech" /></div>
+                <div><label className={lbl}>Sr. No</label><input className={inp} value={f.srNo} onChange={e => setF({ ...f, srNo: e.target.value })} /></div>
+                <div><label className={lbl}>Capacity</label><input className={inp} value={f.capacity} onChange={e => setF({ ...f, capacity: e.target.value })} placeholder="e.g. 50 Ton" /></div>
+                <div><label className={lbl}>Type</label><input className={inp} value={f.type} onChange={e => setF({ ...f, type: e.target.value })} placeholder="e.g. Crane" /></div>
+              </div>
+            </div>
+            <div className="border-t border-[#252e3a] pt-4">
+              <div className="text-[10px] font-semibold text-[#f5a623] uppercase tracking-wider mb-2">Location &amp; Assignment</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className={lbl}>Location</label><input className={inp} value={f.location} onChange={e => setF({ ...f, location: e.target.value })} placeholder="e.g. Main Store / Yard" /></div>
+                <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
+                <div className="col-span-2"><label className={lbl}>Operator</label><input className={inp} value={f.operatorName} onChange={e => setF({ ...f, operatorName: e.target.value })} /></div>
+              </div>
+            </div>
+            <div className="border-t border-[#252e3a] pt-4">
+              <div className="text-[10px] font-semibold text-[#f5a623] uppercase tracking-wider mb-2">Service Schedule</div>
+              <div className="grid grid-cols-3 gap-3">
+                <div><label className={lbl}>Validity</label><input type="date" className={inp} value={f.validityDate} onChange={e => setF({ ...f, validityDate: e.target.value })} /></div>
+                <div><label className={lbl}>Last Service</label><input type="date" className={inp} value={f.lastService} onChange={e => setF({ ...f, lastService: e.target.value })} /></div>
+                <div><label className={lbl}>Next Service</label><input type="date" className={inp} value={f.nextService} onChange={e => setF({ ...f, nextService: e.target.value })} /></div>
+              </div>
+            </div>
+            <div className="border-t border-[#252e3a] pt-4">
+              <div className="grid grid-cols-1">
+                <div><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
+              </div>
+            </div>
           </div>
           <ModalFooter onCancel={() => setFormOpen(false)} onSave={save} saving={saving} label="Register Equipment" />
         </Modal>

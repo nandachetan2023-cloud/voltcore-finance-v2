@@ -119,6 +119,35 @@ interface FormState {
   qtyInTransit: number; scheduledDate: string; expectedDate: string;
 }
 
+interface POOption {
+  poNo: string;
+  vendorName: string;
+  date: string;
+  orderCompletionDate: string | null;
+  descriptionOfWork: string | null;
+  jobCode: string | null;
+  site?: { siteCode: string; name: string; customer?: { id: number; name: string } | null } | null;
+  items?: { description: string; unitOfMeasure: string; quantity: number }[];
+}
+
+const dateOnly = (d?: string | null) => (d ? String(d).split('T')[0] : '');
+
+// Best-effort category guess from a PO line description, since PO items carry
+// no category. Falls back to the form's current category when nothing matches.
+function guessCategory(text: string): string {
+  const t = (text || '').toLowerCase();
+  const direct = CATEGORIES.find(c => t.includes(c.toLowerCase()));
+  if (direct) return direct;
+  const hints: [string, string][] = [
+    ['steel', 'Structural Steel'], ['cement', 'Cement'], ['cable', 'HV Cables'],
+    ['transformer', 'Transformers'], ['pipe', 'Pipes'], ['valve', 'Valves'],
+    ['motor', 'Motors'], ['switchgear', 'Switchgear'], ['vcb', 'Switchgear'],
+    ['panel', 'Control Panels'], ['tray', 'Cable Trays'], ['conduit', 'Conduits'],
+    ['earthing', 'Earthing Materials'], ['earth', 'Earthing Materials'],
+  ];
+  return hints.find(([k]) => t.includes(k))?.[1] || '';
+}
+
 const EMPTY_FORM: FormState = {
   poNo: '', vendor: '', project: PROJECTS[0], site: SITES[0], material: '',
   category: CATEGORIES[0], unit: UNITS[CATEGORIES[0]], qtyRequired: 0, qtyStock: 0,
@@ -144,10 +173,58 @@ export default function ProcurementMaterialTracking() {
   // Contractor master (Contractors Management) drives the vendor dropdown.
   const setActiveModule = useERPStore(s => s.setActiveModule);
   const { optionsWith } = useContractors();
+  const [poList, setPoList] = useState<POOption[]>([]);
   const vendorOptions = useMemo(
-    () => optionsWith(records.map(r => r.vendor)),
-    [optionsWith, records],
+    () => optionsWith([...records.map(r => r.vendor), ...poList.map(p => p.vendorName)]),
+    [optionsWith, records, poList],
   );
+
+  // Purchase orders come from the PO master so a new material entry can be
+  // raised against a real PO instead of a hand-typed number.
+  useEffect(() => {
+    fetch('/api/fin/purchase-orders')
+      .then(res => res.json())
+      .then(data => { if (data.success && Array.isArray(data.data)) setPoList(data.data); })
+      .catch(() => {});
+  }, []);
+
+  // Keep project/site dropdowns able to display values auto-filled from a PO
+  // (their customer / site name may not be in the built-in sample lists).
+  const projectOptions = useMemo(() => {
+    const set = new Set(PROJECTS);
+    for (const po of poList) {
+      const customer = po.site?.customer?.name;
+      if (customer) set.add(customer);
+      if (po.site?.name) set.add(po.site.name);
+    }
+    return [...set];
+  }, [poList]);
+
+  const siteOptions = useMemo(() => {
+    const set = new Set(SITES);
+    for (const po of poList) if (po.site?.name) set.add(po.site.name);
+    return [...set];
+  }, [poList]);
+
+  const applyPO = (poNo: string) => {
+    const po = poList.find(p => p.poNo === poNo);
+    if (!po) { setForm(f => ({ ...f, poNo })); return; }
+    const line = po.items?.[0];
+    const description = line?.description || po.descriptionOfWork || '';
+    setForm(f => ({
+      ...f,
+      poNo: po.poNo,
+      vendor: po.vendorName || f.vendor,
+      project: po.site?.customer?.name || po.site?.name || f.project,
+      site: po.site?.name || f.site,
+      material: description || f.material,
+      category: guessCategory(description) || f.category,
+      unit: line?.unitOfMeasure || f.unit,
+      qtyRequired: line ? (Number(line.quantity) || 0) : f.qtyRequired,
+      scheduledDate: dateOnly(po.date) || f.scheduledDate,
+      expectedDate: dateOnly(po.orderCompletionDate) || f.expectedDate,
+    }));
+  };
 
   useEffect(() => {
     fetch('/api/procurement/material-tracking')
@@ -488,7 +565,20 @@ export default function ProcurementMaterialTracking() {
           <div className="grid grid-cols-2 gap-4 py-4">
             <div>
               <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">PO No</label>
-              <input value={form.poNo} onChange={e => setForm({...form, poNo: e.target.value})} className="vc-input" />
+              <select value={form.poNo} onChange={e => applyPO(e.target.value)} className="vc-input">
+                <option value="">Select purchase order…</option>
+                {poList.map(p => (
+                  <option key={p.poNo} value={p.poNo}>
+                    {p.poNo} — {p.vendorName}{p.site?.name ? ` (${p.site.name})` : ''}
+                  </option>
+                ))}
+                {form.poNo && !poList.some(p => p.poNo === form.poNo) && (
+                  <option value={form.poNo}>{form.poNo} — not in PO master</option>
+                )}
+              </select>
+              <div className="text-[10px] text-[#5a6878] mt-1">
+                {poList.length} purchase order{poList.length === 1 ? '' : 's'} loaded from master · details auto-fill on selection
+              </div>
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Contractor / Vendor</label>
@@ -504,13 +594,13 @@ export default function ProcurementMaterialTracking() {
             <div>
               <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Project</label>
               <select value={form.project} onChange={e => setForm({...form, project: e.target.value})} className="vc-input">
-                {PROJECTS.map(p => <option key={p} value={p}>{p}</option>)}
+                {projectOptions.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Site</label>
               <select value={form.site} onChange={e => setForm({...form, site: e.target.value})} className="vc-input">
-                {SITES.map(s => <option key={s} value={s}>{s}</option>)}
+                {siteOptions.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div>

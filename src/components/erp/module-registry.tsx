@@ -67,6 +67,11 @@ const MODULE_PATHS: Record<string, () => Promise<{ default: React.ComponentType 
   'fin-petty-cash-custodian': () => import('@/components/erp/fin-petty-cash-custodian'),
   'fin-petty-cash-approval-queue': () => import('@/components/erp/fin-petty-cash-approval-queue'),
   'fin-petty-cash-replenishment': () => import('@/components/erp/fin-petty-cash-replenishment'),
+  'fin-petty-cash-ledger': () => import('@/components/erp/fin-petty-cash-ledger'),
+  'fin-petty-cash-reconciliation': () => import('@/components/erp/fin-petty-cash-reconciliation'),
+  'fin-petty-cash-fund-allocation': () => import('@/components/erp/fin-petty-cash-fund-allocation'),
+  'fin-fund-master': () => import('@/components/erp/fin-fund-master'),
+  'fin-cash-request': () => import('@/components/erp/fin-cash-request'),
   'fin-payment-advices': () => import('@/components/erp/fin-payment-advices'),
   'fin-payments': () => import('@/components/erp/fin-payments'),
   // 'fin-assets' excluded per request - do not disturb Assets module

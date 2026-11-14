@@ -1346,6 +1346,8 @@ model FinSite {
   finBudgets          FinBudget[]
   finAssets           FinAsset[]
   finPettyCashes      FinPettyCash[]
+  finPettyCashReconciliations FinPettyCashReconciliation[]
+  cashRequests        FinCashRequest[]
 budgetItems        BudgetItem[]
   accountsPayables   AccountsPayable[]
   accountsReceivables AccountsReceivable[]
@@ -1963,6 +1965,13 @@ model FinPettyCash {
   authorizedBy       String?
   custodian          String? // person holding this petty cash float (Site Incharge / Store Incharge / Admin Executive)
   limitAmount        Float? // the custodian's sanctioned petty cash limit
+  fundId             Int? // the fund master this voucher belongs to
+  replenished        Boolean   @default(false) // covered by a replenishment voucher
+  coversVoucherIds   String? // JSON array of expense voucher ids covered by this replenishment
+  managerApprovedBy  String? // stage 1: manager approves business purpose
+  managerApprovedAt  DateTime?
+  verifiedBy         String? // stage 2: finance verifies documents + policy
+  verifiedAt         DateTime?
   paymentMode        String?
   balance            Float     @default(0)
   referenceNo        String?
@@ -1981,6 +1990,7 @@ model FinPettyCash {
   site         FinSite?          @relation(fields: [siteId], references: [id], onDelete: SetNull)
   po           FinPurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
   expenseClaim FinExpenseClaim?  @relation(fields: [expenseClaimId], references: [id], onDelete: SetNull)
+  fund         FinFund?          @relation(fields: [fundId], references: [id], onDelete: SetNull)
   approvals    FinApprovalLog[]
 
   @@index([voucherNo])
@@ -1989,7 +1999,91 @@ model FinPettyCash {
   @@index([poId])
   @@index([expenseClaimId])
   @@index([approvalStatus])
+  @@index([fundId])
+  @@index([replenished])
   @@map("FinPettyCash")
+}
+
+// ── Finance – Petty Cash Reconciliation (cash count / variance) ─────
+model FinPettyCashReconciliation {
+  id            Int       @id @default(autoincrement())
+  fundId        Int?
+  siteId        Int?
+  custodian     String?
+  reconDate     DateTime  @db.Date
+  openingCash   Float     @default(0)
+  cashReceived  Float     @default(0)
+  cashPaid      Float     @default(0)
+  expectedCash  Float     @default(0)
+  physicalCash  Float     @default(0)
+  variance      Float     @default(0)
+  shortage      Float     @default(0)
+  excess        Float     @default(0)
+  carryForward  Float     @default(0) // physical cash carried into the next period on close
+  remarks       String?
+  status        String    @default("Draft")
+  verifiedBy    String?
+  verifiedAt    DateTime?
+  approvedBy    String?
+  approvedAt    DateTime?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  site FinSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  fund FinFund? @relation(fields: [fundId], references: [id], onDelete: SetNull)
+
+  @@index([reconDate])
+  @@index([siteId])
+  @@index([status])
+  @@map("FinPettyCashReconciliation")
+}
+
+// ── Finance – Petty Cash Fund master (fund account + custodian + sanctioned limit) ─────
+model FinFund {
+  id            Int      @id @default(autoincrement())
+  fundCode      String   @unique
+  fundName      String
+  custodian     String? // person holding the float
+  limitAmount   Float    @default(0) // approved fund limit
+  balance       Float    @default(0)
+  branch        String?
+  department    String?
+  status        String   @default("Active") // Active | Frozen | Closed
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  vouchers        FinPettyCash[]
+  reconciliations FinPettyCashReconciliation[]
+
+  @@index([status])
+  @@map("FinFund")
+}
+
+// ── Finance – Employee Cash Request (request → approve → disburse) ─────
+model FinCashRequest {
+  id             Int       @id @default(autoincrement())
+  requestNo      String    @unique
+  employeeName   String
+  siteId         Int?
+  amount         Float
+  purpose        String
+  neededBy       DateTime? @db.Date
+  status         String    @default("Pending") // Pending | Approved | Rejected | Disbursed
+  requestedBy    String?
+  approvedBy     String?
+  approvedAt     DateTime?
+  rejectedReason String?
+  voucherId      Int? // Credit voucher created on disbursement
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  site FinSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([siteId])
+  @@map("FinCashRequest")
 }
 
 // ── Finance – Payment Advice ────────────────────────────────────────

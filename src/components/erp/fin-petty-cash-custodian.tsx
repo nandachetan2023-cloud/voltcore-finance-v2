@@ -1,19 +1,25 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Wallet, Loader2, UserCog, Pencil, Check, X, AlertTriangle } from 'lucide-react';
+import { Wallet, Loader2, UserCog, Pencil, Check, X, AlertTriangle, Workflow, Landmark, ArrowLeftRight, Coins, Receipt, ListChecks, BookOpen, RefreshCcw, Scale, ChevronRight } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { useERPStore, type ModuleId } from '@/store/erp-store';
 import { toast } from 'sonner';
 
 interface Site {
   id: number; name: string; siteCode: string; responsiblePerson: string | null;
   contactEmail: string | null; contactPhone: string | null; pettyCashLimit: number | null; status: string;
 }
-interface PettyCashRecord { id: number; siteId: number | null; type: string; amount: number; approvalStatus: string; site?: { name: string } | null; }
+interface PettyCashRecord { id: number; siteId: number | null; type: string; amount: number; approvalStatus: string; linkedType?: string | null; billAttachmentPath?: string | null; category?: string | null; site?: { name: string } | null; }
+interface Fund { id: number; fundCode: string; status: string; }
 
 function fmt(n: number) { return '₹' + (n ?? 0).toLocaleString('en-IN'); }
 
 export default function FinPettyCashCustodian() {
+  const setActiveModule = useERPStore((s) => s.setActiveModule);
   const [sites, setSites] = useState<Site[]>([]);
   const [records, setRecords] = useState<PettyCashRecord[]>([]);
+  const [funds, setFunds] = useState<Fund[]>([]);
+  const [reconCount, setReconCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [editingSiteId, setEditingSiteId] = useState<number | null>(null);
   const [editCustodian, setEditCustodian] = useState('');
@@ -23,14 +29,20 @@ export default function FinPettyCashCustodian() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [sitesRes, pcRes] = await Promise.all([
+      const [sitesRes, pcRes, reconRes, fundsRes] = await Promise.all([
         fetch('/api/fin/sites'),
         fetch('/api/fin/petty-cash'),
+        fetch('/api/fin/petty-cash/reconciliations'),
+        fetch('/api/fin/funds'),
       ]);
       const sitesJson = await sitesRes.json();
       const pcJson = await pcRes.json();
+      const reconJson = await reconRes.json();
+      const fundsJson = await fundsRes.json();
       if (sitesJson.success) setSites(sitesJson.data);
       if (pcJson.success) setRecords(pcJson.data);
+      if (reconJson.success && Array.isArray(reconJson.data)) setReconCount(reconJson.data.length);
+      if (fundsJson.success && Array.isArray(fundsJson.data)) setFunds(fundsJson.data);
     } catch { toast.error('Failed to load custodian data'); }
     finally { setLoading(false); }
   }, []);
@@ -55,6 +67,29 @@ export default function FinPettyCashCustodian() {
     const balance = activeSites.reduce((s, site) => s + (balanceBySite.get(site.id) || 0), 0);
     return { limit, balance };
   }, [activeSites, balanceBySite]);
+
+  // Live counts powering the Petty Cash Lifecycle flow strip
+  const lc = useMemo(() => ({
+    fundsCreated: funds.filter(f => f.status === 'Active').length,
+    hoReceipts: records.filter(r => r.category === 'HO FUND').length,
+    siteAllocations: records.filter(r => r.category === 'SITE FUND').length,
+    advances: records.filter(r => r.linkedType !== 'Fund' && r.type === 'Credit').length,
+    withReceipts: records.filter(r => r.type === 'Debit' && r.billAttachmentPath).length,
+    pending: records.filter(r => r.approvalStatus === 'Pending').length,
+    posted: records.filter(r => r.approvalStatus === 'Approved' && r.type === 'Debit').length,
+    overLimit: activeSites.filter(s => (s.pettyCashLimit || 0) > 0 && (balanceBySite.get(s.id) || 0) < 0).length,
+  }), [activeSites, records, balanceBySite, funds]);
+
+  const lifecycle: { n: number; icon: LucideIcon; label: string; sub: string; target: ModuleId; alert?: boolean }[] = [
+    { n: 1, icon: Landmark, label: 'Fund Creation', sub: `${lc.fundsCreated} funds · sent to HO`, target: 'fin-fund-master' },
+    { n: 2, icon: ArrowLeftRight, label: 'Fund Allocation', sub: `${lc.hoReceipts} HO receipts · ${lc.siteAllocations} sites`, target: 'fin-petty-cash-fund-allocation' },
+    { n: 3, icon: Coins, label: 'Cash Utilization', sub: `${lc.advances} advances`, target: 'fin-petty-cash' },
+    { n: 4, icon: Receipt, label: 'Expense Submission', sub: `${lc.withReceipts} with receipts`, target: 'fin-petty-cash' },
+    { n: 5, icon: ListChecks, label: 'Approval & Verification', sub: lc.pending > 0 ? `${lc.pending} awaiting` : 'All clear', target: 'fin-petty-cash-approval-queue', alert: lc.pending > 0 },
+    { n: 6, icon: BookOpen, label: 'Expense Posting', sub: `${lc.posted} posted to ledger`, target: 'fin-petty-cash-ledger' },
+    { n: 7, icon: RefreshCcw, label: 'Cash Replenishment', sub: lc.overLimit > 0 ? `${lc.overLimit} sites over limit` : 'All funded', target: 'fin-petty-cash-replenishment', alert: lc.overLimit > 0 },
+    { n: 8, icon: Scale, label: 'Reconciliation', sub: `${reconCount} counts done`, target: 'fin-petty-cash-reconciliation' },
+  ];
 
   const startEdit = (site: Site) => {
     setEditingSiteId(site.id);
@@ -84,6 +119,26 @@ export default function FinPettyCashCustodian() {
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#f5a623]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Total Sanctioned Limit</div><div className="text-[20px] font-bold text-[#f5a623]" style={{fontFamily:"'Barlow Condensed',sans-serif"}}>{fmt(totals.limit)}</div></div>
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00e676]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Total Current Balance</div><div className="text-[20px] font-bold text-[#00e676]" style={{fontFamily:"'Barlow Condensed',sans-serif"}}>{fmt(totals.balance)}</div></div>
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00d4ff]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Sites Tracked</div><div className="text-[20px] font-bold text-[#00d4ff]" style={{fontFamily:"'Barlow Condensed',sans-serif"}}>{activeSites.length}</div></div>
+      </div>
+
+      {/* Petty Cash Lifecycle flow — Fund Creation → ... → Reconciliation & Closing */}
+      <div className="vc-panel">
+        <div className="vc-panel-header"><Workflow size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Petty Cash Lifecycle — Fund to Close</span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">Click a step to open its screen</span></div>
+        <div className="p-3 flex items-stretch flex-wrap gap-y-2">
+          {lifecycle.map((s, i) => (
+            <div key={s.n} className="flex items-center">
+              <button onClick={() => setActiveModule(s.target)} className={`flex flex-col items-start gap-1 w-[122px] shrink-0 border rounded-lg px-2.5 py-2 text-left transition-colors ${s.alert ? 'border-[#ffab40]/50 bg-[#ffab40]/5 hover:bg-[#ffab40]/10' : 'border-[#252e3a] bg-[#0f1318]/50 hover:border-[#00d4ff]/40 hover:bg-[#00d4ff]/5'}`}>
+                <div className="flex items-center gap-1.5">
+                  <span className={`flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold shrink-0 ${s.alert ? 'bg-[#ffab40] text-[#0d1117]' : 'bg-[#f5a623]/15 text-[#f5a623]'}`}>{s.n}</span>
+                  <s.icon size={13} className={s.alert ? 'text-[#ffab40]' : 'text-[#00d4ff]'} />
+                </div>
+                <div className="text-[10px] font-semibold text-[#e2e8f0] leading-tight">{s.label}</div>
+                <div className={`text-[8.5px] font-mono ${s.alert ? 'text-[#ffab40]' : 'text-[#5a6878]'}`}>{s.sub}</div>
+              </button>
+              {i < lifecycle.length - 1 && <ChevronRight size={12} className="text-[#3a4654] shrink-0" />}
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="vc-panel">

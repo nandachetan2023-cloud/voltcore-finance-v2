@@ -147,20 +147,42 @@ export default function MaterialIssueWip() {
 function IssueForm({ onClose, onSaved, saving, setSaving }: { onClose: () => void; onSaved: () => void; saving: boolean; setSaving: (b: boolean) => void }) {
   const [f, setF] = useState({ itemCode: '', jobCode: '', jobName: '', siteCode: '', description: '', qty: '', unit: 'Nos', rate: '', amount: '', wipAccount: '1501', status: 'Posted', remarks: '' });
   const [jobs, setJobs] = useState<{ jobCode: string; description: string | null; siteCode: string }[]>([]);
+  const [items, setItems] = useState<{ itemCode: string; name: string; uom: string; rate: number; isActive: boolean; category: { code: string; name: string } | null }[]>([]);
   useEffect(() => {
     fetch('/api/fin/jobs').then(r => r.json()).then(j => {
       if (j.success) setJobs(j.data.map((x: any) => ({ jobCode: x.jobCode, description: x.description, siteCode: x.site?.siteCode || '' })));
     }).catch(() => {});
+    fetch('/api/fin/items').then(r => r.json()).then(j => {
+      if (j.success) setItems((j.data || []).filter((x: any) => x.isActive !== false));
+    }).catch(() => {});
   }, []);
+  // Category → item-code map from the Item Code Master Register, grouped by
+  // category name then code, so the picker mirrors the register order.
+  const itemOptions = useMemo(() =>
+    [...items].sort((a, b) =>
+      (a.category?.name || 'zz').localeCompare(b.category?.name || 'zz') ||
+      a.itemCode.localeCompare(b.itemCode)
+    ), [items]);
   const pickJob = (code: string) => {
     const job = jobs.find(j => j.jobCode === code);
     setF(x => ({ ...x, jobCode: code, jobName: job?.description || x.jobName, siteCode: job?.siteCode || x.siteCode }));
+  };
+  const pickItem = (code: string) => {
+    const it = items.find(x => x.itemCode.toLowerCase() === code.trim().toLowerCase());
+    setF(x => ({
+      ...x,
+      itemCode: it ? it.itemCode : code,
+      description: it && !x.description ? it.name : x.description,
+      unit: it ? (it.uom || x.unit) : x.unit,
+      rate: it && !x.rate ? String(it.rate || '') : x.rate,
+    }));
   };
   const save = async () => {
     if (!f.jobCode || !f.description || !f.qty) { toast.error('Job, description and qty required'); return; }
     setSaving(true);
     try {
-      const body: any = { itemCode: f.itemCode.trim() || null, jobCode: f.jobCode.toUpperCase(), jobName: f.jobName, siteCode: f.siteCode || null, description: f.description, qty: Number(f.qty), unit: f.unit, rate: Number(f.rate) || 0, amount: Number(f.amount) || (Number(f.qty) * Number(f.rate)) || 0, wipAccount: f.wipAccount || null, status: f.status, remarks: f.remarks || null };
+      const picked = items.find(x => x.itemCode.toLowerCase() === f.itemCode.trim().toLowerCase());
+      const body: any = { itemCode: f.itemCode.trim() || null, itemName: picked?.name || f.itemCode.trim() || null, jobCode: f.jobCode.toUpperCase(), jobName: f.jobName, siteCode: f.siteCode || null, description: f.description, qty: Number(f.qty), unit: f.unit, rate: Number(f.rate) || 0, amount: Number(f.amount) || (Number(f.qty) * Number(f.rate)) || 0, wipAccount: f.wipAccount || null, status: f.status, remarks: f.remarks || null };
       const j = await fetch('/api/fin/material-issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
       if (j.success) { toast.success('WIP posted'); onSaved(); } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); }
@@ -176,7 +198,14 @@ function IssueForm({ onClose, onSaved, saving, setSaving }: { onClose: () => voi
           <div><label className={lbl}>Job Code</label><input list="mi-job-codes" className={inp} value={f.jobCode} onChange={e => pickJob(e.target.value)} placeholder="Select existing job…" /><datalist id="mi-job-codes">{jobs.map(j => <option key={j.jobCode} value={j.jobCode}>{j.description || ''}</option>)}</datalist></div>
           <div><label className={lbl}>Job Name</label><input className={inp} value={f.jobName} onChange={e => setF(x => ({ ...x, jobName: e.target.value }))} /></div>
           <div className="col-span-2"><label className={lbl}>Material Description</label><input className={inp} value={f.description} onChange={e => setF(x => ({ ...x, description: e.target.value }))} /></div>
-          <div><label className={lbl}>Item Code <span className="normal-case text-[#5a6878]">(posts Stock Ledger)</span></label><input className={inp} value={f.itemCode} onChange={e => setF(x => ({ ...x, itemCode: e.target.value }))} /></div>
+          <div><label className={lbl}>Item Code <span className="normal-case text-[#5a6878]">(posts Stock Ledger)</span></label>
+            <input list="mi-item-codes" className={inp} value={f.itemCode} onChange={e => pickItem(e.target.value)} placeholder="Select category item…" />
+            <datalist id="mi-item-codes">
+              {itemOptions.map(it => (
+                <option key={it.itemCode} value={it.itemCode}>{`${it.category ? `[${it.category.code}] ${it.category.name} — ` : ''}${it.name}`}</option>
+              ))}
+            </datalist>
+          </div>
           <div><label className={lbl}>Qty</label><input type="number" className={inp} value={f.qty} onChange={e => setF(x => ({ ...x, qty: e.target.value }))} /></div>
           <div><label className={lbl}>Unit</label><input className={inp} value={f.unit} onChange={e => setF(x => ({ ...x, unit: e.target.value }))} /></div>
           <div><label className={lbl}>Rate</label><input type="number" className={inp} value={f.rate} onChange={e => setF(x => ({ ...x, rate: e.target.value }))} /></div>

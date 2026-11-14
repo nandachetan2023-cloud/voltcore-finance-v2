@@ -8,7 +8,7 @@ import { useERPStore } from '@/store/erp-store';
 import { useTableControls, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
-import { FormField, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
+import { FormField, SearchableSelect, DatalistField, useFormValidation, required } from './_form-controls';
 import { FilterBar, type ListFilters } from './_list-filter-bar';
 import { useContractors } from './_contractor-master';
 import { StatusBadge } from './_status-badge';
@@ -24,7 +24,14 @@ interface APRecord {
   po?: { id: number; poNo: string } | null;
 }
 
-interface LineItem { id: number; description: string; glAccount: string; costCenter: string; quantity: number; unitPrice: number; }
+interface LineItem { id: number; categoryId: string; itemCode: string; description: string; glAccount: string; costCenter: string; quantity: number; unitPrice: number; }
+
+interface RegisterItem {
+  itemCode: string; name: string; specification: string | null; sizeCapacity: string | null;
+  description: string | null; uom: string; rate: number; isActive: boolean;
+  categoryId: number | null; category?: { id: number; code: string; name: string } | null;
+}
+interface ItemCategoryRef { id: number; code: string; name: string; }
 interface SiteRef { id: number; name: string; siteCode: string; }
 interface PartyRef { id: number; name: string; }
 interface PoRef { id: number; poNo: string; vendorName: string; }
@@ -53,7 +60,6 @@ const AP_COLUMNS: ExportColumn<APRecord>[] = [
   { header: 'Payment Ref', accessor: 'paymentRef' },
   { header: 'Site Code', accessor: (r) => r.site?.siteCode ?? '' },
   { header: 'Job Code', accessor: 'jobCode' },
-  { header: 'Cost Center', accessor: 'costCenter' },
   { header: 'Department', accessor: 'department' },
   { header: 'Project Manager', accessor: 'projectManager' },
   { header: 'Status', accessor: 'status' },
@@ -97,7 +103,7 @@ export default function AccountsPayable() {
   const [view, setView] = useState<'list' | 'form'>('list');
   const [editTarget, setEditTarget] = useState<APRecord | null>(null);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
-  const [lines, setLines] = useState<LineItem[]>([{ id: 1, description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]);
+  const [lines, setLines] = useState<LineItem[]>([{ id: 1, categoryId: '', itemCode: '', description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]);
   const [submitting, setSubmitting] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [filters, setFilters] = useState<ListFilters>({});
@@ -115,6 +121,8 @@ export default function AccountsPayable() {
     [optionsWith, records],
   );
   const [jobs, setJobs] = useState<JobRef[]>([]);
+  const [itemList, setItemList] = useState<RegisterItem[]>([]);
+  const [itemCategories, setItemCategories] = useState<ItemCategoryRef[]>([]);
   const { triggerCreate } = useERPStore();
 
   useEffect(() => {
@@ -122,6 +130,8 @@ export default function AccountsPayable() {
     fetch('/api/fin/parties').then(r => r.json()).then(j => { if (j.success) setParties(j.data); }).catch(() => {});
     fetch('/api/fin/purchase-orders').then(r => r.json()).then(j => { if (j.success) setPurchaseOrders(j.data); }).catch(() => {});
     fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success) setJobs(j.data.map((x: any) => ({ id: x.id, jobCode: x.jobCode, description: x.description ?? null, siteId: x.siteId ?? null, siteName: x.site?.name ?? '' }))); }).catch(() => {});
+    fetch('/api/fin/items').then(r => r.json()).then(j => { if (j.success) setItemList((j.data || []).filter((x: any) => x.isActive !== false)); }).catch(() => {});
+    fetch('/api/fin/item-categories').then(r => r.json()).then(j => { if (j.success) setItemCategories((j.data || []).filter((x: any) => x.isActive !== false)); }).catch(() => {});
   }, []);
 
   const statusFiltered = useMemo(
@@ -159,9 +169,6 @@ export default function AccountsPayable() {
     siteId: required('Site Code'),
     poId: required('PO Number'),
     jobCode: required('Job Code'),
-    costCenter: required('Cost Center'),
-    department: required('Department'),
-    projectManager: required('Project Manager'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
@@ -179,18 +186,39 @@ export default function AccountsPayable() {
     while (existing.has(candidate)) { seq += 1; candidate = `AP-${year}-${String(seq).padStart(3, '0')}`; }
     return candidate;
   };
-  const openCreate = () => { setEditTarget(null); setForm({ ...EMPTY_FORM, billNo: generateBillNo() }); setFormErrors({}); setLines([{ id: 1, description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]); setView('form'); };
+  const openCreate = () => { setEditTarget(null); setForm({ ...EMPTY_FORM, billNo: generateBillNo() }); setFormErrors({}); setLines([{ id: 1, categoryId: '', itemCode: '', description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]); setView('form'); };
   const openEdit = (r: APRecord) => {
     setEditTarget(r);
     setForm({ billNo: r.billNo, vendor: r.vendor, vendorCode: r.vendorCode || '', invoiceRef: r.invoiceRef || '', dueDate: r.dueDate?.split('T')[0] || '', totalAmount: r.totalAmount, status: r.status, description: r.description || '', poReference: '', siteId: r.siteId ? String(r.siteId) : '', partyId: r.partyId ? String(r.partyId) : '', poId: r.poId ? String(r.poId) : '', jobCode: r.jobCode || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' });
     setFormErrors({});
-    setLines([{ id: 1, description: r.description || '', glAccount: '', costCenter: '', quantity: 1, unitPrice: r.amount }]);
+    setLines([{ id: 1, categoryId: '', itemCode: '', description: r.description || '', glAccount: '', costCenter: '', quantity: 1, unitPrice: r.amount }]);
     setView('form');
   };
 
-  const addLine = () => { setLines([...lines, { id: Date.now(), description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]); };
+  const addLine = () => { setLines([...lines, { id: Date.now(), categoryId: '', itemCode: '', description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]); };
   const removeLine = (i: number) => { if (lines.length <= 1) return; setLines(lines.filter((_, idx) => idx !== i)); };
   const updateLine = (i: number, field: keyof LineItem, value: string | number) => { const u = [...lines]; u[i] = { ...u[i], [field]: value }; setLines(u); };
+  // Category → item-code → auto description, sourced from the Item Code
+  // Master Register (same map the finance item master uses).
+  const pickLineCategory = (i: number, categoryId: string) => {
+    const u = [...lines];
+    u[i] = { ...u[i], categoryId, itemCode: '' };
+    setLines(u);
+  };
+  const pickLineItem = (i: number, itemCode: string) => {
+    const it = itemList.find(x => x.itemCode === itemCode);
+    const u = [...lines];
+    u[i] = {
+      ...u[i],
+      itemCode,
+      description: it ? [it.name, it.specification, it.sizeCapacity].filter(Boolean).join(' — ') : u[i].description,
+      unitPrice: it && it.rate > 0 ? it.rate : u[i].unitPrice,
+    };
+    setLines(u);
+  };
+  const lineItemsFor = (categoryId: string) => categoryId
+    ? itemList.filter(x => x.categoryId !== null && String(x.categoryId) === categoryId)
+    : itemList;
   const lineTotal = lines.reduce((s, l) => s + (l.quantity * l.unitPrice), 0);
 
   const handleSubmit = async (status: string) => {
@@ -327,7 +355,6 @@ export default function AccountsPayable() {
                   />
                 </FormField>
               </div>
-              <CostingFields prefix="ap" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
             </div>
 
             {/* Line Items */}
@@ -337,18 +364,20 @@ export default function AccountsPayable() {
                 <button onClick={addLine} className="flex items-center gap-1.5 text-[#f5a623] text-[12px] font-semibold hover:text-[#e8991a]"><Plus size={14} className="border border-[#f5a623] rounded-full" /> ADD LINE</button>
               </div>
               <div className="overflow-x-auto"><table className="w-full text-[11px]"><thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">
+                <th className="text-left py-3 px-4 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Category</th>
+                <th className="text-left py-3 px-4 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Item Code</th>
                 <th className="text-left py-3 px-4 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Description</th>
                 <th className="text-left py-3 px-4 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">GL Account</th>
-                <th className="text-left py-3 px-4 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Cost Center</th>
                 <th className="text-right py-3 px-4 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Quantity</th>
                 <th className="text-right py-3 px-4 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Unit Price</th>
                 <th className="w-10"></th>
               </tr></thead><tbody>
                 {lines.map((line, i) => (
                   <tr key={line.id} className="border-b border-[#1a2028] hover:bg-[#141920]">
-                    <td className="py-3 px-4"><input value={line.description} onChange={e => updateLine(i, 'description', e.target.value)} placeholder="Item description..." className="w-full bg-transparent border-b border-[#252e3a] pb-1 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></td>
+                    <td className="py-3 px-4"><select value={line.categoryId} onChange={e => pickLineCategory(i, e.target.value)} className="w-full min-w-[110px] bg-transparent border-b border-[#252e3a] pb-1 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none"><option value="" className="bg-[#0a0d12]">Category…</option>{itemCategories.map(c => <option key={c.id} value={String(c.id)} className="bg-[#0a0d12]">{c.name} ({c.code})</option>)}</select></td>
+                    <td className="py-3 px-4"><select value={line.itemCode} onChange={e => pickLineItem(i, e.target.value)} className="w-full min-w-[120px] bg-transparent border-b border-[#252e3a] pb-1 text-[12px] text-[#e2e8f0] font-mono focus:border-[#f5a623] focus:outline-none"><option value="" className="bg-[#0a0d12]">Item code…</option>{lineItemsFor(line.categoryId).map(it => <option key={it.itemCode} value={it.itemCode} className="bg-[#0a0d12]">{it.itemCode} — {it.name}</option>)}</select></td>
+                    <td className="py-3 px-4"><input value={line.description} onChange={e => updateLine(i, 'description', e.target.value)} placeholder="Auto from item…" className="w-full min-w-[160px] bg-transparent border-b border-[#252e3a] pb-1 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></td>
                     <td className="py-3 px-4"><input value={line.glAccount} onChange={e => updateLine(i, 'glAccount', e.target.value)} placeholder="5400 - Raw Materials" className="w-full bg-transparent border-b border-[#252e3a] pb-1 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></td>
-                    <td className="py-3 px-4"><input value={line.costCenter} onChange={e => updateLine(i, 'costCenter', e.target.value)} placeholder="CC-402-PROD" className="w-full bg-transparent border-b border-[#252e3a] pb-1 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></td>
                     <td className="py-3 px-4"><input type="number" value={line.quantity || ''} onChange={e => updateLine(i, 'quantity', Number(e.target.value) || 0)} className="w-full bg-transparent border-b border-[#252e3a] pb-1 text-[13px] text-right text-[#e2e8f0] font-mono focus:border-[#f5a623] focus:outline-none" /></td>
                     <td className="py-3 px-4"><input type="number" value={line.unitPrice || ''} onChange={e => updateLine(i, 'unitPrice', Number(e.target.value) || 0)} placeholder="0.00" className="w-full bg-transparent border-b border-[#252e3a] pb-1 text-[13px] text-right text-[#e2e8f0] font-mono focus:border-[#f5a623] focus:outline-none" /></td>
                     <td className="py-3 px-4 text-center"><button onClick={() => removeLine(i)} className="p-1.5 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={14} /></button></td>
@@ -424,6 +453,7 @@ export default function AccountsPayable() {
         search={tc.search}
         setSearch={tc.setSearch}
         searchPlaceholder="Search bill no, vendor..."
+        hide={['costCenter']}
       />
       <div className="grid grid-cols-3 gap-3">
         <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#ffab40]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Pending</div><div className="text-[20px] font-bold text-[#ffab40]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>&#8377;{(totalPending / 100000).toFixed(2)} L</div></div>
@@ -443,7 +473,6 @@ export default function AccountsPayable() {
           <SortableTh label="Vendor" sortKey="vendor" accessor={(r: APRecord) => r.vendor} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="Site" sortKey="site" accessor={(r: APRecord) => r.site?.name} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: APRecord) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
-          <SortableTh label="Cost Center" sortKey="costCenter" accessor={(r: APRecord) => r.costCenter} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="Dept" sortKey="department" accessor={(r: APRecord) => r.department} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="PM" sortKey="projectManager" accessor={(r: APRecord) => r.projectManager} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="Amount" sortKey="amount" accessor={(r: APRecord) => r.amount} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
@@ -459,7 +488,6 @@ export default function AccountsPayable() {
               <td className="py-2.5 px-3 text-[#e2e8f0]">{r.vendor}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.site?.siteCode || '—'}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || '—'}</td>
-              <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.costCenter || '—'}</td>
               <td className="py-2.5 px-3 text-[#8899aa]">{r.department || '—'}</td>
               <td className="py-2.5 px-3 text-[#8899aa]">{r.projectManager || '—'}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">&#8377;{(r.amount ?? 0).toLocaleString('en-IN')}</td>
@@ -469,7 +497,7 @@ export default function AccountsPayable() {
               <td className="py-2.5 px-3"><StatusBadge status={r.status} /></td>
               <td className="py-2.5 px-3"><div className="flex gap-1"><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button><button onClick={() => handleDelete(r.id)} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button></div></td>
             </tr>
-          ))}{tc.pageItems.length === 0 && <tr><td colSpan={13} className="py-10 text-center text-[#5a6878]">No records found.</td></tr>}</tbody>
+          ))}{tc.pageItems.length === 0 && <tr><td colSpan={12} className="py-10 text-center text-[#5a6878]">No records found.</td></tr>}</tbody>
         </table></div>
 
         <PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} />

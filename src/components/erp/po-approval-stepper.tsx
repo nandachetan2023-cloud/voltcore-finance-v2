@@ -7,6 +7,7 @@ import {
 import { toast } from 'sonner';
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
+import { useContractors } from './_contractor-master';
 
 interface FinRec {
   id: number; poNo: string; vendorName: string; description: string; jobCode: string;
@@ -14,7 +15,7 @@ interface FinRec {
 }
 interface FormRec {
   vendorName: string; description: string; jobCode: string; siteId: string;
-  costCenter: string; projectManager: string; totalAmount: number;
+  projectManager: string; totalAmount: number;
 }
 
 const PO_COLUMNS: ExportColumn<FinRec>[] = [
@@ -28,7 +29,7 @@ const PO_COLUMNS: ExportColumn<FinRec>[] = [
 
 const STEPS = ['Draft', 'Pending Approval', 'Approved', 'Converted to PO'];
 const POOL_INDEX: Record<string, number> = { Draft: 0, 'Pending Approval': 1, Approved: 2, 'Converted to PO': 3, Converted: 3 };
-const EMPTY: FormRec = { vendorName: '', description: '', jobCode: '', siteId: '', costCenter: 'CC-PROJ', projectManager: '', totalAmount: 0 };
+const EMPTY: FormRec = { vendorName: '', description: '', jobCode: '', siteId: '', projectManager: '', totalAmount: 0 };
 const inpBox = 'w-full bg-[#0d1117] border border-[#2e3a48] rounded-lg px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#00d4ff]/60 placeholder:text-[#5a6878]';
 
 export default function PoApprovalStepper() {
@@ -40,6 +41,7 @@ export default function PoApprovalStepper() {
   const [form, setForm] = useState<FormRec>(EMPTY);
   const [sites, setSites] = useState<{ id: number; name: string }[]>([]);
   const [jobs, setJobs] = useState<{ id: number; jobCode: string; siteId: number }[]>([]);
+  const { options: vendorOptions } = useContractors();
 
   const tc = useTableControls(records, (r) => `${r.poNo} ${r.vendorName} ${r.description} ${r.jobCode}`);
 
@@ -83,7 +85,7 @@ export default function PoApprovalStepper() {
 
   const create = async () => {
     if (!form.vendorName || !form.description) { toast.error('Vendor and description required'); return; }
-    if (!form.siteId || !form.jobCode || !form.costCenter.trim() || !form.projectManager.trim()) { toast.error('Site, Job, Cost Center and Project Manager required'); return; }
+    if (!form.siteId || !form.jobCode || !form.projectManager.trim()) { toast.error('Site, Job and Project Manager required'); return; }
     setSaving(true);
     try {
       const res = await fetch('/api/fin/purchase-orders', {
@@ -95,7 +97,6 @@ export default function PoApprovalStepper() {
           descriptionOfWork: form.description,
           jobCode: form.jobCode,
           siteId: Number(form.siteId),
-          costCenter: form.costCenter.trim(),
           department: 'Procurement',
           projectManager: form.projectManager.trim(),
           status: 'Pending Approval',
@@ -210,7 +211,7 @@ export default function PoApprovalStepper() {
           <div className="bg-[#161c24] border border-[#00d4ff]/25 rounded-xl p-4 max-w-md w-full">
             <h4 className="text-[13px] font-bold text-[#e2e8f0] mb-3">New Purchase Order</h4>
             <div className="space-y-3">
-              <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Vendor</label><input className={inpBox} value={form.vendorName} onChange={e => setForm(f => ({ ...f, vendorName: e.target.value }))} placeholder="Supplier name" /></div>
+              <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Vendor *</label><select className={inpBox} value={form.vendorName} onChange={e => setForm(f => ({ ...f, vendorName: e.target.value }))}><option value="">Select vendor…</option>{vendorOptions.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div>
               <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Description</label><input className={inpBox} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Scope of supply" /></div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -228,8 +229,7 @@ export default function PoApprovalStepper() {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Cost Ctr *</label><input className={inpBox} value={form.costCenter} onChange={e => setForm(f => ({ ...f, costCenter: e.target.value }))} /></div>
+              <div className="grid grid-cols-2 gap-2">
                 <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">PM *</label><input className={inpBox} value={form.projectManager} onChange={e => setForm(f => ({ ...f, projectManager: e.target.value }))} placeholder="Name" /></div>
                 <div><label className="block text-[10px] font-semibold text-[#5a6878] uppercase mb-1">Amount</label><input type="number" className={inpBox} value={form.totalAmount} onChange={e => setForm(f => ({ ...f, totalAmount: Number(e.target.value) }))} /></div>
               </div>

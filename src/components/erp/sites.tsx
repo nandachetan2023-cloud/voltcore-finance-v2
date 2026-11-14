@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useERPStore } from '@/store/erp-store';
+import { INDIAN_STATES } from '@/lib/indian-states';
 
 interface Site {
   id: string | number;
@@ -190,7 +191,7 @@ export default function SitesModule() {
       <FormField label="State">
         <select className={selectCls} value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))}>
           <option value="">Select state</option>
-          {['Tamil Nadu', 'Maharashtra', 'Gujarat', 'Rajasthan', 'Karnataka', 'Telangana', 'Andhra Pradesh', 'Odisha', 'West Bengal', 'Madhya Pradesh'].map(s => (
+          {INDIAN_STATES.map(s => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>

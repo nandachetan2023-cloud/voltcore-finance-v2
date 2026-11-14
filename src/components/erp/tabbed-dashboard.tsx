@@ -87,6 +87,11 @@ const CATEGORIES: Category[] = [
       { key: 'fin-petty-cash', label: 'Vouchers' },
       { key: 'fin-petty-cash-approval-queue', label: 'Approval Queue' },
       { key: 'fin-petty-cash-replenishment', label: 'Replenishment' },
+      { key: 'fin-petty-cash-fund-allocation', label: 'Fund Allocation' },
+      { key: 'fin-fund-master', label: 'Fund Master' },
+      { key: 'fin-cash-request', label: 'Cash Requests' },
+      { key: 'fin-petty-cash-ledger', label: 'Ledger' },
+      { key: 'fin-petty-cash-reconciliation', label: 'Reconciliation' },
     ],
   },
   {

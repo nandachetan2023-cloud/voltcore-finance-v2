@@ -23,7 +23,7 @@ export const MODULE_TREE: Record<string, string[]> = {
   inventory: ['site-store', 'material-receipt', 'material-issue-wip', 'stock-ledger', 'scrap-entry'],
   'sales-billing': ['sales-orders', 'sales-quotations', 'ra-work-slider', 'sales-tax-invoices', 'receipt-entry'],
   'finance-accounts': ['finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'bank-cash', 'fin-bank-reconciliation', 'journal-entries', 'taxation', 'fin-profit-loss', 'financial-reports', 'tally-sync'],
-  'petty-cash': ['fin-petty-cash-custodian', 'fin-petty-cash', 'fin-petty-cash-approval-queue', 'fin-petty-cash-replenishment'],
+  'petty-cash': ['fin-petty-cash-custodian', 'fin-petty-cash', 'fin-petty-cash-approval-queue', 'fin-petty-cash-replenishment', 'fin-petty-cash-fund-allocation', 'fin-petty-cash-ledger', 'fin-petty-cash-reconciliation', 'fin-fund-master', 'fin-cash-request'],
   mis: ['report-drilldown', 'po-cost-tree', 'customer-profitability', 'budget'],
 }
 
@@ -90,7 +90,7 @@ export type ModuleId =
    | 'finance' | 'create-journal-entry' | 'fin-sites' | 'fin-jobs' | 'fin-items' | 'fin-clients' | 'fin-parties'
     | 'fin-invoices' | 'fin-payments' | 'fin-payment-advices' | 'fin-petty-cash' | 'fin-profit-loss' | 'fin-bank-reconciliation' | 'tally-sync' | 'notifications-ultra'
     | 'fin-purchase-orders' | 'fin-credit-notes' | 'fin-expense-claims' | 'fin-site-expenses' | 'fin-work-orders' | 'fin-client-follow-up'
-    | 'fin-petty-cash-custodian' | 'fin-petty-cash-approval-queue' | 'fin-petty-cash-replenishment'
+    | 'fin-petty-cash-custodian' | 'fin-petty-cash-approval-queue' | 'fin-petty-cash-replenishment' | 'fin-petty-cash-fund-allocation' | 'fin-petty-cash-ledger' | 'fin-petty-cash-reconciliation' | 'fin-fund-master' | 'fin-cash-request'
   | 'fin-user-management'
    // Purchase Management sub-modules
    | 'procurement-pr' | 'procurement-rfq' | 'procurement-po-register' | 'procurement-vendors' | 'procurement-material-tracking' | 'procurement-subcontracts'
@@ -288,6 +288,11 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'fin-petty-cash', icon: 'Wallet', label: 'Vouchers', section: 'Petty Cash' },
     { id: 'fin-petty-cash-approval-queue', icon: 'ListChecks', label: 'Approval Queue', section: 'Petty Cash' },
     { id: 'fin-petty-cash-replenishment', icon: 'HandCoins', label: 'Replenishment', section: 'Petty Cash' },
+    { id: 'fin-petty-cash-fund-allocation', icon: 'Landmark', label: 'Fund Allocation', section: 'Petty Cash' },
+    { id: 'fin-petty-cash-ledger', icon: 'BookOpen', label: 'Ledger', section: 'Petty Cash' },
+    { id: 'fin-petty-cash-reconciliation', icon: 'Scale', label: 'Reconciliation', section: 'Petty Cash' },
+    { id: 'fin-fund-master', icon: 'PiggyBank', label: 'Fund Master', section: 'Petty Cash' },
+    { id: 'fin-cash-request', icon: 'Banknote', label: 'Cash Requests', section: 'Petty Cash' },
   ],
   mis: [
     { id: 'report-drilldown', icon: 'BarChart3', label: 'Site / Job P&L Drill-down', section: 'MIS' },
@@ -431,6 +436,11 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'fin-petty-cash-custodian': { title: 'Custodian Dashboard', breadcrumb: 'Finance › Petty Cash › Custodian Dashboard' },
   'fin-petty-cash-approval-queue': { title: 'Approval Queue', breadcrumb: 'Finance › Petty Cash › Approval Queue' },
   'fin-petty-cash-replenishment': { title: 'Replenishment Request', breadcrumb: 'Finance › Petty Cash › Replenishment Request' },
+  'fin-petty-cash-fund-allocation': { title: 'Fund Allocation', breadcrumb: 'Finance › Petty Cash › Fund Allocation' },
+  'fin-petty-cash-ledger': { title: 'Petty Cash Ledger', breadcrumb: 'Finance › Petty Cash › Ledger' },
+  'fin-petty-cash-reconciliation': { title: 'Cash Reconciliation', breadcrumb: 'Finance › Petty Cash › Reconciliation' },
+  'fin-fund-master': { title: 'Fund Master', breadcrumb: 'Finance › Petty Cash › Fund Master' },
+  'fin-cash-request': { title: 'Cash Requests', breadcrumb: 'Finance › Petty Cash › Cash Requests' },
   'fin-payments': { title: 'Payment Center', breadcrumb: 'Finance › Payment Center' },
   'fin-payment-advices': { title: 'Payment Advices', breadcrumb: 'Finance › Payment Advices' },
   'fin-credit-notes': { title: 'Credit Notes', breadcrumb: 'Sales › Credit Notes' },
@@ -532,7 +542,7 @@ export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance-accounts',
 // Main modules kept out of the dashboard tile grid. They stay routable (and
 // keep their sub-modules) so existing links and grants still work — they just
 // no longer get a top-level tile.
-export const HIDDEN_MAIN_MODULES: string[] = ['hrms'];
+export const HIDDEN_MAIN_MODULES: string[] = ['hrms', 'sales-billing'];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};

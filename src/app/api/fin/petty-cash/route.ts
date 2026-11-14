@@ -111,6 +111,8 @@ export async function POST(request: NextRequest) {
         projectManager: body.projectManager || null,
         custodian: body.custodian || null,
         limitAmount: body.limitAmount ? Number(body.limitAmount) : null,
+        fundId: body.fundId ? Number(body.fundId) : null,
+        coversVoucherIds: body.coversVoucherIds ? String(body.coversVoucherIds) : null,
       },
       include: {
         party: { select: { id: true, name: true, code: true } },

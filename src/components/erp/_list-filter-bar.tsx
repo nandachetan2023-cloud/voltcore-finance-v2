@@ -50,6 +50,7 @@ export function FilterBar({
   search,
   setSearch,
   searchPlaceholder = 'Search...',
+  hide = [],
 }: {
   filters: ListFilters;
   setFilter: (key: keyof ListFilters, value: string) => void;
@@ -57,6 +58,7 @@ export function FilterBar({
   search: string;
   setSearch: (v: string) => void;
   searchPlaceholder?: string;
+  hide?: Array<keyof ListFilters>;
 }) {
   const costCenterOptions = useMemo(() => (options.costCenters ?? []).map((c) => ({ value: c, label: c })), [options.costCenters]);
   const departmentOptions = useMemo(() => (options.departments ?? []).map((d) => ({ value: d, label: d })), [options.departments]);
@@ -75,11 +77,11 @@ export function FilterBar({
         <span className="text-[9px] uppercase tracking-[1.5px] font-bold">Filters</span>
       </div>
 
-      <FilterSelect label="Site Code" value={filters.site || ''} onChange={(v) => setFilter('site', v)} options={options.sites} placeholder="All sites" />
-      <FilterSelect label="Job Code" value={filters.jobCode || ''} onChange={(v) => setFilter('jobCode', v)} options={options.jobs} placeholder="All jobs" />
-      <FilterSelect label="PO Number" value={filters.poNo || ''} onChange={(v) => setFilter('poNo', v)} options={options.poNos} placeholder="All POs" />
-      <FilterSelect label="Cost Center" value={filters.costCenter || ''} onChange={(v) => setFilter('costCenter', v)} options={costCenterOptions} placeholder="All cost centers" />
-      <FilterSelect label="Department" value={filters.department || ''} onChange={(v) => setFilter('department', v)} options={departmentOptions} placeholder="All departments" />
+      {!hide.includes('site') && <FilterSelect label="Site Code" value={filters.site || ''} onChange={(v) => setFilter('site', v)} options={options.sites} placeholder="All sites" />}
+      {!hide.includes('jobCode') && <FilterSelect label="Job Code" value={filters.jobCode || ''} onChange={(v) => setFilter('jobCode', v)} options={options.jobs} placeholder="All jobs" />}
+      {!hide.includes('poNo') && <FilterSelect label="PO Number" value={filters.poNo || ''} onChange={(v) => setFilter('poNo', v)} options={options.poNos} placeholder="All POs" />}
+      {!hide.includes('costCenter') && <FilterSelect label="Cost Center" value={filters.costCenter || ''} onChange={(v) => setFilter('costCenter', v)} options={costCenterOptions} placeholder="All cost centers" />}
+      {!hide.includes('department') && <FilterSelect label="Department" value={filters.department || ''} onChange={(v) => setFilter('department', v)} options={departmentOptions} placeholder="All departments" />}
 
       <div className="ml-auto flex items-center gap-2">
         <SearchInput value={search} onChange={setSearch} placeholder={searchPlaceholder} />

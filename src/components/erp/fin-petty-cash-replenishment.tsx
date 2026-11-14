@@ -1,11 +1,11 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { HandCoins, Loader2, Send, Info, ArrowRight, ShieldCheck } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { HandCoins, Loader2, Send, Info, ArrowRight, ShieldCheck, CheckSquare, Square } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUserEmail } from '@/lib/current-user';
 
 interface Site { id: number; name: string; siteCode: string; responsiblePerson: string | null; pettyCashLimit: number | null; }
-interface PettyCashRecord { id: number; voucherNo: string; date: string; amount: number; siteId: number | null; approvalStatus: string; site: { name: string } | null; }
+interface PettyCashRecord { id: number; voucherNo: string; date: string; amount: number; siteId: number | null; approvalStatus: string; category?: string | null; linkedType?: string | null; replenished?: boolean; description?: string; type?: string; site: { name: string } | null; }
 interface RbacAssignment { id: number; siteCode: string | null; role: { code: string; name: string; level: number } | null; }
 interface JobOption { id: number; jobCode: string; description: string | null; siteId: number | null; status: string; }
 
@@ -15,6 +15,8 @@ export default function FinPettyCashReplenishment() {
   const [sites, setSites] = useState<Site[]>([]);
   const [jobs, setJobs] = useState<JobOption[]>([]);
   const [recent, setRecent] = useState<PettyCashRecord[]>([]);
+  const [vouchers, setVouchers] = useState<PettyCashRecord[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [siteId, setSiteId] = useState('');
   const [jobCode, setJobCode] = useState('');
@@ -38,7 +40,7 @@ export default function FinPettyCashReplenishment() {
       const jobsJson = await jobsRes.json();
       if (sitesJson.success) setSites(sitesJson.data);
       if (jobsJson.success) setJobs((jobsJson.data ?? []).map((j: any) => ({ id: j.id, jobCode: j.jobCode, description: j.description ?? null, siteId: j.siteId ?? null, status: j.status })));
-      if (pcJson.success) setRecent(pcJson.data.filter((r: any) => r.category === 'Replenishment').slice(0, 15));
+      if (pcJson.success) { setVouchers(pcJson.data); setRecent(pcJson.data.filter((r: any) => r.category === 'Replenishment').slice(0, 15)); }
       if (rbacRes) { const rbacJson = await rbacRes.json(); if (rbacJson.success) setAssignments(rbacJson.data ?? []); }
     } catch { toast.error('Failed to load'); }
     finally { setLoading(false); }
@@ -46,6 +48,20 @@ export default function FinPettyCashReplenishment() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const selectedSite = sites.find(s => String(s.id) === siteId) || null;
+  // Eligible for replenishment: approved expense debits at the selected site, not
+  // already covered by an earlier replenishment, and not fund-transfer credits.
+  const eligible = useMemo(() => vouchers.filter(v =>
+    v.siteId === (selectedSite?.id ?? null) &&
+    v.approvalStatus === 'Approved' &&
+    v.type === 'Debit' &&
+    !v.replenished &&
+    !['Fund'].includes(v.linkedType || '') &&
+    !['HO FUND', 'SITE FUND'].includes(v.category || '')
+  ), [vouchers, selectedSite]);
+  const eligibleTotal = useMemo(() => eligible.filter(v => selectedIds.has(v.id)).reduce((s, v) => s + v.amount, 0), [eligible, selectedIds]);
+  useEffect(() => { setSelectedIds(new Set(eligible.map(v => v.id))); }, [eligible]);
+  const toggleEligible = (id: number) => setSelectedIds(s => { const next = new Set(s); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const toggleAllEligible = () => setSelectedIds(s => s.size === eligible.length ? new Set() : new Set(eligible.map(v => v.id)));
   // Cash is requested against a job code of the chosen site — never another
   // site's job, so the list is filtered by the selected site.
   const siteJobs = selectedSite
@@ -73,11 +89,12 @@ export default function FinPettyCashReplenishment() {
           date: new Date().toISOString().split('T')[0],
           description: reason ? `Replenishment request: ${reason}` : 'Replenishment request',
           amount, type: 'Credit', category: 'Replenishment', siteId: Number(siteId),
-          jobCode: jobCode || null,
-          custodian: selectedSite?.responsiblePerson || null,
-          authorizedBy: getCurrentUserEmail() || selectedSite?.responsiblePerson || null,
-          remarks: reason || null,
-        }),
+           jobCode: jobCode || null,
+           custodian: selectedSite?.responsiblePerson || null,
+           authorizedBy: getCurrentUserEmail() || selectedSite?.responsiblePerson || null,
+           remarks: reason || null,
+           coversVoucherIds: selectedIds.size > 0 ? JSON.stringify([...selectedIds]) : null,
+         }),
       });
       const createJson = await createRes.json();
       if (!createJson.success) { toast.error(createJson.error || 'Failed to create request'); return; }
@@ -107,6 +124,37 @@ export default function FinPettyCashReplenishment() {
   return (
     <div className="p-6 max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
       <div className="lg:col-span-2 space-y-4">
+        <div className="vc-panel">
+          <div className="vc-panel-header"><CheckSquare size={15} className="text-[#00d4ff]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Eligible Unreplenished Expenses</span>
+            <button onClick={toggleAllEligible} className="ml-auto text-[10px] text-[#00d4ff] hover:underline">{selectedIds.size === eligible.length && eligible.length > 0 ? 'Clear all' : 'Select all'}</button>
+            <span className="vc-badge bg-[#252e3a] text-[#8899aa]">{eligible.length}</span>
+          </div>
+          {!selectedSite && <div className="p-4 text-[11px] text-[#5a6878]">Select a site to see its approved expenses that are still awaiting replenishment.</div>}
+          {selectedSite && eligible.length === 0 && <div className="p-4 text-[11px] text-[#5a6878]">Nothing eligible — everything approved at this site is already replenished.</div>}
+          {eligible.length > 0 && (
+            <>
+              <div className="max-h-[220px] overflow-y-auto"><table className="w-full text-[10.5px]">
+                <thead><tr className="bg-[#0f1318]">{['', 'Voucher', 'Date', 'Description', 'Amount'].map(h => <th key={h} className="text-left py-1.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[8.5px]">{h}</th>)}</tr></thead>
+                <tbody className="divide-y divide-[#1a2028]">
+                  {eligible.map(v => (
+                    <tr key={v.id} className="hover:bg-[#141920] cursor-pointer" onClick={() => toggleEligible(v.id)}>
+                      <td className="py-1.5 px-3">{selectedIds.has(v.id) ? <CheckSquare size={12} className="text-[#00d4ff]" /> : <Square size={12} className="text-[#5a6878]" />}</td>
+                      <td className="py-1.5 px-3 text-[#f5a623] font-mono">{v.voucherNo}</td>
+                      <td className="py-1.5 px-3 text-[#8899aa] font-mono">{v.date?.split('T')[0]}</td>
+                      <td className="py-1.5 px-3 text-[#e2e8f0] max-w-[220px] truncate" title={v.description}>{v.description}</td>
+                      <td className="py-1.5 px-3 text-[#e2e8f0] font-mono">{fmt(v.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table></div>
+              <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-[#1a2028]">
+                <div className="text-[10px] text-[#8899aa]">{selectedIds.size} selected — total <span className="text-[#e2e8f0] font-mono">{fmt(eligibleTotal)}</span></div>
+                <button onClick={() => setAmount(eligibleTotal)} className="text-[10px] text-[#00d4ff] hover:text-[#e2e8f0] font-semibold shrink-0">Use this total as the amount</button>
+              </div>
+            </>
+          )}
+        </div>
+
         <div className="vc-panel">
           <div className="vc-panel-header"><HandCoins size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Petty Cash Replenishment Request</span></div>
           <div className="p-4 space-y-3">

@@ -9,6 +9,7 @@ import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_tab
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
 import { FormField, SearchableSelect } from './_form-controls';
+import { INDIAN_STATES } from '@/lib/indian-states';
 
 interface CustomerRef { id: number; name: string; }
 interface Site { id: number; siteCode: string; name: string; location: string | null; state: string | null; contactPerson: string | null; contactPhone: string | null; contactEmail: string | null; budget: number; customerId: number | null; startDate: string | null; endDate: string | null; status: string; customer?: CustomerRef | null; }
@@ -163,7 +164,7 @@ export default function FinSites() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Location"><input value={form.location} onChange={e=>setForm(p=>({...p,location:e.target.value}))} className="vc-input" placeholder="Jharsuguda"/></FormField>
-            <FormField label="State"><input value={form.state} onChange={e=>setForm(p=>({...p,state:e.target.value}))} className="vc-input"/></FormField>
+            <FormField label="State"><select value={form.state} onChange={e=>setForm(p=>({...p,state:e.target.value}))} className="vc-input appearance-none"><option value="">Select state or union territory</option>{form.state && !INDIAN_STATES.includes(form.state) && <option value={form.state}>{form.state}</option>}{INDIAN_STATES.map(state=><option key={state} value={state}>{state}</option>)}</select></FormField>
           </div>
           <FormField label="Customer" hint="Links this site/project to its owning customer">
             <SearchableSelect value={form.customerId} onChange={v => setForm(p => ({ ...p, customerId: v }))} options={customers.map(c => ({ value: String(c.id), label: c.name }))} placeholder="— Select customer —"/>

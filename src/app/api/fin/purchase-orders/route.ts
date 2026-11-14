@@ -10,7 +10,10 @@ export async function GET(request: NextRequest) {
     const pdb = getDbForRequest(request)
     const records = await pdb.finPurchaseOrder.findMany({
       orderBy: { date: 'desc' },
-      include: { site: true, items: true },
+      include: {
+        site: { include: { customer: { select: { id: true, name: true } } } },
+        items: true,
+      },
     })
     return NextResponse.json({ success: true, data: records })
   } catch (error) {

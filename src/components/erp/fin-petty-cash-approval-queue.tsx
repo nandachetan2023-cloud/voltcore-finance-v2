@@ -51,12 +51,12 @@ export default function FinPettyCashApprovalQueue() {
   }, [email]);
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const runAction = async (id: number, action: 'submit' | 'approve' | 'reject', comments?: string) => {
+  const runAction = async (id: number, action: 'submit' | 'approve' | 'reject', comments?: string, stage?: 'manager' | 'finance') => {
     setActionSubmitting(true);
     try {
       const r = await fetch('/api/fin/petty-cash/approve', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action, comments, actor: email }),
+        body: JSON.stringify({ id, action, comments, actor: email, stage }),
       });
       const j = await r.json();
       if (j.success) {
@@ -94,11 +94,11 @@ export default function FinPettyCashApprovalQueue() {
       return !!site && siteCodes.includes(site.siteCode);
     };
     if (!assignments.length) return [];
-    // Custodian sees drafts/rejected it created; approvers see pending.
+    // Custodian sees drafts/rejected it created; approvers see vouchers awaiting manager review or finance verification.
     if (isCustodian) {
       return records.filter(r => (r.approvalStatus === 'Draft' || r.approvalStatus === 'Rejected') && scoped(r));
     }
-    if (isApprover) return records.filter(r => r.approvalStatus === 'Pending' && scoped(r));
+    if (isApprover) return records.filter(r => (r.approvalStatus === 'Pending' || r.approvalStatus === 'ManagerApproved') && scoped(r));
     return [];
   }, [records, assignments, siteCodes, sites, isCustodian, isApprover]);
 
@@ -127,10 +127,10 @@ export default function FinPettyCashApprovalQueue() {
       {assignments.length > 0 && (
         <div className="vc-panel">
           <div className="vc-panel-header"><ListChecks size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">
-            {isCustodian ? 'Vouchers Awaiting Your Submission' : isApprover ? 'Vouchers Awaiting Your Approval' : 'Pending Vouchers'}
+            {isCustodian ? 'Vouchers Awaiting Your Submission' : isApprover ? 'Vouchers Awaiting Manager / Finance Action' : 'Pending Vouchers'}
           </span><span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{queue.length}</span></div>
           <div className="overflow-x-auto"><table className="w-full text-[11px]">
-            <thead><tr className="bg-[#0f1318]">{['Voucher', 'Date', 'Description', 'Site', 'Job Code', 'Type', 'Amount', 'Submitted By', ''].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+            <thead><tr className="bg-[#0f1318]">{['Voucher', 'Date', 'Description', 'Site', 'Job Code', 'Type', 'Stage', 'Amount', 'Submitted By', ''].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
             <tbody className="divide-y divide-[#1a2028]">
               {queue.map(r => (
                 <tr key={r.id} className="hover:bg-[#141920]">
@@ -140,6 +140,7 @@ export default function FinPettyCashApprovalQueue() {
                   <td className="py-2.5 px-3 text-[#8899aa]">{r.site?.name || '—'}</td>
                   <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || '—'}</td>
                   <td className="py-2.5 px-3"><span className={`vc-badge ${r.type === 'Credit' ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#ff3d3d]/15 text-[#ff3d3d]'}`}>{r.type}</span></td>
+                  <td className="py-2.5 px-3"><span className={`vc-badge ${r.approvalStatus === 'ManagerApproved' ? 'bg-[#00d4ff]/15 text-[#00d4ff]' : 'bg-[#ffab40]/15 text-[#ffab40]'}`}>{r.approvalStatus === 'ManagerApproved' ? 'Finance Verification' : 'Manager Review'}</span></td>
                   <td className="py-2.5 px-3 text-[#e2e8f0] font-mono font-medium">{fmt(r.amount)}</td>
                   <td className="py-2.5 px-3 text-[#8899aa]">{r.submittedBy || r.custodian || r.authorizedBy || '—'}</td>
                   <td className="py-2.5 px-3">
@@ -148,7 +149,7 @@ export default function FinPettyCashApprovalQueue() {
                         <button onClick={() => runAction(r.id, 'submit')} disabled={actionSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10 disabled:opacity-50" title="Submit for approval"><Send size={13} /></button>
                       ) : (
                         <>
-                          <button onClick={() => runAction(r.id, 'approve')} disabled={actionSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#00e676] hover:bg-[#00e676]/10 disabled:opacity-50" title="Approve"><CheckCircle2 size={13} /></button>
+                          <button onClick={() => runAction(r.id, 'approve', undefined, r.approvalStatus === 'ManagerApproved' ? 'finance' : 'manager')} disabled={actionSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#00e676] hover:bg-[#00e676]/10 disabled:opacity-50" title={r.approvalStatus === 'ManagerApproved' ? 'Verify documents (Finance)' : 'Approve business purpose (Manager)'}><CheckCircle2 size={13} /></button>
                           <button onClick={() => { setRejectTarget(r); setRejectReason(''); }} disabled={actionSubmitting} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10 disabled:opacity-50" title="Reject"><XCircle size={13} /></button>
                         </>
                       )}
@@ -156,7 +157,7 @@ export default function FinPettyCashApprovalQueue() {
                   </td>
                 </tr>
               ))}
-              {queue.length === 0 && <tr><td colSpan={9} className="py-8 text-center text-[#5a6878]">Nothing waiting on you right now</td></tr>}
+              {queue.length === 0 && <tr><td colSpan={10} className="py-8 text-center text-[#5a6878]">Nothing waiting on you right now</td></tr>}
             </tbody>
           </table></div>
         </div>

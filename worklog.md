@@ -2134,3 +2134,136 @@ User: "New RFQ add Project dropdown" · "prject dropdown not appearing" (in New 
 
 ### Stage Summary
 Every free-text entry that duplicates a master (project, item description, supplier/contractor) is now a dropdown backed by setup, and the notification bell no longer throws into the console when the dev server restarts.
+
+---
+
+## Task ID: 39 - Register New Equipment layout; build fix (@prisma/superadmin-client); material issue / tracking dropdowns; AP form clean-up; PO vendor dropdown
+
+### Work Task
+User: "Register New Equipment keep layout of form should not merge" -> "Build Error Module not found: Can't resolve '@prisma/superadmin-client' fix it" -> "Issue Material to Job Item Code (posts Stock Ledger) selection should appear from category and itemcode map" -> "Material Tracking PO number should come from db as dropdown once selected all details popup auto" -> AP "remove Cost Center, Department, Project Manager" -> "Description can choose from category then itemcode then description auto" -> "Cost Center is not required" -> "Cost Center need to hide do not show" -> "New Purchase Order Vendor dropdown required hide Cost Ctr *".
+
+### Fix - Register New Equipment (site-store.tsx)
+- Form no longer one dense 2-col grid: modal is now `wide` (max-w-4xl) and the 12 fields are split into labelled sections separated by dividers - Basic Details (Name, Make, Sr No, Capacity, Type), Location & Assignment (Location, Site, Operator), Service Schedule (Validity / Last Service / Next Service in a 3-col row), Remarks. No orphan grid cell; state/handlers unchanged.
+
+### Fix - build "Can't resolve '@prisma/superadmin-client'"
+- Root cause: `@prisma/superadmin-client` is generated into node_modules (gitignored) by `prisma generate --schema=prisma/superadmin.prisma`; the postinstall chain short-circuits (`&&`) when the first `prisma generate` fails (EPERM on query_engine dll while next dev is running), so the superadmin client never gets generated and `next build` fails to resolve it.
+- Regenerated the client; `build` and `dev` scripts now run `npm run db:generate` first so a clean checkout/CI always has both clients before compiling.
+
+### Fix - Issue Material to Job -> Job WIP (material-issue-wip.tsx)
+- Item Code is now a picker fed by the Item Code Master Register (/api/fin/items, active only), ordered category -> item code. Selecting a code auto-fills Material Description (item name), Unit (uom) and Rate when blank; `itemName` is posted so the Stock Ledger entry carries the register name.
+
+### Fix - Material Tracking New Entry (procurement-material-tracking.tsx)
+- PO No is now a dropdown from the PO master (/api/fin/purchase-orders); selection auto-fills Vendor, Project (site customer, else site name), Site, Material (first PO line), Category (best-effort keyword match), Unit, Qty Required, Scheduled Date (PO date) and Expected Date (order completion). Project/Site/vendor option lists widen dynamically so PO values render; legacy POs stay selectable.
+- /api/fin/purchase-orders GET now includes the site's customer (for the Project auto-fill).
+
+### Fix - Accounts Payable > New AP Invoice (accounts-payable.tsx + api/accounts-payable)
+- Removed Cost Center / Department / Project Manager from the form, their client validation rules, and the server-side required checks (POST/PUT now require siteId, jobCode, poId only) so the hidden fields no longer block submission.
+- Line-item Description now works category -> item code -> description: each line has Category and Item Code selects from the Item Code register; picking an item fills Description (name - specification - size) and Unit Price (item rate) automatically; description stays editable.
+- Cost Center fully hidden in AP: line-item column, list column, export column and the list FilterBar entry (new optional `hide` prop on FilterBar; other modules unchanged). Department/PM list columns left as-is.
+- Backlog: the "Invoice Scan" panel (₹0 / File / "OCR Confidence: 98.2%") is still a static mock - upload input has no handler and no OCR backend exists; needs a real preview/extraction flow.
+
+### Fix - New Purchase Order (po-approval-stepper.tsx)
+- Vendor is now a required dropdown from the Contractors master (label marked *, create() still validates); "Cost Ctr *" field removed from the form, validation and payload (PM + Amount now in a 2-col row).
+
+### Verification
+- tsc + eslint clean on every touched file; `npm run build` completes and lists /superadmin + all API routes (fixing the module-not-found error). Note: `prisma generate` cannot rewrite the main client dll while `next dev` holds it (EPERM) - stop the dev server before regenerating.
+
+---
+
+## Task ID: 40 - Petty Cash: Ledger + Reconciliation modules (partial build-out of the full spec)
+
+### Work Task
+User: "update PettyCash module with" + an enterprise Petty Cash ERP spec (Angular/Node/MySQL reference, ~15 modules: Dashboard, Funds, Allocation, Requests, Expenses, Settlement, Approvals, Ledger, Replenishment, Reconciliation, Reports, Employees, Admin).
+
+Note: the repo is Next.js 16 + Prisma + PostgreSQL (not Angular/MySQL), and the full spec is multi-week, so it is being built module-by-module; the existing module already covered Vouchers, Custodian Dashboard, Approval Queue, Replenishment.
+
+### What shipped this round
+- New Prisma model `FinPettyCashReconciliation` (siteId -> FinSite, opening/received/paid/expected/physical/variance/shortage/excess, Draft->Submitted->Verified->Approved->Closed, verification/approval metadata, createdBy, timestamps). `prisma db push` applied; relation added on FinSite.Back-relations.
+- New API `/api/fin/petty-cash/reconciliations` (GET list, POST create - server computes expected/variance/shortage/excess, PUT partial update recomputes). No delete of posted records (reversal pattern is the intended path going forward).
+- New UI `fin-petty-cash-reconciliation.tsx`: count-vs-expected, variance banner for shortage/excess (must be documented before closing), KPI cards, full list table; registered as the "Reconciliation" sub-tab under Petty Cash.
+- New UI `fin-petty-cash-ledger.tsx`: running-balance ledger derived from posted voucher data (opening/received/paid/next-balance), site filter, simple voucher-to-closing view; registered as the "Ledger" sub-tab.
+- Both wired into module-registry, erp-store sub-tabs, tabbed-dashboard; lint + tsc equivalents pass on the touched files (tsc --noEmit shows no errors for them).
+
+### Still open (not built yet)
+- Fund Management (fund CRUD + limits + custodian assignment per branch/department), Fund Allocation vouchers, Cash Requests + Advances, Advance Settlement (net against eligible expenses, no double-count), configurable multi-level Approval engine (roles/amount limits/delegation/escalation), Replenishment auto-calc from eligible unreplenished expenses, 16+ Reports with Excel/PDF export, Employees master UI, Admin/config screens (category management, approval matrix, limits, FY, audit log), dupe-invoice detection, audit trail, JWT-specific security (app already uses session auth; password hashing is bcrypt in the current stack), and demo data seed for the new tables.
+- These remain to be implemented incrementally per the order in the spec (Phases 4-15); nothing in the existing Petty Cash module was removed or broken by this round.
+
+
+## Task ID 41 - Petty Cash Fund Allocation + prototype field port (complete - see Task IDs 42-43)
+**Status: COMPLETE** — Fund Allocation screen shipped here; the Lifecycle flow strip was added in Task ID 42 and the backend gaps (Fund master, two-stage approval, auto replenishment, period close, cash requests) were built in Task ID 43.
+
+### What shipped
+- Ported the HO Cash & Site Expense Management prototype into the ERP Petty Cash module: created the 8 prototype sites (SITE-006..SITE-013: OFFICE, WORKSHOP, BALCO, VEDANTA, HILTI, ADITYA ALUMINIUM LAPANGA, GAP, ABF) and replaced the voucher EXPENSE_HEADS with the prototype categories (+ 'HO FUND').
+- New UI fin-petty-cash-fund-allocation.tsx: HO->Finance and Finance->Site fund allocation vouchers (stored as FinPettyCash type='Credit', category='HO FUND'/'SITE FUND', linkedType='Fund'), finance/site balance KPIs, site balance table, transfer history; finance-balance validation on site transfers.
+- Registered in module-registry, erp-store (MODULE_TREE, ModuleId union, SUB_MODULES, MODULE_CONFIG breadcrumbs), tabbed-dashboard ('Fund Allocation' tab).
+
+### Note
+- erp-store.ts was accidentally collapsed to one line by a bulk PowerShell replace; recovered by restoring HEAD and re-applying the 5 intended diffs (incl. pre-existing HIDDEN_MAIN_MODULES 'sales-billing'). App compiles and serves 200 again.
+
+### Still open
+- Fund CRUD/limits, Advance Requests + settlement, approval engine, auto replenishment, reports/exports, seed data (Phases 4-15 of the spec).
+
+
+## Task ID 42 - Petty Cash Lifecycle flow on Custodian Dashboard
+
+- Added a clickable 8-step Petty Cash Lifecycle flow strip (Fund Creation -> Fund Allocation -> Cash Utilization -> Expense Submission -> Approval & Verification -> Expense Posting -> Cash Replenishment -> Reconciliation) to fin-petty-cash-custodian.tsx, above the site cards.
+- Each step shows a live count (funded sites, fund transfers [linkedType='Fund'], advances, receipts attached, pending approvals, posted debits, over-limit sites, reconciliation counts) and navigates to the matching sub-tab on click via useERPStore.setActiveModule.
+- Steps 5 (Approval) and 7 (Replenishment) highlight amber when action is needed; extra fetch to /api/fin/petty-cash/reconciliations for the count.
+- tsc clean (no custodian errors), eslint clean.
+
+
+## Task ID 43 - Petty Cash gap-fix build (lifecycle backend + screens)
+
+### New models / columns (prisma db push applied, client regenerated)
+- FinFund: petty cash fund master (fundCode FND-xxx auto, fundName, custodian, limitAmount, branch, department, status Active/Frozen/Closed).
+- FinCashRequest: employee cash/advance request workflow (Pending -> Approved -> Disbursed; Disburse creates an approved Credit voucher + FinApprovalLog entry).
+- FinPettyCash.fundId (allocation vouchers linked to a fund), replenished (covered by a replenishment voucher), coversVoucherIds (JSON ids), managerApprovedBy/At + verifiedBy/At (two-stage approval).
+- FinPettyCashReconciliation.carryForward (physical cash carried into next period on close).
+
+### New API routes
+- /api/fin/funds (GET with per-fund allocated/utilized/available/utilizationPct; POST create with FND-xxx code + PETTYCASH_CREATE check; PUT edit).
+- /api/fin/cash-requests (GET, POST create with CR/YYYY/xxxx code, PUT approve/reject/disburse).
+
+### Two-stage approval (Draft -> Pending -> ManagerApproved -> Approved)
+- approve API takes stage=manager|finance; manager stage sets ManagerApproved + manager fields; finance stage verifies (SoD: requester/manager cannot verify; server-side) and posts to Approved, marking replenishment-covered expenses replenished=true. Allocate action also marks covered expenses replenished. Resubmit from Rejected clears both stages.
+- Approval Queue + Vouchers screens show stage badges (Manager Review / Finance Verification) and stage-appropriate action buttons. Voucher filter adds ManagerApproved.
+
+### Replenishment auto-calc
+- Replenishment screen now lists eligible unreplenished expenses (site-scoped, Approved, Debit, not Fund/HO FUND/SITE FUND, replenished=false) with select-all and auto-total; creates the Credit voucher with coversVoucherIds; finance approval or Allocate marks them replenished.
+
+### Period close
+- Reconciliation: Close Period action per row (PUT status=Closed; variance must be documented in remarks; carryForward = physicalCash; Closed is terminal; carryForward never client-asserted). New Carry Fwd KPI + column.
+
+### Fund Master + Cash Requests screens
+- fin-fund-master.tsx: CRUD, KPIs (active/sanctioned/allocated/utilized), utilization bars, status. fin-cash-request.tsx: KPIs, create/approve/reject/disburse flow.
+- Fund Allocation screen: optional Fund dropdown linked to funds API (allocations can now be tied to a fund master).
+- Registered everywhere: module-registry, erp-store (MODULE_TREE/ModuleId/SUB_MODULES/MODULE_CONFIG breadcrumbs), tabbed-dashboard tabs (Fund Master + Cash Requests).
+
+### Verified
+- Dev server restarted; / serves 200; fund create (FND-001), cash request create (CR/2026/0001) -> approve -> disburse -> Credit voucher all 201/200; smoke data cleaned up after test. eslint + tsc clean on all touched files.
+
+### Still open
+- Finance-side linking of allocation vouchers to funds is optional/unenforced; dupe-invoice detection, reports/exports, demo seed for new tables, and any hard split of EXPENSING vs petty cash remains.
+
+
+## Task ID 44 - Petty Cash Lifecycle work: consolidation status (Tasks 41-43)
+
+### Status of the 8-step lifecycle after this session
+- Step 1 Fund Creation: DONE - Fund Master screen + /api/fin/funds (FND-xxx codes, custodian, sanctioned limit, branch/department, Active/Frozen/Closed).
+- Step 2 Fund Allocation: DONE - HO->Finance->Site allocation vouchers (HO FUND / SITE FUND, linkedType='Fund'); optional fundId links allocations to a Fund Master record.
+- Step 3 Cash Utilization: DONE - Credit advances against jobs/sites + employee-wise settlement view (advance vs expense).
+- Step 4 Expense Submission: DONE - vouchers with receipt upload (billAttachmentPath), categories, job-code costing.
+- Step 5 Approval & Verification: DONE - two-stage Manager -> Finance (ManagerApproved -> Approved), SoD enforced server-side, stage badges + queue badges in UI.
+- Step 6 Expense Posting: DONE - approved debits feed the Petty Cash Ledger + Bank & Cash.
+- Step 7 Cash Replenishment: DONE - eligible unreplenished expense panel with select-all + auto-total; covered expenses marked replenished on finance approval / allocate.
+- Step 8 Reconciliation & Closing: DONE - expected vs physical count, variance/shortage/excess, Close Period (variance must be documented; carryForward; Closed terminal).
+
+### Details logged since Task ID 43
+- Fund Master KPIs count vouchers with approvalStatus != 'Rejected' (not only Approved) so Draft allocations are visible to finance.
+- Task ID 41 marked COMPLETE (it was in-progress until 42/43 shipped).
+
+### Verified working (dev :3000)
+- / serves 200; /api/fin/funds + /api/fin/cash-requests create/approve/disburse cycle (CR/2026/0001 -> voucher) passed, smoke rows cleaned up; eslint + tsc clean on all touched files.
+
+### Still open
+- Reports/exports (Excel/PDF), demo seed for the new tables, dupe-invoice detection, enforced (not optional) fundId on allocation vouchers, audit-log coverage beyond FinApprovalLog, and customer notification wiring for the new Petty Cash states.

@@ -43,8 +43,8 @@ const INCLUDE = {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, action, actor, comments } = body as {
-      id?: number; action?: string; actor?: string; comments?: string
+    const { id, action, actor, comments, stage } = body as {
+      id?: number; action?: string; actor?: string; comments?: string; stage?: 'manager' | 'finance'
     }
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     if (!action) return NextResponse.json({ success: false, error: 'action is required' }, { status: 400 })
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       const [record] = await pdb.$transaction([
         pdb.finPettyCash.update({
           where: { id: voucher.id },
-          data: { approvalStatus: 'Pending', submittedBy: actor || voucher.authorizedBy || null, submittedAt: new Date(), rejectionReason: null },
+          data: { approvalStatus: 'Pending', submittedBy: actor || voucher.authorizedBy || null, submittedAt: new Date(), rejectionReason: null, managerApprovedBy: null, managerApprovedAt: null, verifiedBy: null, verifiedAt: null },
           include: INCLUDE,
         }),
         pdb.finApprovalLog.create({
@@ -81,30 +81,76 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'approve') {
-      if (voucher.approvalStatus !== 'Pending') {
-        return NextResponse.json({ success: false, error: `Cannot approve a voucher that is ${voucher.approvalStatus}` }, { status: 400 })
-      }
-      const denied = await assertPermission(pdb, actorEmail, 'PETTYCASH_APPROVE', { request, module: 'PettyCash', entityId: String(voucher.id), siteCode })
-      if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
-      // Segregation of Duties: the person who submitted (or holds the float) cannot approve their own request
+      const effStage = stage || (voucher.approvalStatus === 'ManagerApproved' ? 'finance' : 'manager')
       const submitter = (voucher.submittedBy || voucher.custodian || voucher.authorizedBy || '').trim().toLowerCase()
       const actingUser = (actor || '').trim().toLowerCase()
-      if (actingUser && submitter && actingUser === submitter) {
-        return NextResponse.json({ success: false, error: 'Self-approval is not allowed (Segregation of Duties). A supervisor or finance user must approve this request.' }, { status: 403 })
+
+      // Stage 1 — Manager approves the business purpose (Pending -> ManagerApproved)
+      if (effStage === 'manager') {
+        if (voucher.approvalStatus !== 'Pending') {
+          return NextResponse.json({ success: false, error: `Cannot manager-approve a voucher that is ${voucher.approvalStatus}` }, { status: 400 })
+        }
+        const denied = await assertPermission(pdb, actorEmail, 'PETTYCASH_APPROVE', { request, module: 'PettyCash', entityId: String(voucher.id), siteCode })
+        if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
+        // Segregation of Duties: the person who submitted (or holds the float) cannot approve their own request
+        if (actingUser && submitter && actingUser === submitter) {
+          return NextResponse.json({ success: false, error: 'Self-approval is not allowed (Segregation of Duties). A supervisor or finance user must approve this request.' }, { status: 403 })
+        }
+        const [record] = await pdb.$transaction([
+          pdb.finPettyCash.update({
+            where: { id: voucher.id },
+            data: { approvalStatus: 'ManagerApproved', managerApprovedBy: actor || null, managerApprovedAt: new Date() },
+            include: INCLUDE,
+          }),
+          pdb.finApprovalLog.create({
+            data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'ManagerApproved', action: 'Manager Approval', checkerId: actor || null, comments: comments || null, finPettyCashId: voucher.id },
+          }),
+        ])
+        await recomputePettyCashBalances(pdb)
+        return NextResponse.json({ success: true, data: record })
       }
-      const [record] = await pdb.$transaction([
-        pdb.finPettyCash.update({
-          where: { id: voucher.id },
-          data: { approvalStatus: 'Approved', approvedBy: actor || null, approvedAt: new Date() },
-          include: INCLUDE,
-        }),
-        pdb.finApprovalLog.create({
-          data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Approved', action: 'Approve', checkerId: actor || null, comments: comments || null, finPettyCashId: voucher.id },
-        }),
-      ])
-      await recomputePettyCashBalances(pdb)
-      notifyPC(pdb, record, siteCode, actor, 'approve')
-      return NextResponse.json({ success: true, data: record })
+
+      // Stage 2 — Finance verifies documents + policy (ManagerApproved -> Approved)
+      if (effStage === 'finance') {
+        if (voucher.approvalStatus !== 'ManagerApproved') {
+          return NextResponse.json({ success: false, error: `Cannot finance-verify a voucher that is ${voucher.approvalStatus}` }, { status: 400 })
+        }
+        const denied = await assertPermission(pdb, actorEmail, 'PETTYCASH_APPROVE', { request, module: 'PettyCash', entityId: String(voucher.id), siteCode })
+        if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
+        // SoD: the person who submitted/float-holds and the manager who approved the purpose must not finance-verify
+        const manager = (voucher.managerApprovedBy || '').trim().toLowerCase()
+        if (actingUser && ((manager && actingUser === manager) || (submitter && actingUser === submitter))) {
+          return NextResponse.json({ success: false, error: 'Segregation of Duties: the requester or the manager who approved the purpose cannot finance-verify this voucher.' }, { status: 403 })
+        }
+        const operations: any[] = [
+          pdb.finPettyCash.update({
+            where: { id: voucher.id },
+            data: { approvalStatus: 'Approved', verifiedBy: actor || null, verifiedAt: new Date(), approvedBy: actor || null, approvedAt: new Date() },
+            include: INCLUDE,
+          }),
+          pdb.finApprovalLog.create({
+            data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Approved', action: 'Finance Verification', checkerId: actor || null, comments: comments || null, finPettyCashId: voucher.id },
+          }),
+        ]
+        // A replenishment voucher marks the expenses it covers as replenished
+        if (voucher.category === 'Replenishment' && voucher.coversVoucherIds) {
+          try {
+            const ids = JSON.parse(voucher.coversVoucherIds)
+            if (Array.isArray(ids) && ids.length) {
+              operations.push(pdb.finPettyCash.updateMany({
+                where: { id: { in: ids.map((n: any) => Number(n)) }, approvalStatus: 'Approved' },
+                data: { replenished: true },
+              }))
+            }
+          } catch { /* malformed JSON — finance can still approve */ }
+        }
+        const [record] = await pdb.$transaction(operations)
+        await recomputePettyCashBalances(pdb)
+        notifyPC(pdb, record, siteCode, actor, 'approve')
+        return NextResponse.json({ success: true, data: record })
+      }
+
+      return NextResponse.json({ success: false, error: `Unknown stage: ${effStage}` }, { status: 400 })
     }
 
     if (action === 'allocate') {
@@ -116,7 +162,7 @@ export async function POST(request: NextRequest) {
       }
       const denied = await assertPermission(pdb, actorEmail, 'PETTYCASH_APPROVE', { request, module: 'PettyCash', entityId: String(voucher.id), siteCode })
       if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
-      const [record] = await pdb.$transaction([
+      const operations: any[] = [
         pdb.finPettyCash.update({
           where: { id: voucher.id },
           data: { approvalStatus: 'Approved', submittedBy: actor || null, submittedAt: new Date(), approvedBy: actor || null, approvedAt: new Date() },
@@ -125,13 +171,26 @@ export async function POST(request: NextRequest) {
         pdb.finApprovalLog.create({
           data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Approved', action: 'Allocate', makerId: actor || null, checkerId: actor || null, comments: comments || null, finPettyCashId: voucher.id },
         }),
-      ])
+      ]
+      // A replenishment voucher marks the expenses it covers as replenished
+      if (voucher.category === 'Replenishment' && voucher.coversVoucherIds) {
+        try {
+          const ids = JSON.parse(voucher.coversVoucherIds)
+          if (Array.isArray(ids) && ids.length) {
+            operations.push(pdb.finPettyCash.updateMany({
+              where: { id: { in: ids.map((n: any) => Number(n)) }, approvalStatus: 'Approved' },
+              data: { replenished: true },
+            }))
+          }
+        } catch { /* malformed JSON — the voucher itself still allocates */ }
+      }
+      const [record] = await pdb.$transaction(operations)
       await recomputePettyCashBalances(pdb)
       return NextResponse.json({ success: true, data: record })
     }
 
     if (action === 'reject') {
-      if (voucher.approvalStatus !== 'Pending') {
+      if (!['Pending', 'ManagerApproved'].includes(voucher.approvalStatus)) {
         return NextResponse.json({ success: false, error: `Cannot reject a voucher that is ${voucher.approvalStatus}` }, { status: 400 })
       }
       if (!comments) return NextResponse.json({ success: false, error: 'A reason is required to reject' }, { status: 400 })
@@ -144,7 +203,7 @@ export async function POST(request: NextRequest) {
           include: INCLUDE,
         }),
         pdb.finApprovalLog.create({
-          data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Rejected', action: 'Reject', checkerId: actor || null, comments, finPettyCashId: voucher.id },
+          data: { entityType: 'FinPettyCash', entityId: String(voucher.id), status: 'Rejected', action: voucher.approvalStatus === 'ManagerApproved' ? 'Finance Rejection' : 'Reject', checkerId: actor || null, comments, finPettyCashId: voucher.id },
         }),
       ])
       await recomputePettyCashBalances(pdb)
