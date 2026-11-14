@@ -378,7 +378,6 @@ export default function AccountsReceivable() {
               <select value={form.status} onChange={e => setField('status', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none appearance-none"><option value="Pending">Pending</option><option value="Received">Received</option><option value="Partially Received">Partially Received</option><option value="Overdue">Overdue</option></select>
             </FormField>
           </div>
-          <CostingFields prefix="ar" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
         </div>
 
         {/* Payment & Deductions */}

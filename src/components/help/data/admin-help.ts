@@ -87,14 +87,21 @@ export const PETTY_CASH_HELP_ENTRIES: HelpEntry[] = [
 - **Custodian Dashboard** — sanctioned limit and current balance per site
 - **Vouchers** — record and review petty-cash vouchers, plus the cash reports
 - **Approval Queue** — vouchers waiting for your approval
+- **Fund Master** — create and track sanctioned petty-cash funds
+- **Fund Allocation** — record HO → Finance → Site fund movements
+- **Cash Requests** — employees request cash; approval, then disbursement
 - **Replenishment** — request more float for a site
+- **Ledger** — running balance of all posted petty-cash transactions
+- **Reconciliation** — count physical cash, explain variances, close the period
 
 **Who does what**
 - **Site Employee** — requests cash for a job code
 - **Site Manager** — approves expense requests for their site
-- **Finance Head** — allocates float to sites directly (no queue)`,
+- **Finance Head** — creates funds, allocates float to sites (no queue)
+- **Custodian** — holds the float, records vouchers, counts cash at period close`,
     links: [
       { label: 'Vouchers', moduleId: 'fin-petty-cash' },
+      { label: 'Fund Allocation', moduleId: 'fin-petty-cash-fund-allocation' },
       { label: 'Approval Queue', moduleId: 'fin-petty-cash-approval-queue' },
     ],
   },
@@ -111,12 +118,18 @@ export const PETTY_CASH_HELP_ENTRIES: HelpEntry[] = [
 
 Cards show **Total Sanctioned Limit**, **Total Current Balance** and **Sites Tracked**. Each site row lists its **Custodian**, **Fund Limit** and **Balance**.
 
+The **Petty Cash Lifecycle** strip at the top shows the whole flow — click any step to open it:
+1. **Fund Creation** (Fund Master) — Finance creates the fund, then sends it to HO
+2. **Fund Allocation** — record the HO → Finance receipt, then Finance → Site allocations
+3. **Cash Utilization** → **Expense Submission** (with receipts) → **Approval & Verification**
+4. **Expense Posting** (ledger) → **Cash Replenishment** → **Reconciliation**
+
 - Click the fund limit to edit it and **Save**.
 - **Nearing sanctioned limit** — the balance is close to the ceiling.
 - **Over sanctioned limit — replenishment needed** — raise a replenishment request.
 
 *"No active sites found"* means no site in Sites master is active yet.`,
-    links: [{ label: 'Replenishment', moduleId: 'fin-petty-cash-replenishment' }],
+    links: [{ label: 'Fund Master', moduleId: 'fin-fund-master' }],
   },
   {
     id: 'pc-replenishment',
@@ -178,6 +191,112 @@ Shows the vouchers waiting **on you**, under **Approving As** your finance role.
 
 **Segregation of Duties** is enforced on the server: you cannot approve a voucher you submitted yourself.`,
     links: [{ label: 'Finance Access Control', moduleId: 'fin-user-management' }],
+  },
+  {
+    id: 'pc-funds',
+    title: 'Fund Master — creating and tracking petty-cash funds',
+    relatedModule: 'fin-fund-master',
+    keywords: [
+      'fund master', 'funds', 'new fund', 'create fund', 'FND', 'fund code', 'sanctioned limit',
+      'utilization', 'available', 'frozen', 'closed fund', 'fund account',
+    ],
+    summary: 'Create the sanctioned float account; utilization is read from linked vouchers.',
+    body: `### Fund Master
+
+The **Fund Master** holds the sanctioned petty-cash accounts — the float each fund is allowed to hold.
+
+1. Click **New Fund**.
+2. **Fund Name** (required) — e.g. "Head Office Petty Cash". The code (**FND-###**) is generated automatically.
+3. Set the **Custodian**, **Sanctioned Limit (₹)**, **Branch**, **Department** and **Status** (*Active / Frozen / Closed*).
+
+The list shows **Allocated / Utilized / Available** — these are derived automatically from approved vouchers linked to the fund. Vouchers linked to a fund keep its utilization current; the fund must exist before it can be selected in Allocation or vouchers.
+
+To retire a fund, set its status to **Frozen** or **Closed** — history is kept.`,
+    links: [{ label: 'Fund Allocation', moduleId: 'fin-petty-cash-fund-allocation' }],
+  },
+  {
+    id: 'pc-allocation',
+    title: 'Fund Allocation — HO → Finance → Site',
+    popular: true,
+    relatedModule: 'fin-petty-cash-fund-allocation',
+    keywords: [
+      'fund allocation', 'allocation', 'HO fund', 'site fund', 'fund transfer', 'HO to finance',
+      'finance to site', 'finance balance', 'cash received from HO', 'send to HO', 'assign to site',
+    ],
+    summary: 'Record the HO → Finance receipt, then allocate to sites.',
+    body: `### Fund Allocation
+
+Money moves **HO → Finance → Site**, and this screen is where both legs are recorded. Nothing moves until it is recorded here.
+
+1. Click **Record Allocation**.
+2. **Direction**:
+   - **HO → Finance** — cash received from HO; creates an **HO FUND** credit voucher with no site.
+   - **Finance → Site** — allocates cash to a site; creates a **SITE FUND** credit voucher for that site. The site is required.
+3. Optionally link the **Fund** (created in Fund Master), pick the **Date**, **Mode** (CASH / ONLINE / BANK TRANSFER), enter the **Amount** and a **Reference/Note**.
+4. Save.
+
+**Finance Available Balance** = HO receipts minus site allocations — you cannot allocate more to a site than remains. The **Site Balances** table shows allocated − paid expenses per site, and **Fund Transfer History** lists every movement.
+
+Finance creates the fund first (**Fund Creation** in the lifecycle), sends it to HO, then records the receipt here once the cash arrives.`,
+    links: [{ label: 'Fund Master', moduleId: 'fin-fund-master' }, { label: 'Vouchers', moduleId: 'fin-petty-cash' }],
+  },
+  {
+    id: 'pc-cash-requests',
+    title: 'Cash Requests — employee request → disbursement',
+    relatedModule: 'fin-cash-request',
+    keywords: [
+      'cash request', 'cash requests', 'employee cash', 'request cash', 'disburse',
+      'advance', 'approve request', 'needed by',
+    ],
+    summary: 'Employees request cash; finance approves, then disburses against the float.',
+    body: `### Cash Requests
+
+Employees request petty cash for a site/job; Finance approves and disburses.
+
+1. Employee clicks **New Request** — **Employee**, **Amount**, **Purpose** (required), optional **Site** and **Needed By**.
+2. Finance reviews the request. **Pending** requests show Approve / Reject actions (reject needs a reason).
+3. On **Approve** the request waits in *Awaiting Disbursement*. On **Disburse**, an approved **Credit voucher** is created automatically and the request is marked **Disbursed**.
+
+Only a finance role with disbursement rights can approve or disburse — segregation of duties is enforced server-side. The KPI cards track *Pending*, *Awaiting Disbursement*, *Disbursed* and *Total Disbursed*.`,
+    links: [{ label: 'Approval Queue', moduleId: 'fin-petty-cash-approval-queue' }],
+  },
+  {
+    id: 'pc-ledger',
+    title: 'Petty Cash Ledger — running balance',
+    relatedModule: 'fin-petty-cash-ledger',
+    keywords: [
+      'ledger', 'running balance', 'cash book', 'statement', 'debit credit', 'balance',
+      'posted', 'voucher register',
+    ],
+    summary: 'Double-entry running balance of every petty-cash voucher.',
+    body: `### Petty Cash Ledger
+
+The ledger is the double-entry style view of all petty-cash transactions: **Date · Voucher No · Reference · Description · Category · Site · Debit · Credit · Running Balance · Status**.
+
+- Filter by **Site** with the dropdown — *All Sites* by default.
+- Balances run chronologically; credits (cash in) add, debits (cash out) subtract.
+- Every voucher keeps its **Approval Status** (Approved / Pending / Rejected), so you can see posted vs awaiting items at a glance.`,
+  },
+  {
+    id: 'pc-reconciliation',
+    title: 'Cash Reconciliation — count and close the period',
+    relatedModule: 'fin-petty-cash-reconciliation',
+    keywords: [
+      'reconciliation', 'reconcile', 'physical count', 'cash count', 'variance', 'shortage',
+      'excess', 'carry forward', 'close period', 'recon', 'count cash',
+    ],
+    summary: 'Count physical cash per site; document variances; close the period.',
+    body: `### Cash Reconciliation
+
+Period-end cash count for a site's float.
+
+1. Click **New Reconciliation**; pick the **Site** (the custodian auto-fills).
+2. Enter **Opening Cash**, **Cash Received** and **Cash Paid** — **Expected Cash** computes automatically.
+3. Enter the **Physical Cash Count**. The **Variance** (shortage/excess) is shown; any non-zero variance **must be explained in Remarks** before the period can be closed.
+4. **Close the period** (lock icon) — physical cash carries forward to the next period.
+
+The KPIs show totals for reconciliations, shortage, excess, carry-forward and unresolved periods.`,
+    links: [{ label: 'Vouchers', moduleId: 'fin-petty-cash' }],
   },
   {
     id: 'pc-about',

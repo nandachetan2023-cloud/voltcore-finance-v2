@@ -266,7 +266,6 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'fin-work-orders', icon: 'ClipboardList', label: 'Work Orders', section: 'Accounts Payable' },
 
     { id: 'accounts-receivable', icon: 'ArrowUpCircle', label: 'Accounts Receivable', section: 'Accounts Receivable' },
-    { id: 'fin-invoices', icon: 'FileText', label: 'Site Invoices', section: 'Accounts Receivable' },
     { id: 'fin-client-follow-up', icon: 'PhoneCall', label: 'Client Follow Up', section: 'Accounts Receivable' },
 
     { id: 'bank-cash', icon: 'Landmark', label: 'Bank & Cash', section: 'Bank & Cash' },

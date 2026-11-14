@@ -1189,6 +1189,32 @@ You never get an alert for your own action.
     ],
   },
 
+  // ── Item Code Generator ───────────────────────────────────────
+  {
+    id: "item-code-generator",
+    title: "Item Code Generator — codes, register, auto-fill",
+    keywords: [
+      "item code", "item code generator", "item master", "items", "register", "CON-001",
+      "next item code", "category prefix", "auto-fill items", "new item",
+    ],
+    summary: "Item codes are auto-generated per category; details can auto-fill from the master register.",
+    body: `### Item Code Generator (Finance › Items)
+
+Every item gets a code automatically — the user just picks a **Category** and the server assigns the next number, e.g. **CON-001**, **P&M-001**, **T&T-001**. Codes are never typed by hand and never reused, even after a delete.
+
+**Creating an item**
+1. Click **New Item**.
+2. Pick the **Category** — the code is generated from the category prefix (*CON, P&M, T&T, PPE, GAS, ELE, WEL, MIN, LFT, SAF*).
+3. Optionally use **From Master Register (auto-fill)** — picking a register item fills Item Name, Specification, Make/Brand, Model No., Size/Capacity, Description and Unit automatically.
+4. The code preview shows which code the save will get; it is re-checked when you save.
+
+**Good to know**
+- To retire an item, deactivate it — never delete one that has ledger history.
+- The ISO-like register seeded from the Item Code Master Register is idempotently re-runnable (\`npm run item:register\`); existing codes are never renumbered.`,
+    relatedModule: "fin-items",
+    links: [{ label: "Item Code Generator", moduleId: "fin-items" }],
+  },
+
   // ── Contact / about ───────────────────────────────────────────
   {
     id: "about",
