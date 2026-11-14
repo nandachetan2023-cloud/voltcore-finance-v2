@@ -303,7 +303,7 @@ export default function ContractorWizard({
     if (!open) return;
     setForm(existing?.id ? toForm(existing) : EMPTY_FORM);
     setStep('identity');
-    setMaxStep(0);
+    setMaxStep(existing?.id ? STEPS.length - 1 : 0);
     setErrors({});
   }, [open, existing]);
 
@@ -400,7 +400,7 @@ export default function ContractorWizard({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0a0d12]/95 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-[60] bg-[#0a0d12]/95 backdrop-blur-sm overflow-y-auto">
       <div className="max-w-5xl mx-auto p-6 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
