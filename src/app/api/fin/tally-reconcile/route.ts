@@ -2,16 +2,54 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { sendToTally } from '@/lib/tally-client'
 import { assertPermission } from '@/lib/fin-rbac'
+import { deriveFinYear } from '@/lib/notification-bus'
 
 export const dynamic = 'force-dynamic'
+
+function getFinYearRange(finYear: string) {
+  const match = /^(\d{4})-(\d{2})$/.exec(finYear)
+  const startYear = match ? Number(match[1]) : NaN
+  const expectedEnd = String((startYear + 1) % 100).padStart(2, '0')
+  if (!match || startYear < 1900 || startYear > 9998 || match[2] !== expectedEnd) {
+    throw new Error('Financial year must use the format YYYY-YY, such as 2025-26')
+  }
+
+  const endYear = startYear + 1
+  return {
+    endExclusive: new Date(Date.UTC(endYear, 3, 1)),
+    tallyFrom: `${startYear}0401`,
+    tallyTo: `${endYear}0331`,
+  }
+}
+
+function parseTallyBalance(value: string) {
+  const normalized = value.trim().replace(/,/g, '')
+  const match = /^(-?\d+(?:\.\d+)?)\s*(Dr|Cr)?$/i.exec(normalized)
+  if (!match) throw new Error(`Could not parse Tally closing balance: ${value}`)
+
+  const amount = Number(match[1])
+  const isCredit = match[2]
+    ? match[2].toLowerCase() === 'cr'
+    : amount < 0
+
+  return isCredit
+    ? { debit: 0, credit: Math.abs(amount) }
+    : { debit: Math.abs(amount), credit: 0 }
+}
 
 // GET: Trial Balance comparison ERP (FinJournalLine by FinAccount) vs Tally Trial Balance
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
     const { searchParams } = new URL(request.url)
-    const finYear = searchParams.get('finYear') || ''
+    const finYear = searchParams.get('finYear') || deriveFinYear(new Date())
     const companyName = searchParams.get('company') || process.env.TALLY_COMPANY || 'VoltCore'
+    let period: ReturnType<typeof getFinYearRange>
+    try {
+      period = getFinYearRange(finYear)
+    } catch (error) {
+      return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Invalid financial year' }, { status: 400 })
+    }
 
     // RBAC: Reconcile requires GL_VIEW or Auditor
     const actor = request.headers.get('x-actor-email') || searchParams.get('actor') || ''
@@ -20,22 +58,24 @@ export async function GET(request: NextRequest) {
       if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to reconcile' }, { status: 403 })
     }
 
-    // ERP Trial Balance: sum FinJournalLine by account
+    // Trial Balance is a closing balance: include posted entries through year-end,
+    // but exclude drafts, rejected entries, and any later-period activity.
     const erpLines = await pdb.finJournalLine.groupBy({
       by: ['accountId'],
+      where: { entry: { is: { status: 'Posted', entryDate: { lt: period.endExclusive } } } },
       _sum: { debit: true, credit: true },
     })
     const accounts = await pdb.finAccount.findMany({ select: { id: true, accountCode: true, name: true, type: true, group: true } })
     const accMap = new Map(accounts.map(a=>[a.id, a]))
 
     const erpTB: Array<{ accountCode: string; name: string; debit: number; credit: number; balance: number }> = []
-    for (const g of erpLines) {
-      const acc = accMap.get(g.accountId)
+    for (const group of erpLines) {
+      const acc = accMap.get(group.accountId)
       if (!acc) continue
-      const debit = (g as any)._sum.debit || 0
-      const credit = (g as any)._sum.credit || 0
-      const balance = debit - credit
-      erpTB.push({ accountCode: acc.accountCode, name: acc.name, debit, credit, balance })
+      const debit = group._sum.debit ?? 0
+      const credit = group._sum.credit ?? 0
+      const totals = { debit, credit }
+      erpTB.push({ accountCode: acc.accountCode, name: acc.name, ...totals, balance: totals.debit - totals.credit })
     }
     // Include zero-balance accounts for completeness
     for (const acc of accounts) {
@@ -57,7 +97,7 @@ export async function GET(request: NextRequest) {
       const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <ENVELOPE>
   <HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER>
-  <BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>Trial Balance</REPORTNAME><STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY>
+  <BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>Trial Balance</REPORTNAME><STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY><SVFROMDATE>${period.tallyFrom}</SVFROMDATE><SVTODATE>${period.tallyTo}</SVTODATE></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY>
 </ENVELOPE>`
       const res = await sendToTally(xml, conn)
       tallyAlive = res.success
@@ -67,17 +107,13 @@ export async function GET(request: NextRequest) {
         let m: RegExpExecArray | null
         while ((m = ledgerRe.exec(res.rawXml)) !== null) {
           const ledger = m[1].trim()
-          const balStr = m[2].trim().replace(/,/g,'')
-          const bal = Number(balStr) || 0
-          // Tally closing balance: Dr positive, Cr negative? Heuristic: if contains "Cr" then credit
-          const isCr = balStr.includes('Cr') || bal < 0
-          tallyTB.push({ ledger, debit: isCr ? 0 : Math.abs(bal), credit: isCr ? Math.abs(bal) : 0 })
+          tallyTB.push({ ledger, ...parseTallyBalance(m[2]) })
         }
         if (tallyTB.length === 0) {
           // Fallback: try simpler parse
           const altRe = /<DSPDISPNAME>([^<]+)<\/DSPDISPNAME>[\s\S]*?>([\d,\.\-]+)<\/AMOUNT/g
           while ((m = altRe.exec(res.rawXml)) !== null) {
-            tallyTB.push({ ledger: m[1].trim(), debit: Number(m[2].replace(/,/g,''))||0, credit: 0 })
+            tallyTB.push({ ledger: m[1].trim(), ...parseTallyBalance(m[2]) })
           }
         }
       } else {
@@ -85,6 +121,7 @@ export async function GET(request: NextRequest) {
       }
     } catch (e:any) {
       tallyError = e.message
+      tallyAlive = false
     }
 
     // Diff
@@ -106,12 +143,12 @@ export async function GET(request: NextRequest) {
     }
 
     const hasDiff = diffs.some(d=> d.status !== 'Matched')
-    const matched = !hasDiff && tallyAlive
+    const matched = !hasDiff && tallyAlive && !tallyError
 
     return NextResponse.json({
       success: true,
       data: {
-        finYear: finYear || 'All',
+        finYear,
         companyName,
         erp: { debitTotal: erpDebitTotal, creditTotal: erpCreditTotal, balanced: erpBalanced, accounts: erpTB.length },
         tally: { alive: tallyAlive, error: tallyError || undefined, ledgers: tallyTB.length, accounts: tallyTB.slice(0,20) },

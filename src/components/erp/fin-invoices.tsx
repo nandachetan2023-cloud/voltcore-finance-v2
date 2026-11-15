@@ -111,16 +111,6 @@ const INVOICE_SAMPLE_ROW: Record<string, string | number> = {
   status: 'Unpaid',
 };
 
-function generateMockInvoices(): Invoice[] {
-  return [
-    { id: 1, invoiceNo: 'INV/2024-25/001', siteId: 1, partyId: 1, invoiceDate: '2024-11-20T00:00:00', dueDate: '2025-02-20T00:00:00', invoiceValue: 2500000, gstValue: 450000, grandTotal: 2950000, balanceAmount: 2950000, status: 'Unpaid', description: 'Civil works - Phase 1', receivedAmount: 0, tdsDeduction: 37500, afterTdsBalance: 2912500, trackingNo: 'TRK/24-25/001', poNo: 'PO/2024-25/001', jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', month: 'Nov 2024', area: 'Block A', client: 'NTPC Ltd', site: { name: 'NTPC Rihand Dam Project' }, party: { name: 'Bharat Heavy Electricals Ltd' } },
-    { id: 2, invoiceNo: 'INV/2024-25/002', siteId: 2, partyId: 2, invoiceDate: '2024-12-10T00:00:00', dueDate: '2025-03-10T00:00:00', invoiceValue: 1800000, gstValue: 324000, grandTotal: 2124000, balanceAmount: 1062000, status: 'Partially Paid', description: 'Electrical panel installation', receivedAmount: 1062000, tdsDeduction: 27000, afterTdsBalance: 2097000, trackingNo: 'TRK/24-25/002', poNo: 'PO/2024-25/002', jobCode: 'JOB-2026-002', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'A. Verma', month: 'Dec 2024', area: 'Main Plant', client: 'BALCO', site: { name: 'BALCO Aluminium Smelter' }, party: { name: 'Tata Projects Ltd' } },
-    { id: 3, invoiceNo: 'INV/2024-25/003', siteId: 3, partyId: 1, invoiceDate: '2025-01-05T00:00:00', dueDate: '2025-04-05T00:00:00', invoiceValue: 3200000, gstValue: 576000, grandTotal: 3776000, balanceAmount: 0, status: 'Paid', description: 'Coal conveyor belt system', receivedAmount: 3776000, tdsDeduction: 48000, afterTdsBalance: 3728000, trackingNo: 'TRK/24-25/003', poNo: 'PO/2024-25/003', jobCode: 'JOB-2026-003', costCenter: 'CC-SIT-003', department: 'Operations', projectManager: 'P. Iyer', month: 'Jan 2025', area: 'Stockyard', client: 'Coal India Ltd', site: { name: 'Coal India Eastern Coalfield' }, party: { name: 'Bharat Heavy Electricals Ltd' } },
-    { id: 4, invoiceNo: 'INV/2024-25/004', siteId: 4, partyId: 3, invoiceDate: '2025-02-15T00:00:00', dueDate: '2025-05-15T00:00:00', invoiceValue: 4500000, gstValue: 810000, grandTotal: 5310000, balanceAmount: 5310000, status: 'Unpaid', description: 'Smelter expansion works', receivedAmount: 0, tdsDeduction: 67500, afterTdsBalance: 5242500, trackingNo: 'TRK/24-25/004', poNo: 'PO/2024-25/004', jobCode: 'JOB-2026-004', costCenter: 'CC-SIT-004', department: 'Projects', projectManager: 'S. Rao', month: 'Feb 2025', area: 'Potline Area', client: 'Vedanta Ltd', site: { name: 'Vedanta Jharsuguda Smelter' }, party: { name: 'Larsen & Toubro Ltd' } },
-    { id: 5, invoiceNo: 'INV/2024-25/005', siteId: 5, partyId: 2, invoiceDate: '2025-03-20T00:00:00', dueDate: '2025-06-20T00:00:00', invoiceValue: 1250000, gstValue: 225000, grandTotal: 1475000, balanceAmount: 1475000, status: 'Unpaid', description: 'Commissioning & testing', receivedAmount: 0, tdsDeduction: 18750, afterTdsBalance: 1456250, trackingNo: 'TRK/24-25/005', poNo: 'PO/2024-25/005', jobCode: 'JOB-2026-005', costCenter: 'CC-SIT-005', department: 'Site Execution', projectManager: 'M. Khan', month: 'Mar 2025', area: 'Substation', client: 'Hindalco Industries', site: { name: 'Hindalco Mahan Aluminium' }, party: { name: 'Tata Projects Ltd' } },
-  ];
-}
-
 export default function FinInvoices() {
   const [records, setRecords] = useState<Invoice[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -162,21 +152,36 @@ export default function FinInvoices() {
     try {
       const r = await fetch('/api/fin/invoices');
       const rj = await r.json();
-      if (rj.success && rj.data?.length) { setRecords(rj.data); }
-      else { setRecords(generateMockInvoices()); toast.info('Sample data — no server records found'); }
-    } catch { setRecords(generateMockInvoices()); toast.info('Sample data — API unavailable'); }
+      if (!r.ok || !rj.success || !Array.isArray(rj.data)) {
+        throw new Error(rj.error || 'Failed to load invoices');
+      }
+      setRecords(rj.data);
+    } catch (error) {
+      setRecords([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load invoices');
+    }
     try {
       const r = await fetch('/api/fin/sites');
       const rj = await r.json();
-      if (rj.success && rj.data?.length) setSites(rj.data);
-      else setSites([{ id: 1, name: 'TPP Adani Godda', siteCode: 'SITE-001' }, { id: 2, name: 'TPP NTPC Barh', siteCode: 'SITE-002' }, { id: 3, name: 'HO Mumbai', siteCode: 'SITE-003' }]);
-    } catch { setSites([{ id: 1, name: 'TPP Adani Godda', siteCode: 'SITE-001' }, { id: 2, name: 'TPP NTPC Barh', siteCode: 'SITE-002' }, { id: 3, name: 'HO Mumbai', siteCode: 'SITE-003' }]); }
+      if (!r.ok || !rj.success || !Array.isArray(rj.data)) {
+        throw new Error(rj.error || 'Failed to load sites');
+      }
+      setSites(rj.data);
+    } catch (error) {
+      setSites([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load sites');
+    }
     try {
       const r = await fetch('/api/fin/parties');
       const rj = await r.json();
-      if (rj.success && rj.data?.length) setParties(rj.data);
-      else setParties([{ id: 1, name: 'L&T Construction' }, { id: 2, name: 'Siemens India Ltd' }, { id: 3, name: 'Tata Projects' }]);
-    } catch { setParties([{ id: 1, name: 'L&T Construction' }, { id: 2, name: 'Siemens India Ltd' }, { id: 3, name: 'Tata Projects' }]); }
+      if (!r.ok || !rj.success || !Array.isArray(rj.data)) {
+        throw new Error(rj.error || 'Failed to load parties');
+      }
+      setParties(rj.data);
+    } catch (error) {
+      setParties([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load parties');
+    }
     try {
       const r = await fetch('/api/fin/purchase-orders');
       const rj = await r.json();

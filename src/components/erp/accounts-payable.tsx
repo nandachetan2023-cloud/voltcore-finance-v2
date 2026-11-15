@@ -87,16 +87,6 @@ const AP_IMPORT_FIELDS: ImportField[] = [
 ];
 const AP_SAMPLE_ROW = { billNo: 'AP/2024-25/001', vendor: 'ABB India Ltd', vendorCode: 'ABB-001', invoiceRef: 'INV-ABB-001', description: 'HT panel supply', siteCode: 'SIT-001', jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', amount: 3200000, tax: 576000, totalAmount: 3776000, dueDate: '2025-02-20', status: 'Pending' };
 
-function generateMockAP(): APRecord[] {
-  return [
-    { id: 1, billNo: 'AP/2024-25/001', vendor: 'ABB India Ltd', vendorCode: 'ABB-001', invoiceRef: 'INV-ABB-001', description: 'HT panel supply', amount: 3200000, tax: 576000, totalAmount: 3776000, dueDate: '2025-02-20T00:00:00', paidDate: '2025-02-15T00:00:00', paymentMethod: 'NEFT', paymentRef: 'NEFT-78452', status: 'Paid', siteId: null, partyId: null, poId: null, jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', remarks: '' },
-    { id: 2, billNo: 'AP/2024-25/002', vendor: 'Siemens India', vendorCode: 'SIE-002', invoiceRef: 'INV-SIE-002', description: 'Transformer supply', amount: 5800000, tax: 1044000, totalAmount: 6844000, dueDate: '2025-03-15T00:00:00', paidDate: null, paymentMethod: null, paymentRef: null, status: 'Pending', siteId: null, partyId: null, poId: null, jobCode: 'JOB-2026-002', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'A. Verma', remarks: '' },
-    { id: 3, billNo: 'AP/2024-25/003', vendor: 'L&T Construction', vendorCode: 'LNT-003', invoiceRef: 'INV-LNT-003', description: 'Civil works — Phase 2', amount: 1250000, tax: 225000, totalAmount: 1475000, dueDate: '2025-01-05T00:00:00', paidDate: null, paymentMethod: null, paymentRef: null, status: 'Overdue', siteId: null, partyId: null, poId: null, jobCode: 'JOB-2026-003', costCenter: 'CC-PROJ-001', department: 'Site Execution', projectManager: 'P. Iyer', remarks: 'Payment delayed — vendor follow-up' },
-    { id: 4, billNo: 'AP/2024-25/004', vendor: 'Havells India', vendorCode: 'HAV-004', invoiceRef: 'INV-HAV-004', description: 'Cable and wire supply', amount: 980000, tax: 176400, totalAmount: 1156400, dueDate: '2025-04-10T00:00:00', paidDate: '2025-04-05T00:00:00', paymentMethod: 'RTGS', paymentRef: 'RTGS-33219', status: 'Paid', siteId: null, partyId: null, poId: null, jobCode: 'JOB-2026-004', costCenter: 'CC-HO-001', department: 'Procurement', projectManager: 'S. Rao', remarks: '' },
-    { id: 5, billNo: 'AP/2024-25/005', vendor: 'BHEL', vendorCode: 'BHEL-005', invoiceRef: 'INV-BHEL-005', description: 'DG set spares', amount: 2100000, tax: 378000, totalAmount: 2478000, dueDate: '2025-05-20T00:00:00', paidDate: null, paymentMethod: null, paymentRef: null, status: 'Pending', siteId: null, partyId: null, poId: null, jobCode: 'JOB-2026-005', costCenter: 'CC-PROJ-002', department: 'Operations', projectManager: 'M. Khan', remarks: '' },
-  ];
-}
-
 export default function AccountsPayable() {
   const [records, setRecords] = useState<APRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,9 +145,14 @@ export default function AccountsPayable() {
       setLoading(true);
       const res = await fetch('/api/accounts-payable');
       const json = await res.json();
-      if (json.success && json.data?.length) { setRecords(json.data); }
-      else { setRecords(generateMockAP()); toast.info('Sample data — no server records found'); }
-    } catch { setRecords(generateMockAP()); toast.info('Sample data — API unavailable'); }
+      if (!res.ok || !json.success || !Array.isArray(json.data)) {
+        throw new Error(json.error || 'Failed to load Accounts Payable');
+      }
+      setRecords(json.data);
+    } catch (error) {
+      setRecords([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load Accounts Payable');
+    }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -243,7 +238,11 @@ export default function AccountsPayable() {
       const body = editTarget ? { id: editTarget.id, ...common } : common;
       const res = await fetch('/api/accounts-payable', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
-      if (json.success) { toast.success(status === 'Pending' ? 'Saved as draft' : 'Submitted'); setView('list'); await fetchData(); }
+      if (json.success) {
+        toast.success(status === 'Draft' ? 'Saved as draft' : status === 'Pending' ? 'Submitted for approval' : 'Changes saved');
+        setView('list');
+        await fetchData();
+      }
       else toast.error(json.error || 'Failed');
     } catch { toast.error('Network error'); } finally { setSubmitting(false); }
   };
@@ -284,8 +283,10 @@ export default function AccountsPayable() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setView('list')} className="px-4 py-2 rounded-lg border border-[#252e3a] text-[#8899aa] text-[12px] font-medium hover:text-[#e2e8f0] hover:border-[#f5a623] flex items-center gap-1.5">Cancel</button>
-            <button onClick={() => handleSubmit('Pending')} disabled={submitting} className="px-4 py-2 rounded-lg border border-[#f5a623] text-[#f5a623] text-[12px] font-semibold hover:bg-[#f5a623]/10 disabled:opacity-50 flex items-center gap-1.5"><Save size={13} /> Save Draft</button>
-            <button onClick={() => handleSubmit('Pending')} disabled={submitting} className="px-4 py-2 rounded-lg bg-[#f5a623] text-[#0a0d12] text-[12px] font-semibold hover:bg-[#e8991a] disabled:opacity-50 flex items-center gap-1.5">{submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} {editTarget ? 'Update Invoice' : 'Submit for Approval'}</button>
+            <button onClick={() => handleSubmit(editTarget ? form.status : 'Draft')} disabled={submitting} className="px-4 py-2 rounded-lg border border-[#f5a623] text-[#f5a623] text-[12px] font-semibold hover:bg-[#f5a623]/10 disabled:opacity-50 flex items-center gap-1.5"><Save size={13} /> {editTarget ? 'Save Changes' : 'Save Draft'}</button>
+            {(!editTarget || ['Draft', 'Rejected'].includes(editTarget.status)) && (
+              <button onClick={() => handleSubmit('Pending')} disabled={submitting} className="px-4 py-2 rounded-lg bg-[#f5a623] text-[#0a0d12] text-[12px] font-semibold hover:bg-[#e8991a] disabled:opacity-50 flex items-center gap-1.5">{submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Submit for Approval</button>
+            )}
           </div>
         </div>
 

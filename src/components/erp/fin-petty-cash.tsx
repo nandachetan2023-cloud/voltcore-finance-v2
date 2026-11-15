@@ -75,18 +75,6 @@ const PETTY_CASH_IMPORT_FIELDS: ImportField[] = [
   { key: 'balance', label: 'Balance', type: 'number' },
 ];
 
-function generateMockPettyCash(): PettyCash[] {
-  return [
-    { id: 1, voucherNo: 'PV/2024-25/001', date: '2024-11-10T00:00:00', description: 'Office stationery purchase', amount: 12500, type: 'Debit', category: 'Office Supplies', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Rajesh Kumar', paymentMode: 'Cash', balance: 487500, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
-    { id: 2, voucherNo: 'PV/2024-25/002', date: '2024-12-05T00:00:00', description: 'Site visit travel - Delhi to Rihand', amount: 8500, type: 'Debit', category: 'Travel', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Ankit Verma', paymentMode: 'Cash', balance: 479000, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
-    { id: 3, voucherNo: 'PV/2024-25/003', date: '2025-01-15T00:00:00', description: 'Petty cash replenishment', amount: 50000, type: 'Credit', category: 'Replenishment', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Suresh Mahto', paymentMode: 'Bank Transfer', balance: 529000, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
-    { id: 4, voucherNo: 'PV/2024-25/004', date: '2025-02-20T00:00:00', description: 'Team lunch - client meeting', amount: 4200, type: 'Debit', category: 'Food', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Prakash Sahu', paymentMode: 'Cash', balance: 524800, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Approved', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
-    { id: 5, voucherNo: 'PV/2024-25/005', date: '2025-03-10T00:00:00', description: 'Courier & postal charges', amount: 1800, type: 'Debit', category: 'Office Supplies', partyId: null, siteId: null, poId: null, expenseClaimId: null, linkedType: 'Direct', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Deepak Mishra', paymentMode: 'Cash', balance: 523000, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Pending', submittedBy: 'Deepak Mishra', submittedAt: '2025-03-10T09:00:00', approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: null, expenseClaim: null },
-    { id: 6, voucherNo: 'PV/2024-25/006', date: '2025-04-01T00:00:00', description: 'Payment against PO: PO/2024-25/001 - Site material', amount: 150000, type: 'Debit', category: 'Purchase Order', partyId: null, siteId: null, poId: 1, expenseClaimId: null, linkedType: 'PO', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Amit Singh', paymentMode: 'Bank Transfer', balance: 522350, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Draft', submittedBy: null, submittedAt: null, approvedBy: null, approvedAt: null, rejectionReason: null, party: null, site: null, po: { id: 1, poNo: 'PO/2024-25/001', totalAmount: 150000 }, expenseClaim: null },
-    { id: 7, voucherNo: 'PV/2024-25/007', date: '2025-04-15T00:00:00', description: 'Expense claim: EC/001 - Travel reimbursement', amount: 12300, type: 'Debit', category: 'Expense Claim', partyId: null, siteId: null, poId: null, expenseClaimId: 1, linkedType: 'ExpenseClaim', jobCode: null, costCenter: null, department: null, projectManager: null, authorizedBy: 'Manoj Rao', paymentMode: 'Cash', balance: 510050, referenceNo: null, remarks: null, billAttachmentPath: null, approvalStatus: 'Rejected', submittedBy: 'Manoj Rao', submittedAt: '2025-04-15T10:00:00', approvedBy: null, approvedAt: null, rejectionReason: 'Missing bill attachment — please re-upload the receipt.', party: null, site: null, po: null, expenseClaim: { id: 1, claimNo: 'EC/001', totalAmount: 12300 } },
-  ];
-}
-
 type ReportView = 'vouchers' | 'daily' | 'site' | 'employee';
 const REPORT_TABS: { id: ReportView; label: string; icon: typeof Wallet }[] = [
   { id: 'vouchers', label: 'Vouchers', icon: ListChecks },
@@ -305,12 +293,28 @@ export default function FinPettyCash() {
         fetch('/api/fin/jobs'),
       ]);
       const [pData, sData, poData, exData, jobData] = await Promise.all([pRes.json(), sRes.json(), poRes.json(), exRes.json(), jobRes.json()]);
-      if (pData.success) setParties(pData.data ?? []);
-      if (sData.success) setSites(sData.data ?? []);
-      if (poData.success) setPoOptions(poData.data?.map((p: any) => ({ id: p.id, poNo: p.poNo, vendorName: p.vendorName, totalAmount: p.totalAmount })) ?? []);
-      if (exData.success) setExpenseOptions(exData.data?.map((e: any) => ({ id: e.id, claimNo: e.claimNo, expenseType: e.expenseType, totalAmount: e.totalAmount, siteName: e.site?.name ?? '' })) ?? []);
-      if (jobData.success) setJobOptions(jobData.data?.map((j: any) => ({ id: j.id, jobCode: j.jobCode, description: j.description ?? null, siteId: j.siteId ?? null, siteName: j.site?.name ?? '' })) ?? []);
-    } catch { /* non-critical */ }
+      if (
+        !pRes.ok || !pData.success || !Array.isArray(pData.data) ||
+        !sRes.ok || !sData.success || !Array.isArray(sData.data) ||
+        !poRes.ok || !poData.success || !Array.isArray(poData.data) ||
+        !exRes.ok || !exData.success || !Array.isArray(exData.data) ||
+        !jobRes.ok || !jobData.success || !Array.isArray(jobData.data)
+      ) {
+        throw new Error('Failed to load petty-cash reference data');
+      }
+      setParties(pData.data);
+      setSites(sData.data);
+      setPoOptions(poData.data.map((p: any) => ({ id: p.id, poNo: p.poNo, vendorName: p.vendorName, totalAmount: p.totalAmount })));
+      setExpenseOptions(exData.data.map((e: any) => ({ id: e.id, claimNo: e.claimNo, expenseType: e.expenseType, totalAmount: e.totalAmount, siteName: e.site?.name ?? '' })));
+      setJobOptions(jobData.data.map((j: any) => ({ id: j.id, jobCode: j.jobCode, description: j.description ?? null, siteId: j.siteId ?? null, siteName: j.site?.name ?? '' })));
+    } catch (error) {
+      setParties([]);
+      setSites([]);
+      setPoOptions([]);
+      setExpenseOptions([]);
+      setJobOptions([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load petty-cash reference data');
+    }
   }, []);
 
   const fetch_ = useCallback(async () => {
@@ -318,9 +322,14 @@ export default function FinPettyCash() {
       setLoading(true);
       const r = await fetch('/api/fin/petty-cash');
       const j = await r.json();
-      if (j.success && j.data?.length) { setRecords(j.data); }
-      else { setRecords(generateMockPettyCash()); toast.info('Sample data — no server records found'); }
-    } catch { setRecords(generateMockPettyCash()); toast.info('Sample data — API unavailable'); }
+      if (!r.ok || !j.success || !Array.isArray(j.data)) {
+        throw new Error(j.error || 'Failed to load petty-cash vouchers');
+      }
+      setRecords(j.data);
+    } catch (error) {
+      setRecords([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load petty-cash vouchers');
+    }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { fetch_(); fetchLookups(); }, [fetch_, fetchLookups]);

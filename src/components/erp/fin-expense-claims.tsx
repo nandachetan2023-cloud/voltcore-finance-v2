@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { FileText, Plus, Pencil, Trash2, Loader2, Search, CheckCircle2, Upload } from 'lucide-react';
+import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_table-controls';
@@ -105,16 +106,6 @@ const EMPTY_FORM: FormData = {
 const STATUSES = ['Draft', 'Submitted', 'Approved', 'Paid', 'Rejected'];
 const CATEGORIES = ['Material', 'Travel', 'Food', 'Accommodation', 'Transport', 'Office Supplies', 'Utilities', 'Other'];
 
-function generateMockExpenseClaims(): ExpenseClaim[] {
-  return [
-    { id: 1, claimNo: 'EC/2024-25/001', siteId: 1, siteType: 'Site', submittedBy: 'Rajesh Kumar', date: '2024-11-20T00:00:00', totalAmount: 47500, gstAmount: 0, tdsAmount: 0, billNo: null, status: 'Approved', approvalStatus: 'Approved', remarks: 'Site visit expenses — November', site: { name: 'NTPC Rihand Dam Project' }, items: [{ id: 1, category: 'Travel', description: 'Delhi to Rihand train fare', amount: 2800, receiptUrl: '' }, { id: 2, category: 'Accommodation', description: 'Hotel stay — 3 nights', amount: 9000, receiptUrl: '' }, { id: 3, category: 'Food', description: 'Meals during site visit', amount: 3500, receiptUrl: '' }, { id: 4, category: 'Transport', description: 'Local cab hire', amount: 4200, receiptUrl: '' }] },
-    { id: 2, claimNo: 'EC/2024-25/002', siteId: 2, siteType: 'Site', submittedBy: 'Ankit Verma', date: '2024-12-15T00:00:00', totalAmount: 23000, gstAmount: 0, tdsAmount: 0, billNo: null, status: 'Paid', approvalStatus: 'Approved', remarks: 'Project material procurement', site: { name: 'BALCO Aluminium Smelter' }, items: [{ id: 3, category: 'Material', description: 'PVC pipes and fittings', amount: 12000, receiptUrl: '' }, { id: 4, category: 'Office Supplies', description: 'Print cartridges and paper', amount: 3500, receiptUrl: '' }, { id: 5, category: 'Transport', description: 'Auto fare — material pickup', amount: 1500, receiptUrl: '' }] },
-    { id: 3, claimNo: 'EC/2024-25/003', siteId: 3, siteType: 'Site', submittedBy: 'Suresh Mahto', date: '2025-01-10T00:00:00', totalAmount: 15800, gstAmount: 0, tdsAmount: 0, billNo: null, status: 'Submitted', approvalStatus: 'Pending', remarks: 'Client meeting travel', site: { name: 'Coal India Eastern Coalfield' }, items: [{ id: 6, category: 'Travel', description: 'Ranchi to Dhanbad bus', amount: 1200, receiptUrl: '' }, { id: 7, category: 'Food', description: 'Client lunch meeting', amount: 4500, receiptUrl: '' }, { id: 8, category: 'Accommodation', description: 'Overnight stay', amount: 3500, receiptUrl: '' }] },
-    { id: 4, claimNo: 'EC/2024-25/004', siteId: 4, siteType: 'Site', submittedBy: 'Prakash Sahu', date: '2025-02-25T00:00:00', totalAmount: 68000, gstAmount: 0, tdsAmount: 0, billNo: null, status: 'Approved', approvalStatus: 'Approved', remarks: 'Emergency equipment repair', site: { name: 'Vedanta Jharsuguda Smelter' }, items: [{ id: 9, category: 'Material', description: 'Hydraulic hose and clamps', amount: 18000, receiptUrl: '' }, { id: 10, category: 'Transport', description: 'Crane rental — half day', amount: 25000, receiptUrl: '' }, { id: 11, category: 'Other', description: 'Overtime allowance — crew of 4', amount: 12000, receiptUrl: '' }] },
-    { id: 5, claimNo: 'EC/2024-25/005', siteId: 5, siteType: 'Site', submittedBy: 'Deepak Mishra', date: '2025-03-18T00:00:00', totalAmount: 31500, gstAmount: 0, tdsAmount: 0, billNo: null, status: 'Rejected', approvalStatus: 'Rejected', remarks: 'Office renovation expenses', site: { name: 'Hindalco Mahan Aluminium' }, items: [{ id: 12, category: 'Office Supplies', description: 'Whiteboard and markers', amount: 5500, receiptUrl: '' }, { id: 13, category: 'Utilities', description: 'Electricity bill — March', amount: 12000, receiptUrl: '' }, { id: 14, category: 'Other', description: 'Carpenter charges', amount: 8000, receiptUrl: '' }] },
-  ];
-}
-
 const ic = "w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none";
 const sc = ic + " appearance-none cursor-pointer";
 
@@ -153,15 +144,25 @@ export default function FinExpenseClaims() {
     try {
       const r = await fetch('/api/fin/expense-claims?' + p);
       const rj = await r.json();
-      if (rj.success) setRecords(rj.data ?? []);
-      else setRecords(generateMockExpenseClaims());
-    } catch { setRecords(generateMockExpenseClaims()); }
+      if (!r.ok || !rj.success || !Array.isArray(rj.data)) {
+        throw new Error(rj.error || 'Failed to load expense claims');
+      }
+      setRecords(rj.data);
+    } catch (error) {
+      setRecords([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load expense claims');
+    }
     try {
       const r = await fetch('/api/fin/sites');
       const rj = await r.json();
-      if (rj.success && rj.data?.length) setSites(rj.data);
-      else setSites([{ id: 1, name: 'TPP Adani Godda', siteCode: 'SITE-001' }, { id: 2, name: 'TPP NTPC Barh', siteCode: 'SITE-002' }, { id: 3, name: 'HO Mumbai', siteCode: 'SITE-003' }]);
-    } catch { setSites([{ id: 1, name: 'TPP Adani Godda', siteCode: 'SITE-001' }, { id: 2, name: 'TPP NTPC Barh', siteCode: 'SITE-002' }, { id: 3, name: 'HO Mumbai', siteCode: 'SITE-003' }]); }
+      if (!r.ok || !rj.success || !Array.isArray(rj.data)) {
+        throw new Error(rj.error || 'Failed to load sites');
+      }
+      setSites(rj.data);
+    } catch (error) {
+      setSites([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load sites');
+    }
     fetch('/api/fin/purchase-orders').then(r => r.json()).then(j => { if (j.success && j.data?.length) setPurchaseOrders(j.data); }).catch(() => {});
     setLoading(false);
   }, [monthFilter]);

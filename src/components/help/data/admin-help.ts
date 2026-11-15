@@ -23,12 +23,11 @@ Set these up **first** — invoices, POs, petty cash and reports all pick from t
 
 - **Sites** — site code, location, state, contacts, budget
 - **Jobs (PO-wise)** — a job code tied to a site and PO
-- **Clients & Vendors** — the party master (GST, PAN, TDS)
-- **Vendor Management** — vendor directory with rating and compliance
-- **Employees** — employee directory
-- **Chart of Accounts** — the account tree used by the ledger
+- **Item Code Generator** — item codes from the category register (e.g. CON-001)
+- **Clients** — the client/party master (GST, PAN, TDS)
+- **Contractors Management** — contractor directory with rating and compliance
 
-Suggested order: **Chart of Accounts → Sites → Parties → Jobs**.`,
+Suggested order: **Sites → Item Code Generator → Jobs → Clients → Contractors**.`,
     links: [
       { label: 'Sites', moduleId: 'fin-sites' },
       { label: 'Clients & Vendors', moduleId: 'fin-parties' },

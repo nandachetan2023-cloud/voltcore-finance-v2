@@ -19,7 +19,7 @@ export const MODULE_TREE: Record<string, string[]> = {
   reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
   // Category groups (like HRMS / Organization)
   'login-role': ['fin-user-management', 'notifications-ultra'],
-  'master-setup': ['fin-sites', 'fin-jobs', 'fin-items', 'fin-clients', 'procurement-vendors', 'employees'],
+  'master-setup': ['fin-sites', 'fin-jobs', 'fin-items', 'fin-clients', 'procurement-vendors'],
   inventory: ['site-store', 'material-receipt', 'material-issue-wip', 'stock-ledger', 'scrap-entry'],
   'sales-billing': ['sales-orders', 'sales-quotations', 'ra-work-slider', 'sales-tax-invoices', 'receipt-entry'],
   'finance-accounts': ['finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'bank-cash', 'fin-bank-reconciliation', 'journal-entries', 'taxation', 'fin-profit-loss', 'financial-reports', 'tally-sync'],
@@ -236,7 +236,6 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'fin-items', icon: 'Package', label: 'Item Code Generator', section: 'Masters' },
     { id: 'fin-clients', icon: 'Users', label: 'Clients', section: 'Masters' },
     { id: 'procurement-vendors', icon: 'Users', label: 'Contractors Management', section: 'Masters' },
-    { id: 'employees', icon: 'HardHat', label: 'Employees', section: 'Masters' },
   ],
   inventory: [
     { id: 'site-store', icon: 'Warehouse', label: 'Site Store Management', section: 'Inventory' },
