@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Target, Loader2, Plus, Pencil, Trash2, Upload } from 'lucide-react';
+import { Target, Loader2, Plus, Pencil, Trash2, Upload, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
@@ -37,7 +37,7 @@ const BUDGET_COLUMNS: ExportColumn<BudgetItem>[] = [
   { header: 'Status', accessor: 'status' },
 ];
 
-const EMPTY_FORM: FormData = { category: '', description: '', planned: 0, actual: 0, period: 'FY 2024-25', siteId: '', jobCode: '', poNo: '', costCenter: '', department: '', projectManager: '', status: 'On Track' };
+const EMPTY_FORM: FormData = { category: '', description: '', planned: 0, actual: 0, period: 'FY 2026-27', siteId: '', jobCode: '', poNo: '', costCenter: '', department: '', projectManager: '', status: 'On Track' };
 
 const BUDGET_IMPORT_FIELDS: ImportField[] = [
   { key: 'category', label: 'Category', required: true },
@@ -53,22 +53,12 @@ const BUDGET_IMPORT_FIELDS: ImportField[] = [
   { key: 'month', label: 'Month' },
   { key: 'status', label: 'Status' },
 ];
-const BUDGET_SAMPLE_ROW = { category: 'Manpower', description: 'Skilled labour charges', planned: 4500000, actual: 3800000, period: 'FY 2024-25', month: 'April', jobCode: 'JOB-2026-001', poNo: 'PO-1001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', status: 'On Track' };
-
-function generateMockBudget(): BudgetItem[] {
-  return [
-    { id: 1, category: 'Manpower', description: 'Skilled & unskilled labour charges', planned: 4500000, actual: 3800000, variance: 700000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-001', poNo: 'PO-1001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', status: 'On Track' },
-    { id: 2, category: 'Material', description: 'Electrical panels, cables, transformers', planned: 8200000, actual: 9100000, variance: -900000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-002', poNo: 'PO-1002', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'A. Verma', status: 'Over Budget' },
-    { id: 3, category: 'Equipment', description: 'DG sets, cranes, compressors', planned: 3500000, actual: 2800000, variance: 700000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-003', poNo: 'PO-1003', costCenter: 'CC-PROJ-001', department: 'Operations', projectManager: 'P. Iyer', status: 'Under Budget' },
-    { id: 4, category: 'Travel', description: 'Staff travel & site visits', planned: 1200000, actual: 950000, variance: 250000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-004', poNo: 'PO-1004', costCenter: 'CC-HO-001', department: 'Projects', projectManager: 'S. Rao', status: 'On Track' },
-    { id: 5, category: 'Subcontract', description: 'Specialized testing & commissioning', planned: 6000000, actual: 5200000, variance: 800000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-005', poNo: 'PO-1005', costCenter: 'CC-PROJ-002', department: 'Projects', projectManager: 'M. Khan', status: 'On Track' },
-    { id: 6, category: 'Overhead', description: 'Office rent, utilities, admin', planned: 1800000, actual: 1950000, variance: -150000, period: 'FY 2024-25', month: null, siteId: null, jobCode: 'JOB-2026-006', poNo: 'PO-1006', costCenter: 'CC-HO-001', department: 'Operations', projectManager: 'N. Joshi', status: 'Over Budget' },
-  ];
-}
+const BUDGET_SAMPLE_ROW = { category: 'Manpower', description: 'Skilled labour charges', planned: 4500000, actual: 3800000, period: 'FY 2026-27', month: 'April', jobCode: 'JOB-2026-001', poNo: 'PO-1001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', status: 'On Track' };
 
 export default function Budget() {
   const [records, setRecords] = useState<BudgetItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<BudgetItem | null>(null);
@@ -79,13 +69,16 @@ export default function Budget() {
   const [sites, setSites] = useState<SiteRef[]>([]);
   const [jobs, setJobs] = useState<JobRef[]>([]);
   const [statusFilter, setStatusFilter] = useState('All');
+  const [periodFilter, setPeriodFilter] = useState('FY 2026-27');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
-  useEffect(() => { fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success) setSites(j.data); }).catch(() => {}); }, []);
-  useEffect(() => { fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success) setJobs(j.data.map((x: any) => ({ id: x.id, jobCode: x.jobCode, description: x.description ?? null, siteId: x.siteId ?? null, siteName: x.site?.name ?? '' }))); }).catch(() => {}); }, []);
+  useEffect(() => { fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success) setSites(j.data); }).catch(() => toast.error('Failed to load sites/jobs')); }, []);
+  useEffect(() => { fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success) setJobs(j.data.map((x: any) => ({ id: x.id, jobCode: x.jobCode, description: x.description ?? null, siteId: x.siteId ?? null, siteName: x.site?.name ?? '' }))); }).catch(() => toast.error('Failed to load sites/jobs')); }, []);
 
-  const filtered = records.filter(r => statusFilter === 'All' || r.status === statusFilter);
+  const periodFiltered = periodFilter === 'All' ? records : records.filter(r => r.period === periodFilter);
+  const periodOptions = [...new Set(['FY 2026-27', ...records.map(r => r.period).filter(Boolean)])];
+  const filtered = periodFiltered.filter(r => statusFilter === 'All' || r.status === statusFilter);
   const tc = useTableControls(filtered, (r) => `${r.category} ${r.description} ${r.period} ${r.month ?? ''} ${r.status} ${r.site?.name ?? ''} ${r.site?.siteCode ?? ''}`);
   const pageIds = tc.pageItems.map(r => r.id);
   const allPageSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id));
@@ -98,9 +91,9 @@ export default function Budget() {
       setLoading(true);
       const res = await fetch('/api/budget');
       const json = await res.json();
-      if (json.success && json.data?.length) { setRecords(json.data); }
-      else { setRecords(generateMockBudget()); toast.info('Sample data — no server records found'); }
-    } catch { setRecords(generateMockBudget()); toast.info('Sample data — API unavailable'); }
+      if (json.success) { setRecords(json.data ?? []); setError(''); }
+      else setError(json.error || 'Failed to load budget items');
+    } catch (e: any) { setError(e?.message || 'Network error'); }
     finally { setLoading(false); }
   }, []);
 
@@ -170,11 +163,19 @@ export default function Budget() {
     } catch { toast.error('Network error'); }
   };
 
-  const totalPlanned = records.reduce((s, r) => s + r.planned, 0);
-  const totalActual = records.reduce((s, r) => s + r.actual, 0);
+  const totalPlanned = periodFiltered.reduce((s, r) => s + r.planned, 0);
+  const totalActual = periodFiltered.reduce((s, r) => s + r.actual, 0);
   const utilization = totalPlanned > 0 ? ((totalActual / totalPlanned) * 100).toFixed(1) : '0';
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
+
+  if (error) return (
+    <div className="p-6 text-center text-[#ff3d3d]">
+      <AlertCircle size={32} className="mx-auto mb-2" />
+      <p>{error}</p>
+      <button className="vc-btn-primary mt-3" onClick={fetchData}>Retry</button>
+    </div>
+  );
 
   if (importOpen) {
     return (
@@ -182,7 +183,8 @@ export default function Budget() {
         title="Budget Items"
         fields={BUDGET_IMPORT_FIELDS}
         keyField="category"
-        existingKeys={new Set(records.map(r => r.category))}
+        keyFn={(record) => `${String(record.category ?? '').trim()}|${String(record.period ?? '').trim() || 'FY 2026-27'}`}
+        existingKeys={new Set(records.map(r => `${r.category}|${r.period || 'FY 2026-27'}`))}
         commitEndpoint="/api/budget/import"
         sampleRow={BUDGET_SAMPLE_ROW}
         onClose={() => setImportOpen(false)}
@@ -204,6 +206,10 @@ export default function Budget() {
           <Target size={15} className="text-[#f5a623]" />
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Budget Items</span>
           <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{filtered.length} Items</span>
+          <select value={periodFilter} onChange={e => { setPeriodFilter(e.target.value); setSelected(new Set()); }} className="ml-2 vc-input w-auto text-[11px] py-1">
+            <option value="All">All periods</option>
+            {periodOptions.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
           <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setSelected(new Set()); }} className="ml-2 vc-input w-auto text-[11px] py-1">
             <option value="All">All Statuses</option>
             {BUDGET_STATUSES.filter(s => s !== 'All').map(s => <option key={s} value={s}>{s}</option>)}
@@ -249,7 +255,7 @@ export default function Budget() {
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-2">
                         <div className="w-16 h-[5px] bg-[#0a0d12] rounded-full overflow-hidden">
-                          <div className="h-full rounded-full" style={{ width: `${Math.min(Number(util), 100)}%`, backgroundColor: Number(util) > 100 ? '#ff3d3d' : '#00e676' }} />
+                          <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(Number(util), 100))}%`, backgroundColor: Number(util) > 100 ? '#ff3d3d' : '#00e676' }} />
                         </div>
                         <span className="text-[9px] text-[#8899aa]">{util}%</span>
                       </div>
@@ -264,7 +270,7 @@ export default function Budget() {
               })}
             </tbody>
           </table>
-          {tc.pageItems.length === 0 && <div className="py-8 text-center text-[#5a6878] text-[11px]">No matching budget items</div>}
+          {tc.pageItems.length === 0 && <div className="py-8 text-center text-[#5a6878] text-[11px]">{records.length === 0 ? 'No budget records yet — create one or use Import above.' : 'No matching budget items'}</div>}
         </div>
         <PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} />
         </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, Fragment } from 'react';
-import { ListTree, Plus, Trash2, RefreshCw, CheckCircle2, ClipboardList, FileText, IndianRupee } from 'lucide-react';
+import { ListTree, Plus, Trash2, RefreshCw, CheckCircle2, ClipboardList, FileText, IndianRupee, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
@@ -26,25 +26,10 @@ const BOQ_COLUMNS: ExportColumn<Boq>[] = [
   { header: 'Status', accessor: 'status' },
 ];
 
-function mockLines(): BoqLine[] {
-  return [
-    { itemNo: '1', description: 'Structural Steel ISMB 300', uom: 'MT', qty: 120, rate: 72500, amount: 8700000, sortOrder: 0 },
-    { itemNo: '2', description: '33kV XLPE Cable 3Cx400sqmm', uom: 'Mtr', qty: 2500, rate: 4850, amount: 12125000, sortOrder: 1 },
-    { itemNo: '3', description: 'OPC 53 Cement bulk', uom: 'MT', qty: 5000, rate: 6250, amount: 31250000, sortOrder: 2 },
-    { itemNo: '4', description: 'Power Transformer 50 MVA', uom: 'Nos', qty: 2, rate: 4200000, amount: 8400000, sortOrder: 3 },
-  ];
-}
-
-function generateMock(): Boq[] {
-  return [
-    { id: 1, boqNo: 'BOQ-2026-001', title: 'Boiler Erection — BoQ', siteCode: 'SITE-001', jobCode: 'JOB-2026-001', jobName: 'Boiler Erection Phase 1', poNo: 'PO-2026-021', project: 'TPP Adani Godda', version: 'V1', status: 'Approved', totalQty: 7622, totalAmount: 60475000, remarks: null, lines: mockLines() },
-    { id: 2, boqNo: 'BOQ-2026-002', title: 'TG Deck Civil — BoQ', siteCode: 'SITE-002', jobCode: 'JOB-2026-002', jobName: 'TG Deck Civil', poNo: 'PO-2026-022', project: 'TPP NTPC Barh', version: 'V2', status: 'Draft', totalQty: 4800, totalAmount: 38900000, remarks: 'Pending review', lines: mockLines() },
-  ];
-}
-
 export default function BoqEntry() {
   const [rows, setRows] = useState<Boq[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -53,9 +38,9 @@ export default function BoqEntry() {
     setLoading(true);
     try {
       const j = await fetch('/api/projects/boq').then(r => r.json());
-      if (j.success && j.data?.length) setRows(j.data);
-      else { setRows(generateMock()); toast.info('Sample data shown'); }
-    } catch { setRows(generateMock()); toast.info('Sample data shown'); }
+      if (j.success) { setRows(j.data || []); setError(''); }
+      else setError(j.error || 'Failed to load');
+    } catch (e: any) { setError(e?.message || 'Network error'); }
     finally { setLoading(false); }
   };
   useEffect(() => { fetchData(); }, []);
@@ -74,6 +59,13 @@ export default function BoqEntry() {
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-[#a78bfa]/30 border-t-[#a78bfa] rounded-full animate-spin" /></div>;
+  if (error) return (
+    <div className="p-6 text-center text-[#ff3d3d]">
+      <AlertCircle size={32} className="mx-auto mb-2" />
+      <p>{error}</p>
+      <button className="vc-btn-primary mt-3" onClick={fetchData}>Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4">

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Gauge, Plus, Trash2, RefreshCw, Flag, CircleDot } from 'lucide-react';
+import { Gauge, Plus, Trash2, RefreshCw, Flag, CircleDot, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
@@ -21,26 +21,10 @@ const PROG_COLUMNS: ExportColumn<Progress>[] = [
   { header: 'Current Milestone', accessor: (r) => r.milestone ?? '' },
 ];
 
-function mockMilestones(): Milestone[] {
-  return [
-    { name: 'Civil & Foundations', pct: 20, achievedPct: 100, done: true, dueDate: null, notes: null },
-    { name: 'Structural Erection', pct: 35, achievedPct: 80, done: false, dueDate: null, notes: null },
-    { name: 'Equipment Installation', pct: 30, achievedPct: 40, done: false, dueDate: null, notes: null },
-    { name: 'Testing & Commissioning', pct: 15, achievedPct: 0, done: false, dueDate: null, notes: null },
-  ];
-}
-
-function generateMock(): Progress[] {
-  return [
-    { id: 1, jobCode: 'JOB-2026-001', jobName: 'Boiler Erection Phase 1', siteCode: 'SITE-001', overallPct: 62, status: 'In Progress', milestone: 'Equipment Installation', notes: null, milestones: mockMilestones() },
-    { id: 2, jobCode: 'JOB-2026-002', jobName: 'TG Deck Civil', siteCode: 'SITE-002', overallPct: 78, status: 'In Progress', milestone: 'Structural Erection', notes: null, milestones: mockMilestones() },
-    { id: 3, jobCode: 'JOB-2026-004', jobName: 'Cement Works', siteCode: 'SITE-004', overallPct: 35, status: 'On Hold', milestone: 'Civil & Foundations', notes: 'Awaiting approval', milestones: mockMilestones() },
-  ];
-}
-
 export default function JobProgress() {
   const [rows, setRows] = useState<Progress[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -48,9 +32,9 @@ export default function JobProgress() {
     setLoading(true);
     try {
       const j = await fetch('/api/projects/job-progress').then(r => r.json());
-      if (j.success && j.data?.length) setRows(j.data);
-      else { setRows(generateMock()); toast.info('Sample data shown'); }
-    } catch { setRows(generateMock()); toast.info('Sample data shown'); }
+      if (j.success) { setRows(j.data || []); setError(''); }
+      else setError(j.error || 'Failed to load');
+    } catch (e: any) { setError(e?.message || 'Network error'); }
     finally { setLoading(false); }
   };
   useEffect(() => { fetchData(); }, []);
@@ -69,6 +53,13 @@ export default function JobProgress() {
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-[#00d4ff]/30 border-t-[#00d4ff] rounded-full animate-spin" /></div>;
+  if (error) return (
+    <div className="p-6 text-center text-[#ff3d3d]">
+      <AlertCircle size={32} className="mx-auto mb-2" />
+      <p>{error}</p>
+      <button className="vc-btn-primary mt-3" onClick={fetchData}>Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4">

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Recycle, Plus, Trash2, TrendingDown, RefreshCw, PackageX, IndianRupee } from 'lucide-react';
+import { Recycle, Plus, Trash2, TrendingDown, RefreshCw, PackageX, IndianRupee, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTableControls, SearchInput, PaginationBar } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
@@ -25,17 +25,10 @@ const SCRAP_COLUMNS: ExportColumn<ScrapRow>[] = [
   { header: 'Remarks', accessor: (r) => r.remarks ?? '' },
 ];
 
-function generateMock(): ScrapRow[] {
-  return [
-    { id: 1, entryNo: 'SCR-2026-001', postingDate: new Date(Date.now() - 86400000 * 8).toISOString().split('T')[0], itemCode: 'ITM-002', itemName: 'Structural Steel ISMB 300', unit: 'MT', qtyOut: 2.5, balanceQty: 115.5, rate: 18000, valueOut: 45000, referenceNo: 'SCR-0001', jobCode: 'JOB-2026-002', siteCode: 'NTPC', remarks: 'Cut-offs from fabrication' },
-    { id: 2, entryNo: 'SCR-2026-002', postingDate: new Date(Date.now() - 86400000 * 5).toISOString().split('T')[0], itemCode: 'ITM-001', itemName: '33kV XLPE Cable', unit: 'Mtr', qtyOut: 120, balanceQty: 2380, rate: 900, valueOut: 108000, referenceNo: 'SCR-0002', jobCode: 'JOB-2026-001', siteCode: 'GODDA', remarks: 'Damaged cable ends' },
-    { id: 3, entryNo: 'SCR-2026-003', postingDate: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0], itemCode: 'ITM-003', itemName: 'OPC 53 Grade Cement', unit: 'MT', qtyOut: 8, balanceQty: 4792, rate: 2500, valueOut: 20000, referenceNo: 'SCR-0003', jobCode: 'JOB-2026-004', siteCode: 'KORBA', remarks: 'Moisture-damaged bags' },
-  ];
-}
-
 export default function ScrapEntry() {
   const [rows, setRows] = useState<ScrapRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -43,9 +36,9 @@ export default function ScrapEntry() {
     setLoading(true);
     try {
       const j = await fetch('/api/fin/scrap').then(r => r.json());
-      if (j.success && j.data?.length) setRows(j.data);
-      else { setRows(generateMock()); toast.info('Sample data shown'); }
-    } catch { setRows(generateMock()); toast.info('Sample data shown'); }
+      if (j.success) { setRows(j.data || []); setError(''); }
+      else setError(j.error || 'Failed to load');
+    } catch (e: any) { setError(e?.message || 'Network error'); }
     finally { setLoading(false); }
   };
   useEffect(() => { fetchData(); }, []);
@@ -64,6 +57,13 @@ export default function ScrapEntry() {
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-[#00d4ff]/30 border-t-[#00d4ff] rounded-full animate-spin" /></div>;
+  if (error) return (
+    <div className="p-6 text-center text-[#ff3d3d]">
+      <AlertCircle size={32} className="mx-auto mb-2" />
+      <p>{error}</p>
+      <button className="vc-btn-primary mt-3" onClick={fetchData}>Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4">

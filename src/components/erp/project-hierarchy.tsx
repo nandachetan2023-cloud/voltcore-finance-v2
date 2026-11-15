@@ -186,8 +186,10 @@ export default function ProjectHierarchy() {
         fetch('/api/projects/hierarchy').then(r => r.json()),
         fetch('/api/fin/sites').then(r => r.json()),
       ]);
-      if (hj.success) setProjects(hj.data);
-      if (sj.success) setSites(sj.data.map((s: any) => ({ id: s.id, siteCode: s.siteCode, name: s.name })));
+      if (!hj?.success) throw new Error(hj?.error || 'Failed to load hierarchy');
+      if (!sj?.success) throw new Error(sj?.error || 'Failed to load sites');
+      setProjects(hj.data || []);
+      setSites((sj.data || []).map((s: any) => ({ id: s.id, siteCode: s.siteCode, name: s.name })));
     } catch { toast.error('Failed to load hierarchy'); }
     finally { setLoading(false); }
   }, []);

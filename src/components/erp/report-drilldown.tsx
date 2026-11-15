@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, ChevronDown, BarChart3, Wallet, DollarSign, TrendingUp, RefreshCw } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { ChevronRight, ChevronDown, BarChart3, Wallet, DollarSign, TrendingUp, RefreshCw, AlertCircle, AlertTriangle, X } from 'lucide-react';
 
 interface LedgerRow { accountCode: string; name: string; type: string; group: string; parentAccount: string | null; balance: number; }
 
@@ -12,16 +11,29 @@ interface AccountNode extends LedgerRow { children: AccountNode[]; leaf: boolean
 const TYPE_COLOR: Record<string, string> = { Asset: '#00d4ff', Liability: '#f5a623', Equity: '#a78bfa', Income: '#00e676', Expense: '#ff3d3d' };
 
 // Flat seeded CoA (parentAccount → child) as in the seed.
-function buildAccounts(rows: LedgerRow[], types: string[]): AccountNode[] {
+function buildAccounts(rows: LedgerRow[], types: string[]): { roots: AccountNode[]; cyclicOmitted: number } {
   const map: Record<string, AccountNode> = {};
+  for (const r of rows) {
+    if (!types.includes(r.type)) continue;
+    const node: AccountNode = { ...r, children: [], leaf: true };
+    const existing = map[r.accountCode];
+    if (existing) {
+      if (!existing.balance && node.balance) map[r.accountCode] = node;
+      continue;
+    }
+    map[r.accountCode] = node;
+  }
   const roots: AccountNode[] = [];
-  for (const r of rows) if (types.includes(r.type)) map[r.accountCode] = { ...r, children: [], leaf: true };
   for (const n of Object.values(map)) {
     const parent = n.parentAccount ? map[n.parentAccount] : null;
     if (parent) { parent.children.push(n); parent.leaf = false; }
     else roots.push(n);
   }
-  return roots.sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+  roots.sort((a, b) => a.accountCode.localeCompare(b.accountCode));
+  const reachable = new Set<AccountNode>();
+  const mark = (n: AccountNode) => { if (reachable.has(n)) return; reachable.add(n); for (const c of n.children) mark(c); };
+  roots.forEach(mark);
+  return { roots, cyclicOmitted: Object.keys(map).length - reachable.size };
 }
 
 function accountBalance(n: AccountNode): number {
@@ -42,46 +54,35 @@ function groupTally(rows: LedgerRow[], types: string[]): GroupNode[] {
   return [...map.values()].sort((a, b) => b.balance - a.balance);
 }
 
-function generateMock(): LedgerRow[] {
-  return [
-    { accountCode: '1000', name: 'Assets', type: 'Asset', group: 'Assets', parentAccount: null, balance: 0 },
-    { accountCode: '1003', name: 'Petty Cash', type: 'Asset', group: 'Assets', parentAccount: '1000', balance: 32600 },
-    { accountCode: '1004', name: 'Accounts Receivable', type: 'Asset', group: 'Assets', parentAccount: '1000', balance: 4200000 },
-    { accountCode: '1005', name: 'Inventory', type: 'Asset', group: 'Assets', parentAccount: '1000', balance: 1800000 },
-    { accountCode: '1006', name: 'Fixed Assets', type: 'Asset', group: 'Assets', parentAccount: '1000', balance: 6500000 },
-    { accountCode: '2000', name: 'Liabilities', type: 'Liability', group: 'Liabilities', parentAccount: null, balance: 0 },
-    { accountCode: '2001', name: 'Vendor Payable', type: 'Liability', group: 'Liabilities', parentAccount: '2000', balance: 3820000 },
-    { accountCode: '2002', name: 'GST Payable', type: 'Liability', group: 'Liabilities', parentAccount: '2000', balance: 640000 },
-    { accountCode: '4000', name: 'Income', type: 'Income', group: 'Income', parentAccount: null, balance: 0 },
-    { accountCode: '4001', name: 'Project Revenue', type: 'Income', group: 'Income', parentAccount: '4000', balance: 7800000 },
-    { accountCode: '4002', name: 'Service Revenue', type: 'Income', group: 'Income', parentAccount: '4000', balance: 2200000 },
-    { accountCode: '5000', name: 'Expenses', type: 'Expense', group: 'Expense', parentAccount: null, balance: 0 },
-    { accountCode: '5001', name: 'Payroll Expense', type: 'Expense', group: 'Expense', parentAccount: '5000', balance: 1400000 },
-    { accountCode: '5003', name: 'Material Consumption', type: 'Expense', group: 'Expense', parentAccount: '5000', balance: 3200000 },
-  ];
-}
-
 export default function ReportDrilldown() {
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [isBs, setIsBs] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [cycleDismissed, setCycleDismissed] = useState(false);
+  const expandedInit = useRef(false);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const j = await fetch('/api/ledger').then(r => r.json());
-      if (j.success && j.data?.length) setRows(j.data);
-      else { setRows(generateMock()); toast.info('Sample data shown'); }
-    } catch { setRows(generateMock()); toast.info('Sample data shown'); }
+      const res = await fetch('/api/ledger');
+      const j = await res.json();
+      if (j.success) { setRows(Array.isArray(j.data) ? j.data : []); setError(''); }
+      else setError(j.error || 'Failed to load');
+    } catch (e: any) { setError(e?.message || 'Network error'); }
     finally { setLoading(false); }
   };
   useEffect(() => { fetchData(); }, []);
 
   const types = isBs ? ['Asset', 'Liability', 'Equity'] : ['Income', 'Expense'];
-  const accounts = useMemo(() => buildAccounts(rows, types), [rows, isBs]);
+  const { roots: accounts, cyclicOmitted } = useMemo(() => buildAccounts(rows, types), [rows, isBs]);
   const groups = useMemo(() => groupTally(rows, types), [rows, isBs]);
-  useEffect(() => { setExpanded(new Set(groups.map(g => g.group))); }, [groups]);
+  useEffect(() => {
+    if (expandedInit.current || groups.length === 0) return;
+    setExpanded(new Set(groups.map(g => g.group)));
+    expandedInit.current = true;
+  }, [groups]);
 
   const totalAssets = isBs ? sumByType(rows, 'Asset') : 0;
   const totalLiabEq = isBs ? sumByType(rows, 'Liability') + sumByType(rows, 'Equity') : 0;
@@ -92,6 +93,13 @@ export default function ReportDrilldown() {
   const toggle = (g: string) => setExpanded(prev => { const s = new Set(prev); if (s.has(g)) s.delete(g); else s.add(g); return s; });
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-[#00d4ff]/30 border-t-[#00d4ff] rounded-full animate-spin" /></div>;
+  if (error) return (
+    <div className="p-6 text-center text-[#ff3d3d]">
+      <AlertCircle size={32} className="mx-auto mb-2" />
+      <p>{error}</p>
+      <button className="vc-btn-primary mt-3" onClick={fetchData}>Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4">
@@ -112,7 +120,15 @@ export default function ReportDrilldown() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      {cyclicOmitted > 0 && !cycleDismissed && (
+        <div className="mb-3 flex items-center gap-2 bg-[#f5a623]/10 border border-[#f5a623]/30 text-[#f5a623] rounded-lg px-3 py-2 text-[11px]">
+          <AlertTriangle size={13} className="shrink-0" />
+          <span className="flex-1">{cyclicOmitted} account{cyclicOmitted === 1 ? '' : 's'} omitted due to a circular parent reference.</span>
+          <button onClick={() => setCycleDismissed(true)} className="text-[#f5a623]/70 hover:text-[#f5a623]" aria-label="Dismiss"><X size={13} /></button>
+        </div>
+      )}
+
+      <div className={`grid gap-3 mb-4 ${isBs ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'}`}>
         {isBs ? <>
           <Kpi icon={<Wallet size={14} />} label="Total Assets" value={totalAssets} color="#00d4ff" />
           <Kpi icon={<DollarSign size={14} />} label="Liabilities + Equity" value={totalLiabEq} color="#a78bfa" />

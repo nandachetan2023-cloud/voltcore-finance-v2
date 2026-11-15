@@ -1,16 +1,15 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Network, RefreshCw, ChevronRight, ChevronDown, FolderTree, Building2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { RefreshCw, ChevronRight, ChevronDown, FolderTree, Building2, AlertCircle } from 'lucide-react';
 
 interface PO { id: number; poNo: string; vendorName: string; siteId: number; site?: { name?: string } | null; jobCode: string; descriptionOfWork: string | null; totalAmount: number; status: string; }
-
-interface SiteNode { siteId: number | null; siteName: string; }
 
 // Cost rollup: Site → Job (jobCode) → PO.
 interface JobNode { siteId: number | null; jobCode: string; pos: PO[]; poTotal: number; }
 interface SiteTree { siteKey: string; siteName: string; jobs: JobNode[]; total: number; }
+
+const isDraft = (s?: string | null) => (s || '').toLowerCase() === 'draft';
 
 function buildTree(pos: PO[]): SiteTree[] {
   const bySite = new Map<string, PO[]>();
@@ -27,7 +26,7 @@ function buildTree(pos: PO[]): SiteTree[] {
       const jk = po.jobCode || 'No Job';
       const cur = jobs.get(jk) || { siteId: po.siteId, jobCode: jk, pos: [], poTotal: 0 };
       cur.pos.push(po);
-      cur.poTotal = Math.round((cur.poTotal + (po.totalAmount || 0)) * 100) / 100;
+      if (!isDraft(po.status)) cur.poTotal = Math.round((cur.poTotal + (po.totalAmount || 0)) * 100) / 100;
       jobs.set(jk, cur);
     }
     const jobList = [...jobs.values()].sort((a, b) => b.poTotal - a.poTotal);
@@ -40,26 +39,41 @@ function buildTree(pos: PO[]): SiteTree[] {
 export default function PoCostTree() {
   const [pos, setPos] = useState<PO[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const didInitExpand = useRef(false);
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const j = await fetch('/api/fin/purchase-orders').then(r => r.json());
-      if (j.success && j.data?.length) setPos(j.data);
-      else { setPos(generateMock()); toast.info('Sample data shown'); }
-    } catch { setPos(generateMock()); toast.info('Sample data shown'); }
+      if (j.success) { setPos(Array.isArray(j.data) ? j.data : []); setError(''); }
+      else setError(j.error || 'Failed to load purchase orders');
+    } catch (e: any) { setError(e?.message || 'Network error'); }
     finally { setLoading(false); }
   };
   useEffect(() => { fetchData(); }, []);
 
   const tree = useMemo(() => buildTree(pos), [pos]);
   const grand = Math.round(tree.reduce((s, s0) => s + s0.total, 0) * 100) / 100;
-  useEffect(() => { setExpanded(new Set(tree.map(s => s.siteKey))); }, [tree]);
+  useEffect(() => {
+    if (didInitExpand.current) return;
+    if (tree.length === 0) return;
+    setExpanded(new Set(tree.map(s => s.siteKey)));
+    didInitExpand.current = true;
+  }, [tree]);
 
   const toggle = (k: string) => setExpanded(prev => { const s = new Set(prev); if (s.has(k)) s.delete(k); else s.add(k); return s; });
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-[#00d4ff]/30 border-t-[#00d4ff] rounded-full animate-spin" /></div>;
+
+  if (error) return (
+    <div className="p-6 text-center text-[#ff3d3d]">
+      <AlertCircle size={32} className="mx-auto mb-2" />
+      <p>{error}</p>
+      <button className="vc-btn-primary mt-3" onClick={fetchData}>Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4">
@@ -124,7 +138,7 @@ function SiteRow({ site, expanded, onToggle, grand }: { site: SiteTree; expanded
 }
 
 function JobRow({ job, depth, expanded, onToggle }: { job: JobNode; depth: number; expanded: Set<string>; onToggle: (k: string) => void; }) {
-  const key = `${depth}-${job.jobCode}`;
+  const key = `${job.siteId ?? 'unassigned'}-${depth}-${job.jobCode}`;
   const open = expanded.has(key);
   return (
     <>
@@ -165,14 +179,4 @@ function Kpi({ label, value, color, money }: { label: string; value: number; col
       <div className="mt-1 text-[18px] font-bold font-mono" style={{ color }}>{money ? `₹${value.toLocaleString('en-IN')}` : value}</div>
     </div>
   );
-}
-
-function generateMock(): PO[] {
-  return [
-    { id: 1, poNo: 'PO-2026-021', vendorName: 'ElectroMech Solutions', siteId: 1, site: { name: 'BALCO' }, jobCode: 'JOB-2026-001', descriptionOfWork: '40 MT Structural Steel', totalAmount: 2940000, status: 'Approved' },
-    { id: 2, poNo: 'PO-2026-022', vendorName: 'PowerTech Industries', siteId: 2, site: { name: 'NTPC' }, jobCode: 'JOB-2026-002', descriptionOfWork: '2 x Power Transformers', totalAmount: 8400000, status: 'Approved' },
-    { id: 3, poNo: 'PO-2026-023', vendorName: 'CementMart', siteId: 1, site: { name: 'BALCO' }, jobCode: 'JOB-2026-004', descriptionOfWork: 'OPC 53 Cement bulk', totalAmount: 31250000, status: 'Approved' },
-    { id: 4, poNo: 'PO-2026-024', vendorName: 'PanelPro', siteId: 1, site: { name: 'BALCO' }, jobCode: 'JOB-2026-005', descriptionOfWork: 'LV Switchgear Panels', totalAmount: 4800000, status: 'Approved' },
-    { id: 5, poNo: 'PO-2026-025', vendorName: 'CableWorks', siteId: 3, site: { name: 'Coal India' }, jobCode: 'JOB-2026-003', descriptionOfWork: 'Cable Trays & Conduits', totalAmount: 5600000, status: 'Draft' },
-  ];
 }
