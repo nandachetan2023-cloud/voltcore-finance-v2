@@ -150,6 +150,7 @@ export default function FinItems() {
   };
 
   const addCategory = async () => {
+    if (!catForm.code.trim() || !catForm.name.trim()) { toast.error('Code and Name are required'); return; }
     try {
       const res = await fetch('/api/fin/item-categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(catForm) });
       const j = await readJsonSafe(res);

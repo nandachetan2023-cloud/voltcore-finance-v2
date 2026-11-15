@@ -230,7 +230,8 @@ function validateStep(step: StepKey, f: ContractorForm): Record<string, string> 
     for (const k of ['onTimeDelivery', 'qualityRating', 'priceCompetitiveness'] as const) {
       if (!f[k]) continue;
       const v = Number(f[k]);
-      if (Number.isNaN(v) || v < 0 || v > 100) e[k] = 'Value must be between 0 and 100';
+      const max = k === 'onTimeDelivery' ? 100 : 5;
+      if (Number.isNaN(v) || v < 0 || v > max) e[k] = `Value must be between 0 and ${max}`;
     }
   }
 

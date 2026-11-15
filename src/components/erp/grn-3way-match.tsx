@@ -96,6 +96,7 @@ export default function Grn3WayMatch() {
   const [pos, setPos] = useState<PoRec[]>([]);
   const [items, setItems] = useState<ItemRec[]>([]);
   const [jobs, setJobs] = useState<{ id: number; jobCode: string }[]>([]);
+  const [sites, setSites] = useState<{ id: number; name: string }[]>([]);
   const [poId, setPoId] = useState('');
   const [hdr, setHdr] = useState({ grnDate: new Date().toISOString().split('T')[0], dcNo: '', invoiceNo: '', remarks: '', siteId: '', jobCode: '', vendorName: '' });
   const [formLines, setFormLines] = useState<GrnLine[]>([]);
@@ -121,11 +122,12 @@ export default function Grn3WayMatch() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [gRes, poRes, iRes, jRes] = await Promise.all([
+      const [gRes, poRes, iRes, jRes, sRes] = await Promise.all([
         fetch('/api/store/grn').then(r => r.json()).catch(() => null),
         fetch('/api/fin/purchase-orders').then(r => r.json()).catch(() => null),
         fetch('/api/items').then(r => r.json()).catch(() => null),
         fetch('/api/fin/jobs').then(r => r.json()).catch(() => null),
+        fetch('/api/fin/sites').then(r => r.json()).catch(() => null),
       ]);
       if (gRes?.success) setGrns((gRes.data || []).map(mapGrn));
       if (poRes?.success) setPos((poRes.data || []).filter((p: { items?: unknown[] }) => p.items?.length).map((p: { id: number; poNo: string; vendorName: string; status: string; siteId: number; site?: { name: string }; jobCode: string; items: PoLine[] }) => ({
@@ -133,6 +135,7 @@ export default function Grn3WayMatch() {
       })));
       if (iRes?.success) setItems((iRes.data || []).map((i: ItemRec) => ({ id: i.id, sku: i.sku, name: i.name, costPrice: Number(i.costPrice) || 0, reorderLevel: Number(i.reorderLevel) || 0, reorderQty: Number(i.reorderQty) || 0 })));
       if (jRes?.success) setJobs((jRes.data || []).map((j: { id: number; jobCode: string }) => ({ id: j.id, jobCode: j.jobCode })));
+      if (sRes?.success) setSites((sRes.data || []).map((s: { id: number; name: string }) => ({ id: s.id, name: s.name })));
     } catch { /* empty state */ }
     finally { setLoading(false); }
   };
@@ -528,6 +531,13 @@ export default function Grn3WayMatch() {
               <div>
                 <label className={lbl}>Invoice No</label>
                 <input value={hdr.invoiceNo} onChange={e => setHdr({ ...hdr, invoiceNo: e.target.value })} className={inputCls} placeholder="Optional" />
+              </div>
+              <div>
+                <label className={lbl}>Destination Site</label>
+                <select value={hdr.siteId} onChange={e => setHdr({ ...hdr, siteId: e.target.value })} disabled={!!editGrnId || !!poId} className={inputCls}>
+                  <option value="">Select destination site…</option>
+                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
               </div>
             </div>
 

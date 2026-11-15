@@ -682,7 +682,6 @@ const [itemCategories, setItemCategories] = useState<ItemCategory[]>([]);
                 <select value={formVendor} onChange={e => setFormVendor(e.target.value)} className="w-full bg-transparent border-b border-dashed border-[#999] outline-none text-[11px] font-bold text-[#1a1a1a] text-right appearance-none">
                   {formVendorOptions.map(v => <option key={v} value={v}>{v}</option>)}
                 </select>
-                <input value={formAddress} onChange={e => setFormAddress(e.target.value)} className="w-full bg-transparent border-b border-dashed border-[#999] outline-none text-[10px] text-[#555] text-right mt-0.5" placeholder="Delivery Address" />
               </div>
             </div>
 

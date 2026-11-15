@@ -132,7 +132,7 @@ export default function FinCreditNotes() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<FormData>({
-    siteId: required('Site Code'),
+    siteId: (v) => (!v) ? 'Site Code is required' : undefined,
     jobCode: required('Job Code'),
     poNo: required('PO Number'),
     costCenter: required('Cost Center'),
