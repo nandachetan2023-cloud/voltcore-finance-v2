@@ -161,7 +161,7 @@ function GrnTab({ lookups }: { lookups: Lookups }) {
     if (!validLines.length) { toast.error('Add at least one item line'); return; }
     setSaving(true);
     try {
-      const body = { ...f, siteId: Number(f.siteId), jobId: f.jobId || null, poId: f.poId || null, grnDate: new Date().toISOString(), actor: getCurrentUserEmail(), lines: validLines.map(l => ({ itemId: Number(l.itemId), qtyReceived: Number(l.qtyReceived), qtyAccepted: Number(l.qtyReceived), rate: Number(l.rate) || 0, materialCategory: l.materialCategory, batchHeatNo: l.batchHeatNo, damageTransit: l.damageTransit, inspectionStatus: l.inspectionStatus })) };
+      const body = { ...f, siteId: Number(f.siteId), jobId: f.jobId || null, poId: f.poId || null, grnDate: new Date().toISOString(), actor: getCurrentUserEmail(), lines: validLines.map((l: any) => ({ itemId: Number(l.itemId), qtyOrdered: Number(l.qtyOrdered) || 0, qtyReceived: Number(l.qtyReceived), qtyAccepted: l.qtyAccepted !== undefined && l.qtyAccepted !== '' ? Number(l.qtyAccepted) : Number(l.qtyReceived), rate: Number(l.rate) || 0, materialCategory: l.materialCategory, batchHeatNo: l.batchHeatNo, damageTransit: l.damageTransit, inspectionStatus: l.inspectionStatus })) };
       const j = await fetch('/api/store/grn', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
       if (j.success) { toast.success(`GRN ${j.data.grnNo} posted`); setFormOpen(false); await fetchData(); } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); } finally { setSaving(false); }
@@ -786,7 +786,7 @@ function ScrapTab({ lookups }: { lookups: Lookups }) {
 
   const openNew = () => { setF({ siteId: '', jobId: '', itemId: '', description: '', qty: '', unit: 'Nos', estimatedValue: '', scrapType: 'Scrap', location: '' }); setFormOpen(true); };
   const save = async () => {
-    if (!f.siteId || !f.description) { toast.error('Site and description are required'); return; }
+    if (!f.siteId || !f.description || !(Number(f.qty) > 0)) { toast.error('Site, description and qty are required'); return; }
     setSaving(true);
     try {
       const body = { ...f, siteId: Number(f.siteId), jobId: f.jobId || null, itemId: f.itemId || null, qty: Number(f.qty) || 0, estimatedValue: Number(f.estimatedValue) || 0, actor: getCurrentUserEmail() };
@@ -886,8 +886,8 @@ function PvTab({ lookups }: { lookups: Lookups }) {
 
   const save = async () => {
     if (!f.siteId) { toast.error('Site is required'); return; }
-    const validLines = lines.filter(l => l.itemId);
-    if (!validLines.length) { toast.error('Add at least one item line'); return; }
+    const validLines = lines.filter(l => l.itemId && l.physicalQty !== '' && l.physicalQty !== null);
+    if (!validLines.length) { toast.error('Add at least one item line with a physical qty'); return; }
     setSaving(true);
     try {
       const body = { ...f, siteId: Number(f.siteId), verificationDate: new Date().toISOString(), status: 'Completed', actor: getCurrentUserEmail(), lines: validLines.map(l => ({ itemId: Number(l.itemId), bookQty: Number(l.bookQty) || 0, physicalQty: Number(l.physicalQty) || 0 })) };
@@ -1083,7 +1083,7 @@ function DieselTab({ lookups }: { lookups: Lookups }) {
 
   const openNew = () => { setF({ logDate: new Date().toISOString().split('T')[0], vehicle: '', siteId: '', opening: '', received: '', consumed: '', operatorName: '', remarks: '' }); setFormOpen(true); };
   const save = async () => {
-    if (!f.siteId || !f.vehicle.trim()) { toast.error('Site and Vehicle/Equipment are required'); return; }
+    if (!f.siteId || !f.logDate || !f.vehicle.trim()) { toast.error('Site, Date and Vehicle/Equipment are required'); return; }
     setSaving(true);
     try {
       const j = await fetch('/api/store/diesel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, siteId: Number(f.siteId), opening: Number(f.opening) || 0, received: Number(f.received) || 0, consumed: Number(f.consumed) || 0, actor: getCurrentUserEmail() }) }).then(r => r.json());
@@ -1160,7 +1160,8 @@ function GasCylinderTab({ lookups }: { lookups: Lookups }) {
 
   const openNew = () => { setF({ ...emptyForm, logDate: new Date().toISOString().split('T')[0] }); setFormOpen(true); };
   const save = async () => {
-    if (!f.siteId) { toast.error('Site is required'); return; }
+    if (!f.siteId || !f.logDate || !f.gasType) { toast.error('Site, Date and Gas Type are required'); return; }
+    if (f.direction === 'Issued' && !f.issuedTo?.trim()) { toast.error('Issued To is required'); return; }
     setSaving(true);
     try {
       const j = await fetch('/api/store/gas-cylinders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, siteId: Number(f.siteId), qty: Number(f.qty) || 1, actor: getCurrentUserEmail() }) }).then(r => r.json());
@@ -1240,7 +1241,7 @@ function DailyIssueTab({ lookups }: { lookups: Lookups }) {
 
   const openNew = () => { setF({ ...emptyForm, issueDate: new Date().toISOString().split('T')[0] }); setFormOpen(true); };
   const save = async () => {
-    if (!f.siteId || !f.itemName.trim() || !f.receiverName.trim()) { toast.error('Site, Item Name and Receiver Name are required'); return; }
+    if (!f.siteId || !f.issueDate || !f.itemName.trim() || !f.receiverName.trim()) { toast.error('Site, Date, Item Name and Receiver Name are required'); return; }
     setSaving(true);
     try {
       const j = await fetch('/api/store/daily-issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, siteId: Number(f.siteId), qty: Number(f.qty) || 0, actor: getCurrentUserEmail() }) }).then(r => r.json());

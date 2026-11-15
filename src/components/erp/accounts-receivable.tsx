@@ -195,6 +195,7 @@ export default function AccountsReceivable() {
 
   const handleSubmit = async (status: string) => {
     if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
+    if ((Number(form.otherDeduction) || 0) > 0 && !form.deductionType) { toast.error('Deduction Type is required if other deduction is applied'); return; }
     setSubmitting(true);
     const amount = subtotal;
     const tax = amount * 0.18;
@@ -215,6 +216,9 @@ export default function AccountsReceivable() {
         costCenter: form.costCenter || null,
         department: form.department || null,
         projectManager: form.projectManager || null,
+        lines: lines
+          .filter(l => l.description || l.glAccount || l.unitPrice || l.quantity > 1)
+          .map(l => ({ description: l.description, glAccount: l.glAccount, quantity: l.quantity, unitPrice: l.unitPrice })),
         actor: getCurrentUserEmail(),
       };
       const body = editTarget ? { id: editTarget.id, ...payload } : payload;

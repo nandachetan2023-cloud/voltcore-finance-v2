@@ -541,6 +541,9 @@ export default function FinSiteExpenses() {
 
   const save = async () => {
     if (!form.siteId) { toast.error('Site is required'); return; }
+    if (Number(form.receivedAmount) < 0) { toast.error('Received amount cannot be negative'); return; }
+    if (form.items.some(it => it.amount < 0)) { toast.error('Advance cannot be negative'); return; }
+    if (form.items.some(it => it.amount > 0 && !it.name.trim() && !it.description.trim())) { toast.error('Item name or description is required for each expense line'); return; }
     setSaving(true);
     try {
       const body = { ...form, siteId: Number(form.siteId), receivedAmount: Number(form.receivedAmount) || 0,

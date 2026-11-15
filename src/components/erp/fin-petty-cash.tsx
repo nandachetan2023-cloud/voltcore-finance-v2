@@ -350,7 +350,7 @@ export default function FinPettyCash() {
   };
 
   const handleSubmit = async () => {
-    if (!form.description || !form.amount || !form.jobCode) { toast.error('Description, amount and job code are required'); return; }
+    if (!form.description || !form.amount || Number(form.amount) <= 0 || !form.jobCode) { toast.error('Description, amount and job code are required'); return; }
     setSubmitting(true);
     try {
       const method = editTarget ? 'PUT' : 'POST';

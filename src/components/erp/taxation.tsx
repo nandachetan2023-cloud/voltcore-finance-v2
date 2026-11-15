@@ -327,6 +327,7 @@ export default function Taxation() {
   };
 
   const handleSubmit = async () => {
+    if (!(Number(form.amount) > 0)) { toast.error('Amount must be greater than zero'); return; }
     if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
     setSubmitting(true);
     try {

@@ -224,6 +224,7 @@ export default function FinWorkOrders() {
 
   const handleSubmit = async () => {
     if (!validate(form)) { toast.error('Please fix the highlighted fields'); return; }
+    if ((['totalAmount', 'unexecutedWorkAmount', 'workDoneNotBilled', 'amountBookedLastFY', 'amountBookedCurrentFY', 'amountToBeBookedByEndFY', 'billRaisedAmount', 'amountReceivedOutOfBill', 'bgAmount'] as const).some(k => form[k] < 0)) { toast.error('Amounts cannot be negative'); return; }
     setSubmitting(true);
     try {
       const payload: Record<string, unknown> = {

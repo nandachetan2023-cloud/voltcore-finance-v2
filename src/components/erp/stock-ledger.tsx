@@ -170,6 +170,8 @@ function PostForm({ onClose, onSaved, saving, setSaving }: { onClose: () => void
   };
   const save = async () => {
     if (!f.itemCode) { toast.error('Item code required'); return; }
+    if (Number(f.qtyIn) < 0 || Number(f.qtyOut) < 0) { toast.error('Qty in and qty out cannot be negative'); return; }
+    if (!(Number(f.qtyIn) > 0) && !(Number(f.qtyOut) > 0)) { toast.error('Enter qty in or qty out'); return; }
     setSaving(true);
     try {
       const body: any = { itemCode: f.itemCode.toUpperCase(), itemName: f.itemName || f.itemCode, unit: f.unit, qtyIn: Number(f.qtyIn) || 0, qtyOut: Number(f.qtyOut) || 0, rate: Number(f.rate) || 0, referenceType: f.referenceType, jobCode: f.jobCode || null, remarks: f.remarks || null };

@@ -322,7 +322,9 @@ export default function FinPaymentAdvices() {
 
   const handleSubmit = async () => {
     if (!form.adviceNo) { toast.error('Advice No is required'); return; }
+    if (!form.paymentDate) { toast.error('Payment date is required'); return; }
     if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
+    if (form.lines.some(l => (Number(l.tdsAmount) || 0) > (Number(l.invAmount) || 0))) { toast.error('TDS cannot exceed total rent'); return; }
     setSubmitting(true);
     try {
       const payload = {
@@ -346,7 +348,7 @@ export default function FinPaymentAdvices() {
         accountNo: form.accountNo || null,
         ifscCode: form.ifscCode || null,
         lines: form.lines
-          .filter(l => l.billNo || l.amount || l.remarks)
+          .filter(l => l.billNo || l.invDate || l.month || l.remarks || (Number(l.invAmount) || 0) || (Number(l.tdsAmount) || 0) || (Number(l.amount) || 0) || (Number(l.paidAmount) || 0) || (Number(l.balanceAmount) || 0))
           .map(l => ({
             billNo: l.billNo || null, invDate: l.invDate || null, month: l.month || null,
             invAmount: Number(l.invAmount) || 0, tdsAmount: Number(l.tdsAmount) || 0,

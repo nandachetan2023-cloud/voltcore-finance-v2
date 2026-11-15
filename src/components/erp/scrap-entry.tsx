@@ -160,7 +160,8 @@ function ScrapForm({ onClose, onSaved, saving, setSaving }: { onClose: () => voi
   };
 
   const save = async () => {
-    if (!f.itemCode || !f.qty) { toast.error('Item code and qty required'); return; }
+    if (!sel.siteId) { toast.error('Site is required'); return; }
+    if (!f.itemCode || !(Number(f.qty) > 0)) { toast.error('Item code and qty required'); return; }
     setSaving(true);
     try {
       const body: any = {

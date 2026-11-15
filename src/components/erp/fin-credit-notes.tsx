@@ -138,6 +138,7 @@ export default function FinCreditNotes() {
     costCenter: required('Cost Center'),
     department: required('Department'),
     projectManager: required('Project Manager'),
+    date: required('Date'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
@@ -229,6 +230,7 @@ export default function FinCreditNotes() {
     if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
     if (!form.creditNoteNo) { toast.error('Credit Note No is required'); return; }
     if (!form.invoiceId) { toast.error('Invoice is required'); return; }
+    if (!(Number(form.amount) > 0)) { toast.error('Amount must be greater than zero'); return; }
     setSubmitting(true);
     try {
       const payload = {

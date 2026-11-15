@@ -432,6 +432,8 @@ export default function ProcurementPR() {
 
   const saveDetail = async () => {
     if (!detailPR) return;
+    if (editLines.length === 0 || !editLines.every(it => it.description.trim())) { toast.error('At least one line item with a description is required'); return; }
+    if (!editLines.every(it => it.qty > 0)) { toast.error('Enter a quantity greater than 0 for all line items'); return; }
     const total = editLines.reduce((s, it) => s + it.total, 0);
     try {
       const res = await fetch('/api/procurement/requisitions', {

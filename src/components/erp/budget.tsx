@@ -107,6 +107,8 @@ export default function Budget() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<FormData>({
+    category: required('Category'),
+    description: required('Description'),
     siteId: required('Site Code'),
     jobCode: required('Job Code'),
     poNo: required('PO Number'),
@@ -131,6 +133,7 @@ export default function Budget() {
 
   const handleSubmit = async () => {
     if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
+    if (!(form.planned >= 0) || !(form.actual >= 0)) { toast.error('Planned and Actual must not be negative'); return; }
     setSubmitting(true);
     try {
       const variance = form.planned - form.actual;

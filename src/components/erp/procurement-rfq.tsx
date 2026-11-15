@@ -293,8 +293,17 @@ export default function ProcurementRFQ() {
 
   const saveVendorBids = () => {
     if (!detailRfq || !activeVendorTab) return;
+    const saved: VendorBid[] = [];
+    for (const b of vendorBidsEdit) {
+      const hasPrice = Number.isFinite(b.unitPrice) && b.unitPrice > 0;
+      const hasLead = Number.isFinite(b.leadTime) && b.leadTime >= 0;
+      if (!hasPrice && !hasLead && !b.notes.trim() && !b.compliant) continue;
+      if (!hasPrice) { toast.error('Enter unit price for all vendors'); return; }
+      if (!hasLead) { toast.error('Enter lead time for all vendors'); return; }
+      saved.push(b);
+    }
     const otherBids = detailRfq.bids.filter(b => b.vendorId !== activeVendorTab);
-    const updated: RFQ = { ...detailRfq, bids: [...otherBids, ...vendorBidsEdit], status: 'Responses Received' };
+    const updated: RFQ = { ...detailRfq, bids: [...otherBids, ...saved], status: 'Responses Received' };
     fetch('/api/procurement/rfqs/' + detailRfq.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) })
       .then(res => res.json())
       .then(json => { if (json.success) { setRfqs(prev => prev.map(r => r.id === updated.id ? json.data : r)); setDetailRfq(json.data); toast.success('Bids saved for ' + vendorName(activeVendorTab)); } else toast.error('Failed to save bids'); })

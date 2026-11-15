@@ -47,6 +47,7 @@ export default function FinFundMaster() {
 
   const save = async () => {
     if (!form.fundName.trim()) { toast.error('Fund name is required'); return; }
+    if (Number(form.limitAmount) < 0) { toast.error('Sanctioned limit cannot be negative'); return; }
     setSubmitting(true);
     try {
       const body = { ...form, limitAmount: Number(form.limitAmount) || 0, actor: getCurrentUserEmail() };

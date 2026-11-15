@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
     const denied = await assertPermission(pdb, body.actor || '', 'AR_CREATE', { request, module: 'AR', siteCode: site?.siteCode ?? null })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create invoices' }, { status: 403 })
-    const { actor: _actor, ...createData } = body
+    const { actor: _actor, lines: _lines, ...createData } = body
     // Prisma expects Date objects, but JSON sends strings - coerce
     if (createData.invoiceDate) createData.invoiceDate = new Date(createData.invoiceDate)
     if (createData.dueDate) createData.dueDate = new Date(createData.dueDate)
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
   export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, actor, ...data } = body
+    const { id, actor, lines: _lines, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const missing = ['siteId', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager'].filter(k => data[k] === undefined || data[k] === null || data[k] === '')
     if (missing.length) return NextResponse.json({ success: false, error: `Missing required fields: ${missing.join(', ')}` }, { status: 400 })

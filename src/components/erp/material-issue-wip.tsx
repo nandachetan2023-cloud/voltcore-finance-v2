@@ -178,7 +178,7 @@ function IssueForm({ onClose, onSaved, saving, setSaving }: { onClose: () => voi
     }));
   };
   const save = async () => {
-    if (!f.jobCode || !f.description || !f.qty) { toast.error('Job, description and qty required'); return; }
+    if (!f.jobCode || !f.description || !(Number(f.qty) > 0)) { toast.error('Job, description and qty required'); return; }
     setSaving(true);
     try {
       const picked = items.find(x => x.itemCode.toLowerCase() === f.itemCode.trim().toLowerCase());

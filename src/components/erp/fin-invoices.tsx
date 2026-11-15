@@ -218,10 +218,11 @@ export default function FinInvoices() {
 
   const handleSubmit = async (status: string) => {
     if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
+    if (!lines.some(l => (l.quantity || 0) > 0)) { toast.error('At least one line item with quantity is required'); return; }
     setSubmitting(true);
     try {
       const method = editTarget ? 'PUT' : 'POST';
-      const common = { invoiceNo: form.invoiceNo, siteId: form.siteId, partyId: form.partyId, poId: form.poId, jobCode: form.jobCode || null, invoiceDate: new Date(form.invoiceDate), dueDate: new Date(form.dueDate), invoiceValue, gstValue, grandTotal, balanceAmount: grandTotal, description: form.description, status, poNo: form.poNo, trackingNo: form.trackingNo, costCenter: form.costCenter || null, department: form.department || null, projectManager: form.projectManager || null, actor: getCurrentUserEmail() };
+      const common = { invoiceNo: form.invoiceNo, siteId: form.siteId, partyId: form.partyId, poId: form.poId, jobCode: form.jobCode || null, invoiceDate: new Date(form.invoiceDate), dueDate: new Date(form.dueDate), invoiceValue, gstValue, grandTotal, balanceAmount: grandTotal, description: form.description, status, poNo: form.poNo, trackingNo: form.trackingNo, costCenter: form.costCenter || null, department: form.department || null, projectManager: form.projectManager || null, lines: lines.filter(l => l.description || l.area || l.month || l.rate || l.quantity > 1).map(l => ({ description: l.description, area: l.area, month: l.month, quantity: l.quantity, rate: l.rate })), actor: getCurrentUserEmail() };
       const body = editTarget ? { id: editTarget.id, ...common } : common;
       const res = await fetch('/api/fin/invoices', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();

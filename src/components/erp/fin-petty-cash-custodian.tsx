@@ -23,7 +23,7 @@ export default function FinPettyCashCustodian() {
   const [loading, setLoading] = useState(true);
   const [editingSiteId, setEditingSiteId] = useState<number | null>(null);
   const [editCustodian, setEditCustodian] = useState('');
-  const [editLimit, setEditLimit] = useState(0);
+  const [editLimit, setEditLimit] = useState('');
   const [saving, setSaving] = useState(false);
 
   const fetchAll = useCallback(async () => {
@@ -94,15 +94,18 @@ export default function FinPettyCashCustodian() {
   const startEdit = (site: Site) => {
     setEditingSiteId(site.id);
     setEditCustodian(site.responsiblePerson || '');
-    setEditLimit(site.pettyCashLimit || 0);
+    setEditLimit(String(site.pettyCashLimit ?? ''));
   };
 
   const saveEdit = async (siteId: number) => {
+    if (!editCustodian.trim()) { toast.error('Custodian name is required'); return; }
+    const limit = Number(editLimit);
+    if (editLimit.trim() === '' || !Number.isFinite(limit) || limit < 0) { toast.error('Enter a valid fund limit'); return; }
     setSaving(true);
     try {
       const r = await fetch('/api/fin/sites', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: siteId, responsiblePerson: editCustodian || null, pettyCashLimit: editLimit }),
+        body: JSON.stringify({ id: siteId, responsiblePerson: editCustodian || null, pettyCashLimit: limit }),
       });
       const j = await r.json();
       if (j.success) { toast.success('Custodian details updated'); setEditingSiteId(null); await fetchAll(); }
@@ -169,7 +172,7 @@ export default function FinPettyCashCustodian() {
                     </div>
                     <div>
                       <label className="text-[9px] uppercase tracking-[1px] text-[#5a6878] font-bold mb-0.5 block">Fund Limit (₹)</label>
-                      <input type="number" value={editLimit || ''} onChange={e => setEditLimit(Number(e.target.value))} className="vc-input text-[11px] py-1" />
+                      <input type="number" value={editLimit} onChange={e => setEditLimit(e.target.value)} className="vc-input text-[11px] py-1" />
                     </div>
                     <div className="flex gap-1.5 pt-1">
                       <button onClick={() => saveEdit(site.id)} disabled={saving} className="vc-btn-primary text-[10px] py-1 flex items-center gap-1 disabled:opacity-50"><Check size={11} /> Save</button>

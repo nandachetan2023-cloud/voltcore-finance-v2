@@ -108,7 +108,7 @@ export default function MaterialReceipt() {
         <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 mb-4 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {([
-              ['poRef', 'PO Reference'], ['itemName', 'Item'], ['qtyReceived', 'Qty Received'],
+              ['poRef', 'PO Reference *'], ['itemName', 'Item *'], ['qtyReceived', 'Qty Received *'],
             ] as [keyof typeof emptyForm, string][]).map(([key, label]) => (
               <div key={key}>
                 <label className="text-[10px] uppercase tracking-wider text-[#5a6878] font-semibold">{label}</label>

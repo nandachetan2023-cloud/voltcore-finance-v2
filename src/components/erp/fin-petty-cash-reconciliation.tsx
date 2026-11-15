@@ -51,6 +51,9 @@ export default function FinPettyCashReconciliation() {
 
   const save = async () => {
     if (!form.siteId) { toast.error('Site is required'); return; }
+    if (!form.reconDate) { toast.error('Reconciliation Date is required'); return; }
+    if (!form.physicalCash) { toast.error('Enter physical cash counted'); return; }
+    if (opening < 0 || received < 0 || paid < 0 || physical < 0) { toast.error('Amounts cannot be negative'); return; }
     setSaving(true);
     try {
       const res = await fetch('/api/fin/petty-cash/reconciliations', {

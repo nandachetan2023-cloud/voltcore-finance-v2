@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
     const denied = await assertPermission(pdb, body.actor || '', 'AR_CREATE', { request, module: 'AR', siteCode: site?.siteCode ?? null })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create AR invoices' }, { status: 403 })
-    const { actor: _actor, ...createData } = body
+    const { actor: _actor, lines: _lines, ...createData } = body
     const record = isBlank(createData.invoiceNo)
       ? await withCodeRetry(() => nextSeriesCode(pdb, 'ar'), (invoiceNo) => pdb.accountsReceivable.create({ data: { ...createData, invoiceNo } }))
       : await pdb.accountsReceivable.create({ data: createData })
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, actor, ...data } = body
+    const { id, actor, lines: _lines, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
     const missing = ['siteId', 'jobCode', 'poNo', 'costCenter', 'department', 'projectManager']
