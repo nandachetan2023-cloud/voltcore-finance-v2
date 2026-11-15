@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useTableControls, SearchInput, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
-import { FormField, FormSection, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
+import { FormField, FormSection, SearchableSelect, DatalistField, useFormValidation, required } from './_form-controls';
 import { useCompanyProfile } from '@/hooks/use-company-profile';
 
 interface Site { id: number; name: string; }
@@ -153,9 +153,6 @@ export default function FinWorkOrders() {
     poNo: required('PO No'),
     siteId: (v) => (!v) ? 'Site Code is required' : undefined,
     jobCode: required('Job Code'),
-    costCenter: required('Cost Center'),
-    department: required('Department'),
-    projectManager: required('Project Manager'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
@@ -496,10 +493,6 @@ export default function FinWorkOrders() {
               <FormField label="PO No" required error={formErrors.poNo} hint="This work order's own reference number">
                 <input value={form.poNo} readOnly className={inputCls + ' opacity-60'} placeholder="Auto-generated"/>
               </FormField>
-            </FormSection>
-
-            <FormSection title="Costing" icon={IndianRupee}>
-              <CostingFields prefix="wo" form={{ costCenter: form.costCenter, department: form.department, projectManager: form.projectManager }} setField={(k, v) => setField(k, v)} errors={formErrors} />
             </FormSection>
 
             <FormSection title="Status" icon={ShieldCheck}>
