@@ -12,6 +12,7 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
     const current = await pdb.finRFQ.findUnique({ where: { id: Number(id) } })
     if (!current) return NextResponse.json({ success: false, error: 'RFQ not found' }, { status: 404 })
     const data: any = { ...raw }
+    delete data.descCategory
     if (data.rfqNo) delete data.rfqNo
     if (data.issueDate) data.issueDate = new Date(data.issueDate)
     if (data.responseDeadline) data.responseDeadline = new Date(data.responseDeadline)

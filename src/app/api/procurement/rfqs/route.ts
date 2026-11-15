@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     const pdb = getDbForRequest(request)
     const { lineItems, bids, vendorIds, ...raw } = body
     const data: any = { ...raw }
+    delete data.descCategory
     // The form posts <input type="date"> values as 'YYYY-MM-DD'; Prisma's
     // DateTime validation rejects date-only strings, so coerce here.
     if (!data.issueDate) return NextResponse.json({ success: false, error: 'issueDate is required' }, { status: 400 })
@@ -56,6 +57,7 @@ export async function PUT(request: NextRequest) {
     if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 })
     const pdb = getDbForRequest(request)
     const data: any = { ...raw }
+    delete data.descCategory
     if (data.issueDate) data.issueDate = new Date(data.issueDate)
     if (data.responseDeadline) data.responseDeadline = new Date(data.responseDeadline)
     if (Array.isArray(vendorIds)) data.vendorIds = vendorIds.map(Number).filter(Number.isFinite)

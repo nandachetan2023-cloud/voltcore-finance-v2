@@ -466,7 +466,7 @@ export default function ProcurementRFQ() {
         <DialogContent aria-describedby={undefined} className="bg-[#161c24] border-[#252e3a] text-[#e2e8f0] w-[52.5vw] sm:max-w-[52.5vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editTarget ? 'Edit' : 'New'} RFQ</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
-            <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">RFQ No</label><input value={form.rfqNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated" /></div>
+            <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">RFQ No</label>{editTarget ? <select value={String(editTarget.id)} onChange={e => { const r = rfqs.find(x => x.id === Number(e.target.value)); if (r && r.id !== editTarget.id && window.confirm('Discard unsaved changes on this RFQ?')) openEdit(r); }} className="vc-input appearance-none">{rfqs.map(r => <option key={r.id} value={r.id}>{r.rfqNo} — {r.description}</option>)}</select> : <input value={form.rfqNo} readOnly className="vc-input opacity-60" placeholder="Auto-generated" />}</div>
             <div><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Issue Date</label><input type="date" value={form.issueDate} onChange={e => setForm({...form, issueDate: e.target.value})} className="vc-input" /></div>
             <div className="col-span-2"><label className="block text-[11px] font-semibold text-[#8899aa] mb-1">Description</label>
               <div className="flex gap-2">
