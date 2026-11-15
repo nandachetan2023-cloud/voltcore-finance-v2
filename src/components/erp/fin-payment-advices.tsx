@@ -174,6 +174,7 @@ export default function FinPaymentAdvices() {
   const [parties, setParties] = useState<Party[]>([]);
   const [sites, setSites] = useState<SiteRef[]>([]);
   const [poOptions, setPoOptions] = useState<PoRef[]>([]);
+  const [jobs, setJobs] = useState<{ jobCode: string; description: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -244,6 +245,11 @@ export default function FinPaymentAdvices() {
         const r = await fetch('/api/fin/sites');
         const rj = await r.json();
         if (rj.success && rj.data?.length) setSites(rj.data.map((s: any) => ({ id: s.id, name: s.name, siteCode: s.siteCode })));
+      } catch { /* non-critical */ }
+      try {
+        const r = await fetch('/api/fin/jobs');
+        const rj = await r.json();
+        if (rj.success && rj.data?.length) setJobs(rj.data.map((j: { jobCode: string; description: string | null }) => ({ jobCode: j.jobCode, description: j.description })));
       } catch { /* non-critical */ }
       try {
         const r = await fetch('/api/fin/purchase-orders');
@@ -678,19 +684,19 @@ export default function FinPaymentAdvices() {
             </div>
             {/* Supplier */}
             <div className="grid grid-cols-3 gap-3">
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Supplier Name</label><input value={form.supplierName} onChange={e => setForm(p => ({ ...p, supplierName: e.target.value }))} className="vc-input" /></div>
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Vendor Code</label><input value={form.vendorCode} onChange={e => setForm(p => ({ ...p, vendorCode: e.target.value }))} className="vc-input" /></div>
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">PAN No</label><input value={form.panNo} onChange={e => setForm(p => ({ ...p, panNo: e.target.value }))} className="vc-input font-mono" /></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Supplier Name</label><DatalistField id="pa-supplier" value={form.supplierName} onChange={v => setForm(p => ({ ...p, supplierName: v }))} options={[...new Set([...parties.map(p => p.name), ...records.map(r => r.supplierName)].filter(Boolean) as string[])]} placeholder="Type or pick…" /></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Vendor Code</label><DatalistField id="pa-vendor-code" value={form.vendorCode} onChange={v => setForm(p => ({ ...p, vendorCode: v }))} options={[...new Set([...parties.map(p => p.code), ...records.map(r => r.vendorCode)].filter(Boolean) as string[])]} placeholder="V001" /></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">PAN No</label><DatalistField id="pa-pan" value={form.panNo} onChange={v => setForm(p => ({ ...p, panNo: v }))} options={[...new Set([...parties.map(p => p.pan), ...records.map(r => r.panNo)].filter(Boolean) as string[])]} placeholder="AAAAA0000A" /></div>
             </div>
             {/* Bank */}
             <div className="grid grid-cols-3 gap-3">
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Bank Name</label><input value={form.bankName} onChange={e => setForm(p => ({ ...p, bankName: e.target.value }))} className="vc-input" /></div>
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Account No</label><input value={form.accountNo} onChange={e => setForm(p => ({ ...p, accountNo: e.target.value }))} className="vc-input font-mono" /></div>
-              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">IFSC Code</label><input value={form.ifscCode} onChange={e => setForm(p => ({ ...p, ifscCode: e.target.value }))} className="vc-input font-mono" /></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Bank Name</label><DatalistField id="pa-bank" value={form.bankName} onChange={v => setForm(p => ({ ...p, bankName: v }))} options={[...new Set(records.map(r => r.bankName).filter(Boolean) as string[])]} placeholder="Type or pick…" /></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Account No</label><DatalistField id="pa-account" value={form.accountNo} onChange={v => setForm(p => ({ ...p, accountNo: v }))} options={[...new Set(records.map(r => r.accountNo).filter(Boolean) as string[])]} placeholder="0000000000" /></div>
+              <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">IFSC Code</label><DatalistField id="pa-ifsc" value={form.ifscCode} onChange={v => setForm(p => ({ ...p, ifscCode: v }))} options={[...new Set(records.map(r => r.ifscCode).filter(Boolean) as string[])]} placeholder="HDFC0001234" /></div>
             </div>
             {/* Ref + party */}
             <div className="grid grid-cols-2 gap-3">
-              <FormField label="Party (Linked)"><SearchableSelect value={form.partyId} onChange={v => setForm(p => ({ ...p, partyId: v }))} options={parties.map(p => ({ value: String(p.id), label: p.name }))} placeholder="— None —"/></FormField>
+              <FormField label="Party (Linked)"><SearchableSelect value={form.partyId} onChange={v => { const p = parties.find(x => String(x.id) === v); setForm(prev => ({ ...prev, partyId: v, supplierName: p?.name ?? prev.supplierName, vendorCode: p?.code ?? prev.vendorCode, panNo: p?.pan ?? prev.panNo })); }} options={parties.map(p => ({ value: String(p.id), label: p.name, sublabel: p.code ?? undefined }))} placeholder="— None —"/></FormField>
               <div><label className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-bold mb-1 block">Reference No (UTR / Cheque)</label><input value={form.referenceNo} onChange={e => setForm(p => ({ ...p, referenceNo: e.target.value }))} className="vc-input" /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
@@ -698,7 +704,7 @@ export default function FinPaymentAdvices() {
                 <SearchableSelect value={form.siteId} onChange={v => setField('siteId', v)} options={sites.map(s => ({ value: String(s.id), label: s.name, sublabel: s.siteCode }))} placeholder="— Select site —" />
               </FormField>
               <FormField label="Job Code" required error={formErrors.jobCode}>
-                <DatalistField id="pa-job-code" value={form.jobCode} onChange={v => setField('jobCode', v)} options={[...new Set(records.map(r => r.jobCode).filter(Boolean) as string[])]} placeholder="JOB-2026-001" />
+                <DatalistField id="pa-job-code" value={form.jobCode} onChange={v => setField('jobCode', v)} options={[...new Set([...jobs.map(j => j.jobCode), ...records.map(r => r.jobCode)].filter(Boolean) as string[])]} placeholder="JOB-2026-001" />
               </FormField>
               <FormField label="PO Number" required error={formErrors.poId}>
                 <SearchableSelect value={form.poId} onChange={v => setField('poId', v)} options={poOptions.map(p => ({ value: String(p.id), label: p.poNo, sublabel: p.totalAmount ? fmt(p.totalAmount) : undefined }))} placeholder="— Select PO —" />
