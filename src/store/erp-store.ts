@@ -540,7 +540,7 @@ export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance-accounts',
 // Main modules kept out of the dashboard tile grid. They stay routable (and
 // keep their sub-modules) so existing links and grants still work — they just
 // no longer get a top-level tile.
-export const HIDDEN_MAIN_MODULES: string[] = ['hrms', 'sales-billing'];
+export const HIDDEN_MAIN_MODULES: string[] = ['hrms', 'sales-billing', 'finance-accounts'];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};
