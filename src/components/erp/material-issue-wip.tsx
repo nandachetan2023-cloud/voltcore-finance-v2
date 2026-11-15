@@ -169,13 +169,18 @@ function IssueForm({ onClose, onSaved, saving, setSaving }: { onClose: () => voi
   };
   const pickItem = (code: string) => {
     const it = items.find(x => x.itemCode.toLowerCase() === code.trim().toLowerCase());
-    setF(x => ({
-      ...x,
-      itemCode: it ? it.itemCode : code,
-      description: it && !x.description ? it.name : x.description,
-      unit: it ? (it.uom || x.unit) : x.unit,
-      rate: it && !x.rate ? String(it.rate || '') : x.rate,
-    }));
+    setF(x => {
+      const rate = it && !x.rate ? String(it.rate || '') : x.rate;
+      const amt = Number(x.qty) * Number(rate);
+      return {
+        ...x,
+        itemCode: it ? it.itemCode : code,
+        description: it && !x.description ? it.name : x.description,
+        unit: it ? (it.uom || x.unit) : x.unit,
+        rate,
+        amount: Number.isFinite(amt) && amt > 0 ? String(amt) : x.amount,
+      };
+    });
   };
   const save = async () => {
     if (!f.jobCode || !f.description || !(Number(f.qty) > 0)) { toast.error('Job, description and qty required'); return; }
@@ -206,9 +211,9 @@ function IssueForm({ onClose, onSaved, saving, setSaving }: { onClose: () => voi
               ))}
             </datalist>
           </div>
-          <div><label className={lbl}>Qty</label><input type="number" className={inp} value={f.qty} onChange={e => setF(x => ({ ...x, qty: e.target.value }))} /></div>
+          <div><label className={lbl}>Qty</label><input type="number" className={inp} value={f.qty} onChange={e => setF(x => { const qty = e.target.value; const amt = Number(qty) * Number(x.rate); return { ...x, qty, amount: Number.isFinite(amt) && amt > 0 ? String(amt) : x.amount }; })} /></div>
           <div><label className={lbl}>Unit</label><input className={inp} value={f.unit} onChange={e => setF(x => ({ ...x, unit: e.target.value }))} /></div>
-          <div><label className={lbl}>Rate</label><input type="number" className={inp} value={f.rate} onChange={e => setF(x => ({ ...x, rate: e.target.value }))} /></div>
+          <div><label className={lbl}>Rate</label><input type="number" className={inp} value={f.rate} onChange={e => setF(x => { const rate = e.target.value; const amt = Number(x.qty) * Number(rate); return { ...x, rate, amount: Number.isFinite(amt) && amt > 0 ? String(amt) : x.amount }; })} /></div>
           <div><label className={lbl}>Amount</label><input type="number" className={inp} value={f.amount} onChange={e => setF(x => ({ ...x, amount: e.target.value }))} /></div>
           <div><label className={lbl}>Site</label><input className={inp} value={f.siteCode} onChange={e => setF(x => ({ ...x, siteCode: e.target.value }))} /></div>
           <div><label className={lbl}>WIP Account</label><input className={inp} value={f.wipAccount} onChange={e => setF(x => ({ ...x, wipAccount: e.target.value }))} /></div>
