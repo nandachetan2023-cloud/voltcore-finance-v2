@@ -12,7 +12,7 @@ import { useERPStore } from '@/store/erp-store';
 import { useTableControls, PaginationBar, SortableTh } from './_table-controls';
 import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
-import { FormField, SearchableSelect, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
+import { FormField, SearchableSelect, DatalistField, useFormValidation, required } from './_form-controls';
 import { FilterBar, type ListFilters } from './_list-filter-bar';
 import { StatusBadge } from './_status-badge';
 
@@ -163,9 +163,6 @@ export default function AccountsReceivable() {
     siteId: required('Site Code'),
     jobCode: required('Job Code'),
     poNo: required('PO Number'),
-    costCenter: required('Cost Center'),
-    department: required('Department'),
-    projectManager: required('Project Manager'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
