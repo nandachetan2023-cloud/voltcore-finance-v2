@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
           jobCode: r.jobCode || null, poNo: r.poNo || null,
           costCenter: r.costCenter || null, department: r.department || null,
           projectManager: r.projectManager || null,
-          period: r.period || 'FY 2024-25', month: r.month || null,
+          period: r.period || 'FY 2026-27', month: r.month || null,
           status: r.status || 'On Track',
         }
         const existing = await pdb.budgetItem.findFirst({ where: { category: r.category, period: data.period } })
