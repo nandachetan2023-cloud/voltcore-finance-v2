@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { assertPermission } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,21 @@ function extractSiteName(site: any): string {
   return site?.name || String(site?.id || 'Unknown')
 }
 
+function payrollMonthKey(year: number, month: number): string {
+  const idx = Math.min(Math.max(month, 1), 12) - 1
+  return `${MONTH_KEYS[idx]}-${String(year).slice(-2)}`
+}
+
+// Income is recognised GST-exclusive: taxable value only (CGST/SGST/IGST are
+// output-tax liabilities, not revenue). Fall back gracefully for legacy rows.
+function invoiceIncome(inv: { taxableValue?: number; invoiceValue?: number; grandTotal?: number; gstValue?: number }): number {
+  const taxable = Number(inv.taxableValue) || 0
+  if (taxable > 0) return taxable
+  const invValue = Number(inv.invoiceValue) || 0
+  if (invValue > 0) return invValue
+  return (Number(inv.grandTotal) || 0) - (Number(inv.gstValue) || 0)
+}
+
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
@@ -27,6 +43,7 @@ export async function GET(request: NextRequest) {
 
     // 1. Income from FinInvoice
     const invoices = await pdb.finInvoice.findMany({
+      where: { status: { not: 'Draft' } },
       include: { site: { select: { name: true } }, party: { select: { name: true } } },
     })
     for (const inv of invoices) {
@@ -46,13 +63,13 @@ export async function GET(request: NextRequest) {
         side: 'credit',
         category: 'Sales Accounts',
         particular: `Invoice ${inv.invoiceNo || ''} - ${inv.party?.name || ''}`,
-        amount: inv.grandTotal || inv.invoiceValue || 0,
+        amount: invoiceIncome(inv),
       })
     }
 
     // 2. Income from FinCreditNote (reduces income)
     const creditNotes = await pdb.finCreditNote.findMany({
-      include: { site: { select: { name: true } } },
+      include: { site: { select: { name: true } }, invoice: { select: { party: { select: { name: true } } } } },
     })
     for (const cn of creditNotes) {
       const site = extractSiteName(cn.site)
@@ -67,16 +84,42 @@ export async function GET(request: NextRequest) {
         month,
         jobCode: cn.jobCode || null,
         poNo: cn.poNo || null,
-        customer: null, // FinCreditNote has no partyId — only linked via invoiceId
+        customer: cn.invoice?.party?.name || null,
         side: 'debit',
         category: 'Sales Accounts',
         particular: `Credit Note ${cn.creditNoteNo || ''}`,
-        amount: cn.amount || 0,
+        amount: cn.invoiceValue || cn.amount || 0,
+      })
+    }
+
+    // 2b. Direct material cost from FinMaterialIssue (posted issues to jobs)
+    const materialIssues = await pdb.finMaterialIssue.findMany({
+      where: { status: 'Posted' },
+    })
+    for (const mi of materialIssues) {
+      const site = mi.siteCode || (mi.siteId ? `Site ${mi.siteId}` : 'Unallocated')
+      if (siteFilter && siteFilter !== 'all' && site !== siteFilter) continue
+      const month = toMonthKey(new Date(mi.issueDate || mi.createdAt))
+      if (monthFilter && monthFilter !== 'all' && month !== monthFilter) continue
+      profitLossEntries.push({
+        id: `mi-${mi.id}`,
+        source: 'material_issue',
+        sourceId: mi.id,
+        site,
+        month,
+        jobCode: mi.jobCode || null,
+        poNo: null,
+        customer: null,
+        side: 'debit',
+        category: 'Purchase Accounts',
+        particular: `Material Issue ${mi.issueNo} - ${mi.itemName || mi.description || ''}`,
+        amount: mi.amount || 0,
       })
     }
 
     // 3. Expenses from FinExpenseClaim
     const claims = await pdb.finExpenseClaim.findMany({
+      where: { OR: [{ approvalStatus: { in: ['Approved', 'Paid'] } }, { status: { in: ['Approved', 'Paid'] } }] },
       include: { site: { select: { name: true } } },
     })
     for (const claim of claims) {
@@ -103,6 +146,7 @@ export async function GET(request: NextRequest) {
 
     // 4. Expenses from FinPettyCash (Debit = money going out)
     const pettyRecords = await pdb.finPettyCash.findMany({
+      where: { approvalStatus: 'Approved', expenseClaimId: null },
       include: { site: { select: { name: true } }, party: { select: { name: true } } },
     })
     for (const pr of pettyRecords) {
@@ -129,32 +173,37 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // 5. Expenses from FinPaymentAdvice (vendor payments)
-    const advices = await pdb.finPaymentAdvice.findMany({
-      include: { party: { select: { name: true } }, site: { select: { name: true } } },
+    // 4b. Payroll / Salaries. PayrollRun is company-wide (no site/job split),
+    // so it is posted to the 'HO' bucket as an indirect (overhead) cost.
+    const payrollRuns = await pdb.payrollRun.findMany({
+      where: {
+        OR: [
+          { processedAt: { not: null } },
+          { status: { in: ['processed', 'completed', 'finalized', 'paid'] } },
+        ],
+      },
     })
-    for (const ad of advices) {
-      const site = ad.site?.name || 'HO'
-      if (siteFilter && siteFilter !== 'all' && site !== siteFilter) continue
-      const month = toMonthKey(new Date(ad.paymentDate))
+    for (const pr of payrollRuns) {
+      if (siteFilter && siteFilter !== 'all' && siteFilter !== 'HO') continue
+      const month = payrollMonthKey(pr.year, pr.month)
       if (monthFilter && monthFilter !== 'all' && month !== monthFilter) continue
       profitLossEntries.push({
-        id: `pa-${ad.id}`,
-        source: 'payment_advice',
-        sourceId: ad.id,
-        site,
+        id: `payroll-${pr.id}`,
+        source: 'payroll',
+        sourceId: pr.id,
+        site: 'HO',
         month,
-        jobCode: ad.jobCode || null,
-        poNo: null, // FinPaymentAdvice only has poId, no poNo string
-        customer: ad.supplierName || ad.party?.name || null,
+        jobCode: null, poNo: null, customer: null,
         side: 'debit',
-        category: 'Purchase Accounts',
-        particular: `Payment Advice ${ad.adviceNo} - ${ad.supplierName || ad.party?.name || ''}`,
-        amount: ad.totalAmount || 0,
+        category: 'Indirect Expenses',
+        particular: `Payroll ${pr.name} (${pr.totalEmployees} employees)`,
+        amount: Number(pr.totalGross) || 0,
       })
     }
 
-    // 6. Existing manual ProfitLossEntry records
+    // Payment advices settle recorded liabilities and are not expenses themselves.
+
+    // 5. Existing manual ProfitLossEntry records
     const manualWhere: any = {}
     if (siteFilter && siteFilter !== 'all') manualWhere.site = siteFilter
     if (monthFilter && monthFilter !== 'all') manualWhere.month = monthFilter
@@ -244,6 +293,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: profitLossEntries,
       summary: {
+        source: 'Operational (Project/Operational Profitability — not statutory GL P&L)',
         sites, months,
         totalDebit, totalCredit,
         netPL: totalCredit - totalDebit,
@@ -260,6 +310,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const pdb = getDbForRequest(request)
+    const actor = request.headers.get('x-actor-email') || body?.actor || ''
+    const denied = await assertPermission(pdb, actor, 'GL_CREATE', { request, module: 'GL' })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
     const record = await (pdb as any).profitLossEntry.create({ data: body })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
@@ -274,6 +327,9 @@ export async function PUT(request: NextRequest) {
     const { id, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
+    const actor = request.headers.get('x-actor-email') || body?.actor || ''
+    const denied = await assertPermission(pdb, actor, 'GL_CREATE', { request, module: 'GL' })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
     const record = await (pdb as any).profitLossEntry.update({ where: { id: Number(id) }, data })
     return NextResponse.json({ success: true, data: record })
   } catch (error) {
@@ -287,6 +343,9 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     const pdb = getDbForRequest(request)
+    const actor = request.headers.get('x-actor-email') || ''
+    const denied = await assertPermission(pdb, actor, 'GL_CREATE', { request, module: 'GL' })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed' }, { status: 403 })
     if (id) {
       await (pdb as any).profitLossEntry.delete({ where: { id: Number(id) } })
     }

@@ -3,35 +3,67 @@ import { getDbForRequest } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
+const INCLUDE = { lineItems: true, bids: true }
+
 export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params
+    const rfqId = Number(id)
     const body = await request.json()
     const { lineItems, bids, vendorIds, ...raw } = body
     const pdb = getDbForRequest(request)
-    const current = await pdb.finRFQ.findUnique({ where: { id: Number(id) } })
+    const current = await pdb.finRFQ.findUnique({ where: { id: rfqId } })
     if (!current) return NextResponse.json({ success: false, error: 'RFQ not found' }, { status: 404 })
-    const data: any = { ...raw }
-    delete data.descCategory
-    if (data.rfqNo) delete data.rfqNo
-    if (data.issueDate) data.issueDate = new Date(data.issueDate)
-    if (data.responseDeadline) data.responseDeadline = new Date(data.responseDeadline)
+
+    // Only persist fields the RFQ form owns; never echo back id/timestamps/rfqNo.
+    const data: any = {}
+    if (raw.description !== undefined) data.description = raw.description
+    if (raw.issueDate) data.issueDate = new Date(raw.issueDate)
+    if (raw.responseDeadline) data.responseDeadline = new Date(raw.responseDeadline)
+    if (raw.project !== undefined) data.project = raw.project
+    if (raw.notes !== undefined) data.notes = raw.notes
+    if (raw.status !== undefined) data.status = raw.status
     if (Array.isArray(vendorIds)) data.vendorIds = vendorIds.map(Number).filter(Number.isFinite)
-    if (lineItems) {
-      await pdb.finRFQLineItem.deleteMany({ where: { rfqId: Number(id) } })
+
+    // Update line items in place so their ids survive; bids point at those ids.
+    const idMap = new Map<number, number>()
+    const keepIds = new Set<number>()
+    const lineItemsTouched = Array.isArray(lineItems)
+    if (lineItemsTouched) {
+      const existing = await pdb.finRFQLineItem.findMany({ where: { rfqId }, select: { id: true } })
+      const existingIds = new Set(existing.map(e => e.id))
       for (const li of lineItems) {
         if (!li.description) continue
-        await pdb.finRFQLineItem.create({ data: { rfqId: Number(id), description: li.description, qty: Number(li.qty) || 0, unit: li.unit || 'Nos' } })
+        const incomingId = Number(li.id)
+        const fields = { description: li.description, qty: Number(li.qty) || 0, unit: li.unit || 'Nos' }
+        if (Number.isFinite(incomingId) && existingIds.has(incomingId)) {
+          await pdb.finRFQLineItem.update({ where: { id: incomingId }, data: fields })
+          keepIds.add(incomingId)
+        } else {
+          const created = await pdb.finRFQLineItem.create({ data: { ...fields, rfqId } })
+          keepIds.add(created.id)
+          if (Number.isFinite(incomingId)) idMap.set(incomingId, created.id)
+        }
+      }
+      const removed = [...existingIds].filter(x => !keepIds.has(x))
+      if (removed.length) {
+        await pdb.finRFQBid.deleteMany({ where: { rfqId, lineItemId: { in: removed } } })
+        await pdb.finRFQLineItem.deleteMany({ where: { id: { in: removed } } })
       }
     }
-    if (bids) {
-      await pdb.finRFQBid.deleteMany({ where: { rfqId: Number(id) } })
+
+    if (Array.isArray(bids)) {
+      await pdb.finRFQBid.deleteMany({ where: { rfqId } })
       for (const b of bids) {
         if (b.vendorId === undefined && !b.vendorName) continue
-        await pdb.finRFQBid.create({ data: { rfqId: Number(id), vendorId: Number(b.vendorId) || b.vendorIdInt || (b.vendorName ? Math.abs(hash(b.vendorName)) : 0), lineItemId: b.lineItemId ? Number(b.lineItemId) : 0, unitPrice: Number(b.unitPrice) || 0, leadTime: Number(b.leadTime) || 0, notes: b.notes || null, compliant: b.compliant !== false } })
+        const rawLineId = Number(b.lineItemId)
+        const lineItemId = idMap.get(rawLineId) ?? (Number.isFinite(rawLineId) ? rawLineId : 0)
+        if (lineItemsTouched && lineItemId !== 0 && !keepIds.has(lineItemId)) continue
+        await pdb.finRFQBid.create({ data: { rfqId, vendorId: Number(b.vendorId) || b.vendorIdInt || (b.vendorName ? Math.abs(hash(b.vendorName)) : 0), lineItemId, unitPrice: Number(b.unitPrice) || 0, leadTime: Number(b.leadTime) || 0, notes: b.notes || null, compliant: b.compliant !== false } })
       }
     }
-    const record = await pdb.finRFQ.update({ where: { id: Number(id) }, data })
+
+    const record = await pdb.finRFQ.update({ where: { id: rfqId }, data, include: INCLUDE })
     return NextResponse.json({ success: true, data: record })
   } catch (error) {
     console.error('Error updating RFQ:', error)
@@ -42,10 +74,16 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
 export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params
+    const rfqId = Number(id)
+    if (!Number.isFinite(rfqId)) return NextResponse.json({ success: false, error: 'Invalid id' }, { status: 400 })
     const pdb = getDbForRequest(request)
-    await pdb.finRFQLineItem.deleteMany({ where: { rfqId: Number(id) } })
-    await pdb.finRFQBid.deleteMany({ where: { rfqId: Number(id) } })
-    await pdb.finRFQ.delete({ where: { id: Number(id) } })
+    const existing = await pdb.finRFQ.findUnique({ where: { id: rfqId }, select: { id: true } })
+    if (!existing) return NextResponse.json({ success: false, error: 'RFQ not found' }, { status: 404 })
+    await pdb.$transaction([
+      pdb.finRFQBid.deleteMany({ where: { rfqId } }),
+      pdb.finRFQLineItem.deleteMany({ where: { rfqId } }),
+      pdb.finRFQ.delete({ where: { id: rfqId } }),
+    ])
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting RFQ:', error)

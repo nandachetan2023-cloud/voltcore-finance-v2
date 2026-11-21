@@ -974,7 +974,7 @@ await db.finMaterialIssue.create({ data: { issueNo: 'MI-2026-003', issueDate: da
   // Prefix master per the Item Code Master Register (Item code.docx).
   const catDefs: Array<[string, string]> = [
     ['CON', 'Consumable'], ['P&M', 'Power & Machine'], ['T&T', 'Tools & Tackles'],
-    ['PPE', 'PPES'], ['GAS', 'Gas'], ['ELE', 'Electrical'],
+    ['PPE', 'PPES'], ['GAS', 'Gas'],
     ['WEL', 'Welding Equipment'], ['MIN', 'Measuring Instrument'], ['LFT', 'Lifting Equipment'],
     ['SAF', 'Safety Equipment'], ['ELC', 'Electrical'],
     ['MEC', 'Mechanical'], ['CIV', 'Civil'], ['TNL', 'Tools & Consumables'], ['CNS', 'Consultancy & Services'],
@@ -1025,7 +1025,7 @@ await db.finMaterialIssue.create({ data: { issueNo: 'MI-2026-003', issueDate: da
     }
   }
 
-  console.log(`   Item Master: ${catDefs.length} categories (CON/P&M/T&T/PPE/GAS/ELE/WEL/MIN/LFT/SAF + legacy) + ${seededItems} sample items with segmented codes`)
+  console.log(`   Item Master: ${catDefs.length} categories (ELE omitted to preserve the legacy ELC Electrical category) + ${seededItems} sample items with segmented codes`)
 }
 
 main().catch((e) => { console.error(e); process.exit(1) }).finally(async () => { await db.$disconnect() })

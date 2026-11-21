@@ -420,8 +420,11 @@ function Sidebar({ onLogout }: { onLogout?: () => void }) {
 
 // ── Topbar ──────────────────────────────────────────────────────
 function Topbar({ onLogout }: { onLogout?: () => void }) {
-  const { activeModule, setSidebarOpen, setActiveModule, goBack, userRole, allowedModules } = useERPStore();
+  const { activeModule, activeParentModule, setSidebarOpen, setActiveModule, goBack, userRole, allowedModules } = useERPStore();
   const config = MODULE_CONFIG[activeModule];
+  const breadcrumb = activeModule === 'employees' && activeParentModule === 'master-setup'
+    ? 'Master Setup › Employee Master'
+    : config?.breadcrumb || '';
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   // Finance alerts live in their own inbox (Notifications Ultra); the bell
@@ -542,7 +545,7 @@ function Topbar({ onLogout }: { onLogout?: () => void }) {
       )}
       <div>
         <h1 className="text-[16px] font-semibold text-[#e2e8f0] tracking-tight">{config?.title || 'VoltCore ERP'}</h1>
-        <p className="text-[11px] text-[#5a6878] mt-0.5">{config?.breadcrumb || ''}</p>
+        <p className="text-[11px] text-[#5a6878] mt-0.5">{breadcrumb}</p>
       </div>
       <div className="ml-auto flex items-center gap-2">
         <RoleScopeIndicator />

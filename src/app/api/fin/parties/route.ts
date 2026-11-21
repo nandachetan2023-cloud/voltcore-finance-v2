@@ -18,14 +18,41 @@ function isValidPartyName(name: string): boolean {
   return name.trim().length >= 2 && !/^\d+\.?\d*$/.test(name.trim())
 }
 
+function getFinancialTerms(body: Record<string, unknown>) {
+  const hasCreditDays = Object.prototype.hasOwnProperty.call(body, 'creditDays')
+  const hasContractValue = Object.prototype.hasOwnProperty.call(body, 'contractValue')
+  const creditDays = body.creditDays === undefined || body.creditDays === null || body.creditDays === ''
+    ? null
+    : Number(body.creditDays)
+  const contractValue = body.contractValue === undefined || body.contractValue === null || body.contractValue === ''
+    ? null
+    : Number(body.contractValue)
+
+  if (creditDays !== null && (!Number.isInteger(creditDays) || creditDays < 0)) {
+    return { error: 'Credit period must be a non-negative whole number of days' }
+  }
+  if (contractValue !== null && (!Number.isFinite(contractValue) || contractValue < 0)) {
+    return { error: 'Contract value must be a non-negative number' }
+  }
+
+  return {
+    data: {
+      ...(hasCreditDays ? { creditDays } : {}),
+      ...(hasContractValue ? { contractValue } : {}),
+    },
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     if (!body.name || !isValidPartyName(body.name)) {
       return NextResponse.json({ success: false, error: 'Party name must be at least 2 characters and cannot be purely numeric' }, { status: 400 })
     }
+    const terms = getFinancialTerms(body)
+    if ('error' in terms) return NextResponse.json({ success: false, error: terms.error }, { status: 400 })
     const pdb = getDbForRequest(request)
-    const record = await pdb.finParty.create({ data: body })
+    const record = await pdb.finParty.create({ data: { ...body, ...terms.data } })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating:', error)
@@ -41,8 +68,10 @@ export async function PUT(request: NextRequest) {
     if (data.name && !isValidPartyName(data.name)) {
       return NextResponse.json({ success: false, error: 'Party name must be at least 2 characters and cannot be purely numeric' }, { status: 400 })
     }
+    const terms = getFinancialTerms(data)
+    if ('error' in terms) return NextResponse.json({ success: false, error: terms.error }, { status: 400 })
     const pdb = getDbForRequest(request)
-    const record = await pdb.finParty.update({ where: { id }, data })
+    const record = await pdb.finParty.update({ where: { id }, data: { ...data, ...terms.data } })
     return NextResponse.json({ success: true, data: record })
   } catch (error) {
     console.error('Error updating:', error)

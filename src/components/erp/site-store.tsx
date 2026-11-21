@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Warehouse, Plus, X, Loader2, RefreshCw, Truck, ClipboardList, PackageCheck, PackageX,
   Wrench, IdCard, Forklift, Recycle, ClipboardCheck, FileBarChart, Check, Ban, Trash2,
-  Package, Fuel, Flame,
+  Package, Fuel, Flame, ListChecks,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUserEmail } from '@/lib/current-user';
@@ -82,6 +82,7 @@ const TABS = [
   { id: 'diesel', label: 'Diesel Register', icon: Fuel },
   { id: 'gas', label: 'Gas Cylinder Register', icon: Flame },
   { id: 'daily', label: 'Daily Issue Register', icon: ClipboardList },
+  { id: 'routine', label: 'Routine Checklist', icon: ListChecks },
   { id: 'report', label: 'Monthly Report', icon: FileBarChart },
 ] as const;
 type TabId = typeof TABS[number]['id'];
@@ -126,6 +127,7 @@ export default function SiteStore() {
       {tab === 'diesel' && <DieselTab lookups={lookups} />}
       {tab === 'gas' && <GasCylinderTab lookups={lookups} />}
       {tab === 'daily' && <DailyIssueTab lookups={lookups} />}
+      {tab === 'routine' && <RoutineChecklistTab lookups={lookups} />}
       {tab === 'report' && <ReportTab lookups={lookups} />}
     </div>
   );
@@ -140,7 +142,7 @@ function GrnTab({ lookups }: { lookups: Lookups }) {
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({ siteId: '', jobId: '', poId: '', vendorName: '', dcNo: '', invoiceNo: '', status: 'Posted', remarks: '', timeOfReceipt: '', projectName: '', siteLocation: '', gateEntryNo: '', vehicleNo: '', lrDetails: '', storeLocation: 'Main Store', receivedBy: '' });
-  const [lines, setLines] = useState([{ itemId: '', qtyReceived: '', rate: '', materialCategory: 'CONSUMABLE ITEM', batchHeatNo: '', damageTransit: 'No', inspectionStatus: 'Accepted' }]);
+  const [lines, setLines] = useState([{ itemId: '', qtyReceived: '', rate: '', materialCategory: 'CONSUMABLE ITEM', storageLocation: '', batchHeatNo: '', damageTransit: 'No', inspectionStatus: 'Accepted' }]);
   const [step, setStep] = useState(0);
 
   const fetchData = useCallback(async () => {
@@ -150,8 +152,8 @@ function GrnTab({ lookups }: { lookups: Lookups }) {
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openNew = () => { setF({ siteId: '', jobId: '', poId: '', vendorName: '', dcNo: '', invoiceNo: '', status: 'Posted', remarks: '', timeOfReceipt: '', projectName: '', siteLocation: '', gateEntryNo: '', vehicleNo: '', lrDetails: '', storeLocation: 'Main Store', receivedBy: '' }); setLines([{ itemId: '', qtyReceived: '', rate: '', materialCategory: 'CONSUMABLE ITEM', batchHeatNo: '', damageTransit: 'No', inspectionStatus: 'Accepted' }]); setStep(0); setFormOpen(true); };
-  const addLine = () => setLines([...lines, { itemId: '', qtyReceived: '', rate: '', materialCategory: 'CONSUMABLE ITEM', batchHeatNo: '', damageTransit: 'No', inspectionStatus: 'Accepted' }]);
+  const openNew = () => { setF({ siteId: '', jobId: '', poId: '', vendorName: '', dcNo: '', invoiceNo: '', status: 'Posted', remarks: '', timeOfReceipt: '', projectName: '', siteLocation: '', gateEntryNo: '', vehicleNo: '', lrDetails: '', storeLocation: 'Main Store', receivedBy: '' }); setLines([{ itemId: '', qtyReceived: '', rate: '', materialCategory: 'CONSUMABLE ITEM', storageLocation: '', batchHeatNo: '', damageTransit: 'No', inspectionStatus: 'Accepted' }]); setStep(0); setFormOpen(true); };
+  const addLine = () => setLines([...lines, { itemId: '', qtyReceived: '', rate: '', materialCategory: 'CONSUMABLE ITEM', storageLocation: '', batchHeatNo: '', damageTransit: 'No', inspectionStatus: 'Accepted' }]);
   const removeLine = (i: number) => { if (lines.length > 1) setLines(lines.filter((_, idx) => idx !== i)); };
   const goNext = () => { if (!f.siteId) { toast.error('Site is required'); return; } setStep(1); };
 
@@ -161,7 +163,7 @@ function GrnTab({ lookups }: { lookups: Lookups }) {
     if (!validLines.length) { toast.error('Add at least one item line'); return; }
     setSaving(true);
     try {
-      const body = { ...f, siteId: Number(f.siteId), jobId: f.jobId || null, poId: f.poId || null, grnDate: new Date().toISOString(), actor: getCurrentUserEmail(), lines: validLines.map((l: any) => ({ itemId: Number(l.itemId), qtyOrdered: Number(l.qtyOrdered) || 0, qtyReceived: Number(l.qtyReceived), qtyAccepted: l.qtyAccepted !== undefined && l.qtyAccepted !== '' ? Number(l.qtyAccepted) : Number(l.qtyReceived), rate: Number(l.rate) || 0, materialCategory: l.materialCategory, batchHeatNo: l.batchHeatNo, damageTransit: l.damageTransit, inspectionStatus: l.inspectionStatus })) };
+      const body = { ...f, siteId: Number(f.siteId), jobId: f.jobId || null, poId: f.poId || null, grnDate: new Date().toISOString(), actor: getCurrentUserEmail(), lines: validLines.map((l: any) => ({ itemId: Number(l.itemId), qtyOrdered: Number(l.qtyOrdered) || 0, qtyReceived: Number(l.qtyReceived), qtyAccepted: l.qtyAccepted !== undefined && l.qtyAccepted !== '' ? Number(l.qtyAccepted) : Number(l.qtyReceived), rate: Number(l.rate) || 0, materialCategory: l.materialCategory, storageLocation: l.storageLocation, batchHeatNo: l.batchHeatNo, damageTransit: l.damageTransit, inspectionStatus: l.inspectionStatus })) };
       const j = await fetch('/api/store/grn', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
       if (j.success) { toast.success(`GRN ${j.data.grnNo} posted`); setFormOpen(false); await fetchData(); } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); } finally { setSaving(false); }
@@ -239,7 +241,7 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({ siteId: '', jobId: '', requestedBy: '', department: '', purpose: '', requiredByDate: '', reasonForRequirement: 'New Work' });
   const [lines, setLines] = useState([{ itemId: '', qtyRequested: '' }]);
-  const [issueForm, setIssueForm] = useState({ issuedTo: '', issuedBy: '' });
+  const [issueForm, setIssueForm] = useState({ issuedTo: '', contractorName: '', issuedBy: '', receiverSignature: '' });
   const [step, setStep] = useState(0);
 
   const fetchData = useCallback(async () => {
@@ -260,9 +262,13 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
     if (!validLines.length) { toast.error('Add at least one item line'); return; }
     setSaving(true);
     try {
-      const body = { ...f, siteId: Number(f.siteId), jobId: f.jobId || null, mrsDate: new Date().toISOString(), status: 'Pending', actor: getCurrentUserEmail(), lines: validLines.map(l => ({ itemId: Number(l.itemId), qtyRequested: Number(l.qtyRequested) })) };
+      const body = { ...f, siteId: Number(f.siteId), jobId: f.jobId || null, mrsDate: new Date().toISOString(), actor: getCurrentUserEmail(), lines: validLines.map(l => ({ itemId: Number(l.itemId), qtyRequested: Number(l.qtyRequested) })) };
       const j = await fetch('/api/store/mrs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
-      if (j.success) { toast.success(`MRS ${j.data.mrsNo} submitted`); setFormOpen(false); await fetchData(); } else toast.error(j.error || 'Failed');
+      if (j.success) {
+        const submitted = await fetch('/api/store/mrs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: j.data.id, action: 'submit', actor: getCurrentUserEmail() }) }).then(r => r.json());
+        if (submitted.success) { toast.success(`MRS ${j.data.mrsNo} submitted`); setFormOpen(false); await fetchData(); }
+        else { toast.error(`MRS ${j.data.mrsNo} was saved as Draft but could not be submitted: ${submitted.error || 'Request failed'}`); await fetchData(); }
+      } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); } finally { setSaving(false); }
   };
 
@@ -280,11 +286,11 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
     try {
       const body = {
         siteId: issueTarget.siteId, jobId: issueTarget.jobId, mrsId: issueTarget.id, issueDate: new Date().toISOString(),
-        issuedTo: issueForm.issuedTo, issuedBy: issueForm.issuedBy, actor: getCurrentUserEmail(),
+        issuedTo: issueForm.issuedTo, contractorName: issueForm.contractorName, issuedBy: issueForm.issuedBy, receiverSignature: issueForm.receiverSignature, actor: getCurrentUserEmail(),
         lines: issueTarget.lines.map((l: any) => ({ itemId: l.itemId, qty: l.qtyRequested })),
       };
       const j = await fetch('/api/store/issue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
-      if (j.success) { toast.success(`Issued as ${j.data.issueNo}`); setIssueTarget(null); setIssueForm({ issuedTo: '', issuedBy: '' }); await fetchData(); } else toast.error(j.error || 'Failed');
+      if (j.success) { toast.success(`Issued as ${j.data.issueNo}`); setIssueTarget(null); setIssueForm({ issuedTo: '', contractorName: '', issuedBy: '', receiverSignature: '' }); await fetchData(); } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); } finally { setSaving(false); }
   };
 
@@ -312,7 +318,7 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
                 <td className="py-2 px-3">
                   <div className="flex gap-1.5 items-center">
                     {r.status === 'Pending' && <><button onClick={() => runAction(r.id, 'approve')} className="p-1 rounded text-[#5a6878] hover:text-[#00e676] hover:bg-[#00e676]/10" title="Approve"><Check size={13} /></button><button onClick={() => runAction(r.id, 'reject')} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10" title="Reject"><Ban size={13} /></button></>}
-                    {r.status === 'Approved' && <button onClick={() => setIssueTarget(r)} className="px-2 py-1 rounded bg-[#f5a623]/15 text-[#f5a623] text-[10px] font-semibold hover:bg-[#f5a623]/25">Issue</button>}
+                    {r.status === 'Approved' && <button onClick={() => { setIssueForm({ issuedTo: '', contractorName: '', issuedBy: '', receiverSignature: '' }); setIssueTarget(r); }} className="px-2 py-1 rounded bg-[#f5a623]/15 text-[#f5a623] text-[10px] font-semibold hover:bg-[#f5a623]/25">Issue</button>}
                     {r.status !== 'Issued' && <DeleteButton onClick={() => remove(r.id)} />}
                   </div>
                 </td>
@@ -344,10 +350,12 @@ function MrsTab({ lookups }: { lookups: Lookups }) {
       )}
 
       {issueTarget && (
-        <Modal title={`Issue Material — ${issueTarget.mrsNo}`} onClose={() => setIssueTarget(null)}>
+        <Modal title={`Issue Material — ${issueTarget.mrsNo}`} onClose={() => { setIssueTarget(null); setIssueForm({ issuedTo: '', contractorName: '', issuedBy: '', receiverSignature: '' }); }}>
           <div className="grid grid-cols-2 gap-3">
             <div><label className={lbl}>Issued To (Receiver)</label><input className={inp} value={issueForm.issuedTo} onChange={e => setIssueForm({ ...issueForm, issuedTo: e.target.value })} /></div>
+            <div><label className={lbl}>Contractor / Subcontractor</label><select className={inp} value={issueForm.contractorName} onChange={e => setIssueForm({ ...issueForm, contractorName: e.target.value })}><option value="">— Not applicable —</option>{lookups.vendors.map(vendor => <option key={vendor.id} value={vendor.name}>{vendor.name}</option>)}</select></div>
             <div><label className={lbl}>Issued By</label><input className={inp} value={issueForm.issuedBy} onChange={e => setIssueForm({ ...issueForm, issuedBy: e.target.value })} /></div>
+            <div className="col-span-2"><label className={lbl}>Receiver Signature</label><SignaturePad onChange={receiverSignature => setIssueForm({ ...issueForm, receiverSignature })} /></div>
           </div>
           <div className="mt-3 text-[10px] text-[#5a6878]">Issuing all {issueTarget.lines?.length ?? 0} approved line item(s) in full.</div>
           <ModalFooter onCancel={() => setIssueTarget(null)} onSave={doIssue} saving={saving} label="Confirm Issue" />
@@ -363,7 +371,7 @@ function ReturnsTab({ lookups }: { lookups: Lookups }) {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState({ siteId: '', jobId: '', returnedBy: '', receivedBy: '', remarks: '' });
+  const [f, setF] = useState({ siteId: '', jobId: '', returnType: 'Site', vendorName: '', supplierDocNo: '', authorizedBy: '', returnedBy: '', receivedBy: '', remarks: '' });
   const [lines, setLines] = useState([{ itemId: '', qty: '', condition: 'Good' }]);
 
   const fetchData = useCallback(async () => {
@@ -373,19 +381,20 @@ function ReturnsTab({ lookups }: { lookups: Lookups }) {
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openNew = () => { setF({ siteId: '', jobId: '', returnedBy: '', receivedBy: '', remarks: '' }); setLines([{ itemId: '', qty: '', condition: 'Good' }]); setFormOpen(true); };
+  const openNew = () => { setF({ siteId: '', jobId: '', returnType: 'Site', vendorName: '', supplierDocNo: '', authorizedBy: '', returnedBy: '', receivedBy: '', remarks: '' }); setLines([{ itemId: '', qty: '', condition: 'Good' }]); setFormOpen(true); };
   const addLine = () => setLines([...lines, { itemId: '', qty: '', condition: 'Good' }]);
   const removeLine = (i: number) => { if (lines.length > 1) setLines(lines.filter((_, idx) => idx !== i)); };
 
   const save = async () => {
     if (!f.siteId) { toast.error('Site is required'); return; }
+    if (f.returnType === 'Supplier' && !f.vendorName) { toast.error('Supplier is required'); return; }
     const validLines = lines.filter(l => l.itemId && l.qty);
     if (!validLines.length) { toast.error('Add at least one item line'); return; }
     setSaving(true);
     try {
       const body = { ...f, siteId: Number(f.siteId), jobId: f.jobId || null, returnDate: new Date().toISOString(), actor: getCurrentUserEmail(), lines: validLines.map(l => ({ itemId: Number(l.itemId), qty: Number(l.qty), condition: l.condition })) };
       const j = await fetch('/api/store/returns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
-      if (j.success) { toast.success(`Return ${j.data.returnNo} recorded`); setFormOpen(false); await fetchData(); } else toast.error(j.error || 'Failed');
+      if (j.success) { toast.success(`${f.returnType === 'Supplier' ? 'Supplier return' : 'Return'} ${j.data.returnNo} recorded`); setFormOpen(false); await fetchData(); } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); } finally { setSaving(false); }
   };
   const remove = async (id: number) => { if (await deleteRecord('/api/store/returns', id, 'return note')) await fetchData(); };
@@ -397,37 +406,46 @@ function ReturnsTab({ lookups }: { lookups: Lookups }) {
       <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
-          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Return No', 'Date', 'Site', 'Returned By', 'Received By', 'Items', 'Condition', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Return No', 'Date', 'Site', 'Type', 'Party', 'Returned / Authorized By', 'Received By', 'Items', 'Condition', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
             {records.map(r => (
               <tr key={r.id} className="hover:bg-[#141920]">
                 <td className="py-2 px-3 text-[#f5a623] font-mono">{r.returnNo}</td>
                 <td className="py-2 px-3 text-[#8899aa] font-mono">{r.returnDate?.split('T')[0]}</td>
                 <td className="py-2 px-3 text-[#e2e8f0]">{r.site?.siteCode}</td>
-                <td className="py-2 px-3 text-[#8899aa]">{r.returnedBy || '—'}</td>
+                <td className="py-2 px-3"><Badge text={r.returnType === 'Supplier' ? 'To Supplier' : 'From Site'} tone={r.returnType === 'Supplier' ? 'warn' : 'ok'} /></td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.vendorName || '—'}</td>
+                <td className="py-2 px-3 text-[#8899aa]">{r.returnType === 'Supplier' ? r.authorizedBy || '—' : r.returnedBy || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.receivedBy || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.lines?.length ?? 0}</td>
                 <td className="py-2 px-3 text-[#5a6878]">{r.lines?.map((l: any) => l.condition).includes('Damaged') ? <Badge text="Has damaged items" tone="warn" /> : <Badge text="Good" tone="ok" />}</td>
                 <td className="py-2 px-3"><DeleteButton onClick={() => remove(r.id)} /></td>
               </tr>
             ))}
-            {records.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-[#5a6878]">No returns yet</td></tr>}
+            {records.length === 0 && <tr><td colSpan={10} className="py-8 text-center text-[#5a6878]">No returns yet</td></tr>}
           </tbody>
         </table>
         </div>
       </div>
 
       {formOpen && (
-        <Modal title="New Material Return" onClose={() => setFormOpen(false)}>
+        <Modal title={f.returnType === 'Supplier' ? 'Return Material to Supplier' : 'Record Material Returned from Site'} onClose={() => setFormOpen(false)}>
           <div className="grid grid-cols-2 gap-3">
+            <div><label className={lbl}>Return Type *</label><select className={inp} value={f.returnType} onChange={e => setF({ ...f, returnType: e.target.value })}><option value="Site">Unused material from site</option><option value="Supplier">Return to supplier</option></select></div>
             <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
-            <div><label className={lbl}>Job</label><select className={inp} value={f.jobId} onChange={e => setF({ ...f, jobId: e.target.value })}><option value="">— None —</option>{lookups.jobs.filter(j => !f.siteId || j.siteId === Number(f.siteId)).map(j => <option key={j.id} value={j.id}>{j.jobCode}{j.description ? ' — ' + j.description : ''}</option>)}</select></div>
-            <div><label className={lbl}>Returned By</label><input className={inp} value={f.returnedBy} onChange={e => setF({ ...f, returnedBy: e.target.value })} placeholder="Who returned the material" /></div>
-            <div><label className={lbl}>Received By</label><input className={inp} value={f.receivedBy} onChange={e => setF({ ...f, receivedBy: e.target.value })} placeholder="Store keeper who received it" /></div>
+            {f.returnType === 'Site' ? <>
+              <div><label className={lbl}>Job</label><select className={inp} value={f.jobId} onChange={e => setF({ ...f, jobId: e.target.value })}><option value="">— None —</option>{lookups.jobs.filter(j => !f.siteId || j.siteId === Number(f.siteId)).map(j => <option key={j.id} value={j.id}>{j.jobCode}{j.description ? ' — ' + j.description : ''}</option>)}</select></div>
+              <div><label className={lbl}>Returned By</label><input className={inp} value={f.returnedBy} onChange={e => setF({ ...f, returnedBy: e.target.value })} placeholder="Who returned the material" /></div>
+              <div><label className={lbl}>Received By</label><input className={inp} value={f.receivedBy} onChange={e => setF({ ...f, receivedBy: e.target.value })} placeholder="Store keeper who received it" /></div>
+            </> : <>
+              <div><label className={lbl}>Supplier *</label><select className={inp} value={f.vendorName} onChange={e => setF({ ...f, vendorName: e.target.value })}><option value="">— Select supplier —</option>{lookups.vendors.map(vendor => <option key={vendor.id} value={vendor.name}>{vendor.name}</option>)}</select></div>
+              <div><label className={lbl}>Supplier Return / Challan No.</label><input className={inp} value={f.supplierDocNo} onChange={e => setF({ ...f, supplierDocNo: e.target.value })} /></div>
+              <div><label className={lbl}>Authorized By</label><input className={inp} value={f.authorizedBy} onChange={e => setF({ ...f, authorizedBy: e.target.value })} /></div>
+            </>}
             <div><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
           </div>
           <LinesEditor lines={lines} setLines={setLines} items={lookups.items} addLine={addLine} removeLine={removeLine} qtyKey="qty" withCondition />
-          <ModalFooter onCancel={() => setFormOpen(false)} onSave={save} saving={saving} label="Record Return" />
+          <ModalFooter onCancel={() => setFormOpen(false)} onSave={save} saving={saving} label={f.returnType === 'Supplier' ? 'Record Supplier Return' : 'Record Return'} />
         </Modal>
       )}
     </div>
@@ -442,7 +460,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
   const [issueTarget, setIssueTarget] = useState<any | null>(null);
   const [returnTarget, setReturnTarget] = useState<{ tool: any; log: any } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState({ name: '', category: '', siteId: '', remarks: '' });
+  const [f, setF] = useState({ name: '', category: '', siteId: '', calibrationDueDate: '', remarks: '' });
   const [issuedTo, setIssuedTo] = useState('');
   const [returnCondition, setReturnCondition] = useState('Good');
 
@@ -459,7 +477,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
     .flatMap(r => (r.logs ?? []).map((l: any) => ({ tool: r, log: l })))
     .sort((a, b) => new Date(b.log.issueDate).getTime() - new Date(a.log.issueDate).getTime());
 
-  const openNew = () => { setF({ name: '', category: '', siteId: '', remarks: '' }); setFormOpen(true); };
+  const openNew = () => { setF({ name: '', category: '', siteId: '', calibrationDueDate: '', remarks: '' }); setFormOpen(true); };
   const save = async () => {
     if (!f.name || !f.siteId) { toast.error('Name and site are required'); return; }
     setSaving(true);
@@ -524,7 +542,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
         <div className="px-4 py-2 border-b border-[#252e3a] text-[11px] font-bold text-[#e2e8f0]">Tool Master ({records.length})</div>
         <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
-          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Tool Code', 'Name', 'Category', 'Site', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Tool Code', 'Name', 'Category', 'Site', 'Calibration Due', 'Status', ''].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
             {records.map(r => (
               <tr key={r.id} className="hover:bg-[#141920]">
@@ -532,6 +550,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
                 <td className="py-2 px-3 text-[#e2e8f0]">{r.name}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.category || '—'}</td>
                 <td className="py-2 px-3 text-[#8899aa]">{r.site?.siteCode}</td>
+                <td className="py-2 px-3 text-[#8899aa] font-mono">{r.calibrationDueDate ? String(r.calibrationDueDate).slice(0, 10) : '—'}</td>
                 <td className="py-2 px-3"><Badge text={r.status} tone={r.status === 'Available' ? 'ok' : r.status === 'Issued' ? 'warn' : 'bad'} /></td>
                 <td className="py-2 px-3">
                   <div className="flex gap-1.5 items-center">
@@ -541,7 +560,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
                 </td>
               </tr>
             ))}
-            {records.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-[#5a6878]">No tools registered yet</td></tr>}
+            {records.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-[#5a6878]">No tools registered yet</td></tr>}
           </tbody>
         </table>
         </div>
@@ -553,6 +572,7 @@ function ToolsTab({ lookups }: { lookups: Lookups }) {
             <div className="col-span-2"><label className={lbl}>Name *</label><input className={inp} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="e.g. Grinding Machine" /></div>
             <div><label className={lbl}>Category</label><select className={inp} value={f.category} onChange={e => setF({ ...f, category: e.target.value })}><option value="">— Select category —</option>{TOOL_CATEGORIES.map(category => <option key={category} value={category}>{category}</option>)}</select></div>
             <div><label className={lbl}>Site *</label><select className={inp} value={f.siteId} onChange={e => setF({ ...f, siteId: e.target.value })}><option value="">— Select —</option>{lookups.sites.map(s => <option key={s.id} value={s.id}>{s.siteCode} — {s.name}</option>)}</select></div>
+            <div><label className={lbl}>Calibration Due</label><input type="date" className={inp} value={f.calibrationDueDate} onChange={e => setF({ ...f, calibrationDueDate: e.target.value })} /></div>
             <div className="col-span-2"><label className={lbl}>Remarks</label><input className={inp} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} /></div>
           </div>
           <ModalFooter onCancel={() => setFormOpen(false)} onSave={save} saving={saving} label="Register Tool" />
@@ -869,7 +889,7 @@ function PvTab({ lookups }: { lookups: Lookups }) {
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({ siteId: '', type: 'Monthly', verifiedBy: '' });
-  const [lines, setLines] = useState([{ itemId: '', bookQty: '', physicalQty: '' }]);
+  const [lines, setLines] = useState([{ itemId: '', bookQty: '', physicalQty: '', remarks: '' }]);
   const [step, setStep] = useState(0);
 
   const fetchData = useCallback(async () => {
@@ -879,9 +899,9 @@ function PvTab({ lookups }: { lookups: Lookups }) {
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openNew = () => { setF({ siteId: '', type: 'Monthly', verifiedBy: '' }); setLines([{ itemId: '', bookQty: '', physicalQty: '' }]); setStep(0); setFormOpen(true); };
+  const openNew = () => { setF({ siteId: '', type: 'Monthly', verifiedBy: '' }); setLines([{ itemId: '', bookQty: '', physicalQty: '', remarks: '' }]); setStep(0); setFormOpen(true); };
   const goNext = () => { if (!f.siteId) { toast.error('Site is required'); return; } setStep(1); };
-  const addLine = () => setLines([...lines, { itemId: '', bookQty: '', physicalQty: '' }]);
+  const addLine = () => setLines([...lines, { itemId: '', bookQty: '', physicalQty: '', remarks: '' }]);
   const removeLine = (i: number) => { if (lines.length > 1) setLines(lines.filter((_, idx) => idx !== i)); };
 
   const save = async () => {
@@ -890,7 +910,7 @@ function PvTab({ lookups }: { lookups: Lookups }) {
     if (!validLines.length) { toast.error('Add at least one item line with a physical qty'); return; }
     setSaving(true);
     try {
-      const body = { ...f, siteId: Number(f.siteId), verificationDate: new Date().toISOString(), status: 'Completed', actor: getCurrentUserEmail(), lines: validLines.map(l => ({ itemId: Number(l.itemId), bookQty: Number(l.bookQty) || 0, physicalQty: Number(l.physicalQty) || 0 })) };
+      const body = { ...f, siteId: Number(f.siteId), verificationDate: new Date().toISOString(), status: 'Completed', actor: getCurrentUserEmail(), lines: validLines.map(l => ({ itemId: Number(l.itemId), bookQty: Number(l.bookQty) || 0, physicalQty: Number(l.physicalQty) || 0, remarks: l.remarks })) };
       const j = await fetch('/api/store/physical-verification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
       if (j.success) { toast.success(`Verification ${j.data.verificationNo} recorded`); setFormOpen(false); await fetchData(); } else toast.error(j.error || 'Failed');
     } catch { toast.error('Network error'); } finally { setSaving(false); }
@@ -941,10 +961,11 @@ function PvTab({ lookups }: { lookups: Lookups }) {
             <div>
               <label className={lbl}>Item Count Sheet</label>
               {lines.map((l, i) => (
-                <div key={i} className="grid grid-cols-[1fr_100px_100px_28px] gap-2 mb-2 items-end">
+                <div key={i} className="grid grid-cols-[1fr_85px_85px_1fr_28px] gap-2 mb-2 items-end">
                   <select className={inp} value={l.itemId} onChange={e => { const u = [...lines]; u[i] = { ...u[i], itemId: e.target.value }; setLines(u); }}><option value="">— Item —</option>{lookups.items.map(it => <option key={it.id} value={it.id}>{it.sku} — {it.name}</option>)}</select>
                   <input type="number" className={inp} placeholder="Book Qty" value={l.bookQty} onChange={e => { const u = [...lines]; u[i] = { ...u[i], bookQty: e.target.value }; setLines(u); }} />
                   <input type="number" className={inp} placeholder="Physical Qty" value={l.physicalQty} onChange={e => { const u = [...lines]; u[i] = { ...u[i], physicalQty: e.target.value }; setLines(u); }} />
+                  <input className={inp} placeholder="Reason / corrective action" value={l.remarks} onChange={e => { const u = [...lines]; u[i] = { ...u[i], remarks: e.target.value }; setLines(u); }} />
                   <button onClick={() => removeLine(i)} className="text-[#ff3d3d] hover:opacity-80"><X size={14} /></button>
                 </div>
               ))}
@@ -1002,7 +1023,7 @@ function StockRegisterTab({ lookups }: { lookups: Lookups }) {
           <div className="px-4 py-2 border-b border-[#252e3a] text-[11px] font-bold text-[#e2e8f0]">Index (all items)</div>
           <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
             <table className="w-full text-[11px]">
-              <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12] sticky top-0">{['Item Code', 'Item Details', 'Unit', 'Received', 'Issued', 'Closing Stock', 'Min Stock', 'Status'].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+              <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12] sticky top-0">{['Item Code', 'Item Details', 'Unit', 'Received', 'Issued', 'Returned to Supplier', 'Closing Stock', 'Min Stock', 'Status'].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
               <tbody className="divide-y divide-[#1a2028]">
                 {index.map(i => (
                   <tr key={i.itemCode} className="hover:bg-[#141920] cursor-pointer" onClick={() => setSelected(i.itemCode)}>
@@ -1011,23 +1032,25 @@ function StockRegisterTab({ lookups }: { lookups: Lookups }) {
                     <td className="py-2 px-3 text-[#8899aa]">{i.unit}</td>
                     <td className="py-2 px-3 text-[#00e676] font-mono">{i.totalIn}</td>
                     <td className="py-2 px-3 text-[#ff3d3d] font-mono">{i.totalOut}</td>
+                    <td className="py-2 px-3 text-[#ffab40] font-mono">{i.returnedToSupplier}</td>
                     <td className="py-2 px-3 text-[#e2e8f0] font-mono font-bold">{i.balance}</td>
                     <td className="py-2 px-3 text-[#8899aa] font-mono">{i.reorderLevel}</td>
                     <td className="py-2 px-3">{i.belowMin ? <Badge text="Below Min" tone="bad" /> : <Badge text="OK" tone="ok" />}</td>
                   </tr>
                 ))}
-                {index.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-[#5a6878]">No stock movements yet — post a GRN or issue to build the register</td></tr>}
+                {index.length === 0 && <tr><td colSpan={9} className="py-8 text-center text-[#5a6878]">No stock movements yet — post a GRN or issue to build the register</td></tr>}
               </tbody>
             </table>
           </div>
         </div>
       ) : loadingDetail ? <Spinner /> : !data ? <div className="text-[12px] text-[#5a6878] text-center py-8">No data</div> : (
         <div className="space-y-3">
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <StatCard label="Current Balance" value={`${data.totals.balance} ${data.item.unit}`} sub={data.belowMin ? 'Below minimum stock' : 'Above minimum stock'} />
             <StatCard label="Min Stock" value={`${data.reorderLevel} ${data.item.unit}`} sub={`Reorder level`} />
             <StatCard label="Total Received" value={String(data.totals.received)} sub="GRN receipts" />
             <StatCard label="Total Returned" value={String(data.totals.returned ?? 0)} sub="Returns from issue" />
+            <StatCard label="Returned to Supplier" value={String(data.totals.returnedToSupplier ?? 0)} sub="Supplier returns" />
             <StatCard label="Total Issued" value={String(data.totals.issued)} sub="Issues" />
           </div>
           <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
@@ -1037,7 +1060,7 @@ function StockRegisterTab({ lookups }: { lookups: Lookups }) {
             </div>
             <div className="overflow-x-auto max-h-[460px] overflow-y-auto">
               <table className="w-full text-[11px]">
-                <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12] sticky top-0">{['Date', 'Reference', 'PO Number', 'Job Code', 'Site', 'Opening', 'Received', 'Issued', 'Closing', 'Remarks'].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
+                <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12] sticky top-0">{['Date', 'Reference', 'PO Number', 'Job Code', 'Site', 'Location', 'Opening', 'Received', 'Issued', 'Returned to Supplier', 'Closing', 'Remarks'].map(h => <th key={h} className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
                 <tbody className="divide-y divide-[#1a2028]">
                   {data.entries.map((e: any) => (
                     <tr key={e.id} className="hover:bg-[#141920]">
@@ -1046,14 +1069,16 @@ function StockRegisterTab({ lookups }: { lookups: Lookups }) {
                       <td className="py-2 px-3 text-[#8899aa] font-mono">{e.poNo || '—'}</td>
                       <td className="py-2 px-3 text-[#8899aa] font-mono">{e.jobCode || '—'}</td>
                       <td className="py-2 px-3 text-[#8899aa]">{e.siteCode || '—'}</td>
+                      <td className="py-2 px-3 text-[#8899aa]">{e.location || '—'}</td>
                       <td className="py-2 px-3 text-[#8899aa] font-mono">{e.opening}</td>
                       <td className="py-2 px-3 text-[#00e676] font-mono">{e.received > 0 ? `+${e.received}` : '—'}</td>
                       <td className="py-2 px-3 text-[#ff3d3d] font-mono">{e.issued > 0 ? `-${e.issued}` : '—'}</td>
+                      <td className="py-2 px-3 text-[#ffab40] font-mono">{e.returnedToSupplier > 0 ? `-${e.returnedToSupplier}` : '—'}</td>
                       <td className="py-2 px-3 text-[#e2e8f0] font-mono font-bold">{e.closing}</td>
                       <td className="py-2 px-3 text-[#5a6878] max-w-[220px] truncate">{e.remarks || '—'}</td>
                     </tr>
                   ))}
-                  {data.entries.length === 0 && <tr><td colSpan={10} className="py-8 text-center text-[#5a6878]">No movements for this item yet</td></tr>}
+                  {data.entries.length === 0 && <tr><td colSpan={12} className="py-8 text-center text-[#5a6878]">No movements for this item yet</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1307,6 +1332,103 @@ function DailyIssueTab({ lookups }: { lookups: Lookups }) {
   );
 }
 
+type RoutineType = 'Daily' | 'Weekly' | 'Monthly';
+type RoutineStatus = '' | 'Done' | 'Issue' | 'N/A';
+interface RoutineItem { id: string; label: string; status: RoutineStatus; note: string; }
+
+function RoutineChecklistTab({ lookups }: { lookups: Lookups }) {
+  const [siteId, setSiteId] = useState('');
+  const [routineType, setRoutineType] = useState<RoutineType>('Daily');
+  const [routineDate, setRoutineDate] = useState(new Date().toISOString().slice(0, 10));
+  const [items, setItems] = useState<RoutineItem[]>([]);
+  const [savedBy, setSavedBy] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!siteId) { setItems([]); setSavedBy(''); return; }
+    setItems([]);
+    setSavedBy('');
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ siteId, routineType, date: routineDate });
+      const response = await fetch(`/api/store/routine-checklists?${params}`);
+      const result = await response.json();
+      if (!result.success) { toast.error(result.error || 'Failed to load checklist'); return; }
+      const saved = new Map((result.data.record?.checks ?? []).map((check: any) => [check.id, check]));
+      setItems(result.data.template.map((item: { id: string; label: string }) => {
+        const check = saved.get(item.id) as { status?: RoutineStatus; note?: string } | undefined;
+        return { ...item, status: check?.status || '', note: check?.note || '' };
+      }));
+      setSavedBy(result.data.record?.completedBy || '');
+    } catch { toast.error('Network error loading checklist'); }
+    finally { setLoading(false); }
+  }, [siteId, routineType, routineDate]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const updateItem = (id: string, patch: Partial<RoutineItem>) => {
+    setItems(current => current.map(item => item.id === id ? { ...item, ...patch } : item));
+  };
+  const readyToSave = items.length > 0 && items.every(item => item.status && (item.status !== 'Issue' || item.note.trim()));
+  const save = async () => {
+    if (!siteId) { toast.error('Site is required'); return; }
+    if (!readyToSave) { toast.error('Complete every item and add corrective action notes for issues'); return; }
+    setSaving(true);
+    try {
+      const response = await fetch('/api/store/routine-checklists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-actor-email': getCurrentUserEmail() },
+        body: JSON.stringify({ siteId: Number(siteId), routineType, routineDate, completedBy: getCurrentUserEmail(), actor: getCurrentUserEmail(), checks: items.map(({ id, status, note }) => ({ id, status, note })) }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setSavedBy(result.data.completedBy);
+        toast.success(`${routineType} checklist saved`);
+      } else toast.error(result.error || 'Failed to save checklist');
+    } catch { toast.error('Network error saving checklist'); }
+    finally { setSaving(false); }
+  };
+
+  const doneCount = items.filter(item => item.status === 'Done' || item.status === 'N/A').length;
+  return (
+    <div className="space-y-3">
+      <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div><label className={lbl}>Site *</label><select className={inp} value={siteId} onChange={e => setSiteId(e.target.value)}><option value="">— Select site —</option>{lookups.sites.map(site => <option key={site.id} value={site.id}>{site.siteCode} — {site.name}</option>)}</select></div>
+          <div><label className={lbl}>Checklist Frequency</label><select className={inp} value={routineType} onChange={e => setRoutineType(e.target.value as RoutineType)}>{(['Daily', 'Weekly', 'Monthly'] as const).map(type => <option key={type} value={type}>{type}</option>)}</select></div>
+          <div><label className={lbl}>Checklist Date</label><input type="date" className={inp} value={routineDate} onChange={e => setRoutineDate(e.target.value)} /></div>
+        </div>
+        <p className="text-[10px] text-[#5a6878] mt-3">Record store opening/closing routines, FIFO, 5S, safe stacking, gas-cylinder storage, fire safety, stock checks, and follow-up actions. A checklist is saved once per site, date, and frequency.</p>
+      </div>
+      {loading ? <Spinner /> : !siteId ? (
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl py-10 text-center text-[11px] text-[#5a6878]">Select a site to load its checklist.</div>
+      ) : (
+        <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[#252e3a] px-3 py-2.5">
+            <div className="text-[11px] font-semibold text-[#e2e8f0]">{routineType} Store Checklist <span className="text-[#5a6878] font-normal">— {doneCount}/{items.length} complete</span></div>
+            {savedBy && <Badge text={`Saved by ${savedBy}`} tone="ok" />}
+          </div>
+          <div className="divide-y divide-[#1a2028]">
+            {items.map((item, index) => (
+              <div key={item.id} className="grid grid-cols-1 md:grid-cols-[1fr_125px_260px] gap-2 items-center px-3 py-2.5">
+                <div className="text-[11px] text-[#c5ced8]">{index + 1}. {item.label}</div>
+                <select className={inp} aria-label={`Status: ${item.label}`} value={item.status} onChange={e => updateItem(item.id, { status: e.target.value as RoutineStatus, note: e.target.value === 'Issue' ? item.note : '' })}>
+                  <option value="">— Select —</option><option value="Done">Done</option><option value="Issue">Issue found</option><option value="N/A">Not applicable</option>
+                </select>
+                {item.status === 'Issue' ? <input className={inp} aria-label={`Corrective action: ${item.label}`} placeholder="Required corrective action" value={item.note} onChange={e => updateItem(item.id, { note: e.target.value })} /> : <span className="text-[10px] text-[#5a6878]">{item.note || ''}</span>}
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end border-t border-[#252e3a] p-3">
+            <button onClick={save} disabled={saving || !readyToSave} className="vc-btn-primary flex items-center gap-1.5 disabled:opacity-50">{saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Save Checklist</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Monthly Report ───────────────────────────────────────────────────
 function ReportTab({ lookups }: { lookups: Lookups }) {
   const [siteId, setSiteId] = useState('');
@@ -1338,11 +1460,21 @@ function ReportTab({ lookups }: { lookups: Lookups }) {
         <div className="text-center py-12 text-[#5a6878] text-[12px]">Select a site to view its monthly report</div>
       ) : (
         <div className="space-y-4">
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <StatCard label="Material Received" value={fmt(data.summary.materialReceived.value)} sub={`${data.summary.materialReceived.count} GRN(s)`} />
             <StatCard label="Material Issued" value={fmt(data.summary.materialIssued.value)} sub={`${data.summary.materialIssued.count} issue(s)`} />
-            <StatCard label="Material Returned" value={String(data.summary.materialReturned.count)} sub="return notes" />
+            <StatCard label="Returned from Site" value={String(data.summary.materialReturned.count)} sub="return notes" />
+            <StatCard label="Returned to Supplier" value={String(data.summary.returnsToSupplier.count)} sub={`${data.summary.returnsToSupplier.qty} qty · ${fmt(data.summary.returnsToSupplier.value)}`} />
             <StatCard label="Scrap Generated" value={`${data.summary.scrap.qty ?? data.summary.scrap.count}`} sub={`${fmt(data.summary.scrap.value)} · ${data.summary.scrap.count} entries (incl. ${data.summary.scrap.damagedLostQty ?? 0} damaged/lost)`} />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
+            <div className="col-span-2 md:col-span-6 text-[11px] font-bold text-[#e2e8f0]">Stock Valuation</div>
+            <Row k="Opening stock value" v={fmt(data.summary.stockValue.opening)} />
+            <Row k="Receipts value" v={fmt(data.summary.stockValue.received)} />
+            <Row k="Site returns value" v={fmt(data.summary.stockValue.returned)} />
+            <Row k="Issues value" v={fmt(data.summary.stockValue.issued)} />
+            <Row k="Supplier returns value" v={fmt(data.summary.stockValue.returnedToSupplier)} />
+            <Row k="Closing stock value" v={fmt(data.summary.stockValue.closing)} />
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
@@ -1352,6 +1484,9 @@ function ReportTab({ lookups }: { lookups: Lookups }) {
             <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
               <div className="text-[11px] font-bold text-[#e2e8f0] mb-3">Tools &amp; Equipment Status</div>
               <Row k="Tools Issued" v={data.summary.tools.issued} /><Row k="Tools Available" v={data.summary.tools.available} /><Row k="Under Repair / Lost" v={data.summary.tools.underRepair + data.summary.tools.lost} />
+              <Row k="Tool issues this month" v={data.summary.toolActivity.issued} /><Row k="Tool returns this month" v={data.summary.toolActivity.returned} />
+              <Row k="Damaged / lost tools this month" v={data.summary.toolActivity.damaged + data.summary.toolActivity.lost} />
+              <Row k="Calibration due" v={data.summary.calibrationDueItems.length} />
             </div>
             <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4">
               <div className="text-[11px] font-bold text-[#e2e8f0] mb-3">Gate Passes &amp; Verification</div>
@@ -1362,7 +1497,7 @@ function ReportTab({ lookups }: { lookups: Lookups }) {
             <div className="px-4 py-2.5 border-b border-[#252e3a] text-[11px] font-bold text-[#e2e8f0]">Item-wise Monthly Report — {month}</div>
             <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
-              <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Sl.No', 'Item Code', 'Item Details', 'Opening Stock', 'Material Received', 'Material Issued', 'Material Returned', 'Closing Stock', 'Scrap', 'Damaged/Lost', 'Variance', 'Stock Value'].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">{h}</th>)}</tr></thead>
+              <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">{['Sl.No', 'Item Code', 'Item Details', 'Opening Stock', 'Material Received', 'Material Issued', 'Returned from Site', 'Returned to Supplier', 'Closing Stock', 'Scrap', 'Damaged/Lost', 'Variance', 'Stock Value'].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px] whitespace-nowrap">{h}</th>)}</tr></thead>
               <tbody className="divide-y divide-[#1a2028]">
                 {data.items.map((r: any, i: number) => (
                   <tr key={r.itemCode} className="hover:bg-[#141920]">
@@ -1373,6 +1508,7 @@ function ReportTab({ lookups }: { lookups: Lookups }) {
                     <td className="py-2 px-3 text-[#00e676] font-mono">{r.received}</td>
                     <td className="py-2 px-3 text-[#ff3d3d] font-mono">{r.issued}</td>
                     <td className="py-2 px-3 text-[#00d4ff] font-mono">{r.returned}</td>
+                    <td className="py-2 px-3 text-[#ffab40] font-mono">{r.returnedToSupplier}</td>
                     <td className="py-2 px-3 text-[#e2e8f0] font-mono font-bold">{r.closing}</td>
                     <td className="py-2 px-3 text-[#8899aa] font-mono">{r.scrapQty}</td>
                     <td className="py-2 px-3 text-[#8899aa] font-mono">{r.damagedLostQty}</td>
@@ -1380,12 +1516,101 @@ function ReportTab({ lookups }: { lookups: Lookups }) {
                     <td className="py-2 px-3 text-[#e2e8f0] font-mono">{fmt(r.stockValue)}</td>
                   </tr>
                 ))}
-                {data.items.length === 0 && <tr><td colSpan={12} className="py-6 text-center text-[#5a6878]">No movement this month</td></tr>}
+                {data.items.length === 0 && <tr><td colSpan={13} className="py-6 text-center text-[#5a6878]">No movement this month</td></tr>}
               </tbody>
             </table>
             </div>
           </div>
-          <p className="text-[10px] text-[#5a6878]">Opening/Received/Issued/Returned/Closing come straight from the stock ledger; closing = opening + received + returns − issued. Damaged/Lost counts scrap entries of type Damaged or Lost. Minimum-stock position is on the Stock Register tab.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <ReportBreakdown title="Consumables Report" rows={data.summary.consumables} columns={[
+              { key: 'itemCode', label: 'Code' }, { key: 'itemName', label: 'Consumable' },
+              { key: 'opening', label: 'Opening' }, { key: 'received', label: 'Received' },
+              { key: 'issued', label: 'Consumed' }, { key: 'returned', label: 'Returned' },
+              { key: 'closing', label: 'Closing' }, { key: 'stockValue', label: 'Stock Value', format: (v: number) => fmt(v) },
+            ]} />
+            <ReportBreakdown title="Receipts by Supplier" rows={data.summary.receiptsBySupplier} columns={[
+              { key: 'supplier', label: 'Supplier' }, { key: 'grnCount', label: 'GRNs' }, { key: 'value', label: 'Value', format: (v: number) => fmt(v) },
+            ]} />
+            <ReportBreakdown title="Receipts by Purchase Order" rows={data.summary.receiptsByPurchaseOrder} columns={[
+              { key: 'poNo', label: 'PO' }, { key: 'supplier', label: 'Supplier' }, { key: 'grnCount', label: 'GRNs' }, { key: 'value', label: 'Value', format: (v: number) => fmt(v) },
+            ]} />
+            <ReportBreakdown title="Returns to Supplier" rows={data.summary.returnsBySupplier} columns={[
+              { key: 'supplier', label: 'Supplier' }, { key: 'returnCount', label: 'Returns' }, { key: 'qty', label: 'Qty' }, { key: 'value', label: 'Value', format: (v: number) => fmt(v) },
+            ]} />
+            <ReportBreakdown title="Issues by Department" rows={data.summary.issuesByDepartment} columns={[
+              { key: 'name', label: 'Department' }, { key: 'issueCount', label: 'Issues' }, { key: 'qty', label: 'Qty' }, { key: 'value', label: 'Value', format: (v: number) => fmt(v) },
+            ]} />
+            <ReportBreakdown title="Issues by Job / Work Area" rows={data.summary.issuesByWorkArea} columns={[
+              { key: 'name', label: 'Job / Work' }, { key: 'issueCount', label: 'Issues' }, { key: 'qty', label: 'Qty' }, { key: 'value', label: 'Value', format: (v: number) => fmt(v) },
+            ]} />
+            <ReportBreakdown title="Issues by Receiver / Contractor" rows={data.summary.issuesByReceiver} columns={[
+              { key: 'name', label: 'Receiver' }, { key: 'issueCount', label: 'Issues' }, { key: 'qty', label: 'Qty' }, { key: 'value', label: 'Value', format: (v: number) => fmt(v) },
+            ]} />
+            <ReportBreakdown title="Issues by Contractor / Subcontractor" rows={data.summary.issuesByContractor} columns={[
+              { key: 'name', label: 'Contractor' }, { key: 'issueCount', label: 'Issues' }, { key: 'qty', label: 'Qty' }, { key: 'value', label: 'Value', format: (v: number) => fmt(v) },
+            ]} />
+            <ReportBreakdown title="Pending Purchase Materials" rows={data.summary.pendingMaterials} columns={[
+              { key: 'poNo', label: 'PO' }, { key: 'supplier', label: 'Supplier' }, { key: 'description', label: 'Material' },
+              { key: 'pending', label: 'Pending', format: (v: number, row: any) => `${v} ${row.unit}` },
+              { key: 'expectedDate', label: 'Expected', format: (v: string | null) => v ? String(v).slice(0, 10) : '—' },
+              { key: 'overdue', label: 'Status', format: (v: boolean) => v ? 'Overdue' : 'Open' },
+            ]} />
+            <ReportBreakdown title="Slow / Non-Moving Stock (90 days)" rows={data.summary.slowMoving} columns={[
+              { key: 'itemCode', label: 'Code' }, { key: 'itemName', label: 'Item' },
+              { key: 'balance', label: 'Balance', format: (v: number, row: any) => `${v} ${row.unit}` },
+              { key: 'lastIssuedAt', label: 'Last Issue', format: (v: string | null) => v ? String(v).slice(0, 10) : 'Never' },
+            ]} />
+            <ReportBreakdown title="Below Reorder Level" rows={data.summary.belowReorderLevel} columns={[
+              { key: 'itemCode', label: 'Code' }, { key: 'itemName', label: 'Item' },
+              { key: 'balance', label: 'Balance', format: (v: number, row: any) => `${v} ${row.unit}` },
+              { key: 'reorderLevel', label: 'Minimum' },
+            ]} />
+            <ReportBreakdown title="Physical Verification Variances" rows={data.summary.varianceDetails} columns={[
+              { key: 'verificationNo', label: 'Verification' }, { key: 'verificationDate', label: 'Date', format: (v: string) => String(v).slice(0, 10) },
+              { key: 'itemCode', label: 'Item' }, { key: 'bookQty', label: 'Book' }, { key: 'physicalQty', label: 'Physical' }, { key: 'variance', label: 'Variance' }, { key: 'remarks', label: 'Corrective Action / Notes' },
+            ]} />
+            <ReportBreakdown title="Equipment Service Due" rows={data.summary.serviceDueItems} columns={[
+              { key: 'name', label: 'Equipment' }, { key: 'status', label: 'Status' },
+              { key: 'nextService', label: 'Next Service', format: (v: string | null) => v ? String(v).slice(0, 10) : '—' },
+              { key: 'validityDate', label: 'Validity', format: (v: string | null) => v ? String(v).slice(0, 10) : '—' },
+            ]} />
+            <ReportBreakdown title="Tool Calibration Due" rows={data.summary.calibrationDueItems} columns={[
+              { key: 'toolCode', label: 'Tool Code' }, { key: 'name', label: 'Tool' },
+              { key: 'category', label: 'Category' }, { key: 'status', label: 'Status' },
+              { key: 'calibrationDueDate', label: 'Due Date', format: (v: string) => String(v).slice(0, 10) },
+            ]} />
+          </div>
+          <div className="space-y-3">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-[#e2e8f0]">Key Observations</div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <ReportBreakdown title="Major Receipts" rows={data.summary.keyObservations.majorReceipts} columns={[
+                { key: 'grnNo', label: 'GRN' }, { key: 'date', label: 'Date', format: (v: string) => String(v).slice(0, 10) },
+                { key: 'supplier', label: 'Supplier' }, { key: 'value', label: 'Value', format: (v: number) => fmt(v) },
+              ]} />
+              <ReportBreakdown title="High-Value Issues" rows={data.summary.keyObservations.highValueIssues} columns={[
+                { key: 'issueNo', label: 'Issue' }, { key: 'date', label: 'Date', format: (v: string) => String(v).slice(0, 10) },
+                { key: 'receiver', label: 'Receiver' }, { key: 'contractor', label: 'Contractor' },
+                { key: 'workArea', label: 'Work Area' }, { key: 'value', label: 'Value', format: (v: number) => fmt(v) },
+              ]} />
+              <ReportBreakdown title="Critical Material Shortages" rows={data.summary.keyObservations.criticalShortages} columns={[
+                { key: 'itemCode', label: 'Code' }, { key: 'itemName', label: 'Item' },
+                { key: 'balance', label: 'Balance', format: (v: number, row: any) => `${v} ${row.unit}` },
+                { key: 'reorderLevel', label: 'Minimum' },
+              ]} />
+              <ReportBreakdown title="Damage, Loss & Disposal" rows={data.summary.keyObservations.damageLossIncidents} columns={[
+                { key: 'scrapNo', label: 'Record' }, { key: 'date', label: 'Date', format: (v: string) => String(v).slice(0, 10) },
+                { key: 'description', label: 'Material' }, { key: 'type', label: 'Type' },
+                { key: 'qty', label: 'Qty', format: (v: number, row: any) => `${v} ${row.unit}` },
+                { key: 'disposalStatus', label: 'Disposal' }, { key: 'disposedTo', label: 'Disposed To' },
+              ]} />
+              <ReportBreakdown title="Store Improvement Actions" rows={data.summary.keyObservations.improvementActions} columns={[
+                { key: 'date', label: 'Date', format: (v: string) => String(v).slice(0, 10) },
+                { key: 'frequency', label: 'Frequency' }, { key: 'checklistItem', label: 'Checklist Item' },
+                { key: 'completedBy', label: 'Reported By' }, { key: 'action', label: 'Corrective Action' },
+              ]} />
+            </div>
+          </div>
+          <p className="text-[10px] text-[#5a6878]">Damaged returns are recorded but excluded from available stock. Supplier returns reduce stock only when available quantity is sufficient. Slow / non-moving is measured over 90 days.</p>
         </div>
       )}
     </div>
@@ -1413,6 +1638,75 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
       </div>
     </div>,
     document.body,
+  );
+}
+
+function SignaturePad({ onChange }: { onChange: (signature: string) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+
+  const point = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = event.currentTarget;
+    const bounds = canvas.getBoundingClientRect();
+    return {
+      x: (event.clientX - bounds.left) * (canvas.width / bounds.width),
+      y: (event.clientY - bounds.top) * (canvas.height / bounds.height),
+    };
+  };
+  const start = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    const canvas = event.currentTarget;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const p = point(event);
+    drawing.current = true;
+    canvas.setPointerCapture(event.pointerId);
+    context.beginPath();
+    context.moveTo(p.x, p.y);
+    context.strokeStyle = '#e2e8f0';
+    context.lineWidth = 3;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+  };
+  const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawing.current) return;
+    const context = event.currentTarget.getContext('2d');
+    if (!context) return;
+    const p = point(event);
+    context.lineTo(p.x, p.y);
+    context.stroke();
+  };
+  const finish = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    const canvas = canvasRef.current;
+    if (canvas) onChange(canvas.toDataURL('image/png'));
+  };
+  const clear = () => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height);
+    onChange('');
+  };
+
+  return (
+    <div>
+      <canvas
+        ref={canvasRef}
+        width={720}
+        height={180}
+        aria-label="Receiver signature drawing area"
+        className="w-full h-[90px] border border-[#2e3a48] rounded-lg bg-[#0d1117] touch-none cursor-crosshair"
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={finish}
+        onPointerCancel={finish}
+      />
+      <div className="flex items-center justify-between mt-1">
+        <span className="text-[10px] text-[#5a6878]">Sign above using mouse, touch, or stylus.</span>
+        <button type="button" onClick={clear} className="text-[10px] text-[#8899aa] hover:text-[#e2e8f0]">Clear</button>
+      </div>
+    </div>
   );
 }
 
@@ -1480,7 +1774,7 @@ function GrnLinesEditor({ lines, setLines, items, addLine, removeLine }: { lines
       <div className="overflow-x-auto border border-[#252e3a] rounded-lg">
         <table className="w-full text-[11px] whitespace-nowrap">
           <thead><tr className="bg-[#0a0d12]">
-            <th className={th}>Category</th><th className={th}>Item</th><th className={th}>Ordered</th><th className={th}>Received</th><th className={th}>Accepted</th><th className={th}>Short/Excess</th><th className={th}>Rate</th><th className={th}>Batch/Heat</th><th className={th}>Damage (Y/N)</th><th className={th}>Inspection</th><th className={th}></th>
+            <th className={th}>Category</th><th className={th}>Item</th><th className={th}>Ordered</th><th className={th}>Received</th><th className={th}>Accepted</th><th className={th}>Short/Excess</th><th className={th}>Rate</th><th className={th}>Storage Location</th><th className={th}>Batch/Heat</th><th className={th}>Damage (Y/N)</th><th className={th}>Inspection</th><th className={th}></th>
           </tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
             {lines.map((l, i) => (
@@ -1492,15 +1786,16 @@ function GrnLinesEditor({ lines, setLines, items, addLine, removeLine }: { lines
                 <td className="py-1.5 px-2"><input type="number" className={cell + ' w-[70px]'} placeholder="0" value={l.qtyAccepted ?? l.qtyReceived ?? ''} onChange={e => update(i, { qtyAccepted: e.target.value })} /></td>
                 <td className="py-1.5 px-2 text-[#8899aa] font-mono">{shortExcess(l) >= 0 ? `+${shortExcess(l)}` : shortExcess(l)}</td>
                 <td className="py-1.5 px-2"><input type="number" className={cell + ' w-[80px]'} placeholder="0.00" value={l.rate ?? ''} onChange={e => update(i, { rate: e.target.value })} /></td>
+                <td className="py-1.5 px-2"><input className={cell + ' w-[130px]'} placeholder={l.inspectionStatus === 'Rejected' ? 'Quarantine' : 'Rack / Bin'} value={l.storageLocation ?? ''} onChange={e => update(i, { storageLocation: e.target.value })} /></td>
                 <td className="py-1.5 px-2"><input className={cell + ' w-[90px]'} placeholder="HN-12345" value={l.batchHeatNo ?? ''} onChange={e => update(i, { batchHeatNo: e.target.value })} /></td>
                 <td className="py-1.5 px-2"><select className={cell + ' w-[110px] appearance-none'} value={l.damageTransit ?? 'No'} onChange={e => update(i, { damageTransit: e.target.value })}>{['No', 'Yes'].map(c => <option key={c}>{c}</option>)}</select></td>
                 <td className="py-1.5 px-2"><select className={cell + ' w-[110px] appearance-none'} value={l.inspectionStatus ?? 'Accepted'} onChange={e => update(i, { inspectionStatus: e.target.value })}>{['Accepted', 'Pending', 'Rejected'].map(c => <option key={c}>{c}</option>)}</select></td>
                 <td className="py-1.5 px-2"><button onClick={() => removeLine(i)} className="text-[#ff3d3d] hover:opacity-80"><X size={14} /></button></td>
               </tr>
             ))}
-            {lines.length === 0 && <tr><td colSpan={11} className="py-6 text-center text-[#5a6878]">No items — click “Add line”</td></tr>}
+            {lines.length === 0 && <tr><td colSpan={12} className="py-6 text-center text-[#5a6878]">No items — click “Add line”</td></tr>}
           </tbody>
-          <tfoot><tr className="bg-[#0a0d12] border-t border-[#252e3a]"><td className={th} colSpan={2}>Totals</td><td className="py-2 px-2 text-[#e2e8f0] font-mono">{totals.ordered}</td><td className="py-2 px-2 text-[#e2e8f0] font-mono">{totals.received}</td><td className="py-2 px-2 text-[#00e676] font-mono">{totals.accepted}</td><td className="py-2 px-2" colSpan={6}></td></tr></tfoot>
+          <tfoot><tr className="bg-[#0a0d12] border-t border-[#252e3a]"><td className={th} colSpan={2}>Totals</td><td className="py-2 px-2 text-[#e2e8f0] font-mono">{totals.ordered}</td><td className="py-2 px-2 text-[#e2e8f0] font-mono">{totals.received}</td><td className="py-2 px-2 text-[#00e676] font-mono">{totals.accepted}</td><td className="py-2 px-2" colSpan={7}></td></tr></tfoot>
         </table>
       </div>
     </div>
@@ -1542,6 +1837,36 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub: st
       <div className="text-[9px] uppercase tracking-wider text-[#5a6878] font-bold">{label}</div>
       <div className="text-[16px] font-bold text-[#e2e8f0] mt-1">{value}</div>
       <div className="text-[10px] text-[#5a6878] mt-0.5">{sub}</div>
+    </div>
+  );
+}
+
+function ReportBreakdown({ title, rows, columns }: {
+  title: string;
+  rows: any[];
+  columns: Array<{ key: string; label: string; format?: (value: any, row: any) => React.ReactNode }>;
+}) {
+  return (
+    <div className="bg-[#161c24] border border-[#252e3a] rounded-xl overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-[#252e3a] text-[11px] font-bold text-[#e2e8f0]">{title}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[10px]">
+          <thead><tr className="border-b border-[#252e3a] bg-[#0a0d12]">
+            {columns.map(column => <th key={column.key} className="text-left py-2 px-2 text-[#5a6878] font-semibold uppercase tracking-wider whitespace-nowrap">{column.label}</th>)}
+          </tr></thead>
+          <tbody className="divide-y divide-[#1a2028]">
+            {rows.map((row, index) => (
+              <tr key={`${row.id ?? row.poNo ?? row.itemCode ?? row.name ?? 'row'}-${index}`}>
+                {columns.map(column => {
+                  const value = row[column.key];
+                  return <td key={column.key} className="py-2 px-2 text-[#8899aa]">{column.format ? column.format(value, row) : value ?? '—'}</td>;
+                })}
+              </tr>
+            ))}
+            {rows.length === 0 && <tr><td colSpan={columns.length} className="py-5 text-center text-[#5a6878]">No records</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

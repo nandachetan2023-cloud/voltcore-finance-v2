@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   FileText, Plus, Pencil, Trash2, Search, Link, Loader2, CheckCircle, Calendar, X as XIcon,
-  TrendingUp, TrendingDown, Clock, Users, Award, BarChart3, ChevronDown, ChevronRight, Upload,
+  TrendingUp, TrendingDown, Clock, Users, Award, BarChart3, ChevronDown, ChevronRight, Upload, RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -35,7 +35,7 @@ const RFQ_COLUMNS: ExportColumn<RFQ>[] = [
   { header: 'Issue Date', accessor: (r) => r.issueDate?.split('T')[0] ?? '' },
   { header: 'Project', accessor: 'project' },
   { header: 'Vendors Invited', accessor: (r) => vendorIdsOf(r).length },
-  { header: 'Responses', accessor: (r) => new Set(r.bids.map(b => b.vendorId)).size },
+  { header: 'Responses', accessor: (r) => new Set((r.bids ?? []).map(b => b.vendorId)).size },
   { header: 'Response Deadline', accessor: (r) => r.responseDeadline?.split('T')[0] ?? '' },
   { header: 'Status', accessor: 'status' },
 ];
@@ -49,30 +49,6 @@ const RFQ_IMPORT_FIELDS: ImportField[] = [
   { key: 'status', label: 'Status' },
 ];
 const RFQ_SAMPLE_ROW = { rfqNo: 'RFQ-2026-001', description: 'Safety equipment procurement', issueDate: '2026-01-10', responseDeadline: '2026-01-25', project: 'Godda Unit 5', status: 'Sent' };
-
-function generateMockRFQs(): RFQ[] {
-  const now = new Date(); const d = (off: number) => new Date(now.getTime() + off * 86400000).toISOString().split('T')[0];
-  const li = (id: number, desc: string, qty: number, unit: string): RFQLineItem => ({ id, description: desc, qty, unit });
-  const vb = (vid: number, lid: number, price: number, lead: number, notes: string, compliant: boolean): VendorBid => ({ vendorId: vid, lineItemId: lid, unitPrice: price, leadTime: lead, notes, compliant });
-  return [
-    { id:1, rfqNo:'RFQ-2026-001', description:'Supply of HT Cables 33kV for BALCO Switchyard', issueDate:d(-30), responseDeadline:d(10), project:'BALCO', notes:'Emergency requirement. Urgent delivery needed.', status:'Sent', vendorIds:[1,2,3,5],
-      lineItems:[li(1,'33kV XLPE Cable 3Cx400sqmm',2500,'Mtr'),li(2,'33kV XLPE Cable 3Cx240sqmm',1800,'Mtr'),li(3,'Cable Jointing Kit 33kV 3C',25,'Set')],
-      bids:[vb(1,1,4850,25,'Standard pricing, 25 days lead',true),vb(1,2,3250,25,'',true),vb(1,3,18500,20,'',true),vb(2,1,5200,30,'Premium quality cable',true),vb(2,2,3500,30,'',true),vb(2,3,22000,25,'Includes installation kit',true),vb(3,1,4750,20,'Bulk discount available',true),vb(3,2,3100,20,'',true),vb(3,3,17500,15,'',true)] },
-    { id:2, rfqNo:'RFQ-2026-002', description:'Structural Steel for NTPC Barh Turbine Building', issueDate:d(-20), responseDeadline:d(20), project:'NTPC', notes:'ISMB & ISMC sections as per BOQ.', status:'Responses Received', vendorIds:[1,4,5],
-      lineItems:[li(4,'ISMB 300 x 140mm x 44.2kg/m',120,'MT'),li(5,'ISMC 200 x 75mm x 22.1kg/m',85,'MT'),li(6,'ISMB 600 x 210mm x 123kg/m',60,'MT')],
-      bids:[vb(4,4,72500,30,'',true),vb(4,5,68500,30,'',true),vb(4,6,76500,35,'',true),vb(1,4,74000,25,'Mild steel grade',true),vb(1,5,70000,25,'',true),vb(1,6,78000,25,'',true),vb(5,4,71000,35,'Economy grade available',true),vb(5,5,67500,35,'',true),vb(5,6,75000,40,'',false)] },
-    { id:3, rfqNo:'RFQ-2026-003', description:'Power Transformers for Hindalco Mahan Smelter', issueDate:d(-15), responseDeadline:d(25), project:'Hindalco', notes:'ONAN cooled, 50 MVA, 132/33kV.', status:'Sent', vendorIds:[3,6],
-      lineItems:[li(7,'Power Transformer 50 MVA 132/33kV',2,'Nos'),li(8,'Power Transformer 25 MVA 33/11kV',3,'Nos')], bids:[] },
-    { id:4, rfqNo:'RFQ-2026-004', description:'Cement OPC 53 Grade for BALCO Foundations', issueDate:d(-45), responseDeadline:d(-10), project:'BALCO', notes:'Bulk supply with silo unloading.', status:'Awarded', vendorIds:[2,5],
-      lineItems:[li(9,'OPC 53 Grade Cement Bulk',5000,'MT')],
-      bids:[vb(2,9,6250,10,'Bulk supply with 2 silos',true),vb(5,9,6400,12,'Includes logistics',true)] },
-    { id:5, rfqNo:'RFQ-2026-005', description:'LV Switchgear & Control Panels for Coal India CHP', issueDate:d(-10), responseDeadline:d(30), project:'Coal India', notes:'As per Drg No. CIL-CHP-E-001 to 005.', status:'Draft', vendorIds:[3,5,6],
-      lineItems:[li(10,'LV Main Distribution Panel 2000A',4,'Nos'),li(11,'MCC Panel 630A',8,'Nos'),li(12,'PLC Control Panel',2,'Nos')], bids:[] },
-    { id:6, rfqNo:'RFQ-2026-006', description:'Cable Trays & Conduits for JSW Vijayanagar', issueDate:d(-25), responseDeadline:d(5), project:'JSW', notes:'Hot-dip galvanised as per IS 3509.', status:'Draft', vendorIds:[1,4,6],
-      lineItems:[li(13,'Perforated Cable Tray 600mm x 150mm',800,'Mtr'),li(14,'Perforated Cable Tray 300mm x 100mm',1200,'Mtr'),li(15,'GI Conduit 50mm dia',3000,'Mtr')],
-      bids:[vb(1,13,2850,15,'',true),vb(1,14,1850,15,'',true),vb(1,15,320,15,'',true),vb(4,13,2750,20,'',true),vb(4,14,1750,20,'',true),vb(4,15,310,20,'',true),vb(6,13,3100,12,'Premium quality',true),vb(6,14,2100,12,'',true),vb(6,15,350,12,'',true)] },
-  ];
-}
 
 const LEGACY_VENDORS: Vendor[] = [
   { id: 1, name: 'ElectroMech Solutions' },
@@ -103,7 +79,7 @@ function deadlineColor(days: number): string {
 }
 
 function totalBid(vendorId: number, items: RFQLineItem[], bids: VendorBid[]): number {
-  return bids.filter(b => b.vendorId === vendorId).reduce((s, b) => s + b.unitPrice * (items.find(i => i.id === b.lineItemId)?.qty ?? 1), 0);
+  return (bids ?? []).filter(b => b.vendorId === vendorId).reduce((s, b) => s + b.unitPrice * ((items ?? []).find(i => i.id === b.lineItemId)?.qty ?? 1), 0);
 }
 
 function vendorIdsOf(r: any): number[] {
@@ -112,8 +88,18 @@ function vendorIdsOf(r: any): number[] {
   return [...fromBids].filter((v): v is number => typeof v === 'number');
 }
 
+function mergeRfq(prev: RFQ, next: any): RFQ {
+  return {
+    ...prev,
+    ...next,
+    lineItems: Array.isArray(next?.lineItems) ? next.lineItems : prev.lineItems,
+    bids: Array.isArray(next?.bids) ? next.bids : prev.bids,
+  };
+}
+
 function getMinPrice(lineItemId: number, bids: VendorBid[]): number {
-  return Math.min(...bids.filter(b => b.lineItemId === lineItemId && b.compliant).map(b => b.unitPrice));
+  const prices = (bids ?? []).filter(b => b.lineItemId === lineItemId && b.compliant).map(b => b.unitPrice);
+  return prices.length ? Math.min(...prices) : 0;
 }
 
 function EMPTY_LINE(): RFQLineItem { return { id: Date.now(), description: '', qty: 1, unit: 'Nos' }; }
@@ -158,12 +144,10 @@ export default function ProcurementRFQ() {
     try {
       setLoading(true); setError(null);
       const res = await fetch('/api/procurement/rfqs');
-      const json = await res.json();
-      if (json.success) {
-        if (json.data && json.data.length > 0) setRfqs(json.data);
-        else { setRfqs(generateMockRFQs()); toast.info('Showing sample data — API unavailable'); }
-      } else { setRfqs(generateMockRFQs()); toast.info('Showing sample data — API unavailable'); }
-    } catch { setRfqs(generateMockRFQs()); toast.info('Showing sample data — API unavailable'); }
+      const json = await readJsonSafe(res);
+      if (res.ok && json.success) setRfqs(json.data ?? []);
+      else setError(json.error || 'Failed to load RFQs');
+    } catch { setError('Failed to load RFQs'); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { fetchRfqs(); }, [fetchRfqs]);
@@ -243,8 +227,8 @@ export default function ProcurementRFQ() {
 
   const openEdit = (r: RFQ) => {
     setEditTarget(r);
-    setForm({ rfqNo: r.rfqNo, description: r.description, issueDate: r.issueDate, responseDeadline: r.responseDeadline, project: r.project, notes: r.notes, descCategory: '' });
-    setFormVendors([...vendorIdsOf(r)]); setFormLines(r.lineItems.map(li => ({ ...li }))); setFormSearch(''); setFormOpen(true);
+    setForm({ rfqNo: r.rfqNo, description: r.description ?? '', issueDate: r.issueDate?.split('T')[0] ?? '', responseDeadline: r.responseDeadline?.split('T')[0] ?? '', project: r.project ?? '', notes: r.notes ?? '', descCategory: '' });
+    setFormVendors([...vendorIdsOf(r)]); setFormLines((r.lineItems ?? []).map(li => ({ ...li }))); setFormSearch(''); setFormOpen(true);
   };
 
   const saveForm = () => {
@@ -255,12 +239,12 @@ export default function ProcurementRFQ() {
     if (editTarget) {
       fetch('/api/procurement/rfqs/' + editTarget.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         .then(res => res.json())
-        .then(json => { if (json.success) { setRfqs(prev => prev.map(r => r.id === editTarget.id ? json.data : r)); toast.success('RFQ updated'); setFormOpen(false); } else toast.error('Failed to update RFQ'); })
+        .then(json => { if (json.success) { setRfqs(prev => prev.map(r => r.id === editTarget.id ? mergeRfq(r, json.data) : r)); toast.success('RFQ updated'); setFormOpen(false); } else toast.error(json.error || 'Failed to update RFQ'); })
         .catch(() => toast.error('Failed to update RFQ'));
     } else {
       fetch('/api/procurement/rfqs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         .then(res => res.json())
-        .then(json => { if (json.success) { setRfqs(prev => [...prev, json.data]); toast.success('RFQ created'); setFormOpen(false); } else toast.error('Failed to create RFQ'); })
+        .then(json => { if (json.success) { setRfqs(prev => [...prev, json.data]); toast.success('RFQ created'); setFormOpen(false); } else toast.error(json.error || 'Failed to create RFQ'); })
         .catch(() => toast.error('Failed to create RFQ'));
     }
   };
@@ -269,7 +253,7 @@ export default function ProcurementRFQ() {
     if (!deleteTarget) return;
     fetch('/api/procurement/rfqs/' + deleteTarget.id, { method: 'DELETE' })
       .then(res => res.json())
-      .then(json => { if (json.success) { setRfqs(prev => prev.filter(r => r.id !== deleteTarget.id)); setDeleteOpen(false); toast.success('RFQ deleted'); } else toast.error('Failed to delete RFQ'); })
+      .then(json => { if (json.success) { setRfqs(prev => prev.filter(r => r.id !== deleteTarget.id)); setDeleteOpen(false); toast.success('RFQ deleted'); } else toast.error(json.error || 'Failed to delete RFQ'); })
       .catch(() => toast.error('Failed to delete RFQ'));
   };
 
@@ -277,18 +261,28 @@ export default function ProcurementRFQ() {
     setDetailRfq(r);
     const ids = vendorIdsOf(r);
     setActiveVendorTab(ids.length > 0 ? ids[0] : null);
-    setVendorBidsEdit(r.bids.filter(b => b.vendorId === (ids[0] ?? 0)));
+    setVendorBidsEdit((r.bids ?? []).filter(b => b.vendorId === (ids[0] ?? 0)));
     setDetailTab('bids');
     setDetailOpen(true);
   };
 
   const openVendorTab = (vid: number) => {
     setActiveVendorTab(vid);
-    setVendorBidsEdit(detailRfq?.bids.filter(b => b.vendorId === vid) ?? []);
+    setVendorBidsEdit((detailRfq?.bids ?? []).filter(b => b.vendorId === vid));
   };
 
   const updateBid = (lineItemId: number, field: keyof VendorBid, value: string | number | boolean) => {
-    setVendorBidsEdit(prev => prev.map(b => b.lineItemId === lineItemId ? { ...b, [field]: value } : b));
+    if (!activeVendorTab) return;
+    setVendorBidsEdit(prev => {
+      const idx = prev.findIndex(b => b.lineItemId === lineItemId);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], [field]: value } as VendorBid;
+        return next;
+      }
+      const base: VendorBid = { vendorId: activeVendorTab, lineItemId, unitPrice: 0, leadTime: 0, notes: '', compliant: true };
+      return [...prev, { ...base, [field]: value } as VendorBid];
+    });
   };
 
   const saveVendorBids = () => {
@@ -302,23 +296,24 @@ export default function ProcurementRFQ() {
       if (!hasLead) { toast.error('Enter lead time for all vendors'); return; }
       saved.push(b);
     }
-    const otherBids = detailRfq.bids.filter(b => b.vendorId !== activeVendorTab);
+    const otherBids = (detailRfq.bids ?? []).filter(b => b.vendorId !== activeVendorTab);
     const updated: RFQ = { ...detailRfq, bids: [...otherBids, ...saved], status: 'Responses Received' };
     fetch('/api/procurement/rfqs/' + detailRfq.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) })
       .then(res => res.json())
-      .then(json => { if (json.success) { setRfqs(prev => prev.map(r => r.id === updated.id ? json.data : r)); setDetailRfq(json.data); toast.success('Bids saved for ' + vendorName(activeVendorTab)); } else toast.error('Failed to save bids'); })
+      .then(json => { if (json.success) { const merged = mergeRfq(updated, json.data); setRfqs(prev => prev.map(r => r.id === updated.id ? merged : r)); setDetailRfq(merged); toast.success('Bids saved for ' + vendorName(activeVendorTab)); } else toast.error(json.error || 'Failed to save bids'); })
       .catch(() => toast.error('Failed to save bids'));
   };
 
   const canAward = (r: RFQ): boolean => r.status === 'Responses Received' || r.status === 'Sent';
 
   const recommendVendor = (r: RFQ): number | null => {
-    if (r.bids.length === 0) return null;
-    const responded = [...new Set(r.bids.map(b => b.vendorId))].filter(v => vendorIdsOf(r).includes(v));
+    const bids = r.bids ?? [];
+    if (bids.length === 0) return null;
+    const responded = [...new Set(bids.map(b => b.vendorId))].filter(v => vendorIdsOf(r).includes(v));
     if (responded.length === 0) return null;
-    let best = responded[0]; let bestTotal = totalBid(best, r.lineItems, r.bids);
+    let best = responded[0]; let bestTotal = totalBid(best, r.lineItems ?? [], bids);
     for (let i = 1; i < responded.length; i++) {
-      const t = totalBid(responded[i], r.lineItems, r.bids);
+      const t = totalBid(responded[i], r.lineItems ?? [], bids);
       if (t < bestTotal) { best = responded[i]; bestTotal = t; }
     }
     return best;
@@ -338,10 +333,11 @@ export default function ProcurementRFQ() {
       .then(res => res.json())
       .then(json => {
         if (json.success) {
-          setRfqs(prev => prev.map(r => r.id === rfq.id ? json.data : r)); setDetailRfq(json.data);
+          const merged = mergeRfq(rfq, json.data);
+          setRfqs(prev => prev.map(r => r.id === rfq.id ? merged : r)); setDetailRfq(merged);
           setPoConfirmOpen(false);
-          toast.success('PO awarded to ' + vendorName(poVendorId) + ' - ' + formatINR(totalBid(poVendorId, detailRfq.lineItems, detailRfq.bids)));
-        } else toast.error('Failed to create PO');
+          toast.success('PO awarded to ' + vendorName(poVendorId) + ' - ' + formatINR(totalBid(poVendorId, merged.lineItems ?? [], merged.bids ?? [])));
+        } else toast.error(json.error || 'Failed to create PO');
       })
       .catch(() => toast.error('Failed to create PO'));
   };
@@ -372,7 +368,12 @@ export default function ProcurementRFQ() {
     </div>
   );
   if (loading) return loadingView;
-  if (error) return <div className="flex items-center justify-center h-64 text-[#ff3d3d] text-[13px] font-medium">{error}</div>;
+  if (error) return (
+    <div className="flex flex-col items-center justify-center h-64 gap-3">
+      <div className="text-[#ff3d3d] text-[13px] font-medium">{error}</div>
+      <button onClick={fetchRfqs} className="vc-btn-ghost inline-flex items-center gap-1.5 text-[11px]"><RefreshCw size={13} /> Retry</button>
+    </div>
+  );
 
   return (
     <div className="space-y-4 p-6">
@@ -422,7 +423,7 @@ export default function ProcurementRFQ() {
               <SortableTh label="RFQ#" sortKey="rfqNo" accessor={(r: RFQ) => r.rfqNo} sort={tc.sort} toggleSort={tc.toggleSort} />
               <SortableTh label="Description" sortKey="description" accessor={(r: RFQ) => r.description} sort={tc.sort} toggleSort={tc.toggleSort} />
               <SortableTh label="Vendors" sortKey="vendors" accessor={(r: RFQ) => vendorIdsOf(r).length} sort={tc.sort} toggleSort={tc.toggleSort} />
-              <SortableTh label="Responses" sortKey="responses" accessor={(r: RFQ) => [...new Set(r.bids.map(b => b.vendorId))].length} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Responses" sortKey="responses" accessor={(r: RFQ) => [...new Set((r.bids ?? []).map(b => b.vendorId))].length} sort={tc.sort} toggleSort={tc.toggleSort} />
               <SortableTh label="Deadline" sortKey="deadline" accessor={(r: RFQ) => new Date(r.responseDeadline).getTime()} sort={tc.sort} toggleSort={tc.toggleSort} />
               <SortableTh label="Status" sortKey="status" accessor={(r: RFQ) => r.status} sort={tc.sort} toggleSort={tc.toggleSort} />
               <th className="py-2 px-3"></th>
@@ -430,7 +431,7 @@ export default function ProcurementRFQ() {
             <tbody className="divide-y divide-[#1a2028]">
               {tc.pageItems.map(r => {
                 const dd = daysUntil(r.responseDeadline);
-                const responded = [...new Set(r.bids.map(b => b.vendorId))].length;
+                const responded = [...new Set((r.bids ?? []).map(b => b.vendorId))].length;
                 return (
                   <tr key={r.id} className="hover:bg-[#141920]">
                     <td className="py-2.5 px-3"><button onClick={() => openDetail(r)} className="text-[#f5a623] font-mono font-medium hover:underline">{r.rfqNo}</button></td>
@@ -443,7 +444,7 @@ export default function ProcurementRFQ() {
                     </td>
                     <td className="py-2.5 px-3">
                       <span className={'font-mono inline-flex items-center gap-1 ' + deadlineColor(dd)}>
-                        <Calendar size={11} />{r.responseDeadline} {dd <= 0 ? '(Overdue)' : '(' + dd + 'd)'}
+                        <Calendar size={11} />{r.responseDeadline?.split('T')[0]} {dd <= 0 ? '(Overdue)' : '(' + dd + 'd)'}
                       </span>
                     </td>
                     <td className="py-2.5 px-3"><span className={'inline-block px-2 py-0.5 rounded text-[10px] font-medium ' + (STATUS_STYLES[r.status] || '')}>{r.status}</span></td>
@@ -587,7 +588,7 @@ export default function ProcurementRFQ() {
                 </div>
                 <div className="bg-[#0a0d12] rounded-lg p-3 border border-[#1a2028]">
                   <div className="text-[9px] uppercase tracking-wider text-[#5a6878] font-semibold mb-1">Line Items</div>
-                  <div className="text-[11px] text-[#e2e8f0]">{detailRfq.lineItems.length} items</div>
+                  <div className="text-[11px] text-[#e2e8f0]">{(detailRfq.lineItems ?? []).length} items</div>
                 </div>
                 <div className="col-span-2 bg-[#0a0d12] rounded-lg p-3 border border-[#1a2028]">
                   <div className="text-[9px] uppercase tracking-wider text-[#5a6878] font-semibold mb-1">Notes</div>
@@ -597,7 +598,7 @@ export default function ProcurementRFQ() {
                   <div className="text-[9px] uppercase tracking-wider text-[#5a6878] font-semibold mb-1">Invited Vendors</div>
                   <div className="flex flex-wrap gap-1.5">
                     {vendorIdsOf(detailRfq).map(vid => {
-                      const hasBid = detailRfq.bids.some(b => b.vendorId === vid);
+                      const hasBid = (detailRfq.bids ?? []).some(b => b.vendorId === vid);
                       return (
                         <span key={vid} className={'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ' + (hasBid ? 'bg-[#00e676]/15 text-[#00e676]' : 'bg-[#5a6878]/15 text-[#5a6878]')}>
                           {vendorName(vid)} {hasBid ? <CheckCircle size={10} /> : <Clock size={10} />}
@@ -626,7 +627,7 @@ export default function ProcurementRFQ() {
                   {/* Vendor Tabs */}
                   <div className="flex gap-1 mb-3 flex-wrap">
                     {vendorIdsOf(detailRfq).map(vid => {
-                      const hasBid = detailRfq.bids.some(b => b.vendorId === vid);
+                      const hasBid = (detailRfq.bids ?? []).some(b => b.vendorId === vid);
                       const isActive = activeVendorTab === vid;
                       return (
                          <button key={vid} onClick={() => openVendorTab(vid)}
@@ -651,7 +652,7 @@ export default function ProcurementRFQ() {
                           <th className="text-center py-2 px-3 text-[#5a6878] text-[9px] uppercase font-semibold w-[60px]">Compliant</th>
                         </tr></thead>
                         <tbody className="divide-y divide-[#1a2028]">
-                          {detailRfq.lineItems.map(li => {
+                          {(detailRfq.lineItems ?? []).map(li => {
                             const bid = vendorBidsEdit.find(b => b.lineItemId === li.id);
                             const minPrice = getMinPrice(li.id, detailRfq.bids);
                             const isMin = bid ? bid.unitPrice === minPrice : false;
@@ -702,7 +703,7 @@ export default function ProcurementRFQ() {
               {detailTab === 'compare' && (
                 <div>
                   {(() => {
-                    const responded = vendorIdsOf(detailRfq).filter(v => detailRfq.bids.some(b => b.vendorId === v));
+                    const responded = vendorIdsOf(detailRfq).filter(v => (detailRfq.bids ?? []).some(b => b.vendorId === v));
                     if (responded.length === 0) return <div className="text-center py-8 text-[#5a6878] text-[12px]">No vendor responses yet. Enter bids in the Vendor Bids tab first.</div>;
                     return (
                       <div className="overflow-x-auto border border-[#252e3a] rounded-lg">
@@ -723,14 +724,14 @@ export default function ProcurementRFQ() {
                             <th className="text-center py-2 px-3 text-[#5a6878] text-[9px] uppercase font-semibold w-[80px]">Best Price</th>
                           </tr></thead>
                           <tbody className="divide-y divide-[#1a2028]">
-                            {detailRfq.lineItems.map(li => {
+                            {(detailRfq.lineItems ?? []).map(li => {
                               const minPrice = getMinPrice(li.id, detailRfq.bids);
                               return (
                                 <tr key={li.id} className="hover:bg-[#141920]">
                                   <td className="py-2 px-3 text-[#e2e8f0]">{li.description}</td>
                                   <td className="py-2 px-3 text-center text-[#8899aa] font-mono">{li.qty} {li.unit}</td>
                                   {responded.map(vid => {
-                                    const bid = detailRfq.bids.find(b => b.vendorId === vid && b.lineItemId === li.id);
+                                    const bid = (detailRfq.bids ?? []).find(b => b.vendorId === vid && b.lineItemId === li.id);
                                     const isMin = bid && bid.unitPrice === minPrice && bid.compliant;
                                     const isRec = vid === recommendId;
                                     return (
@@ -771,7 +772,7 @@ export default function ProcurementRFQ() {
                   })()}
 
                   {/* Award Action */}
-                  {canAward(detailRfq) && detailRfq.bids.length > 0 && (
+                  {canAward(detailRfq) && (detailRfq.bids ?? []).length > 0 && (
                     <div className="flex justify-end mt-4">
                       <button onClick={handleCreatePO}
                         className="px-5 py-2 rounded-lg bg-[#00e676] text-[#0a0d12] font-bold text-[12px] flex items-center gap-1.5 hover:bg-[#00b85c] transition-all">
@@ -803,8 +804,8 @@ export default function ProcurementRFQ() {
                 </div>
                 <div className="bg-[#0a0d12] rounded-lg p-3 border border-[#1a2028]">
                   <div className="text-[10px] text-[#5a6878] font-semibold uppercase tracking-wider mb-2">Items</div>
-                  {detailRfq?.lineItems.map(li => {
-                    const bid = detailRfq?.bids.find(b => b.vendorId === poVendorId && b.lineItemId === li.id);
+                  {(detailRfq?.lineItems ?? []).map(li => {
+                    const bid = (detailRfq?.bids ?? []).find(b => b.vendorId === poVendorId && b.lineItemId === li.id);
                     return (
                       <div key={li.id} className="flex items-center justify-between py-1 text-[11px]">
                         <span className="text-[#e2e8f0]">{li.description}</span>

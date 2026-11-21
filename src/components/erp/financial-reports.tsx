@@ -139,7 +139,6 @@ export default function FinancialReports() {
   const [apData, setApData] = useState<any[]>([]);
   const [arData, setArData] = useState<any[]>([]);
   const [journalData, setJournalData] = useState<any[]>([]);
-  const [bankData, setBankData] = useState<any[]>([]);
 
   /* ── Fetch all APIs ── */
   const fetchAll = async (showRefresh = false) => {
@@ -154,7 +153,6 @@ export default function FinancialReports() {
       { url: '/api/accounts-payable', setter: setApData },
       { url: '/api/accounts-receivable', setter: setArData },
       { url: '/api/journal-entries', setter: setJournalData },
-      { url: '/api/bank-cash', setter: (d: any) => setBankData(Array.isArray(d?.accounts) ? d.accounts : Array.isArray(d) ? d : []) },
     ];
 
     await Promise.all(
@@ -211,9 +209,6 @@ export default function FinancialReports() {
   // Budget summary
   const budgetTotal = budgetData.reduce((s: number, b: any) => s + (b.planned || 0), 0);
   const budgetActual = budgetData.reduce((s: number, b: any) => s + (b.actual || 0), 0);
-
-  // Bank balances — defensive: bankData may be object before fix
-  const bankBalance = (Array.isArray(bankData) ? bankData : []).reduce((s: number, b: any) => s + (b.balance || 0), 0);
 
   /* ── Chart Data ── */
 
@@ -369,19 +364,19 @@ export default function FinancialReports() {
                 <div className="bg-[#00e676]/5 border border-[#00e676]/15 rounded-lg p-3 text-center">
                   <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-1">Total Assets</div>
                   <div className="text-[16px] font-bold text-[#00e676]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                    {totalAssets > 0 ? formatCurrency(totalAssets) : formatCurrency(bankBalance + budgetTotal * 0.3)}
+                    {formatCurrency(totalAssets)}
                   </div>
                 </div>
                 <div className="bg-[#ff3d3d]/5 border border-[#ff3d3d]/15 rounded-lg p-3 text-center">
                   <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-1">Total Liabilities</div>
                   <div className="text-[16px] font-bold text-[#ff3d3d]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                    {totalLiabilities > 0 ? formatCurrency(totalLiabilities) : formatCurrency(apTotal + taxPending)}
+                    {formatCurrency(totalLiabilities)}
                   </div>
                 </div>
                 <div className="bg-[#00d4ff]/5 border border-[#00d4ff]/15 rounded-lg p-3 text-center">
                   <div className="text-[9px] uppercase tracking-wider text-[#5a6878] mb-1">Equity</div>
                   <div className="text-[16px] font-bold text-[#00d4ff]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                    {totalEquity > 0 ? formatCurrency(totalEquity) : formatCurrency(bankBalance)}
+                    {formatCurrency(totalEquity)}
                   </div>
                 </div>
               </div>
@@ -392,13 +387,13 @@ export default function FinancialReports() {
                   <div
                     className="h-full rounded-full transition-all duration-700"
                     style={{
-                      width: `${Math.min(((totalAssets || bankBalance) / ((totalAssets || bankBalance) + (totalLiabilities || apTotal))) * 100, 100)}%`,
+                      width: `${totalAssets + totalLiabilities > 0 ? Math.min((totalAssets / (totalAssets + totalLiabilities)) * 100, 100) : 0}%`,
                       background: '#00e676',
                     }}
                   />
                 </div>
                 <span className="text-[12px] font-bold text-[#00e676]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                  {formatCurrency((totalAssets || bankBalance) - (totalLiabilities || apTotal))}
+                  {formatCurrency(totalAssets - totalLiabilities)}
                 </span>
               </div>
             </ReportSection>

@@ -14,6 +14,7 @@
     "db:generate": "prisma generate && prisma generate --schema=prisma/superadmin.prisma",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
+    "db:backup": "node scripts/backup-erp-db.mjs",
     "db:seed": "tsx prisma/seed-superadmin-only.ts",
     "db:seed:legacy": "tsx prisma/seed-simple.ts",
     "cleanup:deleted": "tsx scripts/cleanup-deleted-records.ts",

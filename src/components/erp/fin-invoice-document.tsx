@@ -10,6 +10,7 @@ interface InvoiceData {
   invoiceNo: string;
   trackingNo?: string | null;
   poNo?: string | null;
+  workOrder?: { workOrderNo: string } | null;
   invoiceDate: string;
   eInvoiceDate?: string | null;
   dueDate: string;
@@ -18,6 +19,10 @@ interface InvoiceData {
   client?: string | null;
   invoiceValue: number;
   gstValue: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
+  cessAmount?: number;
   grandTotal: number;
   balanceAmount: number;
   description?: string | null;
@@ -25,6 +30,7 @@ interface InvoiceData {
   status: string;
   site?: { name: string; location?: string | null; state?: string | null } | null;
   party?: { name: string; gstin?: string | null; address?: string | null; state?: string | null; taxType?: string | null } | null;
+  taxCode?: { code: string; cgstRate: number; sgstRate: number; igstRate: number; cessRate: number } | null;
 }
 
 // ── Supplier (issuer) fallback — used until Settings › Branding is configured ──
@@ -101,21 +107,15 @@ export default function InvoiceDocument({ invoice, onClose }: { invoice: Invoice
     logoUrl: profile.logoUrl,
   };
 
-  // GST split — driven by the party's own Tax Type setting (Party Master),
-  // so every document for that party calculates the same way. 'Auto' (the
-  // default) falls back to comparing the recipient's state against the
-  // supplier's; when both are unknown under Auto, default to intra-state
-  // rather than guessing IGST. 'Exempt/SEZ' zeroes out GST entirely.
-  const taxType = invoice.party?.taxType || 'Auto';
-  const isExempt = taxType === 'Exempt/SEZ';
-  const sameState = taxType === 'Intra-State (CGST+SGST)' ? true
-    : taxType === 'Inter-State (IGST)' ? false
-    : (!invoice.party?.state || !profile.state || invoice.party.state.trim().toLowerCase() === profile.state.trim().toLowerCase());
-  const cgstAmt = isExempt ? 0 : sameState ? invoice.gstValue / 2 : 0;
-  const sgstAmt = isExempt ? 0 : sameState ? invoice.gstValue / 2 : 0;
-  const igstAmt = isExempt ? 0 : sameState ? 0 : invoice.gstValue;
-  const showCgstSgst = !isExempt && sameState;
-  const showIgst = !isExempt && !sameState;
+  const cgstAmt = invoice.cgstAmount || 0;
+  const sgstAmt = invoice.sgstAmount || 0;
+  const igstAmt = invoice.igstAmount || 0;
+  const cessAmt = invoice.cessAmount || 0;
+  const cgstRate = invoice.taxCode?.cgstRate || 0;
+  const sgstRate = invoice.taxCode?.sgstRate || 0;
+  const igstRate = invoice.taxCode?.igstRate || 0;
+  const showCgstSgst = cgstRate > 0 || sgstRate > 0 || cgstAmt > 0 || sgstAmt > 0;
+  const showIgst = igstRate > 0 || igstAmt > 0;
   const recipientName = invoice.party?.name || invoice.client || 'N/A';
 
   if (!mounted) return null;
@@ -192,9 +192,13 @@ export default function InvoiceDocument({ invoice, onClose }: { invoice: Invoice
                 <div className="p-1.5">{fmtDate(invoice.invoiceDate)}</div>
               </div>
               <div className="grid grid-cols-2 border-b border-[#ccc]">
-                <div className="p-1.5 border-r border-[#ccc] font-semibold">PO NO</div>
-                <div className="p-1.5">{invoice.poNo || 'NA'}</div>
+                <div className="p-1.5 border-r border-[#ccc] font-semibold">CUSTOMER WORK ORDER</div>
+                <div className="p-1.5">{invoice.workOrder?.workOrderNo || '—'}</div>
               </div>
+              {invoice.poNo && <div className="grid grid-cols-2 border-b border-[#ccc]">
+                <div className="p-1.5 border-r border-[#ccc] font-semibold">LEGACY PO REF</div>
+                <div className="p-1.5">{invoice.poNo}</div>
+              </div>}
               <div className="grid grid-cols-2 border-b border-[#ccc]">
                 <div className="p-1.5 border-r border-[#ccc] font-semibold">E-INVOICE DATE</div>
                 <div className="p-1.5">{fmtDate(invoice.eInvoiceDate)}</div>
@@ -273,11 +277,11 @@ export default function InvoiceDocument({ invoice, onClose }: { invoice: Invoice
                 <td className="border border-[#1a1a1a] p-1.5 text-center align-top">LOT</td>
                 <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(invoice.invoiceValue)}</td>
                 <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{fmt(invoice.invoiceValue)}</td>
-                <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{showCgstSgst ? '9%' : '—'}</td>
+                <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{showCgstSgst ? `${cgstRate}%` : '—'}</td>
                 <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{showCgstSgst ? fmt(cgstAmt) : '—'}</td>
-                <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{showCgstSgst ? '9%' : '—'}</td>
+                <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{showCgstSgst ? `${sgstRate}%` : '—'}</td>
                 <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{showCgstSgst ? fmt(sgstAmt) : '—'}</td>
-                <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{showIgst ? '18%' : '—'}</td>
+                <td className="border border-[#1a1a1a] p-1.5 text-center align-top">{showIgst ? `${igstRate}%` : '—'}</td>
                 <td className="border border-[#1a1a1a] p-1.5 text-right align-top font-mono">{showIgst ? fmt(igstAmt) : '—'}</td>
               </tr>
               {/* spacer rows for authentic look */}
@@ -314,6 +318,7 @@ export default function InvoiceDocument({ invoice, onClose }: { invoice: Invoice
             <div className="text-[9px] min-w-[180px]">
               <div className="grid grid-cols-2 border-b border-[#ccc]"><div className="p-1 border-r border-[#ccc]">Taxable Value</div><div className="p-1 text-right font-mono">{fmt(invoice.invoiceValue)}</div></div>
               <div className="grid grid-cols-2 border-b border-[#ccc]"><div className="p-1 border-r border-[#ccc]">Total GST</div><div className="p-1 text-right font-mono">{fmt(invoice.gstValue)}</div></div>
+              {cessAmt > 0 && <div className="grid grid-cols-2 border-b border-[#ccc]"><div className="p-1 border-r border-[#ccc]">Cess</div><div className="p-1 text-right font-mono">{fmt(cessAmt)}</div></div>}
               <div className="grid grid-cols-2 font-bold bg-[#f5a623]/15"><div className="p-1 border-r border-[#ccc]">Grand Total</div><div className="p-1 text-right font-mono">{fmt(invoice.grandTotal)}</div></div>
             </div>
           </div>

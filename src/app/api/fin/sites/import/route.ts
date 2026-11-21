@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { validateSiteDates } from '@/lib/fin-site-validation'
 
 export const dynamic = 'force-dynamic'
 
 interface ImportRecord {
   siteCode: string
   name: string
+  customerName: string
+  startDate: string
+  endDate: string
   location?: string | null
   state?: string | null
   contactPerson?: string | null
@@ -32,12 +36,28 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < records.length; i++) {
       const r = records[i]
-      if (!r.siteCode || !r.name) { skipped++; continue }
+      if (!r.siteCode?.trim() || !r.name?.trim() || !r.customerName?.trim() || !r.startDate?.trim() || !r.endDate?.trim()) {
+        errors++
+        errorRows.push({ row: i + 1, message: 'Site code, name, customer name, start date, and end date are required' })
+        continue
+      }
 
       try {
+        const dates = validateSiteDates(r.startDate, r.endDate)
+        if (!dates.ok) throw new Error(dates.error)
+
+        const customer = await pdb.finParty.findFirst({
+          where: { name: r.customerName.trim(), partyType: 'Customer' },
+          select: { id: true },
+        })
+        if (!customer) throw new Error('Customer not found')
+
         const data = {
-          siteCode: r.siteCode,
-          name: r.name,
+          siteCode: r.siteCode.trim(),
+          name: r.name.trim(),
+          customerId: customer.id,
+          startDate: dates.startDate,
+          endDate: dates.endDate,
           location: r.location || null,
           state: r.state || null,
           contactPerson: r.contactPerson || null,

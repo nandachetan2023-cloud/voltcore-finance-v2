@@ -22,8 +22,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const pdb = getDbForRequest(request)
     const { lineItems, bids, vendorIds, ...raw } = body
-    const data: any = { ...raw }
-    delete data.descCategory
+    const data: any = {}
+    for (const key of ['rfqNo', 'description', 'issueDate', 'responseDeadline', 'project', 'notes', 'status'] as const) {
+      if (raw[key] !== undefined) data[key] = raw[key]
+    }
     // The form posts <input type="date"> values as 'YYYY-MM-DD'; Prisma's
     // DateTime validation rejects date-only strings, so coerce here.
     if (!data.issueDate) return NextResponse.json({ success: false, error: 'issueDate is required' }, { status: 400 })
@@ -34,6 +36,8 @@ export async function POST(request: NextRequest) {
     if (!data.rfqNo) {
       const year = new Date().getFullYear()
       data.rfqNo = await nextPrefixedCode(pdb, 'finRFQ', 'rfqNo', `RFQ-${year}-`, 3)
+    } else if (await pdb.finRFQ.findUnique({ where: { rfqNo: String(data.rfqNo) }, select: { id: true } })) {
+      return NextResponse.json({ success: false, error: 'RFQ No already exists' }, { status: 409 })
     }
     const record = await pdb.finRFQ.create({
       data: {
@@ -44,8 +48,9 @@ export async function POST(request: NextRequest) {
       include: INCLUDE,
     })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating RFQ:', error)
+    if (error?.code === 'P2002') return NextResponse.json({ success: false, error: 'RFQ No already exists' }, { status: 409 })
     return NextResponse.json({ success: false, error: 'Failed to create' }, { status: 500 })
   }
 }

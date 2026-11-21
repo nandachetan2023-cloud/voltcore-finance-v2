@@ -508,40 +508,33 @@ Catches missing payments, duplicate entries, bank charges, and timing difference
       "office expenses", "cash expense", "petty cash book", "custodian",
       "float", "daily cash report", "site summary", "settlement",
     ],
-    summary: "Record small day-to-day cash expenses, top-ups, and run the three petty cash reports.",
+    summary: "Record petty cash vouchers, sync from PO/expenses, and review reports (vouchers, daily, by site, settlements).",
     body: `### Petty Cash
 
-Petty Cash tracks small, day-to-day site and office expenses paid in cash,
-wallet or UPI — tea, local conveyance, diesel, stationery, courier, labour
-welfare, emergency purchases.
+Track small day-to-day expenses paid in cash, wallet or UPI.
 
-**Creating a voucher**
-1. Open **Finance → Petty Cash** → **New Voucher**.
-2. In **Project Allocation**, pick the **Site**, **Job Code**, **PO** and the costing
-   dimensions (**Cost Center**, **Department**, **Project Manager**) — these six tags
-   are required so the spend flows into Site-wise and Job-wise costing.
-3. In **Expense Details**, tap a category tile — **FUEL / MAINT / LOCAL / FOOD /
-   STATIONARY / MISC** (mapped to Travel / Maintenance / Site Material / Food &
-   Refreshment / Office Supplies / Miscellaneous) — or type a custom category,
-   enter the **amount**, choose **Debit** (money out) or **Credit** (float / top-up),
-   and describe the expense.
-4. In **Payment & Evidence**, choose **Cash / Wallet / UPI** and drop in the receipt.
-5. **Save Draft** keeps it as a draft; **Submit for Approval** sends it to the
-   approver (Draft → Pending → Approved). The running balance updates automatically.
+**Creating a voucher (Request Petty Cash)**
+1. Open **Finance → Petty Cash** → **New Voucher** (button: **Request Petty Cash** in the form).
+2. Enter **What was this for?** (description, required) and **Amount (₹)** (required).
+3. Choose an **Expense Head** (category) if applicable.
+4. Select a **Job Code** (required). Site/cost context is set from the job (the form notes: “Site, cost center & approver auto-set from this job”).
+5. Add **Remarks** (optional) and upload a **Bill Photo** if needed.
+6. Save/submit via **Submit Request** (new) or **Save** (edit). Vouchers follow the approval workflow (Draft/Pending/Manager Approved/Approved/Rejected — see **Petty cash approval workflow**).
 
-**Four tabs**
+**Linking to PO or Expense Claims**
+- Use **Sync PO** to create a voucher from a Purchase Order.
+- Use **Sync Expense** to create a voucher from an Expense Claim.
+- You can also set **Linked to PO/Expense** context from related screens where offered.
+
+**Four tabs (on Petty Cash screen)**
 | Tab | What it shows |
 |---|---|
-| **Vouchers** | The full voucher register with filters and approval actions |
-| **Daily Cash Report** | Opening balance → cash in → expense → closing, per day |
-| **Summary by Site** | Cash given vs expense vs balance, per site |
-| **Employee-wise Settlement** | Advance vs expense vs balance, per custodian |
+| **Vouchers** | Register with filters (type, category, payment mode, source, approval status), search, import/export, and row actions |
+| **Daily Cash Report** | Day-by-day opening, cash in, expense, closing (Approved vouchers drive the KPIs) |
+| **Summary by Site** | Cash given vs expense vs balance by site |
+| **Employee-wise Settlement** | Advance vs expense vs balance per person (from custodian/authorized fields) |
 
-**Custodian & limit**
-Each voucher records the **custodian** (Site Incharge / Store Incharge / Admin
-Executive) and their sanctioned **limit** — e.g. a site petty cash limit of ₹50,000.
-
-See also: **Petty cash approval workflow** for the Draft → Pending → Approved cycle.`,
+**KPIs (Vouchers tab)** show **Balance (Approved)**, **Cash In**, **Cash Out**, **PO Payments**, **Expense Claims**, and **Pending Approval** (count and amount awaiting approval).`,
     links: [{ label: "Petty Cash", moduleId: "fin-petty-cash" }],
   },
 
@@ -554,37 +547,26 @@ See also: **Petty cash approval workflow** for the Draft → Pending → Approve
       "petty cash approval", "approve voucher", "reject voucher", "submit voucher",
       "approval", "approve", "reject", "pending approval", "draft voucher",
       "approval history", "audit trail", "who approved", "rejection reason",
+      "manager approved",
     ],
-    summary: "Draft → Pending → Approved/Rejected cycle for petty cash vouchers, with full audit trail.",
+    summary: "Approval flow for petty cash vouchers: Draft → Pending → (Manager Approved) → Approved or Rejected, with audit history.",
     popular: true,
     body: `### Petty cash approval workflow
 
-Every voucher carries an **approval status** and moves through this cycle:
+Vouchers have an **approval status** (shown in the Vouchers tab and on each record). Common statuses include **Draft**, **Pending**, **Manager Approved** (when used by your workflow), **Approved**, and **Rejected**.
 
-\`\`\`
-Draft ──submit──▶ Pending ──approve──▶ Approved
-                     │
-                     └──reject──▶ Rejected ──resubmit──▶ Pending
-\`\`\`
+**Typical flow**
+- **Draft**: created but not sent for approval.
+- **Submit**: sends a Draft (or Rejected, after fixes) to **Pending** for approvers.
+- **Approve / Reject**: approvers act on Pending vouchers. Rejecting requires a **reason** so the requester can correct and resubmit.
+- **Approved** vouchers count toward the **Balance (Approved)**, **Cash In/Out** and related KPIs on the Vouchers tab.
 
-**Statuses**
-| Status | Meaning |
-|---|---|
-| **Draft** | Just created, not yet sent for approval |
-| **Pending** | Submitted, waiting on the approver |
-| **Approved** | Signed off — counts as final |
-| **Rejected** | Sent back with a reason; fix it and resubmit |
-
-**How to use it**
-- **Submit** (paper-plane icon) on a Draft or Rejected voucher sends it for approval.
-- **Approve** (✓) or **Reject** (✗) appear on Pending vouchers. Rejecting
-  *requires* a reason, which the requester sees on the voucher.
-- Click the **status badge** in the Approval column to open the full
-  **approval history** — who submitted, who approved or rejected, when, and any comments.
+**In the UI**
+- Use the **Approval Status** filter to show Draft, Pending, Manager Approved, Approved, or Rejected.
+- Open the **approval history** (status badge / history view where available) to see who acted and when, with comments.
 
 **Finding what needs action**
-The **Pending Approval** stat card at the top shows the outstanding count, and the
-**Approval Status** filter narrows the register to just Pending (or Draft / Rejected).`,
+The **Pending Approval** card shows how many vouchers and the amount awaiting approval.`,
     links: [{ label: "Petty Cash", moduleId: "fin-petty-cash" }],
   },
 

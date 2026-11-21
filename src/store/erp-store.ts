@@ -9,7 +9,7 @@ export const MODULE_TREE: Record<string, string[]> = {
   procurement: ['procurement', 'procurement-pr', 'procurement-rfq', 'procurement-po-register', 'procurement-material-tracking', 'po-approval-stepper', 'rfq-comparison-matrix', 'grn-3way-match'],
   // Legacy alias: the old "Finance" menu was merged into "Finance & Accounts".
   // Kept so accounts whose saved grants still say 'finance' keep their access.
-  finance: ['finance', 'finance-accounts', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'journal-entries', 'bank-cash', 'fin-bank-reconciliation', 'taxation', 'budget', 'fin-profit-loss', 'financial-reports', 'tally-sync', 'notifications-ultra'],
+  finance: ['finance', 'finance-accounts', 'finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'fin-work-orders', 'journal-entries', 'bank-cash', 'fin-bank-reconciliation', 'taxation', 'budget', 'fin-profit-loss', 'financial-reports', 'tally-sync', 'notifications-ultra'],
   sales: ['sales', 'sales-tax-invoices', 'sales-orders', 'sales-quotations', 'fin-credit-notes', 'sales-opportunity-pipeline', 'sales-tender-register', 'sales-revenue-forecast', 'sales-client-accounts'],
   projects: ['projects', 'project-list', 'project-hierarchy', 'budget', 'boq-entry', 'job-progress', 'sites', 'scrap-entry'],
   assets: ['assets', 'equipment', 'permits', 'safety'],
@@ -19,10 +19,10 @@ export const MODULE_TREE: Record<string, string[]> = {
   reports: ['reports', 'report-manpower', 'report-attendance', 'report-payroll', 'report-leave', 'report-tour', 'report-late-fine', 'report-onboarding', 'report-turnover', 'report-training', 'report-notices', 'report-dispatch'],
   // Category groups (like HRMS / Organization)
   'login-role': ['fin-user-management', 'notifications-ultra'],
-  'master-setup': ['fin-sites', 'fin-jobs', 'fin-items', 'fin-clients', 'procurement-vendors'],
+  'master-setup': ['fin-sites', 'fin-jobs', 'fin-items', 'fin-clients', 'procurement-vendors', 'employees'],
   inventory: ['site-store', 'material-receipt', 'material-issue-wip', 'stock-ledger', 'scrap-entry'],
   'sales-billing': ['sales-orders', 'sales-quotations', 'ra-work-slider', 'sales-tax-invoices', 'receipt-entry'],
-  'finance-accounts': ['finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'bank-cash', 'fin-bank-reconciliation', 'journal-entries', 'taxation', 'fin-profit-loss', 'financial-reports', 'tally-sync'],
+  'finance-accounts': ['finance-dashboard', 'ledger', 'accounts-payable', 'accounts-receivable', 'fin-work-orders', 'bank-cash', 'fin-bank-reconciliation', 'journal-entries', 'taxation', 'fin-profit-loss', 'financial-reports', 'tally-sync'],
   'petty-cash': ['fin-petty-cash-custodian', 'fin-petty-cash', 'fin-petty-cash-approval-queue', 'fin-petty-cash-replenishment', 'fin-petty-cash-fund-allocation', 'fin-petty-cash-ledger', 'fin-petty-cash-reconciliation', 'fin-fund-master', 'fin-cash-request'],
   mis: ['report-drilldown', 'po-cost-tree', 'customer-profitability', 'budget'],
 }
@@ -236,6 +236,7 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'fin-items', icon: 'Package', label: 'Item Code Generator', section: 'Masters' },
     { id: 'fin-clients', icon: 'Users', label: 'Clients', section: 'Masters' },
     { id: 'procurement-vendors', icon: 'Users', label: 'Contractors Management', section: 'Masters' },
+    { id: 'employees', icon: 'HardHat', label: 'Employee Master', section: 'Masters' },
   ],
   inventory: [
     { id: 'site-store', icon: 'Warehouse', label: 'Site Store Management', section: 'Inventory' },
@@ -262,9 +263,9 @@ export const SUB_MODULES: Record<string, NavItem[]> = {
     { id: 'accounts-payable', icon: 'ArrowDownCircle', label: 'Accounts Payable', section: 'Accounts Payable' },
     { id: 'fin-payments', icon: 'Send', label: 'Payment Center', section: 'Accounts Payable' },
     { id: 'fin-payment-advices', icon: 'FileText', label: 'Payment Advices', section: 'Accounts Payable' },
-    { id: 'fin-work-orders', icon: 'ClipboardList', label: 'Work Orders', section: 'Accounts Payable' },
 
     { id: 'accounts-receivable', icon: 'ArrowUpCircle', label: 'Accounts Receivable', section: 'Accounts Receivable' },
+    { id: 'fin-work-orders', icon: 'ClipboardList', label: 'Customer Work Orders', section: 'Accounts Receivable' },
     { id: 'fin-client-follow-up', icon: 'PhoneCall', label: 'Client Follow Up', section: 'Accounts Receivable' },
 
     { id: 'bank-cash', icon: 'Landmark', label: 'Bank & Cash', section: 'Bank & Cash' },
@@ -387,7 +388,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   // HRMS sub-modules
   'employee-analytics': { title: 'Employee Analytics', breadcrumb: 'HRMS › Employee Analytics' },
   timesheet: { title: 'Timesheet', breadcrumb: 'HRMS › Weekly Timesheet' },
-  employees: { title: 'Employees', breadcrumb: 'HRMS › Employee Directory' },
+  employees: { title: 'Employee Master', breadcrumb: 'HRMS › Employee Directory' },
   attendance: { title: 'Attendance', breadcrumb: 'HRMS › Daily Attendance' },
   biometric: { title: 'Biometric Sync', breadcrumb: 'HRMS › Biometric Integration' },
   leave: { title: 'Leave Management', breadcrumb: 'HRMS › Leave Requests' },
@@ -442,7 +443,7 @@ export const MODULE_CONFIG: Record<string, ModuleConfig> = {
   'fin-payments': { title: 'Payment Center', breadcrumb: 'Finance › Payment Center' },
   'fin-payment-advices': { title: 'Payment Advices', breadcrumb: 'Finance › Payment Advices' },
   'fin-credit-notes': { title: 'Credit Notes', breadcrumb: 'Sales › Credit Notes' },
-  'fin-work-orders': { title: 'Work Orders (Orders in Hand)', breadcrumb: 'Finance › Work Orders' },
+  'fin-work-orders': { title: 'Customer Work Orders', breadcrumb: 'Finance › Accounts Receivable › Customer Work Orders' },
   'fin-bank-reconciliation': { title: 'Bank Reconciliation', breadcrumb: 'Finance › Bank Reconciliation' },
   'tally-sync': { title: 'Tally Sync', breadcrumb: 'Finance › Tally Sync (CA-Grade)' },
   'notifications-ultra': { title: 'Notifications Ultra', breadcrumb: 'Login & Role › Notifications Ultra' },
@@ -540,7 +541,7 @@ export const EXPANDABLE_WITH_PAGE = ['hrms', 'organization', 'finance-accounts',
 // Main modules kept out of the dashboard tile grid. They stay routable (and
 // keep their sub-modules) so existing links and grants still work — they just
 // no longer get a top-level tile.
-export const HIDDEN_MAIN_MODULES: string[] = ['hrms', 'sales-billing', 'finance-accounts'];
+export const HIDDEN_MAIN_MODULES: string[] = [];
 
 // Build a quick lookup for main module icons/labels
 const MAIN_MODULE_MAP: Record<string, NavItem> = {};

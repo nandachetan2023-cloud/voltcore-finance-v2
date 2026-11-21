@@ -21,6 +21,7 @@ export const NUMBER_SERIES = {
   po:       () => ({ model: 'finPurchaseOrder', field: 'poNo',      prefix: `PO-${year()}-`,  pad: 3 }),
   ar:       () => ({ model: 'accountsReceivable', field: 'invoiceNo', prefix: `AR-${year()}-`, pad: 3 }),
   ap:       () => ({ model: 'accountsPayable', field: 'billNo', prefix: `AP-${year()}-`, pad: 3 }),
+  receipt:  () => ({ model: 'finReceipt', field: 'receiptNo', prefix: `RCT-${year()}-`, pad: 4 }),
   claim:    () => ({ model: 'finExpenseClaim',  field: 'claimNo',   prefix: `EC-${year()}-`,  pad: 3 }),
   rfq:      () => ({ model: 'finRFQ',           field: 'rfqNo',     prefix: `RFQ/${year()}/`, pad: 3 }),
   subcontract: () => ({ model: 'finSubcontract', field: 'subcontractNo', prefix: `SC-${year()}-`, pad: 3 }),

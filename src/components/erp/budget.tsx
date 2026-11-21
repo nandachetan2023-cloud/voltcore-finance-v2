@@ -105,9 +105,6 @@ export default function Budget() {
     siteId: required('Site Code'),
     jobCode: required('Job Code'),
     poNo: required('PO Number'),
-    costCenter: required('Cost Center'),
-    department: required('Department'),
-    projectManager: required('Project Manager'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 

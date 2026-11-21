@@ -65,15 +65,6 @@ const PERIOD_OPTIONS = [
 
 type PeriodKey = (typeof PERIOD_OPTIONS)[number]['key'];
 
-const BUDGET_FACTORS: Record<string, number> = {
-  'Sales Accounts': 0.92,
-  'Direct Incomes': 1.05,
-  'Indirect Incomes': 1.1,
-  'Purchase Accounts': 0.9,
-  'Direct Expenses': 1.15,
-  'Indirect Expenses': 1.2,
-};
-
 const DONUT_COLORS = ['#00d4ff', '#f5a623', '#a855f7'];
 
 const MONTH_NUM: Record<string, number> = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
@@ -90,24 +81,36 @@ function parseMonth(m: string): { num: number; year: number; q: number; fy: stri
   return { num, year, q, fy: `FY ${String(fyStart).slice(2)}-${String(fyStart + 1).slice(2)}` };
 }
 
-const budgetOf = (label: string, actual: number) => Math.round(actual * (BUDGET_FACTORS[label] ?? 1));
-
 const SOURCE_LABELS: Record<string, string> = {
   invoice: 'Invoices',
   credit_note: 'Credit Notes',
+  material_issue: 'Material Issues',
+  payroll: 'Payroll',
   expense_claim: 'Expense Claims',
   petty_cash: 'Petty Cash',
-  payment_advice: 'Payment Advices',
   manual: 'Manual Entries',
 };
 
 const SOURCE_COLORS: Record<string, string> = {
   invoice: 'bg-[#00d4ff]/15 text-[#00d4ff]',
   credit_note: 'bg-[#f5a623]/15 text-[#f5a623]',
+  material_issue: 'bg-[#a855f7]/15 text-[#a855f7]',
+  payroll: 'bg-[#00e676]/15 text-[#00e676]',
   expense_claim: 'bg-[#a855f7]/15 text-[#a855f7]',
   petty_cash: 'bg-[#ff3d3d]/15 text-[#ff3d3d]',
-  payment_advice: 'bg-[#00e676]/15 text-[#00e676]',
   manual: 'bg-[#5a6878]/15 text-[#5a6878]',
+};
+
+const EMPTY_SUMMARY: PLSummary = {
+  sites: [],
+  months: [],
+  totalDebit: 0,
+  totalCredit: 0,
+  netPL: 0,
+  siteWise: [],
+  catAgg: {},
+  monthlyTrend: [],
+  sourceAgg: {},
 };
 
 const EMPTY_FORM: PLForm = {
@@ -144,91 +147,6 @@ const EXPORT_COLUMNS: ExportColumn<PLEntry>[] = [
   { header: 'Particular', accessor: 'particular' },
   { header: 'Amount', accessor: 'amount' },
 ];
-
-function generateMockData(): { data: PLEntry[]; summary: PLSummary } {
-  const sitesList = ['NTPC Rihand Dam Project', 'BALCO Aluminium Smelter', 'Coal India Eastern Coalfield', 'Vedanta Jharsuguda Smelter', 'Hindalco Mahan Aluminium'];
-  const monthsList = ['Jan 2026', 'Feb 2026', 'Mar 2026'];
-  const incomeCats = ['Sales Accounts', 'Direct Incomes', 'Indirect Incomes'];
-  const expenseCats = ['Purchase Accounts', 'Direct Expenses', 'Indirect Expenses'];
-  const sources = ['invoice', 'expense_claim', 'petty_cash', 'payment_advice', 'manual'];
-  const data: PLEntry[] = [];
-  let id = 1;
-
-  sitesList.forEach((site, si) => {
-    monthsList.forEach((month, mi) => {
-      incomeCats.forEach((cat) => {
-        const src = sources[(si + mi) % sources.length];
-        const amt = Math.round((80000 + Math.random() * 400000 + si * 80000 + mi * 60000) / 100) * 100;
-        data.push({
-          id: src === 'manual' ? id++ : `inv-${si}-${mi}-${cat.slice(0, 3)}`,
-          source: src,
-          site,
-          month,
-          side: 'credit',
-          category: cat,
-          particular: `${cat} — ${site} (${month})`,
-          amount: amt,
-        });
-      });
-      expenseCats.forEach((cat) => {
-        const src = sources[(si + mi + 2) % sources.length];
-        const amt = Math.round((40000 + Math.random() * 250000 + si * 40000 + mi * 30000) / 100) * 100;
-        data.push({
-          id: src === 'manual' ? id++ : `exp-${si}-${mi}-${cat.slice(0, 3)}`,
-          source: src,
-          site,
-          month,
-          side: 'debit',
-          category: cat,
-          particular: `${cat} — ${site} (${month})`,
-          amount: amt,
-        });
-      });
-    });
-  });
-
-  data.push({ id: id++, source: 'manual', site: sitesList[0], month: 'Feb 2026', side: 'credit', category: 'Sales Accounts', particular: 'Manual — Consulting fees', amount: 75000 });
-  data.push({ id: id++, source: 'manual', site: sitesList[1], month: 'Feb 2026', side: 'debit', category: 'Purchase Accounts', particular: 'Manual — Stationery supplies', amount: 12500 });
-  data.push({ id: id++, source: 'manual', site: sitesList[2], month: 'Mar 2026', side: 'credit', category: 'Indirect Incomes', particular: 'Manual — Interest received', amount: 8500 });
-
-  const totalCredit = data.filter(d => d.side === 'credit').reduce((s, d) => s + d.amount, 0);
-  const totalDebit = data.filter(d => d.side === 'debit').reduce((s, d) => s + d.amount, 0);
-  const netPL = totalCredit - totalDebit;
-
-  const siteWise = sitesList.map(site => {
-    const income = data.filter(d => d.site === site && d.side === 'credit').reduce((s, d) => s + d.amount, 0);
-    const expense = data.filter(d => d.site === site && d.side === 'debit').reduce((s, d) => s + d.amount, 0);
-    return { site, income, expense, netPL: income - expense };
-  });
-
-  const catAgg: Record<string, { debit: number; credit: number }> = {};
-  ALL_CATEGORIES.forEach(cat => {
-    catAgg[cat] = {
-      debit: data.filter(d => d.category === cat && d.side === 'debit').reduce((s, d) => s + d.amount, 0),
-      credit: data.filter(d => d.category === cat && d.side === 'credit').reduce((s, d) => s + d.amount, 0),
-    };
-  });
-
-  const monthlyTrend = monthsList.map(month => {
-    const income = data.filter(d => d.month === month && d.side === 'credit').reduce((s, d) => s + d.amount, 0);
-    const expense = data.filter(d => d.month === month && d.side === 'debit').reduce((s, d) => s + d.amount, 0);
-    return { month, income, expense, netPL: income - expense };
-  });
-
-  const sourceKeys = ['invoice', 'credit_note', 'expense_claim', 'petty_cash', 'payment_advice', 'manual'];
-  const sourceAgg: Record<string, { debit: number; credit: number }> = {};
-  sourceKeys.forEach(src => {
-    sourceAgg[src] = {
-      debit: data.filter(d => d.source === src && d.side === 'debit').reduce((s, d) => s + d.amount, 0),
-      credit: data.filter(d => d.source === src && d.side === 'credit').reduce((s, d) => s + d.amount, 0),
-    };
-  });
-
-  return {
-    data,
-    summary: { sites: sitesList, months: monthsList, totalDebit, totalCredit, netPL, siteWise, catAgg, monthlyTrend, sourceAgg },
-  };
-}
 
 function SourceBar({ value, max, color }: { value: number; max: number; color: string }) {
   const p = max > 0 ? Math.min((value / max) * 100, 100) : 0;
@@ -300,23 +218,18 @@ function Donut({ segments, total }: { segments: { label: string; value: number; 
 function StmtSection({ title, color }: { title: string; color?: string }) {
   return (
     <tr>
-      <td colSpan={5} className="py-2 px-3 bg-[#0f1318] text-[10px] font-bold uppercase tracking-wider" style={{ color: color || '#f5a623' }}>
+      <td colSpan={2} className="py-2 px-3 bg-[#0f1318] text-[10px] font-bold uppercase tracking-wider" style={{ color: color || '#f5a623' }}>
         {title}
       </td>
     </tr>
   );
 }
 
-function StmtRow({ label, actual, budget, indent, strong, color }: { label: string; actual: number; budget: number; indent?: boolean; strong?: boolean; color?: string }) {
-  const variance = actual - budget;
-  const varPct = budget !== 0 ? (variance / Math.abs(budget)) * 100 : 0;
+function StmtRow({ label, actual, indent, strong, color }: { label: string; actual: number; indent?: boolean; strong?: boolean; color?: string }) {
   return (
     <tr className="hover:bg-[#141920]">
       <td className={`py-2 px-3 text-[11px] ${indent ? 'pl-8' : ''} ${strong ? 'font-bold text-[#e2e8f0]' : 'text-[#8899aa]'}`}>{label}</td>
       <td className={`py-2 px-3 text-right font-mono ${strong ? 'font-bold' : ''} ${color || 'text-[#e2e8f0]'}`}>{fmtINR(actual)}</td>
-      <td className="py-2 px-3 text-right font-mono text-[#5a6878]">{fmtINR(budget)}</td>
-      <td className={`py-2 px-3 text-right font-mono ${variance >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{variance >= 0 ? '+' : '−'}{fmtINR(Math.abs(variance))}</td>
-      <td className={`py-2 px-3 text-right font-mono ${varPct >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{varPct >= 0 ? '+' : ''}{varPct.toFixed(1)}%</td>
     </tr>
   );
 }
@@ -347,20 +260,15 @@ export default function FinProfitLoss() {
     try {
       const r = await fetch('/api/fin/profit-loss');
       const j: ApiResponse = await r.json();
-      if (j.success && j.data?.length) {
-        setRecords(j.data);
-        setSummary(j.summary);
-      } else {
-        const mock = generateMockData();
-        setRecords(mock.data);
-        setSummary(mock.summary);
-        toast.info('Sample data — no server records found');
+      if (!r.ok || !j.success || !Array.isArray(j.data) || !j.summary) {
+        throw new Error('Failed to load profit and loss data');
       }
-    } catch {
-      const mock = generateMockData();
-      setRecords(mock.data);
-      setSummary(mock.summary);
-      toast.info('Sample data — API unavailable');
+      setRecords(j.data);
+      setSummary(j.summary);
+    } catch (error) {
+      setRecords([]);
+      setSummary(EMPTY_SUMMARY);
+      toast.error(error instanceof Error ? error.message : 'Failed to load profit and loss data');
     } finally {
       setLoading(false);
     }
@@ -476,24 +384,16 @@ export default function FinProfitLoss() {
   const revenueRows = useMemo(() => {
     return CREDIT_CATEGORIES.map(cat => {
       const actual = filteredRecords.filter(r => r.category === cat && r.side === 'credit').reduce((s, r) => s + r.amount, 0);
-      return { label: cat, actual, budget: budgetOf(cat, actual) };
+      return { label: cat, actual };
     });
   }, [filteredRecords]);
 
   const opRows = useMemo(() => {
     return DEBIT_CATEGORIES.filter(c => c !== 'Purchase Accounts').map(cat => {
       const actual = filteredRecords.filter(r => r.category === cat && r.side === 'debit').reduce((s, r) => s + r.amount, 0);
-      return { label: cat, actual, budget: budgetOf(cat, actual) };
+      return { label: cat, actual };
     });
   }, [filteredRecords]);
-
-  const revenueBudget = revenueRows.reduce((s, r) => s + r.budget, 0);
-  const cogsBudget = budgetOf('Purchase Accounts', cogs);
-  const grossBudget = revenueBudget - cogsBudget;
-  const opBudget = opRows.reduce((s, r) => s + r.budget, 0);
-  const netBudget = grossBudget - opBudget;
-  const netVar = fNet - netBudget;
-  const netVarPct = netBudget !== 0 ? (netVar / Math.abs(netBudget)) * 100 : 0;
 
   const expenseSegs = DEBIT_CATEGORIES.map((cat, i) => ({
     label: cat,
@@ -505,9 +405,10 @@ export default function FinProfitLoss() {
   const reconItems = [
     { key: 'invoice', label: 'Invoices', kind: 'credit' as const },
     { key: 'credit_note', label: 'Credit Notes', kind: 'debit' as const },
+    { key: 'material_issue', label: 'Material Issues', kind: 'debit' as const },
+    { key: 'payroll', label: 'Payroll', kind: 'debit' as const },
     { key: 'expense_claim', label: 'Expense Claims', kind: 'debit' as const },
     { key: 'petty_cash', label: 'Petty Cash', kind: 'debit' as const },
-    { key: 'payment_advice', label: 'Payment Advices', kind: 'debit' as const },
   ];
 
   const tableRecords = useMemo(() => {
@@ -808,29 +709,23 @@ export default function FinProfitLoss() {
                       <tr className="bg-[#0f1318]">
                         <th className="text-left py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Account Category</th>
                         <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Actual</th>
-                        <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Budget</th>
-                        <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Variance</th>
-                        <th className="text-right py-2.5 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">Var %</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#1a2028]">
                       <StmtSection title="Revenue" color="#00e676" />
                       {revenueRows.filter(r => r.actual > 0).map(r => (
-                        <StmtRow key={r.label} label={r.label} actual={r.actual} budget={r.budget} indent color="#00e676" />
+                        <StmtRow key={r.label} label={r.label} actual={r.actual} indent color="#00e676" />
                       ))}
                       <StmtSection title="Direct Costs (COGS)" color="#00d4ff" />
-                      {cogs > 0 && <StmtRow label="Purchase Accounts" actual={cogs} budget={cogsBudget} indent color="#00d4ff" />}
-                      <StmtRow label="GROSS PROFIT" actual={gross} budget={grossBudget} strong color={gross >= 0 ? '#00e676' : '#ff3d3d'} />
+                      {cogs > 0 && <StmtRow label="Purchase Accounts" actual={cogs} indent color="#00d4ff" />}
+                      <StmtRow label="GROSS PROFIT" actual={gross} strong color={gross >= 0 ? '#00e676' : '#ff3d3d'} />
                       <StmtSection title="Operating Expenses" color="#f5a623" />
                       {opRows.filter(r => r.actual > 0).map(r => (
-                        <StmtRow key={r.label} label={r.label} actual={r.actual} budget={r.budget} indent color="#f5a623" />
+                        <StmtRow key={r.label} label={r.label} actual={r.actual} indent color="#f5a623" />
                       ))}
                       <tr className="bg-[#0f1318] border-t-2 border-[#f5a623]">
                         <td className="py-3 px-3 text-[13px] font-bold text-[#f5a623]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>NET PROFIT</td>
                         <td className="py-3 px-3 text-right font-mono text-[14px] font-bold text-[#f5a623]">{fNet >= 0 ? '+' : '−'}{fmtINR(Math.abs(fNet))}</td>
-                        <td className="py-3 px-3 text-right font-mono text-[12px] text-[#8899aa]">{fmtINR(netBudget)}</td>
-                        <td className={`py-3 px-3 text-right font-mono text-[12px] font-bold ${netVar >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{netVar >= 0 ? '+' : '−'}{fmtINR(Math.abs(netVar))}</td>
-                        <td className={`py-3 px-3 text-right font-mono text-[12px] font-bold ${netVarPct >= 0 ? 'text-[#00e676]' : 'text-[#ff3d3d]'}`}>{netVarPct >= 0 ? '+' : ''}{netVarPct.toFixed(1)}%</td>
                       </tr>
                     </tbody>
                   </table>

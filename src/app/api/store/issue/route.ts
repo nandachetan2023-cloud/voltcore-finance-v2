@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
 import { nextPrefixedCode } from '@/lib/auto-number'
-import { postIssueLinesToLedger } from '@/lib/store-ledger'
+import { InsufficientStoreStockError, postIssueLinesToLedger } from '@/lib/store-ledger'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +51,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { lines, allowDirectIssue, ...data } = body
+    if (!Array.isArray(lines) || lines.length === 0 || lines.some((line: any) => !Number.isInteger(Number(line.itemId)) || Number(line.itemId) <= 0 || !(Number(line.qty) > 0) || !Number.isFinite(Number(line.qty)))) {
+      return NextResponse.json({ success: false, error: 'At least one valid item and positive quantity are required' }, { status: 400 })
+    }
     if (!data.issueNo) {
       const year = new Date().getFullYear()
       data.issueNo = await nextPrefixedCode(pdb, 'finStoreIssue', 'issueNo', `SI/${year}/`, 4)
@@ -80,6 +83,7 @@ export async function POST(request: NextRequest) {
           siteId: Number(data.siteId),
           jobId: data.jobId ? Number(data.jobId) : null,
           issuedTo: data.issuedTo || null,
+          contractorName: data.contractorName || null,
           receiverSignature: data.receiverSignature || null,
           issuedBy: data.issuedBy || null,
           remarks: data.remarks || null,
@@ -126,6 +130,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
     console.error('Error creating issue:', error)
+    if (error instanceof InsufficientStoreStockError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 409 })
+    }
     if (error instanceof Error && (error.message.startsWith('Cannot issue') || error.message === 'MRS not found')) {
       return NextResponse.json({ success: false, error: error.message }, { status: error.message === 'MRS not found' ? 404 : 400 })
     }

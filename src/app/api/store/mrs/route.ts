@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
         purpose: data.purpose || null,
         requiredByDate: data.requiredByDate ? new Date(data.requiredByDate) : null,
         reasonForRequirement: data.reasonForRequirement || null,
-        status: data.status || 'Draft',
+        status: 'Draft',
         lines: lines?.length ? {
           create: lines.map((l: any) => ({
             itemId: Number(l.itemId),
@@ -76,6 +76,10 @@ export async function PUT(request: NextRequest) {
     const { id, action, actor, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
+
+    if (!action && data.status !== undefined) {
+      return NextResponse.json({ success: false, error: 'MRS status can only be changed through a workflow action' }, { status: 400 })
+    }
 
     // Approval workflow: submit -> Pending, approve -> Approved, reject -> Rejected
     if (action) {
@@ -127,7 +131,6 @@ export async function PUT(request: NextRequest) {
         ...(data.purpose !== undefined ? { purpose: data.purpose } : {}),
         ...(data.requiredByDate !== undefined ? { requiredByDate: data.requiredByDate ? new Date(data.requiredByDate) : null } : {}),
         ...(data.reasonForRequirement !== undefined ? { reasonForRequirement: data.reasonForRequirement } : {}),
-        ...(data.status !== undefined ? { status: data.status } : {}),
       },
       include: INCLUDE,
     })

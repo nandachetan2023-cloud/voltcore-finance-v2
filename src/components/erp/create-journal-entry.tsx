@@ -100,7 +100,7 @@ export default function CreateJournalEntry() {
   const [description, setDescription] = useState('');
   const [reference, setReference] = useState('');
   const [jobCode, setJobCode] = useState('');
-  const [poNo, setPoNo] = useState('');
+  const [poNo, setPoNo] = useState('NA');
   const [costCenter, setCostCenter] = useState('');
   const [department, setDepartment] = useState('');
   const [projectManager, setProjectManager] = useState('');
@@ -162,24 +162,24 @@ export default function CreateJournalEntry() {
     try {
       const res = await fetch('/api/fin/parties');
       const json = await res.json();
-      if (json.success && json.data?.length) setParties(json.data);
-      else setParties([
-        { id: 1, name: 'Tata Steel Limited', code: 'V001', partyType: 'Customer' },
-        { id: 2, name: 'Larsen & Toubro Ltd', code: 'V002', partyType: 'Customer' },
-        { id: 3, name: 'NTPC Limited', code: 'V003', partyType: 'Customer' },
-        { id: 4, name: 'Hindalco Industries', code: 'V004', partyType: 'Vendor' },
-        { id: 5, name: 'Siemens India Ltd', code: 'V005', partyType: 'Vendor' },
-      ]);
-    } catch { /* silent */ }
+      if (!res.ok || !json.success || !Array.isArray(json.data)) throw new Error(json.error || 'Failed to load parties');
+      setParties(json.data);
+    } catch (error) {
+      setParties([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load parties');
+    }
   }, []);
 
   const fetchSites = useCallback(async () => {
     try {
       const res = await fetch('/api/fin/sites');
       const json = await res.json();
-      if (json.success && json.data?.length) setSites(json.data);
-      else setSites([{ id: 1, name: 'TPP Adani Godda', siteCode: 'SITE-001' }, { id: 2, name: 'TPP NTPC Barh', siteCode: 'SITE-002' }, { id: 3, name: 'HO Mumbai', siteCode: 'SITE-003' }]);
-    } catch { setSites([{ id: 1, name: 'TPP Adani Godda', siteCode: 'SITE-001' }, { id: 2, name: 'TPP NTPC Barh', siteCode: 'SITE-002' }, { id: 3, name: 'HO Mumbai', siteCode: 'SITE-003' }]); }
+      if (!res.ok || !json.success || !Array.isArray(json.data)) throw new Error(json.error || 'Failed to load sites');
+      setSites(json.data);
+    } catch (error) {
+      setSites([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load sites');
+    }
   }, []);
 
   const fetchEntries = useCallback(async () => {
@@ -216,7 +216,7 @@ export default function CreateJournalEntry() {
     setDescription('');
     setReference('');
     setJobCode('');
-    setPoNo('');
+    setPoNo('NA');
     setCostCenter('');
     setDepartment('');
     setProjectManager('');
@@ -274,6 +274,11 @@ export default function CreateJournalEntry() {
     if (!date) return 'Date is required';
     if (!entryNo.trim()) return 'Reference number is required';
     if (!siteId) return 'Site is required';
+    if (!jobCode.trim()) return 'Job Code is required';
+    if (!poNo.trim()) return 'Enter a PO number or NA';
+    if (!costCenter.trim()) return 'Cost Center is required';
+    if (!department.trim()) return 'Department is required';
+    if (!projectManager.trim()) return 'Project Manager is required';
     const active = lines.filter(l => l.debitAmount > 0 || l.creditAmount > 0);
     if (active.length === 0) return 'At least one line must have an amount';
     if (active.some(l => !l.account)) return 'Every line with an amount must have an account selected';
@@ -484,10 +489,10 @@ export default function CreateJournalEntry() {
                 <input type="text" value={entryNo} readOnly placeholder="Auto-generated" className={inputCls + ' opacity-60'} />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Site</label>
+                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Site *</label>
                 <div className="relative">
                   <select value={siteId} onChange={e => setSiteId(Number(e.target.value))} className={selectCls + ' pr-7'}>
-                    <option value={0}>All sites...</option>
+                    <option value={0}>Select site...</option>
                     {sites.map(s => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
@@ -543,24 +548,24 @@ export default function CreateJournalEntry() {
             {/* Costing tags — Job/Site/PO/Cost Center/Department/PM */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mt-4">
               <div>
-                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Job Code</label>
-                <input type="text" value={jobCode} onChange={e => setJobCode(e.target.value)} placeholder="JOB-2026-001" className={inputCls} />
+                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Job Code *</label>
+                <input type="text" value={jobCode} onChange={e => setJobCode(e.target.value)} placeholder="Valid job code for selected site" className={inputCls} />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">PO No</label>
-                <input type="text" value={poNo} onChange={e => setPoNo(e.target.value)} placeholder="PO-125" className={inputCls} />
+                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">PO No / NA *</label>
+                <input type="text" value={poNo} onChange={e => setPoNo(e.target.value)} placeholder="Enter valid PO or NA" className={inputCls} />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Cost Center</label>
-                <input type="text" value={costCenter} onChange={e => setCostCenter(e.target.value)} placeholder="Optional" className={inputCls} />
+                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Cost Center *</label>
+                <input type="text" value={costCenter} onChange={e => setCostCenter(e.target.value)} placeholder="Required cost center" className={inputCls} />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Department</label>
+                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Department *</label>
                 <input type="text" value={department} onChange={e => setDepartment(e.target.value)} placeholder="e.g. Electrical" className={inputCls} />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Project Manager</label>
-                <input type="text" value={projectManager} onChange={e => setProjectManager(e.target.value)} placeholder="Optional" className={inputCls} />
+                <label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Project Manager *</label>
+                <input type="text" value={projectManager} onChange={e => setProjectManager(e.target.value)} placeholder="Required project manager" className={inputCls} />
               </div>
             </div>
 

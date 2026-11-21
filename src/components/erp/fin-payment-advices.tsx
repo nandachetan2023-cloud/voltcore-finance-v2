@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { FileText, Plus, Pencil, Trash2, Loader2, X, ChevronDown, ChevronRight, Printer, ImagePlus, Trash, Upload } from 'lucide-react';
 import { toast } from 'sonner';
@@ -320,9 +320,6 @@ export default function FinPaymentAdvices() {
     siteId: required('Site Code'),
     jobCode: required('Job Code'),
     poId: required('PO Number'),
-    costCenter: required('Cost Center'),
-    department: required('Department'),
-    projectManager: required('Project Manager'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 

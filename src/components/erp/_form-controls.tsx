@@ -282,13 +282,13 @@ export function CostingFields({
   const projectManagerOptions = useMemo(() => [...new Set(PROJECT_MANAGER_SUGGESTIONS)], []);
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <FormField label="Cost Center" required error={errors.costCenter} hint="Cost centre for this transaction">
+      <FormField label="Cost Center" error={errors.costCenter} hint="Cost centre for this transaction">
         <DatalistField id={`${prefix}-cost-center`} value={form.costCenter} onChange={(v) => setField('costCenter', v)} options={costCenterOptions} placeholder="e.g. CC-SIT-001" />
       </FormField>
-      <FormField label="Department" required error={errors.department} hint="Responsible department">
+      <FormField label="Department" error={errors.department} hint="Responsible department">
         <DatalistField id={`${prefix}-department`} value={form.department} onChange={(v) => setField('department', v)} options={departmentOptions} placeholder="e.g. Projects" />
       </FormField>
-      <FormField label="Project Manager" required error={errors.projectManager} hint="Accountable project manager">
+      <FormField label="Project Manager" error={errors.projectManager} hint="Accountable project manager">
         <DatalistField id={`${prefix}-pm`} value={form.projectManager} onChange={(v) => setField('projectManager', v)} options={projectManagerOptions} placeholder="e.g. R. Sharma" />
       </FormField>
     </div>

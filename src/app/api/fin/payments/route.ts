@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const pdb = getDbForRequest(request)
     const [payables, bankAccounts, recentTxns] = await Promise.all([
       pdb.accountsPayable.findMany({
-        where: { status: { in: ['Pending', 'Partially Paid', 'Overdue'] } },
+        where: { status: { in: ['Approved', 'Partially Paid'] } },
         orderBy: { dueDate: 'asc' },
         include: { site: true },
       }),
@@ -96,24 +96,65 @@ export async function POST(request: NextRequest) {
     const payAmount = Number(amount)
     if (!payAmount || payAmount <= 0) return NextResponse.json({ success: false, error: 'A positive amount is required' }, { status: 400 })
 
-    const account = await pdb.bankAccount.findUnique({ where: { id: Number(bankAccountId) } })
-    if (!account) return NextResponse.json({ success: false, error: 'Bank account not found' }, { status: 404 })
-    if (account.balance < payAmount) {
-      return NextResponse.json({ success: false, error: `Insufficient balance. Available: ₹${account.balance.toLocaleString('en-IN')}` }, { status: 400 })
-    }
-
-    let bill: Awaited<ReturnType<typeof pdb.accountsPayable.findUnique>> | null = null
-    if (billId) {
-      bill = await pdb.accountsPayable.findUnique({ where: { id: Number(billId) } })
-      if (!bill) return NextResponse.json({ success: false, error: 'Bill not found' }, { status: 404 })
-    }
-
-    const paymentDate = date ? new Date(date) : new Date()
-    const newBalance = account.balance - payAmount
-    const payee = party || bill?.vendor || 'Payment'
-    const site = siteId ? await pdb.finSite.findUnique({ where: { id: Number(siteId) } }) : null
+    let bill: {
+      id: number
+      billNo: string
+      vendor: string
+      totalAmount: number
+      paidAmount: number
+      status: string
+      paidDate: Date | null
+    } | null = null
 
     const result = await pdb.$transaction(async (tx) => {
+      const locked = await tx.$queryRawUnsafe<{ id: number; balance: number; accountName: string }[]>(
+        `SELECT id, balance, accountName FROM "BankAccount" WHERE id = ${Number(bankAccountId)} FOR UPDATE`
+      )
+      const account = locked[0]
+      if (!account) {
+        return { kind: 'error', status: 404, error: 'Bank account not found' }
+      }
+      if (account.balance < payAmount) {
+        return {
+          kind: 'error',
+          status: 400,
+          error: `Insufficient balance. Available: ₹${account.balance.toLocaleString('en-IN')}`,
+        }
+      }
+
+      if (billId) {
+        const lockedBill = await tx.$queryRawUnsafe<{
+          id: number
+          billNo: string
+          vendor: string
+          totalAmount: number
+          paidAmount: number
+          status: string
+          paidDate: Date | null
+        }[]>(
+          `SELECT id, billNo, vendor, totalAmount, paidAmount, status, paidDate FROM "AccountsPayable" WHERE id = ${Number(billId)} FOR UPDATE`
+        )
+        bill = lockedBill[0] ?? null
+        if (!bill) {
+          return { kind: 'error', status: 404, error: 'Bill not found' }
+        }
+        if (!['Approved', 'Partially Paid'].includes(bill.status)) {
+          return { kind: 'error', status: 409, error: 'Only approved unpaid bills can be paid' }
+        }
+        const outstanding = Math.max(0, bill.totalAmount - bill.paidAmount)
+        if (payAmount > outstanding + 0.001) {
+          return {
+            kind: 'error',
+            status: 400,
+            error: `Payment exceeds the bill balance of ₹${outstanding.toLocaleString('en-IN')}`,
+          }
+        }
+      }
+
+      const paymentDate = date ? new Date(date) : new Date()
+      const newBalance = account.balance - payAmount
+      const payee = party || bill?.vendor || 'Payment'
+      const site = siteId ? await tx.finSite.findUnique({ where: { id: Number(siteId) } }) : null
       // 1. Bank withdrawal transaction (records running balance)
       const txn = await tx.bankTransaction.create({
         data: {
@@ -159,49 +200,64 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      return { txn, updatedBill, newBalance }
+      // Auto-post the GL entry for this payment atomically with the settlement:
+      // Dr Vendor Payable / Cr Bank (or Cash, if paid in cash). Any posting
+      // failure rolls back the payment, bank balance, and AP settlement together.
+      await postJournalEntry(tx, {
+        prefix: 'JE-PAY',
+        voucherType: 'Payment',
+        entryDate: paymentDate,
+        description: `Payment to ${party || bill?.vendor || 'Payment'}${bill ? ` for bill ${bill.billNo}` : ''}`,
+        reference: reference || null,
+        siteId: siteId ? Number(siteId) : null,
+        jobCode: jobCode || null,
+        poNo: poNo || null,
+        costCenter: costCenter || null,
+        department: department || null,
+        projectManager: projectManager || null,
+        lines: [
+          { accountCode: GL_ACCOUNTS.VENDOR_PAYABLE, debit: payAmount, credit: 0 },
+          { accountCode: paymentMethod === 'Cash' ? GL_ACCOUNTS.CASH : GL_ACCOUNTS.BANK, debit: 0, credit: payAmount },
+        ],
+      })
+
+      return {
+        kind: 'ok',
+        txn,
+        updatedBill,
+        newBalance,
+        accountName: account.accountName,
+        siteCode: site?.siteCode ?? null,
+        paymentDate,
+      }
     })
 
-    // Auto-post the GL entry for this payment: Dr Vendor Payable / Cr Bank
-    // (or Cash, if paid in cash). A posting failure must never block the
-    // payment itself, so this runs after the transaction commits.
-    await postJournalEntry(pdb, {
-      prefix: 'JE-PAY',
-      voucherType: 'Payment',
-      entryDate: paymentDate,
-      description: `Payment to ${payee}${bill ? ` for bill ${bill.billNo}` : ''}`,
-      reference: reference || null,
-      siteId: siteId ? Number(siteId) : null,
-      jobCode: jobCode || null,
-      poNo: poNo || null,
-      costCenter: costCenter || null,
-      department: department || null,
-      projectManager: projectManager || null,
-      lines: [
-        { accountCode: GL_ACCOUNTS.VENDOR_PAYABLE, debit: payAmount, credit: 0 },
-        { accountCode: paymentMethod === 'Cash' ? GL_ACCOUNTS.CASH : GL_ACCOUNTS.BANK, debit: 0, credit: payAmount },
-      ],
-    })
+    if (result.kind === 'error') {
+      return NextResponse.json({ success: false, error: result.error }, { status: result.status })
+    }
+
+    const { txn, updatedBill, newBalance, accountName, siteCode, paymentDate: txnDate } = result
+    const payee = party || bill?.vendor || 'Payment'
 
     notifyFinance(pdb, {
       entityType: 'FinPayment',
-      entityId: String(result.txn.id),
+      entityId: String(txn.id),
       templateCode: 'PAYMENT_MADE',
-      vars: { payee, amount: inr(payAmount), billNo: bill?.billNo || '', bank: account.accountName || '' },
+      vars: { payee, amount: inr(payAmount), billNo: bill?.billNo || '', bank: accountName || '' },
       title: `Payment of ${inr(payAmount)} to ${payee}`,
-      message: `${bill ? `Bill ${bill.billNo} • ${result.updatedBill?.status} • ` : ''}${paymentMethod || 'Bank'}${reference ? ` ref ${reference}` : ''} • Bank balance ${inr(newBalance)}`,
+      message: `${bill ? `Bill ${bill.billNo} • ${updatedBill?.status} • ` : ''}${paymentMethod || 'Bank'}${reference ? ` ref ${reference}` : ''} • Bank balance ${inr(newBalance)}`,
       type: 'success',
       priority: 'P2',
-      siteCode: site?.siteCode || null,
+      siteCode,
       jobCode: jobCode || null,
-      finYear: deriveFinYear(paymentDate),
+      finYear: deriveFinYear(txnDate),
       amount: payAmount,
       link: 'fin-payments',
       actorEmail: actorEmail || null,
-      recipients: FIN_TEAM(site?.siteCode),
+      recipients: FIN_TEAM(siteCode),
     })
 
-    return NextResponse.json({ success: true, data: result }, { status: 201 })
+    return NextResponse.json({ success: true, data: { txn, updatedBill, newBalance } }, { status: 201 })
   } catch (error) {
     console.error('[payments POST] error:', error)
     return NextResponse.json({ success: false, error: 'Failed to process payment' }, { status: 500 })

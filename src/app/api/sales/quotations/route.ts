@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { allocateVoucherNo, getFinYear } from '@/lib/tally-sync-engine'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,9 +33,8 @@ export async function POST(request: NextRequest) {
     const pdb = getDbForRequest(request)
     const { items, ...data } = body
     if (!data.quotationNo) {
-      const year = new Date().getFullYear()
-      const count = (await pdb.quotation.count()) + 1
-      data.quotationNo = `QT/${year}/${String(count).padStart(3, '0')}`
+      const qDate = data.quotationDate ? new Date(data.quotationDate) : new Date()
+      data.quotationNo = await allocateVoucherNo(pdb, getFinYear(qDate), 'QTN', 'QTN')
     }
     const record = await pdb.quotation.create({
       data: {

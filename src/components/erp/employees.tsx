@@ -43,6 +43,7 @@ interface Employee {
   };
   monthlyGrossSalary?: number | string | null;
   dailyWage?: number | string | null;
+  dailyCostRate?: number | string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -98,6 +99,7 @@ interface EmployeeFormData {
   // Salary
   monthlyGrossSalary: string;
   dailyWage: string;
+  dailyCostRate: string;
   // Statutory
   panNumber: string;
   aadharNumber: string;
@@ -132,7 +134,7 @@ const emptyForm: EmployeeFormData = {
   dateOfJoining: '', confirmationDate: '',
   employmentType: 'non_fixed', otType: 1, employmentStatus: 'active',
   probationMonths: '6', noticePeriodDays: '30',
-  monthlyGrossSalary: '', dailyWage: '',
+  monthlyGrossSalary: '', dailyWage: '', dailyCostRate: '',
   panNumber: '', aadharNumber: '', uanNumber: '', esicNumber: '',
   bankName: '', bankAccount: '', bankIfsc: '',
   emergencyContactName: '', emergencyContactRelation: '', emergencyContactPhone: '',
@@ -289,7 +291,7 @@ export default function EmployeesModule() {
   const [form, setForm] = useState<EmployeeFormData>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [formTab, setFormTab] = useState<'identity' | 'personal' | 'address' | 'org' | 'employment' | 'statutory' | 'bank' | 'emergency'>('identity');
+  const [formTab, setFormTab] = useState<'identity' | 'personal' | 'address' | 'org' | 'employment' | 'statutory' | 'bank' | 'emergency' | 'nominee'>('identity');
 
   // Bulk edit — set of selected employee ids + dialog state.
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -351,6 +353,11 @@ export default function EmployeesModule() {
 
   const sites = useMemo(() => Array.from(new Set(employees.map(e => e.Branch?.name).filter(Boolean))).sort(), [employees]);
   const trades = useMemo(() => Array.from(new Set(employees.map(e => e.Department?.name).filter(Boolean))).sort(), [employees]);
+  const missingOrganizationMasters = [
+    departments.length === 0 ? 'a Department' : null,
+    designations.length === 0 ? 'a Designation' : null,
+    branches.length === 0 ? 'a Branch / Site' : null,
+  ].filter((item): item is string => item !== null);
 
   const filtered = useMemo(() => {
     let list = employees;
@@ -478,6 +485,7 @@ export default function EmployeesModule() {
   };
   const openEdit = (emp: any) => {
     setForm({
+      ...emptyForm,
       empId: emp.employeeCode || '',
       tokenNumber: emp.tokenNumber || '',
       workmenSlNo: emp.workmenSlNo || '',
@@ -517,6 +525,7 @@ export default function EmployeesModule() {
       noticePeriodDays: emp.noticePeriodDays?.toString() || '30',
       monthlyGrossSalary: emp.monthlyGrossSalary?.toString() || '',
       dailyWage: emp.dailyWage?.toString() || '',
+      dailyCostRate: emp.dailyCostRate?.toString() || '',
       panNumber: emp.panNumber || '',
       aadharNumber: emp.aadharNumber || '',
       uanNumber: emp.uanNumber || '',
@@ -603,6 +612,7 @@ export default function EmployeesModule() {
           gradeLabel: form.gradeId.trim() || null,
           monthlyGrossSalary: form.monthlyGrossSalary || null,
           dailyWage: form.dailyWage || null,
+          dailyCostRate: form.dailyCostRate || null,
           password: form.password,
           orgRoleId: form.orgRoleId,
         };
@@ -733,6 +743,7 @@ export default function EmployeesModule() {
         noticePeriodDays: parseInt(form.noticePeriodDays) || 30,
         monthlyGrossSalary: form.monthlyGrossSalary ? parseFloat(form.monthlyGrossSalary) : null,
         dailyWage: form.dailyWage ? parseFloat(form.dailyWage) : null,
+        dailyCostRate: form.dailyCostRate ? parseFloat(form.dailyCostRate) : null,
         panNumber: form.panNumber.trim() || null,
         aadharNumber: form.aadharNumber.trim() || null,
         uanNumber: form.uanNumber.trim() || null,
@@ -936,6 +947,11 @@ export default function EmployeesModule() {
 
         {/* ── Organisation ── */}
         {formTab === 'org' && <>
+          {missingOrganizationMasters.length > 0 && (
+            <div className="col-span-2 rounded-lg border border-[#f5a623]/30 bg-[#f5a623]/10 px-3 py-2 text-[11px] text-[#e2e8f0]" role="alert">
+              Employee setup is incomplete. Configure {missingOrganizationMasters.join(', ')} under Organization before creating employees.
+            </div>
+          )}
           <F label="Department" req>
             <select className={`${sel} ${fieldBorderError(fieldErrors.departmentId)}`} value={form.departmentId} onChange={e => { setForm(f => ({ ...f, departmentId: e.target.value })); setFieldErrors(fe => ({ ...fe, departmentId: '' })); }}>
               <option value="">Select department...</option>
@@ -1020,6 +1036,7 @@ export default function EmployeesModule() {
           </F>
           <F label="Monthly Gross Salary"><input className={inp} type="number" min="0" step="0.01" value={form.monthlyGrossSalary} onChange={e => setForm(f => ({ ...f, monthlyGrossSalary: e.target.value }))} placeholder="15000.00" /></F>
           <F label="Daily Wage (Compliance Rate)"><input className={inp} type="number" min="0" step="0.01" value={form.dailyWage} onChange={e => setForm(f => ({ ...f, dailyWage: e.target.value }))} placeholder="e.g. 439 (daily rate of wages)" /><p className="text-[10px] text-[#5a6878] mt-1">Fixed daily rate used in the compliance sheet (col K). Leave blank to auto-derive from gross ÷ working days.</p></F>
+          <F label="Daily Cost Rate (₹ / day)"><input className={inp} type="number" min="0" step="0.01" value={form.dailyCostRate} onChange={e => setForm(f => ({ ...f, dailyCostRate: e.target.value }))} placeholder="e.g. 650.00" /></F>
           <F label="Probation Months"><input className={inp} type="number" min="0" value={form.probationMonths} onChange={e => setForm(f => ({ ...f, probationMonths: e.target.value }))} /></F>
           <F label="Notice Period Days"><input className={inp} type="number" min="0" value={form.noticePeriodDays} onChange={e => setForm(f => ({ ...f, noticePeriodDays: e.target.value }))} /></F>
         </>}
@@ -1082,7 +1099,7 @@ export default function EmployeesModule() {
         <button type="button" onClick={() => {
           const idx = FORM_TABS.findIndex(t => t.id === formTab);
           if (idx < FORM_TABS.length - 1) setFormTab(FORM_TABS[idx + 1].id);
-        }} disabled={formTab === 'emergency'} className="text-[11px] text-[#8899aa] hover:text-[#e2e8f0] disabled:opacity-30 px-3 py-1.5 border border-[#252e3a] rounded-lg hover:border-[#f5a623] transition-colors">
+        }} disabled={formTab === FORM_TABS[FORM_TABS.length - 1].id} className="text-[11px] text-[#8899aa] hover:text-[#e2e8f0] disabled:opacity-30 px-3 py-1.5 border border-[#252e3a] rounded-lg hover:border-[#f5a623] transition-colors">
           Next →
         </button>
       </div>
@@ -1157,7 +1174,15 @@ export default function EmployeesModule() {
                   <span>ID</span><span>Name</span><span className="hidden md:block">Trade/Role</span><span className="hidden lg:block">Site</span><span>Type</span><span className="hidden sm:block">Joined</span><span className="hidden xl:block">Certifications</span><span>Status</span><span className="text-right">Actions</span>
                 </div>
               {paged.length === 0 ? (
-                <div className="px-4 py-12 text-center text-[#5a6878] text-xs">No employees match your filters.</div>
+                <div className="px-4 py-12 text-center text-[#5a6878] text-xs">
+                  {employees.length === 0 ? 'No employees yet.' : 'No employees match your filters.'}
+                  {employees.length === 0 && missingOrganizationMasters.length > 0 && (
+                    <p className="mt-2">Configure {missingOrganizationMasters.join(', ')} under Organization before adding an employee.</p>
+                  )}
+                  {employees.length === 0 && missingOrganizationMasters.length === 0 && (
+                    <p className="mt-2">Use Add Employee to create the first employee record.</p>
+                  )}
+                </div>
               ) : paged.map(emp => {
                 const fullName = getFullName(emp);
                 const avatar = getAvatarColor(fullName);
@@ -1326,6 +1351,7 @@ export default function EmployeesModule() {
                   <Field label="Notice Period (days)" value={e.noticePeriodDays} />
                   <Field label="Monthly Gross Salary" value={viewEmp.monthlyGrossSalary} />
                   <Field label="Daily Wage" value={viewEmp.dailyWage} />
+                  <Field label="Daily Cost Rate (₹ / day)" value={viewEmp.dailyCostRate} />
                 </div>
 
                 <GroupTitle>Contact</GroupTitle>

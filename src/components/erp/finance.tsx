@@ -102,8 +102,8 @@ export default function Finance() {
       let importType = 'invoices';
 
       if (activeTab === 'work-order') {
-        importEndpoint = '/api/fin/purchase-orders/import';
-        importType = 'purchase-orders';
+        importEndpoint = '/api/fin/work-orders/import';
+        importType = 'work-orders';
       } else if (activeTab === 'payment-advice') {
         importEndpoint = '/api/fin/payment-advices/import';
         importType = 'payment-advices';

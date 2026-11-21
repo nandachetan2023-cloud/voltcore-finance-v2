@@ -135,9 +135,6 @@ export default function FinCreditNotes() {
     siteId: (v) => (!v) ? 'Site Code is required' : undefined,
     jobCode: required('Job Code'),
     poNo: required('PO Number'),
-    costCenter: required('Cost Center'),
-    department: required('Department'),
-    projectManager: required('Project Manager'),
     date: required('Date'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };

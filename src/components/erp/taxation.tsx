@@ -12,6 +12,7 @@ import { ExportButton, type ExportColumn } from './_import-export';
 import ImportWizard, { type ImportField } from './_import-wizard';
 import { FormField, DatalistField, CostingFields, useFormValidation, required } from './_form-controls';
 import { SortableTh } from './_table-controls';
+import FinTaxCodes from './fin-tax-codes';
 
 interface TaxRecord { id: number; taxType: string; period: string; amount: number; dueDate: string; paidDate: string | null; paymentRef: string | null; status: string; remarks: string | null; siteCode: string | null; jobCode: string | null; poNo: string | null; costCenter: string | null; department: string | null; projectManager: string | null; }
 interface FormData { taxType: string; period: string; amount: number; dueDate: string; status: string; remarks: string; siteCode: string; jobCode: string; poNo: string; costCenter: string; department: string; projectManager: string; }
@@ -68,15 +69,17 @@ function generateMockTaxation(): TaxRecord[] {
 
 const fmtINR = (n: number) => '₹' + (n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 
-type RegisterType = 'gst-sales' | 'gst-purchase' | 'gstr3b' | 'tds-register' | 'tds-payable';
+type RegisterType = 'gst-sales' | 'gst-purchase' | 'gstr3b' | 'gstr1' | 'tds-register' | 'tds-payable' | 'form-26q';
 
-const REGISTER_TABS: { id: 'payments' | RegisterType; label: string; icon: typeof Receipt }[] = [
+const REGISTER_TABS: { id: 'payments' | RegisterType | 'tax-codes'; label: string; icon: typeof Receipt }[] = [
   { id: 'payments', label: 'Tax Payments', icon: Receipt },
   { id: 'gst-sales', label: 'GST Sales Register', icon: BookOpen },
   { id: 'gst-purchase', label: 'GST Purchase Register', icon: ShoppingCart },
   { id: 'gstr3b', label: 'GSTR-3B Summary', icon: FileBarChart },
+  { id: 'gstr1', label: 'GSTR-1', icon: FileBarChart },
   { id: 'tds-register', label: 'TDS Register', icon: ReceiptIndianRupee },
   { id: 'tds-payable', label: 'TDS Payable', icon: Wallet },
+  { id: 'tax-codes', label: 'GST Tax Codes', icon: BookOpen },
 ];
 
 // ── GST & TDS Registers (read-only reports over live Fin data) ──────────
@@ -110,14 +113,14 @@ function GstTdsRegister({ type }: { type: RegisterType }) {
         <div className="vc-panel-header">
           {isSales ? <BookOpen size={15} className="text-[#f5a623]" /> : <ShoppingCart size={15} className="text-[#f5a623]" />}
           <span className="text-[12px] font-semibold text-[#e2e8f0]">{isSales ? 'GST Sales Register' : 'GST Purchase Register'}</span>
-          <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{rows.length} {isSales ? 'invoices' : 'purchase orders'}</span>
+          <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{rows.length} {isSales ? 'invoices' : 'reviewed vendor bills'}</span>
         </div>
         <div className="overflow-x-auto"><div className="max-h-[480px] overflow-y-auto">
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
               {(isSales
                 ? ['Invoice', 'Date', 'Party', 'Site', 'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total']
-                : ['PO No', 'Date', 'Vendor', 'Site', 'Taxable Value', 'GST (ITC)', 'Total', 'Status']
+                : ['Bill No', 'Bill Date', 'Vendor', 'Site', 'Taxable Value', 'GST (ITC)', 'Total', 'Status']
               ).map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}
             </tr></thead>
             <tbody className="divide-y divide-[#1a2028]">
@@ -135,7 +138,7 @@ function GstTdsRegister({ type }: { type: RegisterType }) {
                 </tr>
               ) : (
                 <tr key={i} className="hover:bg-[#141920]">
-                  <td className="py-2.5 px-3 text-[#f5a623] font-medium font-mono">{r.poNo}</td>
+                  <td className="py-2.5 px-3 text-[#f5a623] font-medium font-mono">{r.billNo}</td>
                   <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.date?.split('T')[0]}</td>
                   <td className="py-2.5 px-3 text-[#e2e8f0]">{r.vendor}</td>
                   <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.siteCode || '—'}</td>
@@ -176,7 +179,7 @@ function GstTdsRegister({ type }: { type: RegisterType }) {
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
           <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#00d4ff]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Outward Taxable Value</div><div className="text-[20px] font-bold text-[#00d4ff]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{fmtINR(d.outwardTaxableValue)}</div><div className="text-[10px] text-[#5a6878] mt-1">{d.invoiceCount} invoices</div></div>
-          <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#a78bfa]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">ITC Available</div><div className="text-[20px] font-bold text-[#a78bfa]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{fmtINR(d.itcAvailable)}</div><div className="text-[10px] text-[#5a6878] mt-1">{d.poCount} purchase orders</div></div>
+          <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#a78bfa]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">ITC Available</div><div className="text-[20px] font-bold text-[#a78bfa]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{fmtINR(d.itcAvailable)}</div><div className="text-[10px] text-[#5a6878] mt-1">{d.poCount} reviewed vendor bills</div></div>
           <div className="vc-stat-card relative overflow-hidden"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#f5a623]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Net Payable</div><div className="text-[20px] font-bold text-[#f5a623]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{fmtINR(d.netPayable)}</div></div>
         </div>
         <div className="vc-panel">
@@ -202,12 +205,69 @@ function GstTdsRegister({ type }: { type: RegisterType }) {
             <div className="flex justify-between py-2 text-[13px] font-semibold"><span className="text-[#e2e8f0]">Net GST Payable</span><span className="text-[#f5a623] font-mono">{fmtINR(d.netPayable)}</span></div>
           </div>
         </div>
-      </div>
-    );
-  }
+        </div>
+      );
+    }
 
-  if (type === 'tds-register') {
-    const rows: any[] = data.rows;
+    if (type === 'gstr1') {
+      const rows: any[] = data.rows;
+      return (
+        <div className="vc-panel">
+          <div className="vc-panel-header">
+            <FileBarChart size={15} className="text-[#f5a623]" />
+            <span className="text-[12px] font-semibold text-[#e2e8f0]">GSTR-1</span>
+            <span className="vc-badge bg-[#252e3a] text-[#8899aa] ml-auto">{rows.length} invoices</span>
+            <ExportButton records={rows} columns={[
+              { header: 'GSTIN', accessor: 'gstin' },
+              { header: 'Party', accessor: 'party' },
+              { header: 'Invoice', accessor: 'invoiceNo' },
+              { header: 'Date', accessor: (r: any) => r.invoiceDate?.split('T')[0] ?? '' },
+              { header: 'Taxable Value', accessor: (r: any) => fmtINR(r.taxableValue) },
+              { header: 'CGST', accessor: (r: any) => fmtINR(r.cgst) },
+              { header: 'SGST', accessor: (r: any) => fmtINR(r.sgst) },
+              { header: 'IGST', accessor: (r: any) => fmtINR(r.igst) },
+              { header: 'Total', accessor: (r: any) => fmtINR(r.total) },
+            ]} filename="gstr1" />
+          </div>
+          <div className="overflow-x-auto"><div className="max-h-[480px] overflow-y-auto">
+            <table className="w-full text-[11px]">
+              <thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
+                {['GSTIN', 'Party', 'Invoice', 'Date', 'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total'].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}
+              </tr></thead>
+              <tbody className="divide-y divide-[#1a2028]">
+                {rows.map((r, i) => (
+                  <tr key={i} className="hover:bg-[#141920]">
+                    <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.gstin || '—'}</td>
+                    <td className="py-2.5 px-3 text-[#e2e8f0]">{r.party}</td>
+                    <td className="py-2.5 px-3 text-[#f5a623] font-medium font-mono">{r.invoiceNo}</td>
+                    <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.invoiceDate?.split('T')[0]}</td>
+                    <td className="py-2.5 px-3 text-[#e2e8f0] font-mono">{fmtINR(r.taxableValue)}</td>
+                    <td className="py-2.5 px-3 text-[#00d4ff] font-mono">{fmtINR(r.cgst)}</td>
+                    <td className="py-2.5 px-3 text-[#00d4ff] font-mono">{fmtINR(r.sgst)}</td>
+                    <td className="py-2.5 px-3 text-[#a78bfa] font-mono">{fmtINR(r.igst)}</td>
+                    <td className="py-2.5 px-3 text-[#e2e8f0] font-mono font-semibold">{fmtINR(r.total)}</td>
+                  </tr>
+                ))}
+                {rows.length === 0 && <tr><td colSpan={9} className="py-8 text-center text-[#5a6878]">No B2B invoices found. Only invoices with approved tax codes are included.</td></tr>}
+              </tbody>
+              {rows.length > 0 && (
+                <tfoot><tr className="bg-[#0f1318] border-t-2 border-[#252e3a] font-semibold">
+                  <td className="py-2.5 px-3 text-[#e2e8f0]" colSpan={4}>Totals</td>
+                  <td className="py-2.5 px-3 text-[#e2e8f0] font-mono">{fmtINR(data.totals.taxableValue)}</td>
+                  <td className="py-2.5 px-3 text-[#00d4ff] font-mono">{fmtINR(data.totals.cgst)}</td>
+                  <td className="py-2.5 px-3 text-[#00d4ff] font-mono">{fmtINR(data.totals.sgst)}</td>
+                  <td className="py-2.5 px-3 text-[#a78bfa] font-mono">{fmtINR(data.totals.igst)}</td>
+                  <td className="py-2.5 px-3 text-[#f5a623] font-mono">{fmtINR(data.totals.total)}</td>
+                </tr></tfoot>
+              )}
+            </table>
+          </div></div>
+        </div>
+      );
+    }
+
+    if (type === 'tds-register') {
+      const rows: any[] = data.rows;
     return (
       <div className="vc-panel">
         <div className="vc-panel-header">
@@ -259,9 +319,18 @@ function GstTdsRegister({ type }: { type: RegisterType }) {
     <div className="space-y-4">
       <div className="vc-stat-card relative overflow-hidden max-w-xs"><div className="absolute top-0 left-0 right-0 h-[3px] bg-[#f5a623]" /><div className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1">Total TDS Payable</div><div className="text-[24px] font-bold text-[#f5a623]" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>{fmtINR(data.totalPayable)}</div></div>
       <div className="vc-panel">
-        <div className="vc-panel-header"><Wallet size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Payable by Section</span>
-          <a href="#" onClick={(e) => e.preventDefault()} className="ml-auto vc-btn-ghost text-[11px] flex items-center gap-1.5"><FileBarChart size={13} /> Form 26Q Export</a>
-        </div>
+      <div className="vc-panel-header"><Wallet size={15} className="text-[#f5a623]" /><span className="text-[12px] font-semibold text-[#e2e8f0]">Payable by Section</span>
+        <ExportButton
+          records={sections}
+          columns={[
+            { header: 'Section', accessor: 'section' },
+            { header: 'Deductions', accessor: 'count' },
+            { header: 'Taxable Amount', accessor: (s: any) => fmtINR(s.taxable) },
+            { header: 'TDS Payable', accessor: (s: any) => fmtINR(s.deducted) },
+          ]}
+          filename="form-26q"
+        />
+      </div>
         <div className="overflow-x-auto"><table className="w-full text-[11px]">
           <thead><tr className="bg-[#0f1318]">{['Section', 'Deductions', 'Taxable Amount', 'TDS Payable'].map(h => <th key={h} className="text-left py-2 px-3 text-[#5a6878] font-semibold uppercase tracking-wider text-[9px]">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-[#1a2028]">
@@ -282,7 +351,7 @@ function GstTdsRegister({ type }: { type: RegisterType }) {
 }
 
 export default function Taxation() {
-  const [view, setView] = useState<'payments' | RegisterType>('payments');
+  const [view, setView] = useState<'payments' | RegisterType | 'tax-codes'>('payments');
   const [records, setRecords] = useState<TaxRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
@@ -313,9 +382,6 @@ export default function Taxation() {
     siteCode: required('Site Code'),
     jobCode: required('Job Code'),
     poNo: required('PO Number'),
-    costCenter: required('Cost Center'),
-    department: required('Department'),
-    projectManager: required('Project Manager'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
@@ -392,7 +458,7 @@ export default function Taxation() {
     return (
       <div className="space-y-4 p-6">
         {TabBar}
-        <GstTdsRegister type={view} />
+        {view === 'tax-codes' ? <FinTaxCodes /> : <GstTdsRegister type={view} />}
       </div>
     );
   }

@@ -7,10 +7,12 @@ import {
   paymentToTallyVoucher,
   journalEntryToTallyVoucher,
   purchaseToTallyVoucher,
+  creditNoteToTallyVoucher,
   deriveFinYear,
   buildMastersBatchXml,
   buildVouchersBatchXml,
   buildCombinedBatchXml,
+  formatTallyDate,
 } from '@/lib/tally-xml'
 import { assertPermission } from '@/lib/fin-rbac'
 import crypto from 'crypto'
@@ -36,18 +38,20 @@ export async function GET(request: NextRequest) {
     const testResult = await testTallyConnection(conn)
     const pdb = getDbForRequest(request)
 
-    const [partyCount, invoiceCount, paymentCount, journalCount] = await Promise.all([
+    const [partyCount, invoiceCount, receiptCount, journalCount, grnCount, creditNoteCount] = await Promise.all([
       pdb.finParty.count({ where: { isActive: true } }),
       pdb.finInvoice.count(),
-      pdb.finPayment.count(),
+      pdb.finReceipt.count(),
       pdb.finJournalEntry.count({ where: { status: 'Posted' } }),
+      pdb.finStoreGrn.count({ where: { status: 'Posted' } }),
+      pdb.finCreditNote.count(),
     ])
 
     return NextResponse.json({
       success: true,
       data: {
         connection: { host: conn.host, port: conn.port, alive: testResult.alive, message: testResult.message, companies: (testResult as any).companies },
-        counts: { parties: partyCount, invoices: invoiceCount, payments: paymentCount, journalEntries: journalCount },
+        counts: { parties: partyCount, invoices: invoiceCount, receipts: receiptCount, journalEntries: journalCount, grns: grnCount, creditNotes: creditNoteCount },
       },
     })
   } catch (error) {
@@ -61,7 +65,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { actions, companyName, since, finYear: finYearParam, dryRun, trigger = 'manual' } = body
-    // actions: array of "parties" | "invoices" | "payments" | "journal" | "purchase" | "grn" | "creditNotes"
+    // actions: array of "parties" | "invoices" | "receipts" | "payments" | "journal" | "purchase" | "grn" | "creditNotes"
     // companyName: Tally company, finYear: "2025-26", dryRun: boolean, trigger: manual|scheduled|onApprove
 
     if (!companyName) {
@@ -80,14 +84,13 @@ export async function POST(request: NextRequest) {
 
     const selectedActions: string[] = Array.isArray(actions) && actions.length > 0
       ? actions
-      : ['parties', 'invoices', 'payments']
+      : ['parties', 'invoices', 'receipts']
 
     const conn = getConnection()
     const tallyCompany = { name: companyName }
     // FY: derive from since or finYearParam or today
     const finYear = finYearParam || (since ? deriveFinYear(new Date(since)) : deriveFinYear(new Date()))
     const dateFilter = since ? { gte: new Date(since) } : undefined
-    // Also filter by FY if provided
     const finYearFilter = finYear ? { financialYear: finYear } : undefined
 
     // ── 1. Pull data from ERP ──────────────────────────────────────────
@@ -107,6 +110,23 @@ export async function POST(request: NextRequest) {
         })
       : []
 
+    // Receipts (customer collections) - replaces FinPayment for receipt exports
+    const receipts = selectedActions.includes('receipts')
+      ? await pdb.finReceipt.findMany({
+          where: {
+            status: 'Posted',
+            ...(dateFilter ? { receiptDate: dateFilter } : {}),
+          },
+          include: {
+            party: { select: { id: true, name: true } },
+            bankAccount: { select: { id: true, accountName: true } },
+            allocations: { include: { invoice: { select: { id: true, invoiceNo: true } } } },
+          },
+          orderBy: { receiptDate: 'asc' },
+        })
+      : []
+
+    // Payments (vendor payments) - keep for backward compatibility
     const payments = selectedActions.includes('payments')
       ? await pdb.finPayment.findMany({
           where: dateFilter ? { paymentDate: dateFilter } : {},
@@ -129,6 +149,38 @@ export async function POST(request: NextRequest) {
     const purchaseOrders = selectedActions.includes('purchase')
       ? await pdb.finPurchaseOrder.findMany({
           where: dateFilter ? { date: dateFilter } : {},
+          orderBy: { date: 'asc' },
+        })
+      : []
+
+    // GRN (Goods Receipt Notes)
+    const grns = selectedActions.includes('grn')
+      ? await pdb.finStoreGrn.findMany({
+          where: {
+            status: 'Posted',
+            ...(dateFilter ? { grnDate: dateFilter } : {}),
+          },
+          include: {
+            po: { select: { id: true, poNo: true, vendorName: true } },
+            site: { select: { id: true, name: true } },
+            job: { select: { id: true, jobCode: true } },
+            lines: { select: { id: true, amount: true, qtyReceived: true, rate: true } },
+          },
+          orderBy: { grnDate: 'asc' },
+        })
+      : []
+
+    // Credit Notes
+    const creditNotes = selectedActions.includes('creditNotes')
+      ? await pdb.finCreditNote.findMany({
+          where: {
+            status: 'Issued',
+            ...(dateFilter ? { date: dateFilter } : {}),
+          },
+          include: {
+            invoice: { select: { id: true, invoiceNo: true, partyId: true, party: { select: { id: true, name: true } } } },
+            site: { select: { id: true, name: true } },
+          },
           orderBy: { date: 'asc' },
         })
       : []
@@ -171,6 +223,30 @@ export async function POST(request: NextRequest) {
       }))
     }
 
+    // Process receipts (customer collections)
+    for (const rct of receipts) {
+      const keyHash = hashOf({ type: 'Receipt', no: rct.receiptNo, fy: finYear })
+      const existing = await pdb.finTallyVoucher.findFirst({
+        where: { companyName, finYear, voucherType: 'Receipt', voucherNo: rct.receiptNo, hash: keyHash, status: 'Acked' }
+      })
+      if (existing) { skipped.push(`Receipt:${rct.receiptNo}`); continue }
+      // Receipt voucher: Dr Bank, Cr Party (with bill allocation if available)
+      const bankLedger = rct.bankAccount?.accountName || 'Bank Account'
+      const partyName = rct.party?.name || 'Unknown'
+      const allocatedInvoiceNo = rct.allocations?.[0]?.invoice?.invoiceNo || undefined
+      tallyVouchers.push(paymentToTallyVoucher({
+        voucherNo: rct.receiptNo,
+        paymentDate: rct.receiptDate,
+        amount: rct.amount,
+        invoiceNo: allocatedInvoiceNo,
+        partyName,
+        mode: rct.mode,
+        costCentre: undefined,
+        isReceipt: true,
+      }))
+    }
+
+    // Process vendor payments
     for (const pay of payments) {
       const partyName = pay.invoice?.party?.name || pay.invoice?.client || 'Unknown'
       const keyHash = hashOf({ type: 'Payment', no: pay.voucherNo, amt: pay.amount, date: pay.paymentDate })
@@ -213,7 +289,11 @@ export async function POST(request: NextRequest) {
     }
 
     for (const po of purchaseOrders) {
-      // Purchase voucher for PO (if needed for Tally Purchase register)
+      const keyHash = hashOf({ type: 'Purchase', no: po.poNo, fy: finYear })
+      const existing = await pdb.finTallyVoucher.findFirst({
+        where: { companyName, finYear, voucherType: 'Purchase', voucherNo: po.poNo, hash: keyHash, status: 'Acked' }
+      })
+      if (existing) { skipped.push(`Purchase:${po.poNo}`); continue }
       tallyVouchers.push(purchaseToTallyVoucher({
         poNo: po.poNo,
         date: po.date,
@@ -226,7 +306,52 @@ export async function POST(request: NextRequest) {
       }))
     }
 
-    // ── 4. Build XML (fix: combined when both) ─────────────────────────
+    // Process GRNs
+    for (const grn of grns) {
+      const keyHash = hashOf({ type: 'GRN', no: grn.grnNo, fy: finYear })
+      const existing = await pdb.finTallyVoucher.findFirst({
+        where: { companyName, finYear, voucherType: 'Purchase', voucherNo: grn.grnNo, hash: keyHash, status: 'Acked' }
+      })
+      if (existing) { skipped.push(`GRN:${grn.grnNo}`); continue }
+      // GRN as Purchase voucher (goods received against PO)
+      const po = grn.po
+      const partyName = po?.vendorName || 'Unknown Vendor'
+      const totalAmount = grn.lines?.reduce((sum, line) => sum + (line.amount || (line.qtyReceived * line.rate)), 0) || 0
+      tallyVouchers.push(purchaseToTallyVoucher({
+        poNo: grn.grnNo,
+        date: grn.grnDate,
+        partyName,
+        subtotal: totalAmount,
+        taxAmount: 0,
+        totalAmount,
+        costCentre: grn.job?.jobCode || undefined,
+        jobCode: grn.job?.jobCode || undefined,
+      }))
+    }
+
+    // Process Credit Notes
+    for (const cn of creditNotes) {
+      const keyHash = hashOf({ type: 'CreditNote', no: cn.creditNoteNo, fy: finYear })
+      const existing = await pdb.finTallyVoucher.findFirst({
+        where: { companyName, finYear, voucherType: 'Credit Note', voucherNo: cn.creditNoteNo, hash: keyHash, status: 'Acked' }
+      })
+      if (existing) { skipped.push(`CreditNote:${cn.creditNoteNo}`); continue }
+      tallyVouchers.push(creditNoteToTallyVoucher({
+        creditNoteNo: cn.creditNoteNo,
+        date: cn.date,
+        partyName: cn.invoice?.party?.name || cn.client || 'Unknown',
+        amount: cn.amount,
+        gstValue: cn.gstValue,
+        cgstAmount: 0,
+        sgstAmount: 0,
+        igstAmount: 0,
+        invoiceNo: cn.creditNoteAgainstInvoiceNo || cn.invoice?.invoiceNo || undefined,
+        reason: cn.reason || undefined,
+        costCentre: cn.costCenter || undefined,
+      }))
+    }
+
+    // ── 4. Build XML ───────────────────────────────────────────────────
     let xml = ''
     const hasParties = tallyParties.length > 0
     const hasVouchers = tallyVouchers.length > 0
@@ -291,18 +416,26 @@ export async function POST(request: NextRequest) {
         },
       })
 
+      const refIdFor = (v: any): number => {
+        if (v.voucherTypeName === 'Sales') return invoices.find((x: any) => x.invoiceNo === v.voucherNumber)?.id || 0
+        if (v.voucherTypeName === 'Receipt') return receipts.find((x: any) => x.receiptNo === v.voucherNumber)?.id || 0
+        if (v.voucherTypeName === 'Journal') return journals.find((x: any) => x.entryNo === v.voucherNumber)?.id || 0
+        if (v.voucherTypeName === 'Credit Note') return creditNotes.find((x: any) => x.creditNoteNo === v.voucherNumber)?.id || 0
+        return 0
+      }
       // Create per-voucher links for idempotency
       for (let i = 0; i < tallyVouchers.length; i++) {
         const v = tallyVouchers[i]
         const vHash = hashOf({ type: v.voucherTypeName, no: v.voucherNumber, fy: finYear })
         const alterID = result.alterIDs[i] || null
+        const erpRefId = refIdFor(v)
         await pdb.finTallyVoucher.upsert({
           where: { companyName_finYear_voucherType_voucherNo: { companyName, finYear, voucherType: v.voucherTypeName, voucherNo: v.voucherNumber } },
           update: { hash: vHash, status: result.success ? 'Acked' : 'Failed', tallyAlterID: alterID, responseXml: result.rawXml.slice(0, 8000) },
           create: {
             companyName, finYear, voucherType: v.voucherTypeName, voucherNo: v.voucherNumber,
-            erpRefType: v.voucherTypeName === 'Sales' ? 'FinInvoice' : v.voucherTypeName === 'Journal' ? 'FinJournalEntry' : 'AccountsPayable',
-            erpRefId: 0,
+            erpRefType: v.voucherTypeName === 'Sales' ? 'FinInvoice' : v.voucherTypeName === 'Journal' ? 'FinJournalEntry' : v.voucherTypeName === 'Receipt' ? 'FinReceipt' : v.voucherTypeName === 'Credit Note' ? 'FinCreditNote' : 'AccountsPayable',
+            erpRefId,
             hash: vHash, status: result.success ? 'Acked' : 'Failed', tallyAlterID: alterID,
             jsonPayload: v as any, responseXml: result.rawXml.slice(0, 8000), createdBy: actor || null,
           },

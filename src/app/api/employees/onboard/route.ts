@@ -1,6 +1,7 @@
 import { getDbForRequest } from '@/lib/db'
 import { superadminDb } from '@/lib/superadmin-db'
 import { checkAccountLimit } from '@/lib/account-limit'
+import { parseDailyCostRate } from '@/lib/employee-cost-rate'
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
       otType,
       monthlyGrossSalary,
       dailyWage,
+      dailyCostRate,
       natureOfDesignation,
       gradeLabel,
       // User account fields
@@ -43,6 +45,10 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Required: employeeCode, firstName, lastName, email, department, designation, branch, dateOfJoining, password, role' },
         { status: 400 }
       )
+    }
+    const parsedDailyCostRate = parseDailyCostRate(dailyCostRate)
+    if (!parsedDailyCostRate.ok) {
+      return NextResponse.json({ success: false, error: 'Daily cost rate must be a non-negative number' }, { status: 400 })
     }
 
     // Check role validity + the tenant's total account cap before creating anything
@@ -88,6 +94,7 @@ export async function POST(request: NextRequest) {
         natureOfDesignation: natureOfDesignation || gradeLabel || null,
         monthlyGrossSalary: monthlyGrossSalary ? parseFloat(monthlyGrossSalary) : null,
         dailyWage: dailyWage ? parseFloat(dailyWage) : null,
+        dailyCostRate: parsedDailyCostRate.value,
         // Use placeholders for fields we no longer require — will be filled via form
         phone: '',
         gender: null,

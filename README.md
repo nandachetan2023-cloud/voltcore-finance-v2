@@ -61,7 +61,20 @@ The application will be available at `http://localhost:3000`
 - `npm run db:generate` - Generate Prisma client
 - `npm run db:migrate` - Run database migrations
 - `npm run db:reset` - Reset database
+- `npm run db:backup` - Create and verify a local custom-format PostgreSQL backup
 - `npm run db:seed` - Seed database with initial data
+
+## Database Backups
+
+`npm run db:backup` backs up the PostgreSQL database configured by `DATABASE_URL`.
+By default, backups are stored outside the repository in
+`%LOCALAPPDATA%\VoltCoreERP\backups` and backups older than 30 days are removed.
+Set `STORE_BACKUP_DIR` or `STORE_BACKUP_RETENTION_DAYS` to override those defaults.
+The command requires PostgreSQL's `pg_dump` and `pg_restore` tools; set
+`PG_DUMP_PATH` or `PG_RESTORE_PATH` if they are not on `PATH` or in the standard
+PostgreSQL 17 Windows installation directory.
+The local Windows setup schedules `VoltCoreERPDatabaseBackup` daily at 2:00 AM;
+it runs under the current user only while that account is logged in.
 
 ## Alternative Start Methods
 

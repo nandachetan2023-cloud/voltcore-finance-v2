@@ -22,6 +22,7 @@ interface ImportRecord {
   siteCode?: string
   jobCode?: string
   poNo?: string
+  workOrderNo?: string
   costCenter?: string
   department?: string
   projectManager?: string
@@ -58,6 +59,34 @@ export async function POST(request: NextRequest) {
           const site = await pdb.finSite.findUnique({ where: { siteCode: r.siteCode } })
           siteId = site?.id ?? null
         }
+        const missing = [
+          !siteId && 'siteCode',
+          !r.jobCode?.trim() && 'jobCode',
+          !r.costCenter?.trim() && 'costCenter',
+          !r.department?.trim() && 'department',
+          !r.projectManager?.trim() && 'projectManager',
+        ].filter(Boolean)
+        if (missing.length) {
+          errors++
+          errorRows.push({ row: i + 1, message: `Missing required fields: ${missing.join(', ')}` })
+          continue
+        }
+
+        const job = await pdb.finJob.findUnique({ where: { jobCode: r.jobCode!.trim() }, select: { siteId: true } })
+        if (!job || job.siteId !== siteId) {
+          errors++
+          errorRows.push({ row: i + 1, message: job ? 'Job does not belong to the selected site' : 'Job was not found' })
+          continue
+        }
+        const workOrderNo = r.workOrderNo?.trim() || ''
+        const workOrder = workOrderNo
+          ? await pdb.finWorkOrder.findUnique({ where: { workOrderNo }, include: { customer: true } })
+          : null
+        if (workOrderNo && (!workOrder || workOrder.siteId !== siteId || workOrder.jobCode !== r.jobCode!.trim() || workOrder.customer.name !== r.client.trim())) {
+          errors++
+          errorRows.push({ row: i + 1, message: workOrder ? 'Work Order does not match the client, site, and job' : 'Customer Work Order was not found' })
+          continue
+        }
         const data = {
           invoiceNo: r.invoiceNo,
           client: r.client,
@@ -72,11 +101,13 @@ export async function POST(request: NextRequest) {
           deductionType: r.deductionType || null,
           otherDeduction,
           siteId,
-          jobCode: r.jobCode || null,
-          poNo: r.poNo || null,
-          costCenter: r.costCenter || null,
-          department: r.department || null,
-          projectManager: r.projectManager || null,
+          partyId: workOrder?.customerId ?? null,
+          jobCode: r.jobCode!.trim(),
+          ...(r.poNo?.trim() ? { poNo: r.poNo.trim() } : {}),
+          ...(workOrder ? { workOrderNo: workOrder.workOrderNo, workOrderId: workOrder.id } : {}),
+          costCenter: r.costCenter!.trim(),
+          department: r.department!.trim(),
+          projectManager: r.projectManager!.trim(),
           dueDate,
           status: r.status || 'Pending',
         }

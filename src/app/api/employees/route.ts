@@ -1,4 +1,5 @@
 import { getDbForRequest } from '@/lib/db'
+import { parseDailyCostRate } from '@/lib/employee-cost-rate'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 
@@ -58,6 +59,7 @@ export async function GET(request: NextRequest) {
       noticePeriodDays: true,
       monthlyGrossSalary: true,
       dailyWage: true,
+      dailyCostRate: true,
       panNumber: true,
       aadharNumber: true,
       uanNumber: true,
@@ -141,6 +143,10 @@ export async function POST(request: NextRequest) {
   let body: any = {}
   try {
     body = await request.json()
+    const dailyCostRate = parseDailyCostRate(body.dailyCostRate)
+    if (!dailyCostRate.ok) {
+      return NextResponse.json({ success: false, error: 'Daily cost rate must be a non-negative number' }, { status: 400 })
+    }
     const {
       employeeCode,
       firstName,
@@ -240,6 +246,7 @@ export async function POST(request: NextRequest) {
         noticePeriodDays: body.noticePeriodDays ? parseInt(body.noticePeriodDays) : 30,
         monthlyGrossSalary: body.monthlyGrossSalary ? parseFloat(body.monthlyGrossSalary) : null,
         dailyWage: body.dailyWage ? parseFloat(body.dailyWage) : null,
+        dailyCostRate: dailyCostRate.value,
         panNumber: body.panNumber || null,
         aadharNumber: body.aadharNumber || null,
         uanNumber: body.uanNumber || null,
@@ -402,6 +409,13 @@ export async function PUT(request: NextRequest) {
     if (updateData.noticePeriodDays !== undefined) updateData.noticePeriodDays = parseInt(updateData.noticePeriodDays) || 30
     if (updateData.monthlyGrossSalary !== undefined) updateData.monthlyGrossSalary = updateData.monthlyGrossSalary ? parseFloat(updateData.monthlyGrossSalary) : null
     if (updateData.dailyWage !== undefined) updateData.dailyWage = updateData.dailyWage ? parseFloat(updateData.dailyWage) : null
+    if (updateData.dailyCostRate !== undefined) {
+      const dailyCostRate = parseDailyCostRate(updateData.dailyCostRate)
+      if (!dailyCostRate.ok) {
+        return NextResponse.json({ success: false, error: 'Daily cost rate must be a non-negative number' }, { status: 400 })
+      }
+      updateData.dailyCostRate = dailyCostRate.value
+    }
     updateData.updatedAt = new Date()
 
     const employee = await db.employee.update({

@@ -56,7 +56,7 @@ export default function MaterialIssueWip() {
   }, [rows]);
 
   const del = async (id: number) => {
-    if (!confirm('Delete this material issue? This will not reverse the linked Stock Ledger entry.')) return;
+    if (!confirm('Delete this material issue? Any linked Stock Ledger entry will be reversed.')) return;
     try {
       const j = await fetch(`/api/fin/material-issues?id=${id}`, { method: 'DELETE' }).then(r => r.json());
       if (j.success) { toast.success('Deleted'); await fetchData(); } else toast.error(j.error || 'Failed');

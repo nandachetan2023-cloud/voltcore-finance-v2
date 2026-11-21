@@ -17,8 +17,18 @@ const INCLUDE = {
 // explicitly sending 0 (a fully-rejected line) must not fall back to
 // qtyReceived via `||`, since 0 is falsy but a legitimate accepted quantity.
 const resolveAccepted = (l: any) => l.qtyAccepted !== undefined && l.qtyAccepted !== null && l.qtyAccepted !== ''
-  ? Number(l.qtyAccepted) || 0
+  ? (Number(l.qtyAccepted) || 0)
   : Number(l.qtyReceived) || 0
+const acceptedForStock = (l: any) => {
+  const inspection = String(l.inspectionStatus || '').toLowerCase()
+  const condition = String(l.condition || '').toLowerCase()
+  return inspection === 'rejected' || inspection === 'pending' || condition === 'damaged'
+    ? 0
+    : resolveAccepted(l)
+}
+const resolveRejected = (l: any) => l.qtyRejected !== undefined && l.qtyRejected !== null && l.qtyRejected !== ''
+  ? Number(l.qtyRejected) || 0
+  : Math.max(0, (Number(l.qtyReceived) || 0) - acceptedForStock(l))
 
 export async function GET(request: NextRequest) {
   try {
@@ -75,13 +85,14 @@ export async function POST(request: NextRequest) {
               poItemId: l.poItemId ? Number(l.poItemId) : null,
               qtyOrdered: Number(l.qtyOrdered) || 0,
               qtyReceived: Number(l.qtyReceived) || 0,
-              qtyAccepted: resolveAccepted(l),
-              qtyRejected: Number(l.qtyRejected) || 0,
+              qtyAccepted: acceptedForStock(l),
+              qtyRejected: resolveRejected(l),
               rate: Number(l.rate) || 0,
               amount: resolveAccepted(l) * (Number(l.rate) || 0),
               condition: l.condition || 'Good',
               remarks: l.remarks || null,
               materialCategory: l.materialCategory || null,
+              storageLocation: l.storageLocation || null,
               batchHeatNo: l.batchHeatNo || null,
               damageTransit: l.damageTransit || null,
               inspectionStatus: l.inspectionStatus || null,
@@ -115,7 +126,7 @@ export async function POST(request: NextRequest) {
         if (l.poItemId) {
           await pdb.finPOItem.update({
             where: { id: Number(l.poItemId) },
-            data: { receivedQty: { increment: resolveAccepted(l) } },
+            data: { receivedQty: { increment: acceptedForStock(l) } },
           }).catch(() => {})
         }
       }
@@ -166,13 +177,14 @@ export async function PUT(request: NextRequest) {
             poItemId: l.poItemId ? Number(l.poItemId) : null,
             qtyOrdered: Number(l.qtyOrdered) || 0,
             qtyReceived: Number(l.qtyReceived) || 0,
-            qtyAccepted: resolveAccepted(l),
-            qtyRejected: Number(l.qtyRejected) || 0,
+            qtyAccepted: acceptedForStock(l),
+            qtyRejected: resolveRejected(l),
             rate: Number(l.rate) || 0,
             amount: resolveAccepted(l) * (Number(l.rate) || 0),
             condition: l.condition || 'Good',
             remarks: l.remarks || null,
             materialCategory: l.materialCategory || null,
+            storageLocation: l.storageLocation || null,
             batchHeatNo: l.batchHeatNo || null,
             damageTransit: l.damageTransit || null,
             inspectionStatus: l.inspectionStatus || null,

@@ -22,6 +22,8 @@ interface ImportRecord {
   tdsSection?: string
   tdsRate?: number
   gstTreatment?: string
+  creditDays?: number | string | null
+  contractValue?: number | string | null
   status?: string
 }
 
@@ -45,6 +47,19 @@ export async function POST(request: NextRequest) {
       if (!r.name || !isValidPartyName(r.name)) { skipped++; continue }
 
       try {
+        const creditDays = r.creditDays === undefined || r.creditDays === null || r.creditDays === ''
+          ? null
+          : Number(r.creditDays)
+        const contractValue = r.contractValue === undefined || r.contractValue === null || r.contractValue === ''
+          ? null
+          : Number(r.contractValue)
+        if (creditDays !== null && (!Number.isInteger(creditDays) || creditDays < 0)) {
+          throw new Error('Credit period must be a non-negative whole number of days')
+        }
+        if (contractValue !== null && (!Number.isFinite(contractValue) || contractValue < 0)) {
+          throw new Error('Contract value must be a non-negative number')
+        }
+
         const data = {
           code: r.code || null,
           name: r.name,
@@ -60,6 +75,8 @@ export async function POST(request: NextRequest) {
           tdsSection: r.tdsSection || null,
           tdsRate: r.tdsRate ? Number(r.tdsRate) : 0,
           gstTreatment: r.gstTreatment || 'Unregistered',
+          creditDays,
+          contractValue,
           isActive: (r.status || 'Active').toLowerCase() !== 'inactive',
         }
 

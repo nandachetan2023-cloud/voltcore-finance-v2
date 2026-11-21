@@ -19,24 +19,28 @@ import { StatusBadge } from './_status-badge';
 interface ARRecord {
   id: number; invoiceNo: string; client: string; clientCode: string | null;
   invoiceRef?: string | null; description: string | null; amount: number; tax: number; totalAmount: number;
+  taxCodeId?: number | null; cgstAmount?: number; sgstAmount?: number; igstAmount?: number; cessAmount?: number;
   dueDate: string; receivedDate: string | null; status: string;
   receivedAmount: number; tdsAmount: number; deductionType: string | null; otherDeduction: number;
   siteId: number | null; partyId: number | null; jobCode: string | null;
   poNo: string | null; costCenter: string | null; department: string | null; projectManager: string | null;
   site?: { name: string; siteCode: string } | null;
+  workOrderNo?: string | null; workOrder?: { workOrderNo: string; customerId: number; siteId: number; jobCode: string } | null;
 }
 
 interface LineItem { id: number; description: string; glAccount: string; quantity: number; unitPrice: number; }
 interface SiteRef { id: number; name: string; siteCode: string; }
-interface PartyRef { id: number; name: string; }
+interface PartyRef { id: number; name: string; partyType?: string; }
 interface JobRef { id: number; jobCode: string; description: string | null; siteId: number | null; siteName: string; }
+interface TaxCodeOption { id: number; code: string; description: string; cgstRate: number; sgstRate: number; igstRate: number; cessRate: number; status: string; }
+interface WorkOrderRef { id: number; workOrderNo: string; customerId: number; siteId: number; jobCode: string; customer: { name: string }; }
 
 interface FormData {
   invoiceNo: string; client: string; clientCode: string; invoiceRef: string;
-  description: string; dueDate: string; totalAmount: number; status: string;
+  description: string; dueDate: string; totalAmount: number; status: string; taxCodeId: string;
   receivedAmount: number; tdsAmount: number; deductionType: string; otherDeduction: number;
   siteId: string; partyId: string; jobCode: string;
-  poNo: string; costCenter: string; department: string; projectManager: string;
+  poNo: string; workOrderNo: string; costCenter: string; department: string; projectManager: string;
 }
 
 const DEDUCTION_OPTIONS = ['Retention', 'Liquidated Damages', 'Advance Recovery', 'Discount', 'Freight', 'Other'];
@@ -49,7 +53,8 @@ const AR_COLUMNS: ExportColumn<ARRecord>[] = [
   { header: 'Description', accessor: 'description' },
   { header: 'Site Code', accessor: (r) => r.site?.siteCode ?? '' },
   { header: 'Job Code', accessor: 'jobCode' },
-  { header: 'PO Number', accessor: 'poNo' },
+  { header: 'Customer Work Order', accessor: (r) => r.workOrder?.workOrderNo || r.workOrderNo || '' },
+  { header: 'Legacy PO Ref', accessor: 'poNo' },
   { header: 'Cost Center', accessor: 'costCenter' },
   { header: 'Department', accessor: 'department' },
   { header: 'Project Manager', accessor: 'projectManager' },
@@ -71,12 +76,13 @@ const AR_IMPORT_FIELDS: ImportField[] = [
   { key: 'clientCode', label: 'Client Code' },
   { key: 'invoiceRef', label: 'Invoice Ref' },
   { key: 'description', label: 'Description' },
-  { key: 'siteCode', label: 'Site Code' },
-  { key: 'jobCode', label: 'Job Code' },
-  { key: 'poNo', label: 'PO Number' },
+  { key: 'siteCode', label: 'Site Code', required: true },
+  { key: 'jobCode', label: 'Job Code', required: true },
+  { key: 'workOrderNo', label: 'Customer Work Order No' },
+  { key: 'poNo', label: 'Legacy PO Reference' },
   { key: 'costCenter', label: 'Cost Center', required: true },
-  { key: 'department', label: 'Department' },
-  { key: 'projectManager', label: 'Project Manager' },
+  { key: 'department', label: 'Department', required: true },
+  { key: 'projectManager', label: 'Project Manager', required: true },
   { key: 'amount', label: 'Amount', type: 'number' },
   { key: 'tax', label: 'Tax', type: 'number' },
   { key: 'totalAmount', label: 'Total Amount', type: 'number' },
@@ -87,20 +93,10 @@ const AR_IMPORT_FIELDS: ImportField[] = [
   { key: 'dueDate', label: 'Due Date', required: true, type: 'date' },
   { key: 'status', label: 'Status' },
 ];
-const AR_SAMPLE_ROW = { invoiceNo: 'AR/2024-25/001', client: 'NTPC Ltd', clientCode: 'NTPC-001', invoiceRef: 'REF-001', description: 'Electrical panel installation', siteCode: 'SIT-001', jobCode: 'JOB-2026-001', poNo: 'PO-1001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', amount: 4500000, tax: 810000, totalAmount: 5310000, receivedAmount: 6000000, tdsAmount: 100000, deductionType: 'Retention', otherDeduction: 50000, dueDate: '2025-02-15', status: 'Partially Received' };
+const AR_SAMPLE_ROW = { invoiceNo: 'AR/2024-25/001', client: 'NTPC Ltd', clientCode: 'NTPC-001', invoiceRef: 'REF-001', description: 'Electrical panel installation', siteCode: 'SIT-001', jobCode: 'JOB-2026-001', workOrderNo: 'WO/2026/0001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', amount: 4500000, tax: 810000, totalAmount: 5310000, receivedAmount: 6000000, tdsAmount: 100000, deductionType: 'Retention', otherDeduction: 50000, dueDate: '2025-02-15', status: 'Partially Received' };
 
-const EMPTY_FORM: FormData = { invoiceNo: '', client: '', clientCode: '', invoiceRef: '', description: '', dueDate: '', totalAmount: 0, status: 'Pending', receivedAmount: 0, tdsAmount: 0, deductionType: '', otherDeduction: 0, siteId: '', partyId: '', jobCode: '', poNo: '', costCenter: '', department: '', projectManager: '' };
+const EMPTY_FORM: FormData = { invoiceNo: '', client: '', clientCode: '', invoiceRef: '', description: '', dueDate: '', totalAmount: 0, status: 'Pending', taxCodeId: '', receivedAmount: 0, tdsAmount: 0, deductionType: '', otherDeduction: 0, siteId: '', partyId: '', jobCode: '', poNo: 'NA', workOrderNo: '', costCenter: '', department: '', projectManager: '' };
 const NEW_LINE = (): LineItem => ({ id: Date.now() + Math.random(), description: '', glAccount: '', quantity: 1, unitPrice: 0 });
-
-function generateMockAR(): ARRecord[] {
-  return [
-    { id: 1, invoiceNo: 'AR/2024-25/001', client: 'NTPC Ltd', clientCode: 'NTPC-001', invoiceRef: 'REF-001', description: 'Electrical panel installation', amount: 4500000, tax: 810000, totalAmount: 5310000, dueDate: '2025-02-15T00:00:00', receivedDate: '2025-02-10T00:00:00', receivedAmount: 5310000, tdsAmount: 0, deductionType: null, otherDeduction: 0, siteId: null, partyId: null, jobCode: 'JOB-2026-001', poNo: 'PO-1001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', status: 'Received' },
-    { id: 2, invoiceNo: 'AR/2024-25/002', client: 'BALCO', clientCode: 'BALCO-002', invoiceRef: 'REF-002', description: 'Cable tray supply & installation', amount: 2800000, tax: 504000, totalAmount: 3304000, dueDate: '2025-03-20T00:00:00', receivedDate: null, receivedAmount: 2000000, tdsAmount: 100000, deductionType: 'Retention', otherDeduction: 50000, siteId: null, partyId: null, jobCode: 'JOB-2026-002', poNo: 'PO-1002', costCenter: 'CC-SIT-002', department: 'Projects', projectManager: 'A. Verma', status: 'Partially Received' },
-    { id: 3, invoiceNo: 'AR/2024-25/003', client: 'Coal India', clientCode: 'CIL-003', invoiceRef: 'REF-003', description: 'DG set annual maintenance', amount: 1200000, tax: 216000, totalAmount: 1416000, dueDate: '2025-01-10T00:00:00', receivedDate: null, receivedAmount: 0, tdsAmount: 0, deductionType: null, otherDeduction: 0, siteId: null, partyId: null, jobCode: 'JOB-2026-003', poNo: 'PO-1003', costCenter: 'CC-SIT-003', department: 'Operations', projectManager: 'P. Iyer', status: 'Overdue' },
-    { id: 4, invoiceNo: 'AR/2024-25/004', client: 'Vedanta Ltd', clientCode: 'VED-004', invoiceRef: 'REF-004', description: 'Transformer oil filtration', amount: 3500000, tax: 630000, totalAmount: 4130000, dueDate: '2025-04-05T00:00:00', receivedDate: '2025-04-01T00:00:00', receivedAmount: 4130000, tdsAmount: 0, deductionType: null, otherDeduction: 0, siteId: null, partyId: null, jobCode: 'JOB-2026-004', poNo: 'PO-1004', costCenter: 'CC-SIT-004', department: 'Projects', projectManager: 'S. Rao', status: 'Received' },
-    { id: 5, invoiceNo: 'AR/2024-25/005', client: 'Hindalco', clientCode: 'HIN-005', invoiceRef: 'REF-005', description: 'Substation commissioning', amount: 6200000, tax: 1116000, totalAmount: 7316000, dueDate: '2025-05-15T00:00:00', receivedDate: null, receivedAmount: 6000000, tdsAmount: 200000, deductionType: 'Liquidated Damages', otherDeduction: 150000, siteId: null, partyId: null, jobCode: 'JOB-2026-005', poNo: 'PO-1005', costCenter: 'CC-SIT-005', department: 'Projects', projectManager: 'M. Khan', status: 'Partially Received' },
-  ];
-}
 
 export default function AccountsReceivable() {
   const [records, setRecords] = useState<ARRecord[]>([]);
@@ -119,12 +115,22 @@ export default function AccountsReceivable() {
   const [sites, setSites] = useState<SiteRef[]>([]);
   const [parties, setParties] = useState<PartyRef[]>([]);
   const [jobs, setJobs] = useState<JobRef[]>([]);
+  const [taxCodes, setTaxCodes] = useState<TaxCodeOption[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrderRef[]>([]);
   const { triggerCreate } = useERPStore();
 
   useEffect(() => {
     fetch('/api/fin/sites').then(r => r.json()).then(j => { if (j.success) setSites(j.data); }).catch(() => {});
-    fetch('/api/fin/parties').then(r => r.json()).then(j => { if (j.success) setParties(j.data); }).catch(() => {});
+    fetch('/api/fin/parties').then(r => r.json()).then(j => { if (j.success) setParties(j.data.filter((party: PartyRef) => party.partyType === 'Customer')); }).catch(() => {});
     fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success) setJobs(j.data.map((x: any) => ({ id: x.id, jobCode: x.jobCode, description: x.description ?? null, siteId: x.siteId ?? null, siteName: x.site?.name ?? '' }))); }).catch(() => {});
+    fetch('/api/fin/work-orders').then(r => r.json()).then(j => {
+      if (j.success && Array.isArray(j.data)) setWorkOrders(j.data);
+      else toast.error(j.error || 'Failed to load customer Work Orders');
+    }).catch(() => toast.error('Failed to load customer Work Orders'));
+    fetch('/api/fin/tax-codes', { headers: { 'x-actor-email': getCurrentUserEmail() } }).then(r => r.json()).then(j => {
+      if (j.success && Array.isArray(j.data)) setTaxCodes(j.data.filter((code: TaxCodeOption) => code.status === 'Approved'));
+      else toast.error(j.error || 'Failed to load approved GST tax codes');
+    }).catch(() => toast.error('Failed to load approved GST tax codes'));
   }, []);
 
   const statuses = useMemo(() => [...new Set(records.map(r => r.status).filter(Boolean))], [records]);
@@ -148,9 +154,12 @@ export default function AccountsReceivable() {
       setLoading(true);
       const res = await fetch('/api/accounts-receivable');
       const json = await res.json();
-      if (json.success && json.data?.length) { setRecords(json.data); }
-      else { setRecords(generateMockAR()); toast.info('Sample data — no server records found'); }
-    } catch { setRecords(generateMockAR()); toast.info('Sample data — API unavailable'); }
+      if (!res.ok || !json.success || !Array.isArray(json.data)) throw new Error(json.error || 'Failed to load Accounts Receivable');
+      setRecords(json.data);
+    } catch (error) {
+      setRecords([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load Accounts Receivable');
+    }
     finally { setLoading(false); }
   }, []);
 
@@ -162,7 +171,10 @@ export default function AccountsReceivable() {
     dueDate: required('Due Date'),
     siteId: required('Site Code'),
     jobCode: required('Job Code'),
-    poNo: required('PO Number'),
+    workOrderNo: (value) => (!editTarget && !value) ? 'Customer Work Order is required' : undefined,
+    costCenter: required('Cost Center'),
+    department: required('Department'),
+    projectManager: required('Project Manager'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
@@ -178,7 +190,7 @@ export default function AccountsReceivable() {
 
   const openEdit = (r: ARRecord) => {
     setEditTarget(r);
-    setForm({ invoiceNo: r.invoiceNo, client: r.client, clientCode: r.clientCode || '', invoiceRef: r.invoiceRef || '', description: r.description || '', dueDate: r.dueDate?.split('T')[0] || '', totalAmount: r.totalAmount, status: r.status, receivedAmount: r.receivedAmount || 0, tdsAmount: r.tdsAmount || 0, deductionType: r.deductionType || '', otherDeduction: r.otherDeduction || 0, siteId: r.siteId ? String(r.siteId) : '', partyId: r.partyId ? String(r.partyId) : '', jobCode: r.jobCode || '', poNo: r.poNo || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' });
+    setForm({ invoiceNo: r.invoiceNo, client: r.client, clientCode: r.clientCode || '', invoiceRef: r.invoiceRef || '', description: r.description || '', dueDate: r.dueDate?.split('T')[0] || '', totalAmount: r.totalAmount, status: r.status, taxCodeId: r.taxCodeId ? String(r.taxCodeId) : '', receivedAmount: r.receivedAmount || 0, tdsAmount: r.tdsAmount || 0, deductionType: r.deductionType || '', otherDeduction: r.otherDeduction || 0, siteId: r.siteId ? String(r.siteId) : '', partyId: r.partyId ? String(r.partyId) : '', jobCode: r.jobCode || '', poNo: r.poNo || 'NA', workOrderNo: r.workOrder?.workOrderNo || r.workOrderNo || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' });
     setFormErrors({});
     setLines([{ id: 1, description: r.description || '', glAccount: '', quantity: 1, unitPrice: r.amount }]);
     setView('form');
@@ -190,7 +202,11 @@ export default function AccountsReceivable() {
   const lineTotal = lines.reduce((s, l) => s + (l.quantity * l.unitPrice), 0);
 
   const subtotal = lineTotal || form.totalAmount || 0;
-  const gst = subtotal * 0.18;
+  const selectedTaxCode = taxCodes.find(code => String(code.id) === form.taxCodeId);
+  const taxAmount = (rate: number) => Math.round((subtotal * rate / 100 + Number.EPSILON) * 100) / 100;
+  const gst = selectedTaxCode
+    ? taxAmount(selectedTaxCode.cgstRate) + taxAmount(selectedTaxCode.sgstRate) + taxAmount(selectedTaxCode.igstRate) + taxAmount(selectedTaxCode.cessRate)
+    : 0;
   const grandTotal = subtotal + gst;
 
   const handleSubmit = async (status: string) => {
@@ -198,13 +214,12 @@ export default function AccountsReceivable() {
     if ((Number(form.otherDeduction) || 0) > 0 && !form.deductionType) { toast.error('Deduction Type is required if other deduction is applied'); return; }
     setSubmitting(true);
     const amount = subtotal;
-    const tax = amount * 0.18;
     try {
       const method = editTarget ? 'PUT' : 'POST';
       const payload = {
         invoiceNo: form.invoiceNo, client: form.client, clientCode: form.clientCode,
         invoiceRef: form.invoiceRef, description: form.description,
-        amount, tax, totalAmount: amount + tax, dueDate: new Date(form.dueDate), status,
+        amount, taxCodeId: form.taxCodeId ? Number(form.taxCodeId) : null, tax: gst, totalAmount: grandTotal, dueDate: new Date(form.dueDate), status,
         receivedAmount: Number(form.receivedAmount) || 0,
         tdsAmount: Number(form.tdsAmount) || 0,
         deductionType: form.deductionType || null,
@@ -212,7 +227,8 @@ export default function AccountsReceivable() {
         siteId: form.siteId ? Number(form.siteId) : null,
         partyId: form.partyId ? Number(form.partyId) : null,
         jobCode: form.jobCode || null,
-        poNo: form.poNo || null,
+        poNo: form.poNo || 'NA',
+        workOrderNo: form.workOrderNo || null,
         costCenter: form.costCenter || null,
         department: form.department || null,
         projectManager: form.projectManager || null,
@@ -317,7 +333,7 @@ export default function AccountsReceivable() {
         {/* Invoice totals */}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Subtotal</span><span className="text-[14px] font-bold text-[#e2e8f0] font-mono">&#8377;{(subtotal ?? 0).toLocaleString('en-IN')}</span></div>
-          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">GST (18%)</span><span className="text-[14px] font-bold text-[#ffab40] font-mono">&#8377;{(gst ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+          <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">GST (approved code)</span><span className="text-[14px] font-bold text-[#ffab40] font-mono">&#8377;{(gst ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
           <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Grand Total</span><span className="text-[14px] font-bold text-[#00e676] font-mono">&#8377;{(grandTotal ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
         </div>
 
@@ -327,7 +343,7 @@ export default function AccountsReceivable() {
             <FormField label="Client (Linked)">
               <SearchableSelect
                 value={form.partyId}
-                onChange={v => { const party = parties.find(p => String(p.id) === v); setForm(p => ({ ...p, partyId: v, client: party?.name || p.client })); }}
+                onChange={v => { const party = parties.find(p => String(p.id) === v); setForm(p => ({ ...p, partyId: v, client: party?.name || p.client, workOrderNo: '' })); clearError('workOrderNo'); }}
                 options={parties.map(p => ({ value: String(p.id), label: p.name }))}
                 placeholder={form.client || 'Select client...'}
               />
@@ -336,11 +352,17 @@ export default function AccountsReceivable() {
               <input value={form.client} onChange={e => setField('client', e.target.value)} placeholder="Client name" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
             </FormField>
           </div>
+          <FormField label="Approved GST Tax Code" hint="Rates and ledger treatment come from the approved Finance setup; blank means no GST is calculated.">
+            <select value={form.taxCodeId} onChange={e => setField('taxCodeId', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none">
+              <option value="">No GST tax code</option>
+              {taxCodes.map(code => <option key={code.id} value={code.id}>{code.code} — {code.description} ({code.cgstRate + code.sgstRate + code.igstRate + code.cessRate}%)</option>)}
+            </select>
+          </FormField>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <FormField label="Site Code" required error={formErrors.siteId}>
               <SearchableSelect
                 value={form.siteId}
-                onChange={v => setField('siteId', v)}
+                onChange={v => { setForm(p => ({ ...p, siteId: v, workOrderNo: '' })); clearError('siteId'); clearError('workOrderNo'); }}
                 options={sites.map(s => ({ value: String(s.id), label: s.name, sublabel: s.siteCode }))}
                 placeholder="— Select site —"
               />
@@ -353,11 +375,41 @@ export default function AccountsReceivable() {
                 placeholder="— Select job —"
               />
             </FormField>
-            <FormField label="PO Number" required error={formErrors.poNo}>
-              <DatalistField id="ar-po-no" value={form.poNo} onChange={v => setField('poNo', v)} options={[...new Set(records.map(r => r.poNo).filter(Boolean) as string[])]} placeholder="PO-1001" />
+            <FormField label="Customer Work Order" required={!editTarget} error={formErrors.workOrderNo}>
+              <select value={form.workOrderNo} onChange={event => {
+                const workOrder = workOrders.find(item => item.workOrderNo === event.target.value);
+                const customer = parties.find(party => party.id === workOrder?.customerId);
+                setForm(current => ({
+                  ...current,
+                  workOrderNo: workOrder?.workOrderNo || '',
+                  partyId: customer ? String(customer.id) : current.partyId,
+                  client: customer?.name || current.client,
+                  siteId: workOrder ? String(workOrder.siteId) : current.siteId,
+                  jobCode: workOrder?.jobCode || current.jobCode,
+                }));
+                clearError('workOrderNo');
+              }} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0]">
+                <option value="">{editTarget ? 'Legacy invoice — no customer Work Order' : 'Select customer Work Order'}</option>
+                {workOrders.filter(order =>
+                  (!form.partyId || order.customerId === Number(form.partyId)) &&
+                  (!form.siteId || order.siteId === Number(form.siteId)) &&
+                  (!form.jobCode || order.jobCode === form.jobCode)
+                ).map(order => <option key={order.id} value={order.workOrderNo}>{order.workOrderNo} — {order.customer.name}</option>)}
+              </select>
             </FormField>
             <FormField label="Client Code">
               <input value={form.clientCode} onChange={e => setField('clientCode', e.target.value)} placeholder="CL-0000" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
+            </FormField>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <FormField label="Cost Center" required error={formErrors.costCenter}>
+              <input value={form.costCenter} onChange={e => setField('costCenter', e.target.value)} placeholder="e.g. CC-SITE-001" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
+            </FormField>
+            <FormField label="Department" required error={formErrors.department}>
+              <input value={form.department} onChange={e => setField('department', e.target.value)} placeholder="e.g. Projects" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
+            </FormField>
+            <FormField label="Project Manager" required error={formErrors.projectManager}>
+              <input value={form.projectManager} onChange={e => setField('projectManager', e.target.value)} placeholder="Project manager" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
             </FormField>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -449,7 +501,9 @@ export default function AccountsReceivable() {
         <div className="flex items-center justify-between px-4 py-3 bg-[#161c24] border border-[#252e3a] rounded-xl">
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Grand Total: <span className="text-[#f5a623]">&#8377;{(grandTotal ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></span>
           <div className="flex items-center gap-4 text-[11px] text-[#5a6878]">
-            <div className="flex items-center gap-1.5"><CircleDot size={12} className="text-[#00e676]" /> GST @18% applied</div>
+            <div className="flex items-center gap-1.5"><CircleDot size={12} className={selectedTaxCode ? 'text-[#00e676]' : 'text-[#f5a623]'} />
+              {selectedTaxCode ? `GST calculated using ${selectedTaxCode.code}` : 'No approved GST tax code selected'}
+            </div>
           </div>
         </div>
       </div>
@@ -578,7 +632,8 @@ export default function AccountsReceivable() {
               <SortableTh label="Client" sortKey="client" accessor={(r: ARRecord) => r.client} sort={tc.sort} toggleSort={tc.toggleSort} />
               <SortableTh label="Site" sortKey="site" accessor={(r: ARRecord) => r.site?.siteCode} sort={tc.sort} toggleSort={tc.toggleSort} />
               <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: ARRecord) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
-              <SortableTh label="PO No" sortKey="poNo" accessor={(r: ARRecord) => r.poNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Customer Work Order" sortKey="workOrderNo" accessor={(r: ARRecord) => r.workOrder?.workOrderNo || r.workOrderNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+              <SortableTh label="Legacy PO Ref" sortKey="poNo" accessor={(r: ARRecord) => r.poNo} sort={tc.sort} toggleSort={tc.toggleSort} />
               <SortableTh label="Cost Center" sortKey="costCenter" accessor={(r: ARRecord) => r.costCenter} sort={tc.sort} toggleSort={tc.toggleSort} />
               <SortableTh label="Dept" sortKey="department" accessor={(r: ARRecord) => r.department} sort={tc.sort} toggleSort={tc.toggleSort} />
               <SortableTh label="PM" sortKey="projectManager" accessor={(r: ARRecord) => r.projectManager} sort={tc.sort} toggleSort={tc.toggleSort} />
@@ -598,6 +653,7 @@ export default function AccountsReceivable() {
                   <td className="py-2.5 px-3 text-[#e2e8f0]">{r.client}</td>
                   <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.site?.siteCode || '—'}</td>
                   <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || '—'}</td>
+                  <td className="py-2.5 px-3 text-[#00d4ff] font-mono">{r.workOrder?.workOrderNo || r.workOrderNo || '—'}</td>
                   <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.poNo || '—'}</td>
                   <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.costCenter || '—'}</td>
                   <td className="py-2.5 px-3 text-[#8899aa]">{r.department || '—'}</td>
@@ -615,7 +671,7 @@ export default function AccountsReceivable() {
                   </div></td>
                 </tr>
               ))}
-              {tc.pageItems.length === 0 && <tr><td colSpan={16} className="py-10 text-center text-[#5a6878]">No records found.</td></tr>}
+              {tc.pageItems.length === 0 && <tr><td colSpan={17} className="py-10 text-center text-[#5a6878]">No records found.</td></tr>}
             </tbody>
           </table>
         </div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div>

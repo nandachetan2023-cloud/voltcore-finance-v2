@@ -10,6 +10,16 @@ const INCLUDE = {
   logs: { orderBy: { issueDate: 'desc' as const } },
 }
 
+function parseOptionalDate(value: unknown) {
+  if (value === undefined || value === null || value === '') return { valid: true, date: null }
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return { valid: false, date: null }
+  const date = new Date(`${value}T00:00:00.000Z`)
+  if (Number.isNaN(date.getTime())) return { valid: false, date: null }
+  return date.toISOString().slice(0, 10) === value
+    ? { valid: true, date }
+    : { valid: false, date: null }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
@@ -26,6 +36,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const pdb = getDbForRequest(request)
     if (!body.siteId || !body.name) return NextResponse.json({ success: false, error: 'siteId and name are required' }, { status: 400 })
+    const calibrationDate = parseOptionalDate(body.calibrationDueDate)
+    if (!calibrationDate.valid) return NextResponse.json({ success: false, error: 'calibrationDueDate must be a valid YYYY-MM-DD date' }, { status: 400 })
     const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
     const denied = await assertPermission(pdb, body.actor || '', 'INVENTORY_CREATE', { request, module: 'Inventory', siteCode: site?.siteCode ?? null })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create tools' }, { status: 403 })
@@ -37,6 +49,7 @@ export async function POST(request: NextRequest) {
       data: {
         toolCode, name: body.name, category: body.category || null,
         siteId: Number(body.siteId), status: body.status || 'Available', remarks: body.remarks || null,
+        calibrationDueDate: calibrationDate.date,
       },
       include: INCLUDE,
     })
@@ -66,6 +79,8 @@ export async function PUT(request: NextRequest) {
       await pdb.finToolIssueLog.update({ where: { id: Number(issueLog.returnLogId) }, data: { returnDate: new Date(), condition: issueLog.condition || 'Good', remarks: issueLog.remarks || null } })
       await pdb.finTool.update({ where: { id: Number(id) }, data: { status: issueLog.condition === 'Lost' ? 'Lost' : issueLog.condition === 'Damaged' ? 'Under Repair' : 'Available' } })
     } else {
+      const calibrationDate = data.calibrationDueDate === undefined ? null : parseOptionalDate(data.calibrationDueDate)
+      if (calibrationDate && !calibrationDate.valid) return NextResponse.json({ success: false, error: 'calibrationDueDate must be a valid YYYY-MM-DD date' }, { status: 400 })
       await pdb.finTool.update({
         where: { id: Number(id) },
         data: {
@@ -73,6 +88,7 @@ export async function PUT(request: NextRequest) {
           ...(data.category !== undefined ? { category: data.category } : {}),
           ...(data.siteId !== undefined ? { siteId: Number(data.siteId) } : {}),
           ...(data.status !== undefined ? { status: data.status } : {}),
+          ...(calibrationDate ? { calibrationDueDate: calibrationDate.date } : {}),
           ...(data.remarks !== undefined ? { remarks: data.remarks } : {}),
         },
       })

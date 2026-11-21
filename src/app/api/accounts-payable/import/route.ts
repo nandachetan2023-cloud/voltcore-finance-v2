@@ -17,6 +17,7 @@ interface ImportRecord {
   siteId?: number
   siteCode?: string
   poId?: number
+  poNo?: string
   jobCode?: string
   costCenter?: string
   department?: string
@@ -51,6 +52,47 @@ export async function POST(request: NextRequest) {
           const site = await pdb.finSite.findUnique({ where: { siteCode: r.siteCode } })
           siteId = site?.id ?? null
         }
+        const missing = [
+          !siteId && 'siteCode',
+          !r.jobCode?.trim() && 'jobCode',
+          !r.poNo?.trim() && !r.poId && 'poNo (or NA)',
+          !r.costCenter?.trim() && 'costCenter',
+          !r.department?.trim() && 'department',
+          !r.projectManager?.trim() && 'projectManager',
+        ].filter(Boolean)
+        if (missing.length) {
+          errors++
+          errorRows.push({ row: i + 1, message: `Missing required fields: ${missing.join(', ')}` })
+          continue
+        }
+
+        const job = await pdb.finJob.findUnique({ where: { jobCode: r.jobCode!.trim() }, select: { siteId: true } })
+        if (!job || job.siteId !== siteId) {
+          errors++
+          errorRows.push({ row: i + 1, message: job ? 'Job does not belong to the selected site' : 'Job was not found' })
+          continue
+        }
+
+        let poId: number | null = null
+        if (r.poId) {
+          poId = Number(r.poId)
+        } else if (r.poNo?.trim() && r.poNo.trim().toUpperCase() !== 'NA') {
+          const po = await pdb.finPurchaseOrder.findFirst({
+            where: { poNo: r.poNo.trim() },
+            select: { id: true, siteId: true, jobCode: true },
+          })
+          if (!po) {
+            errors++
+            errorRows.push({ row: i + 1, message: 'Purchase order was not found' })
+            continue
+          }
+          if (po.siteId !== siteId || (po.jobCode && po.jobCode !== r.jobCode!.trim())) {
+            errors++
+            errorRows.push({ row: i + 1, message: 'Purchase order does not match the selected site and job' })
+            continue
+          }
+          poId = po.id
+        }
         const data = {
           billNo: r.billNo,
           vendor: r.vendor,
@@ -61,11 +103,11 @@ export async function POST(request: NextRequest) {
           tax,
           totalAmount: Number(r.totalAmount) || amount + tax,
           siteId,
-          poId: r.poId ? Number(r.poId) : null,
-          jobCode: r.jobCode || null,
-          costCenter: r.costCenter || null,
-          department: r.department || null,
-          projectManager: r.projectManager || null,
+          poId,
+          jobCode: r.jobCode!.trim(),
+          costCenter: r.costCenter!.trim(),
+          department: r.department!.trim(),
+          projectManager: r.projectManager!.trim(),
           dueDate,
           status: r.status || 'Pending',
         }

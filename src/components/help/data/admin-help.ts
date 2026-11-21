@@ -83,21 +83,21 @@ export const PETTY_CASH_HELP_ENTRIES: HelpEntry[] = [
     summary: 'Map of the petty-cash screens and who does what.',
     body: `### Petty Cash
 
-- **Custodian Dashboard** — sanctioned limit and current balance per site
-- **Vouchers** — record and review petty-cash vouchers, plus the cash reports
+- **Custodian Dashboard** — sanctioned limit and current balance per site (with lifecycle steps)
+- **Vouchers** — create/review vouchers, filter by status/source, run Daily/Site/Settlement reports
 - **Approval Queue** — vouchers waiting for your approval
 - **Fund Master** — create and track sanctioned petty-cash funds
 - **Fund Allocation** — record HO → Finance → Site fund movements
 - **Cash Requests** — employees request cash; approval, then disbursement
 - **Replenishment** — request more float for a site
-- **Ledger** — running balance of all posted petty-cash transactions
+- **Ledger** — running balance of posted petty-cash transactions
 - **Reconciliation** — count physical cash, explain variances, close the period
 
 **Who does what**
-- **Site Employee** — requests cash for a job code
-- **Site Manager** — approves expense requests for their site
-- **Finance Head** — creates funds, allocates float to sites (no queue)
-- **Custodian** — holds the float, records vouchers, counts cash at period close`,
+- **Site Employee** — requests cash (often tied to a job code)
+- **Site Manager** — approves expense requests for their site (where applicable)
+- **Finance Head** — creates funds, allocates float to sites
+- **Custodian** — holds float, records vouchers, assists with counts/reconciliation`,
     links: [
       { label: 'Vouchers', moduleId: 'fin-petty-cash' },
       { label: 'Fund Allocation', moduleId: 'fin-petty-cash-fund-allocation' },
@@ -139,15 +139,16 @@ The **Petty Cash Lifecycle** strip at the top shows the whole flow — click any
       'replenishment', 'replenish', 'top up', 'top-up', 'float request', 'request cash',
       'more cash', 'refill', 'add float',
     ],
-    summary: 'Request more float for a site; a draft credit voucher is created.',
+    summary: 'Request or allocate float for a site, linked to eligible expenses and a job code.',
     body: `### Petty Cash Replenishment
 
 1. **Petty Cash → Replenishment**.
-2. Pick the **Site** — the **custodian** and **sanctioned fund limit** auto-fill from the Site Master.
-3. Enter the **Requested Amount (₹)** (required) and a **Reason**. The float is requested against a job so the spend lands on the right cost centre.
-4. Submit — a **Credit voucher is created as a Draft** and routed automatically for approval.
+2. **Select a Site** — custodian and sanctioned fund limit (if set) appear; the **Job Code** list is filtered to active jobs for that site (required when jobs exist). Pick the job this float is for.
+3. Review **Eligible Unreplenished Expenses** (approved debit vouchers for the site not yet covered). You can select/deselect items and use **Use this total as the amount** to prefill the requested amount.
+4. Enter **Requested Amount (₹)** and an optional **Reason**.
+5. Submit: if you have an approval-eligible role for the site, the flow may **Allocate Now** (immediate); otherwise it creates a **credit/replenishment** request routed for approval (so it does not bypass approval rules). Segregation of Duties applies on the server.
 
-*Recent Replenishment Requests* lists what you've already asked for.`,
+*Recent Replenishment Requests* lists recent entries. Use the info panel for who typically requests vs approves/all allocates.`,
   },
   {
     id: 'pc-vouchers-tabs',
@@ -156,20 +157,22 @@ The **Petty Cash Lifecycle** strip at the top shows the whole flow — click any
     keywords: [
       'voucher', 'vouchers', 'daily cash report', 'summary by site', 'employee settlement',
       'employee-wise', 'cash in', 'cash out', 'sync po', 'sync expense', 'new voucher',
-      'pending approval', 'draft', 'rejected', 'approved', 'import',
+      'pending approval', 'draft', 'rejected', 'approved', 'manager approved', 'import',
     ],
-    summary: 'Filter vouchers and use the three petty-cash reports.',
+    summary: 'Filter vouchers and use the Vouchers, Daily, Site summary, and Settlement reports.',
     body: `### Petty Cash Vouchers
 
-**New Voucher** records a debit (cash out) or credit (cash in). Filter by **type**, **category**, **payment mode**, **source** (*Direct*, *Linked to PO*, *Linked to Expense*) and **approval status** (*Draft*, *Pending*, *Approved*, *Rejected*).
+Use **New Voucher** to create a voucher (typically a debit for spending; credits may be used for top-ups depending on your process). Filter by **type**, **category**, **payment mode**, **source** (*Direct*, *Linked to PO*, *Linked to Expense*) and **approval status** (*Draft*, *Pending*, *Manager Approved*, *Approved*, *Rejected*).
 
 **Tabs**
-- **Vouchers** — the list
-- **Daily Cash Report** — cash in/out for the day with balance
-- **Summary by Site** — totals per site
-- **Employee-wise Settlement** — what each person holds
+- **Vouchers** — the register with search, filters, bulk select, import/export, and actions
+- **Daily Cash Report** — opening/cash in/expense/closing by day
+- **Summary by Site** — cash given vs expense vs balance by site
+- **Employee-wise Settlement** — advance vs expense vs balance per person
 
-**Sync PO** / **Sync Expense** pull PO payments and expense claims into petty cash. **Import** loads vouchers in bulk. Cards show *Cash In*, *Cash Out*, *Balance (Approved)* and *Pending Approval*.`,
+**Sync PO** / **Sync Expense** create vouchers from Purchase Orders or Expense Claims. **Import** loads vouchers in bulk.
+
+**KPIs (Vouchers tab)** show **Balance (Approved)**, **Cash In**, **Cash Out**, **PO Payments**, **Expense Claims**, and **Pending Approval** (count and amount). Approved vouchers drive the financial KPIs; pending items are tracked separately.`,
   },
   {
     id: 'pc-approval-queue',

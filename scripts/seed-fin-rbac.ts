@@ -33,18 +33,18 @@ const ROLES = [
 // Which modules each role can touch, and with which actions.
 // 'all' means every module in MODULES.
 const ROLE_PERMISSIONS: Record<string, string[] | 'all'> = {
-  REQUESTER: ['PettyCash:CREATE', 'PettyCash:VIEW', 'Purchase:CREATE', 'Purchase:VIEW', 'GL:VIEW', 'Reports:VIEW'],
+  REQUESTER: ['PettyCash:CREATE', 'PettyCash:VIEW', 'Expenses:CREATE', 'Expenses:VIEW', 'Expenses:EDIT', 'Purchase:CREATE', 'Purchase:VIEW', 'GL:VIEW', 'Reports:VIEW'],
   // Site storekeeper: runs day-to-day Site Store ops (GRN/MRS/Issue/Returns/Tools/Gate Pass/Equipment/Scrap/Physical Verification).
   CUSTODIAN: ['PettyCash:CREATE', 'PettyCash:VIEW', 'PettyCash:EDIT', 'Purchase:VIEW', 'Inventory:VIEW', 'Inventory:CREATE', 'Inventory:EDIT', 'Inventory:DELETE', 'GL:VIEW', 'Reports:VIEW'],
   // Site Manager: approves the storekeeper's MRS requisitions (SOP approval workflow).
-  SITE_MGR: ['PettyCash:VIEW', 'PettyCash:APPROVE', 'Purchase:VIEW', 'Inventory:VIEW', 'Inventory:APPROVE', 'Reports:VIEW'],
+  SITE_MGR: ['PettyCash:VIEW', 'PettyCash:APPROVE', 'Expenses:VIEW', 'Expenses:APPROVE', 'Purchase:VIEW', 'Inventory:VIEW', 'Inventory:APPROVE', 'Reports:VIEW'],
   DEPT_HEAD: ['Purchase:CREATE', 'Purchase:VIEW', 'Purchase:EDIT', 'Purchase:APPROVE', 'PettyCash:VIEW', 'Inventory:VIEW', 'Reports:VIEW'],
-  FIN_EXEC: ['AP:CREATE', 'AP:VIEW', 'AP:EDIT', 'AR:CREATE', 'AR:VIEW', 'AR:EDIT', 'PettyCash:VIEW', 'PettyCash:APPROVE', 'GL:VIEW', 'Purchase:VIEW', 'Inventory:VIEW', 'Reports:VIEW'],
+  FIN_EXEC: ['AP:CREATE', 'AP:VIEW', 'AP:EDIT', 'AR:CREATE', 'AR:VIEW', 'AR:EDIT', 'PettyCash:VIEW', 'PettyCash:APPROVE', 'Expenses:VIEW', 'Expenses:APPROVE', 'GL:VIEW', 'Purchase:VIEW', 'Inventory:VIEW', 'Reports:VIEW'],
   // Finance Head also administers Finance Access Control itself: manage the
   // role catalog, site-scoped user assignments, and SoD rules (but not
   // Reports:CREATE — that permission is unrelated and was previously
   // (mis)reused to gate RBAC admin actions).
-  FINANCE_MGR: ['AP:VIEW', 'AP:APPROVE', 'AP:EXPORT', 'AR:VIEW', 'AR:APPROVE', 'AR:EXPORT', 'PettyCash:VIEW', 'PettyCash:APPROVE', 'PettyCash:EXPORT', 'GL:CREATE', 'GL:VIEW', 'GL:EDIT', 'GL:APPROVE', 'Purchase:VIEW', 'Purchase:APPROVE', 'Payroll:VIEW', 'Inventory:VIEW', 'Inventory:APPROVE', 'Inventory:EXPORT', 'Reports:VIEW', 'Reports:EXPORT', 'Admin:VIEW', 'Admin:CREATE', 'Admin:EDIT', 'Admin:DELETE'],
+  FINANCE_MGR: ['AP:VIEW', 'AP:APPROVE', 'AP:EXPORT', 'AR:VIEW', 'AR:APPROVE', 'AR:EXPORT', 'PettyCash:VIEW', 'PettyCash:APPROVE', 'PettyCash:EXPORT', 'Expenses:VIEW', 'Expenses:APPROVE', 'GL:CREATE', 'GL:VIEW', 'GL:EDIT', 'GL:APPROVE', 'Purchase:VIEW', 'Purchase:APPROVE', 'Payroll:VIEW', 'Inventory:VIEW', 'Inventory:APPROVE', 'Inventory:EXPORT', 'Reports:VIEW', 'Reports:EXPORT', 'Admin:VIEW', 'Admin:CREATE', 'Admin:EDIT', 'Admin:DELETE'],
   DIRECTOR: 'all',
   AUDITOR: 'all', // enforced read-only at the gate via role.readOnly
 }

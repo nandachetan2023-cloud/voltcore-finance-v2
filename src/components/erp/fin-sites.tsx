@@ -34,6 +34,9 @@ const SITE_COLUMNS: ExportColumn<Site>[] = [
 const SITE_IMPORT_FIELDS: ImportField[] = [
   { key: 'siteCode', label: 'Site Code', required: true },
   { key: 'name', label: 'Name', required: true },
+  { key: 'customerName', label: 'Customer Name', required: true, aliases: ['Customer'] },
+  { key: 'startDate', label: 'Start Date', required: true, type: 'date' },
+  { key: 'endDate', label: 'End Date', required: true, type: 'date' },
   { key: 'location', label: 'Location' },
   { key: 'state', label: 'State' },
   { key: 'contactPerson', label: 'Contact Person' },
@@ -42,7 +45,7 @@ const SITE_IMPORT_FIELDS: ImportField[] = [
   { key: 'budget', label: 'Budget', type: 'number' },
   { key: 'status', label: 'Status' },
 ];
-const SITE_SAMPLE_ROW = { siteCode: 'NTPC-UP-01', name: 'NTPC Rihand Dam Project', location: 'Rihand Nagar', state: 'Uttar Pradesh', contactPerson: 'Rajesh Kumar', contactPhone: '+91-9876543210', contactEmail: 'rajesh@ntpc.in', budget: 4500000, status: 'Active' };
+const SITE_SAMPLE_ROW = { siteCode: 'NTPC-UP-01', name: 'NTPC Rihand Dam Project', customerName: 'Example Customer', startDate: '2026-01-01', endDate: '2026-12-31', location: 'Rihand Nagar', state: 'Uttar Pradesh', contactPerson: 'Rajesh Kumar', contactPhone: '+91-9876543210', contactEmail: 'rajesh@ntpc.in', budget: 4500000, status: 'Active' };
 
 function generateMockSites(): Site[] {
   return [
@@ -84,17 +87,21 @@ export default function FinSites() {
 
   const fetch_ = useCallback(async () => { try { setLoading(true); const r = await fetch('/api/fin/sites'); const j = await r.json(); if (j.success && j.data?.length) { setRecords(j.data); } else { setRecords(generateMockSites()); toast.info('Sample data — no server records found'); } } catch { setRecords(generateMockSites()); toast.info('Sample data — API unavailable'); } finally { setLoading(false); } }, []);
   useEffect(() => { fetch_(); }, [fetch_]);
-  useEffect(() => { fetch('/api/fin/parties').then(r => r.json()).then(j => { if (j.success) setCustomers(j.data.filter((p: any) => p.partyType === 'Customer' || p.partyType === 'Other')); }).catch(() => {}); }, []);
+  useEffect(() => { fetch('/api/fin/parties').then(r => r.json()).then(j => { if (j.success) setCustomers(j.data.filter((p: any) => p.partyType === 'Customer')); }).catch(() => {}); }, []);
 
   const openEdit = (r: Site) => { setEditTarget(r); setForm({ siteCode: r.siteCode, name: r.name, location: r.location || '', state: r.state || '', contactPerson: r.contactPerson || '', contactPhone: r.contactPhone || '', contactEmail: r.contactEmail || '', budget: r.budget, customerId: r.customerId ? String(r.customerId) : '', startDate: r.startDate?.split('T')[0] || '', endDate: r.endDate?.split('T')[0] || '', status: r.status }); setFormOpen(true); };
 
   const handleSubmit = async () => {
-    if (!form.name) { toast.error('Site name is required'); return; }
+    if (!form.name.trim()) { toast.error('Site name is required'); return; }
+    if (!form.customerId) { toast.error('Customer is required'); return; }
+    if (!form.startDate || !form.endDate) { toast.error('Start date and end date are required'); return; }
+    if (new Date(form.endDate) < new Date(form.startDate)) { toast.error('End date must be on or after the start date'); return; }
     setSubmitting(true);
     try {
       const { customerId, startDate, endDate, ...rest } = form;
       const payload = {
         ...rest,
+        name: form.name.trim(),
         customerId: customerId ? Number(customerId) : null,
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
@@ -166,12 +173,12 @@ export default function FinSites() {
             <FormField label="Location"><input value={form.location} onChange={e=>setForm(p=>({...p,location:e.target.value}))} className="vc-input" placeholder="Jharsuguda"/></FormField>
             <FormField label="State"><select value={form.state} onChange={e=>setForm(p=>({...p,state:e.target.value}))} className="vc-input appearance-none"><option value="">Select state or union territory</option>{form.state && !INDIAN_STATES.includes(form.state) && <option value={form.state}>{form.state}</option>}{INDIAN_STATES.map(state=><option key={state} value={state}>{state}</option>)}</select></FormField>
           </div>
-          <FormField label="Customer" hint="Links this site/project to its owning customer">
+          <FormField label="Customer" required hint="Links this site/project to its owning customer">
             <SearchableSelect value={form.customerId} onChange={v => setForm(p => ({ ...p, customerId: v }))} options={customers.map(c => ({ value: String(c.id), label: c.name }))} placeholder="— Select customer —"/>
           </FormField>
           <div className="grid grid-cols-2 gap-3">
-            <FormField label="Start Date"><input type="date" value={form.startDate} onChange={e=>setForm(p=>({...p,startDate:e.target.value}))} className="vc-input"/></FormField>
-            <FormField label="End Date"><input type="date" value={form.endDate} onChange={e=>setForm(p=>({...p,endDate:e.target.value}))} className="vc-input"/></FormField>
+            <FormField label="Start Date" required><input type="date" value={form.startDate} onChange={e=>setForm(p=>({...p,startDate:e.target.value}))} className="vc-input" required/></FormField>
+            <FormField label="End Date" required><input type="date" value={form.endDate} onChange={e=>setForm(p=>({...p,endDate:e.target.value}))} className="vc-input" required/></FormField>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <FormField label="Contact Person"><input value={form.contactPerson} onChange={e=>setForm(p=>({...p,contactPerson:e.target.value}))} className="vc-input"/></FormField>

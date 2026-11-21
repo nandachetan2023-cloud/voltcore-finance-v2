@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
+import { validateJournalDimensions } from '@/lib/fin-journal-dimensions'
 
 const INCLUDE = { lines: { include: { account: true } } }
 
@@ -43,8 +44,9 @@ export async function PUT(request: NextRequest) {
     if (existing.status === 'Posted') {
       return NextResponse.json({ success: false, error: 'Cannot edit a Posted journal entry — it has already been approved and reconciled to the GL' }, { status: 400 })
     }
-    const site = base.siteId ? await pdb.finSite.findUnique({ where: { id: Number(base.siteId) } }) : (existing.siteId ? await pdb.finSite.findUnique({ where: { id: existing.siteId } }) : null)
-    const denied = await assertPermission(pdb, base.actor || '', 'GL_EDIT', { request, module: 'GL', entityId: String(existing.id), siteCode: site?.siteCode ?? null })
+    const dimensions = await validateJournalDimensions(pdb, { ...existing, ...base })
+    if ('error' in dimensions) return NextResponse.json({ success: false, error: dimensions.error }, { status: 400 })
+    const denied = await assertPermission(pdb, base.actor || '', 'GL_EDIT', { request, module: 'GL', entityId: String(existing.id), siteCode: dimensions.site.siteCode })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit journal entries' }, { status: 403 })
 
     const resolvedLines: { accountId: number; description: string | null; debit: number; credit: number; costCenter: string | null; jobCode: string | null; siteCode: string | null; department: string | null; projectManager: string | null }[] = []
@@ -57,11 +59,11 @@ export async function PUT(request: NextRequest) {
         description: line.description || base.description || null,
         debit: Number(line.debit) || 0,
         credit: Number(line.credit) || 0,
-        costCenter: base.costCenter || null,
-        jobCode: base.jobCode || null,
-        siteCode: null,
-        department: base.department || null,
-        projectManager: base.projectManager || null,
+        costCenter: dimensions.costCenter,
+        jobCode: dimensions.jobCode,
+        siteCode: dimensions.site.siteCode,
+        department: dimensions.department,
+        projectManager: dimensions.projectManager,
       })
     }
     if (resolvedLines.length === 0) {
@@ -81,12 +83,13 @@ export async function PUT(request: NextRequest) {
           entryDate: base.date ? new Date(base.date) : undefined,
           reference: base.reference ?? undefined,
           description: base.description ?? undefined,
-          siteId: base.siteId ? Number(base.siteId) : undefined,
-          jobCode: base.jobCode ?? undefined,
-          poNo: base.poNo ?? undefined,
-          costCenter: base.costCenter ?? undefined,
-          department: base.department ?? undefined,
-          projectManager: base.projectManager ?? undefined,
+          siteId: dimensions.site.id,
+          finSiteId: dimensions.site.id,
+          jobCode: dimensions.jobCode,
+          poNo: dimensions.poNo,
+          costCenter: dimensions.costCenter,
+          department: dimensions.department,
+          projectManager: dimensions.projectManager,
           voucherType: base.voucherType ?? undefined,
           attachmentPath: base.attachmentPath !== undefined ? (base.attachmentPath || null) : undefined,
           totalDebit,

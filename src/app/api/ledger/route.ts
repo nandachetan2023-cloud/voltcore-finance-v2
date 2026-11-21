@@ -7,34 +7,38 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
-    const ledgerRecords = await pdb.ledgerAccount.findMany({ orderBy: { accountCode: 'asc' } })
-    const finRecords = await pdb.finAccount.findMany({ orderBy: { accountCode: 'asc' } })
+    const [finRecords, postedLines] = await Promise.all([
+      pdb.finAccount.findMany({
+        orderBy: { accountCode: 'asc' },
+        include: { parent: { select: { accountCode: true } } },
+      }),
+      pdb.finJournalLine.findMany({
+        where: { entry: { is: { status: 'Posted' } } },
+        select: { accountId: true, debit: true, credit: true },
+      }),
+    ])
+    const accountTypes = new Map(finRecords.map(account => [account.id, account.type]))
+    const finBalances = new Map<number, number>()
+    for (const line of postedLines) {
+      const type = accountTypes.get(line.accountId)
+      const isDebitNormal = type === 'Asset' || type === 'Expense'
+      const movement = isDebitNormal ? line.debit - line.credit : line.credit - line.debit
+      finBalances.set(line.accountId, (finBalances.get(line.accountId) || 0) + movement)
+    }
 
-    const ledgerMapped = ledgerRecords.map(r => ({
-      id: r.id,
-      source: 'ledger',
-      accountCode: r.accountCode,
-      name: r.name,
-      group: r.group || '',
-      type: r.type || '',
-      parentAccount: r.parentAccount || null,
-      balance: r.balance,
-      status: r.status,
-    }))
-
-    const finMapped = finRecords.map(r => ({
-      id: r.id,
-      source: 'fin',
-      accountCode: r.accountCode,
-      name: r.name,
-      group: r.group || '',
-      type: r.type || '',
-      parentAccount: null,
-      balance: 0,
-      status: r.isActive ? 'Active' : 'Inactive',
-    }))
-
-    const records = [...ledgerMapped, ...finMapped].sort((a, b) => a.accountCode.localeCompare(b.accountCode))
+    const records = finRecords
+      .map(r => ({
+        id: r.id,
+        source: 'fin',
+        accountCode: r.accountCode,
+        name: r.name,
+        group: r.group,
+        type: r.type,
+        parentAccount: r.parent?.accountCode || null,
+        balance: finBalances.get(r.id) || 0,
+        status: r.isActive ? 'Active' : 'Inactive',
+      }))
+      .sort((a, b) => a.accountCode.localeCompare(b.accountCode))
 
     return NextResponse.json({ success: true, data: records })
   } catch (error) {

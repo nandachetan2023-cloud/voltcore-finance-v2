@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Site { id: number; name: string; siteCode: string; }
+interface ExpenseAccount { id: number; accountCode: string; name: string; type: string; isActive: boolean; }
+interface SettlementBank { id: number; accountName: string; bankName: string; status: string; finAccountId: number | null; }
 
 interface ExpenseItem {
   id?: number;
@@ -20,6 +22,7 @@ interface ExpenseItem {
   description: string;
   amount: number;
   remark: string;
+  accountId?: number | null;
 }
 
 interface ExpenseClaim {
@@ -33,6 +36,11 @@ interface ExpenseClaim {
   totalAmount: number;
   status: string;
   approvalStatus: string;
+  managerApprovedBy: string | null;
+  managerApprovedAt: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  settledAt: string | null;
   remarks: string | null;
   postedAt: string | null;
   approvedBy: string | null;
@@ -76,7 +84,6 @@ const EMPTY_FORM: FormState = {
 };
 const EXPENSE_TYPES = ['GAP FOODING','BIKE Maintanance','Sattionary GAP','ABF','Advance','LAPANGA PROJECT HOUSE','PROJECT EXPENSES','Fuel','Other'];
 const SUMMARY_SHEETS = ['final sheet','summary','sheet1'];
-const STATUS_FLOW: Record<string, string> = { Draft:'Pending', Pending:'Approved', Approved:'Posted' };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -425,6 +432,8 @@ function printSummary(records: ExpenseClaim[], month: string, siteName: string) 
 export default function FinSiteExpenses() {
   const [records, setRecords] = useState<ExpenseClaim[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccount[]>([]);
+  const [settlementBanks, setSettlementBanks] = useState<SettlementBank[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState('');
@@ -452,6 +461,9 @@ export default function FinSiteExpenses() {
 
   // action loading
   const [actionId, setActionId] = useState<number | null>(null);
+  const [settleTarget, setSettleTarget] = useState<ExpenseClaim | null>(null);
+  const [settlementRef, setSettlementRef] = useState('');
+  const [settlementBankId, setSettlementBankId] = useState('');
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
@@ -478,7 +490,18 @@ export default function FinSiteExpenses() {
     } catch {}
   }, []);
 
-  useEffect(() => { fetchData(); fetchSites(); }, [fetchData, fetchSites]);
+  const fetchAccountingOptions = useCallback(async () => {
+    try {
+      const [coaResponse, bankResponse] = await Promise.all([fetch('/api/coa'), fetch('/api/bank-cash')]);
+      const [coaJson, bankJson] = await Promise.all([coaResponse.json(), bankResponse.json()]);
+      if (coaJson.success) setExpenseAccounts((coaJson.data || []).filter((account: ExpenseAccount) => account.isActive && account.type === 'Expense'));
+      if (bankJson.success) setSettlementBanks((bankJson.data?.accounts || []).filter((account: SettlementBank) => account.status === 'Active' && account.finAccountId));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load account mappings');
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); fetchSites(); fetchAccountingOptions(); }, [fetchData, fetchSites, fetchAccountingOptions]);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
 
@@ -498,11 +521,23 @@ export default function FinSiteExpenses() {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
-      const labels: Record<string,string> = { submit:'Submitted for approval', approve:'Approved', reject:'Rejected', pay:'Marked as Paid' };
+      const labels: Record<string,string> = { submit:'Submitted for manager approval', approve:'Approval stage completed', reject:'Rejected', settle:'Claim settled and posted' };
       toast.success(labels[action] ?? 'Updated');
       setRecords(prev => prev.map(r => r.id === id ? json.data : r));
+      if (action === 'settle') setSettleTarget(null);
     } catch (e: any) { toast.error(e.message || 'Action failed'); }
     finally { setActionId(null); }
+  };
+
+  const confirmSettlement = async () => {
+    if (!settleTarget) return;
+    const netAmount = Math.round((settleTarget.totalAmount - settleTarget.receivedAmount) * 100) / 100;
+    if (netAmount !== 0 && !settlementRef.trim()) { toast.error('Bank payment or recovery reference is required'); return; }
+    if (netAmount !== 0 && !settlementBankId) { toast.error('Select the bank account used for settlement'); return; }
+    await doAction(settleTarget.id, 'settle', {
+      settlementRef: settlementRef.trim(),
+      bankAccountId: settlementBankId ? Number(settlementBankId) : null,
+    });
   };
 
   // ── CRUD ─────────────────────────────────────────────────────────────────
@@ -526,7 +561,7 @@ export default function FinSiteExpenses() {
             id: i.id,
             itemDate: (i as any).itemDate?.split?.('T')[0] ?? '',
             category: i.category ?? '', name: (i as any).name ?? '',
-            description: i.description ?? '', amount: i.amount, remark: (i as any).remark ?? '',
+            description: i.description ?? '', amount: i.amount, remark: (i as any).remark ?? '', accountId: (i as any).accountId ?? null,
           }))
         : [{ ...EMPTY_ITEM }],
     });
@@ -824,27 +859,34 @@ export default function FinSiteExpenses() {
                                   {bal < 0 ? '-' : ''}{fmt(Math.abs(bal))}
                                 </td>
                                 <td className="px-3 py-2 text-center">
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${statusCls(r.status)}`}>{r.status}</span>
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${statusCls(r.status)}`}>{r.status === 'Pending' ? (r.managerApprovedAt ? 'Pending Finance' : 'Pending Manager') : r.status}</span>
                                 </td>
                                 <td className="px-3 py-2">
                                   <div className="flex items-center justify-center gap-1">
                                     {/* Workflow buttons */}
-                                    {r.status === 'Draft' && (
+                                    {['Draft', 'Rejected'].includes(r.status) && (
                                       <button onClick={() => doAction(r.id, 'submit')} disabled={actionId === r.id} title="Submit for Approval" className="p-1 text-[#f5a623] hover:bg-[#f5a623]/15 rounded">
                                         {actionId === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
                                       </button>
                                     )}
                                     {r.status === 'Pending' && (<>
-                                      <button onClick={() => doAction(r.id, 'approve', { role: 'finance' })} disabled={actionId === r.id} title="Approve" className="p-1 text-[#00e676] hover:bg-[#00e676]/15 rounded">
+                                      <button onClick={() => doAction(r.id, 'approve')} disabled={actionId === r.id} title={r.managerApprovedAt ? 'Finance verify' : 'Manager approve'} className="p-1 text-[#00e676] hover:bg-[#00e676]/15 rounded">
                                         {actionId === r.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
                                       </button>
-                                      <button onClick={() => doAction(r.id, 'reject', { role: 'finance' })} disabled={actionId === r.id} title="Reject" className="p-1 text-[#ff3d3d] hover:bg-[#ff3d3d]/15 rounded">
+                                      <button onClick={() => {
+                                        const comments = window.prompt('Enter the reason for rejection');
+                                        if (comments?.trim()) doAction(r.id, 'reject', { comments: comments.trim() });
+                                      }} disabled={actionId === r.id} title="Reject with reason" className="p-1 text-[#ff3d3d] hover:bg-[#ff3d3d]/15 rounded">
                                         <XCircle size={12} />
                                       </button>
                                     </>)}
                                     {r.status === 'Approved' && (
-                                      <button onClick={() => doAction(r.id, 'pay')} disabled={actionId === r.id} title="Mark as Paid" className="p-1 text-[#00d4ff] hover:bg-[#00d4ff]/15 rounded">
-                                        {actionId === r.id ? <Loader2 size={12} className="animate-spin" /> : <Banknote size={12} />}
+                                      <button onClick={() => {
+                                        setSettleTarget(r);
+                                        setSettlementRef('');
+                                        setSettlementBankId(settlementBanks[0] ? String(settlementBanks[0].id) : '');
+                                      }} disabled={actionId === r.id} title="Settle and post" className="p-1 text-[#00d4ff] hover:bg-[#00d4ff]/15 rounded">
+                                        <Banknote size={12} />
                                       </button>
                                     )}
                                     <button onClick={() => printClaim(r)} title="Print" className="p-1 text-[#5a6878] hover:text-[#f5a623]"><Printer size={12} /></button>
@@ -1037,7 +1079,8 @@ export default function FinSiteExpenses() {
                         <th className="px-1 py-2 text-left" style={{width:90}}>Area</th>
                         <th className="px-1 py-2 text-left" style={{width:110}}>Name</th>
                         <th className="px-1 py-2 text-left">Description</th>
-                        <th className="px-1 py-2 text-right" style={{width:88}}>Advance (₹)</th>
+                        <th className="px-1 py-2 text-left" style={{width:180}}>Expense Ledger</th>
+                        <th className="px-1 py-2 text-right" style={{width:88}}>Amount (₹)</th>
                         <th className="px-1 py-2 text-left" style={{width:110}}>Remark</th>
                         <th className="px-1 py-2 w-6" />
                       </tr>
@@ -1050,6 +1093,12 @@ export default function FinSiteExpenses() {
                           <td className="px-1 py-1"><input value={it.category} onChange={e => patchItem(i,{category:e.target.value})} placeholder="Area" className={cellCls} /></td>
                           <td className="px-1 py-1"><input value={it.name} onChange={e => patchItem(i,{name:e.target.value})} placeholder="Name" className={cellCls} /></td>
                           <td className="px-1 py-1"><input value={it.description} onChange={e => patchItem(i,{description:e.target.value})} placeholder="Description" className={cellCls} /></td>
+                          <td className="px-1 py-1">
+                            <select value={it.accountId ?? ''} onChange={e => patchItem(i,{accountId: e.target.value ? Number(e.target.value) : null})} className={cellCls}>
+                              <option value="">Select expense account</option>
+                              {expenseAccounts.map(account => <option key={account.id} value={account.id}>{account.accountCode} — {account.name}</option>)}
+                            </select>
+                          </td>
                           <td className="px-1 py-1"><input type="number" value={it.amount||''} onChange={e => patchItem(i,{amount:Number(e.target.value)})} placeholder="0" className={cellCls+' text-right'} /></td>
                           <td className="px-1 py-1"><input value={it.remark} onChange={e => patchItem(i,{remark:e.target.value})} placeholder="Remark" className={cellCls} /></td>
                           <td className="px-1 py-1 text-center">
@@ -1074,6 +1123,50 @@ export default function FinSiteExpenses() {
           </div>
         </div>
       )}
+
+      {settleTarget && (() => {
+        const net = Math.round((settleTarget.totalAmount - settleTarget.receivedAmount) * 100) / 100;
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-lg rounded-xl border border-[#252e3a] bg-[#161c24] p-5 space-y-4">
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#e2e8f0]">Settle {settleTarget.claimNo}</h3>
+                <p className="mt-1 text-[11px] text-[#8899aa]">Finance-verified expenses are posted against the recorded site advance.</p>
+              </div>
+              <div className="rounded-lg border border-[#252e3a] bg-[#0d1117] p-3 space-y-2 text-[12px]">
+                <div className="flex justify-between"><span className="text-[#8899aa]">Expenses incurred</span><span>{fmt(settleTarget.totalAmount)}</span></div>
+                <div className="flex justify-between"><span className="text-[#8899aa]">Advance already received</span><span>{fmt(settleTarget.receivedAmount)}</span></div>
+                <div className="flex justify-between border-t border-[#252e3a] pt-2 font-semibold">
+                  <span>{net > 0 ? 'Reimbursement due' : net < 0 ? 'Advance recovery due' : 'Advance fully netted'}</span>
+                  <span className={net > 0 ? 'text-[#00d4ff]' : net < 0 ? 'text-[#ffab40]' : 'text-[#00e676]'}>{fmt(Math.abs(net))}</span>
+                </div>
+              </div>
+              {net !== 0 && (
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-[10px] uppercase tracking-wider text-[#8899aa]">Bank account</span>
+                    <select value={settlementBankId} onChange={e => setSettlementBankId(e.target.value)} className="vc-input w-full text-[12px] py-2">
+                      <option value="">Select mapped bank account</option>
+                      {settlementBanks.map(bank => <option key={bank.id} value={bank.id}>{bank.accountName} — {bank.bankName}</option>)}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[10px] uppercase tracking-wider text-[#8899aa]">Payment / recovery reference</span>
+                    <input value={settlementRef} onChange={e => setSettlementRef(e.target.value)} placeholder="Bank transaction reference" className="vc-input w-full text-[12px] py-2" />
+                  </label>
+                </>
+              )}
+              {expenseAccounts.length === 0 && <p className="text-[11px] text-[#ffab40]">No active Expense accounts are configured in the chart of accounts.</p>}
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setSettleTarget(null)} className="vc-btn-ghost text-[12px]">Cancel</button>
+                <button onClick={confirmSettlement} disabled={actionId === settleTarget.id} className="vc-btn-primary flex items-center gap-1.5 text-[12px]">
+                  {actionId === settleTarget.id && <Loader2 size={12} className="animate-spin" />} Settle and Post
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Import Modal ─────────────────────────────────────────────────── */}
       {showImport && (

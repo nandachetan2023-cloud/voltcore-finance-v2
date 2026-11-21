@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
 import { nextPrefixedCode } from '@/lib/auto-number'
-import { postReturnLinesToLedger } from '@/lib/store-ledger'
+import { InsufficientStoreStockError, postReturnLinesToLedger, postSupplierReturnLinesToLedger } from '@/lib/store-ledger'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +29,15 @@ export async function POST(request: NextRequest) {
     const pdb = getDbForRequest(request)
     if (!body.siteId) return NextResponse.json({ success: false, error: 'siteId is required' }, { status: 400 })
     const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
+    if (!site) return NextResponse.json({ success: false, error: 'Site not found' }, { status: 404 })
+    const returnType = body.returnType || 'Site'
+    if (!['Site', 'Supplier'].includes(returnType)) return NextResponse.json({ success: false, error: 'returnType must be Site or Supplier' }, { status: 400 })
+    if (returnType === 'Supplier' && (typeof body.vendorName !== 'string' || !body.vendorName.trim())) return NextResponse.json({ success: false, error: 'vendorName is required for supplier returns' }, { status: 400 })
+    if (returnType === 'Supplier' && (typeof body.authorizedBy !== 'string' || !body.authorizedBy.trim())) return NextResponse.json({ success: false, error: 'authorizedBy is required for supplier returns' }, { status: 400 })
+    if (body.supplierDocNo != null && typeof body.supplierDocNo !== 'string') return NextResponse.json({ success: false, error: 'supplierDocNo must be text' }, { status: 400 })
+    if (!Array.isArray(body.lines) || body.lines.length === 0 || body.lines.some((line: any) => !Number.isInteger(Number(line.itemId)) || Number(line.itemId) <= 0 || !(Number(line.qty) > 0) || !Number.isFinite(Number(line.qty)))) {
+      return NextResponse.json({ success: false, error: 'At least one valid item and positive quantity are required' }, { status: 400 })
+    }
     const denied = await assertPermission(pdb, body.actor || '', 'INVENTORY_CREATE', { request, module: 'Inventory', siteCode: site?.siteCode ?? null })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create material returns' }, { status: 403 })
     const { lines, ...data } = body
@@ -45,6 +54,10 @@ export async function POST(request: NextRequest) {
           returnDate: new Date(data.returnDate || Date.now()),
           siteId: Number(data.siteId),
           jobId: data.jobId ? Number(data.jobId) : null,
+          returnType,
+          vendorName: returnType === 'Supplier' ? data.vendorName.trim() : null,
+          supplierDocNo: returnType === 'Supplier' ? data.supplierDocNo?.trim() || null : null,
+          authorizedBy: returnType === 'Supplier' ? data.authorizedBy?.trim() || null : null,
           returnedBy: data.returnedBy || null,
           receivedBy: data.receivedBy || null,
           remarks: data.remarks || null,
@@ -61,20 +74,20 @@ export async function POST(request: NextRequest) {
       })
 
       if (created.lines?.length) {
-        await postReturnLinesToLedger(
-          tx,
-          created,
-          site?.name ?? null,
-          site?.siteCode ?? null,
-          jobForLedger?.jobCode ?? null,
-          data.returnedBy || null,
-        )
+        if (returnType === 'Supplier') {
+          await postSupplierReturnLinesToLedger(tx, created, site.name, site.siteCode, jobForLedger?.jobCode ?? null)
+        } else {
+          await postReturnLinesToLedger(tx, created, site.name, site.siteCode, jobForLedger?.jobCode ?? null, data.returnedBy || null)
+        }
       }
 
       return created
     })
     return NextResponse.json({ success: true, data: record }, { status: 201 })
   } catch (error) {
+    if (error instanceof InsufficientStoreStockError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 409 })
+    }
     console.error('Error creating return:', error)
     return NextResponse.json({ success: false, error: 'Failed to create record' }, { status: 500 })
   }

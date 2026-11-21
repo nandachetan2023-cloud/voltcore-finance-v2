@@ -90,6 +90,14 @@ export async function POST(request: NextRequest) {
             const s = await pdb.finSite.findFirst({ where: { name: siteName } })
             siteId = s ? s.id : defaultSiteId
           }
+          const workOrderNo = str(r.workOrderNo)
+          const workOrder = workOrderNo
+            ? await pdb.finWorkOrder.findUnique({ where: { workOrderNo } })
+            : null
+          if (workOrderNo && (!workOrder || workOrder.customerId !== partyId || workOrder.siteId !== siteId ||
+              (r.jobCode && workOrder.jobCode !== str(r.jobCode)))) {
+            throw new Error('Customer Work Order does not match the client, site, and job')
+          }
 
           const invoiceValue = num(r.invoiceValue)
           const gstValue = num(r.gstValue)
@@ -99,7 +107,8 @@ export async function POST(request: NextRequest) {
           const data = {
             invoiceNo,
             trackingNo: str(r.trackingNo) || null,
-            poNo: str(r.poNo) || null,
+            ...(str(r.poNo) ? { poNo: str(r.poNo) } : {}),
+            ...(workOrder ? { workOrderId: workOrder.id } : {}),
             jobCode: str(r.jobCode) || null,
             costCenter: str(r.costCenter) || null,
             department: str(r.department) || null,
@@ -225,7 +234,7 @@ export async function POST(request: NextRequest) {
         const data = {
           invoiceNo: billNo,
           trackingNo: str(pick(r, 'TRACKING NO.', 'Tracking No.', 'TRACKING NO')) || null,
-          poNo: str(pick(r, 'PO NO.', 'PO No.', 'PO NO')) || null,
+          ...(str(pick(r, 'PO NO.', 'PO No.', 'PO NO')) ? { poNo: str(pick(r, 'PO NO.', 'PO No.', 'PO NO')) } : {}),
           jobCode: str(pick(r, 'JOB CODE', 'Job Code')) || null,
           costCenter: str(pick(r, 'COST CENTER', 'Cost Center')) || null,
           department: str(pick(r, 'DEPARTMENT', 'Department')) || null,

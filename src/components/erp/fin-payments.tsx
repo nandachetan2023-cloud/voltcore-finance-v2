@@ -129,9 +129,6 @@ export default function FinPayments() {
     siteId: required('Site Code'),
     jobCode: required('Job Code'),
     poNo: required('PO Number'),
-    costCenter: required('Cost Center'),
-    department: required('Department'),
-    projectManager: required('Project Manager'),
   });
   const setField = <K extends keyof PaymentForm>(key: K, value: PaymentForm[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { allocateVoucherNo, getFinYear } from '@/lib/tally-sync-engine'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,9 +41,8 @@ export async function POST(request: NextRequest) {
     const { items, ...data } = body
     const pdb = getDbForRequest(request)
     if (!data.soNo) {
-      const year = new Date().getFullYear()
-      const count = (await pdb.salesOrder.count()) + 1
-      data.soNo = `SO/${year}/${String(count).padStart(4, '0')}`
+      const oDate = data.soDate ? new Date(data.soDate) : new Date()
+      data.soNo = await allocateVoucherNo(pdb, getFinYear(oDate), 'SO', 'SO')
     }
     const record = await pdb.salesOrder.create({
       data: {

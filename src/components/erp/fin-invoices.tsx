@@ -17,7 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 
 interface Invoice {
-  id: number; invoiceNo: string; siteId: number; partyId: number | null; poId?: number | null; jobCode?: string | null;
+  id: number; invoiceNo: string; siteId: number; partyId: number | null; poId?: number | null; workOrderId?: number | null; taxCodeId?: number | null; jobCode?: string | null;
   invoiceDate: string; eInvoiceDate?: string | null; dueDate: string; invoiceValue: number; gstValue: number;
   grandTotal: number; balanceAmount: number; status: string; description: string | null;
   trackingNo?: string | null; poNo?: string | null; month?: string | null; area?: string | null;
@@ -27,19 +27,23 @@ interface Invoice {
   afterTdsBalance?: number; receivedAmount?: number; remarks?: string | null;
   site?: { name: string; siteCode?: string | null; location?: string | null; state?: string | null } | null;
   party?: { name: string; gstin?: string | null; address?: string | null; state?: string | null } | null;
+  workOrder?: { workOrderNo: string } | null;
+  taxCode?: TaxCodeOption | null;
 }
-interface Site { id: number; name: string; siteCode: string; }
-interface Party { id: number; name: string; }
-interface PoOption { id: number; poNo: string; vendorName: string; }
+interface Site { id: number; name: string; siteCode: string; customerId?: number | null; }
+interface Party { id: number; name: string; partyType?: string; }
+interface WorkOrderOption { id: number; workOrderNo: string; customerId: number; siteId: number; jobCode: string; }
+interface TaxCodeOption { id: number; code: string; description: string; cgstRate: number; sgstRate: number; igstRate: number; cessRate: number; status: string; }
 
 interface LineItem { id: number; description: string; area: string; month: string; quantity: number; rate: number; }
-interface FormData { invoiceNo: string; siteId: number; partyId: number | null; poId: number | null; jobCode: string; invoiceDate: string; dueDate: string; description: string; status: string; poNo: string; trackingNo: string; costCenter: string; department: string; projectManager: string; }
-const EMPTY_FORM: FormData = { invoiceNo: '', siteId: 0, partyId: null, poId: null, jobCode: '', invoiceDate: '', dueDate: '', description: '', status: 'Unpaid', poNo: '', trackingNo: '', costCenter: '', department: '', projectManager: '' };
+interface FormData { invoiceNo: string; siteId: number; partyId: number | null; workOrderId: number | null; taxCodeId: number | null; jobCode: string; invoiceDate: string; dueDate: string; description: string; status: string; poNo: string; trackingNo: string; costCenter: string; department: string; projectManager: string; }
+const EMPTY_FORM: FormData = { invoiceNo: '', siteId: 0, partyId: null, workOrderId: null, taxCodeId: null, jobCode: '', invoiceDate: '', dueDate: '', description: '', status: 'Unpaid', poNo: '', trackingNo: '', costCenter: '', department: '', projectManager: '' };
 
 const INVOICE_COLUMNS: ExportColumn<Invoice>[] = [
   { header: 'Invoice No', accessor: 'invoiceNo' },
   { header: 'Tracking No', accessor: 'trackingNo' },
-  { header: 'PO No', accessor: 'poNo' },
+  { header: 'Customer Work Order', accessor: (r) => r.workOrder?.workOrderNo || '' },
+  { header: 'Legacy PO Ref', accessor: 'poNo' },
   { header: 'Client / Party Name', accessor: (r) => r.party?.name || r.client || '' },
   { header: 'Site Name', accessor: (r) => r.site?.name || '' },
   { header: 'Site Code', accessor: (r) => r.site?.siteCode ?? '—' },
@@ -62,7 +66,8 @@ const INVOICE_COLUMNS: ExportColumn<Invoice>[] = [
 const INVOICE_IMPORT_FIELDS: ImportField[] = [
   { key: 'invoiceNo', label: 'Invoice No', required: true },
   { key: 'trackingNo', label: 'Tracking No' },
-  { key: 'poNo', label: 'PO No' },
+  { key: 'workOrderNo', label: 'Customer Work Order No' },
+  { key: 'poNo', label: 'Legacy PO Reference' },
   { key: 'jobCode', label: 'Job Code' },
   { key: 'costCenter', label: 'Cost Center' },
   { key: 'department', label: 'Department' },
@@ -88,7 +93,7 @@ const INVOICE_IMPORT_FIELDS: ImportField[] = [
 const INVOICE_SAMPLE_ROW: Record<string, string | number> = {
   invoiceNo: 'INV/2025-26/001',
   trackingNo: 'TRK/25-26/001',
-  poNo: 'PO/2025-26/001',
+  workOrderNo: 'WO/2026/0001',
   jobCode: 'JOB-2026-001',
   costCenter: 'CC-SIT-001',
   department: 'Projects',
@@ -115,7 +120,8 @@ export default function FinInvoices() {
   const [records, setRecords] = useState<Invoice[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
-  const [purchaseOrders, setPurchaseOrders] = useState<PoOption[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrderOption[]>([]);
+  const [taxCodes, setTaxCodes] = useState<TaxCodeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'form'>('list');
   const [editTarget, setEditTarget] = useState<Invoice | null>(null);
@@ -177,16 +183,29 @@ export default function FinInvoices() {
       if (!r.ok || !rj.success || !Array.isArray(rj.data)) {
         throw new Error(rj.error || 'Failed to load parties');
       }
-      setParties(rj.data);
+      setParties(rj.data.filter((party: Party) => party.partyType === 'Customer'));
     } catch (error) {
       setParties([]);
       toast.error(error instanceof Error ? error.message : 'Failed to load parties');
     }
     try {
-      const r = await fetch('/api/fin/purchase-orders');
+      const r = await fetch('/api/fin/tax-codes', { headers: { 'x-actor-email': getCurrentUserEmail() } });
       const rj = await r.json();
-      if (rj.success && rj.data?.length) setPurchaseOrders(rj.data);
-    } catch { /* PO list is optional — form still works with free-text PO No */ }
+      if (!r.ok || !rj.success || !Array.isArray(rj.data)) throw new Error(rj.error || 'Failed to load GST tax codes');
+      setTaxCodes(rj.data.filter((code: TaxCodeOption) => code.status === 'Approved'));
+    } catch (error) {
+      setTaxCodes([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load approved GST tax codes');
+    }
+    try {
+      const r = await fetch('/api/fin/work-orders');
+      const rj = await r.json();
+      if (!r.ok || !rj.success || !Array.isArray(rj.data)) throw new Error(rj.error || 'Failed to load customer Work Orders');
+      setWorkOrders(rj.data);
+    } catch (error) {
+      setWorkOrders([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load customer Work Orders');
+    }
     setLoading(false);
   }, []);
   useEffect(() => { fetch_(); }, [fetch_]);
@@ -203,22 +222,27 @@ export default function FinInvoices() {
     invoiceDate: required('Invoice Date'),
     dueDate: required('Due Date'),
     jobCode: required('Job Code'),
-    poNo: required('PO Number'),
-    costCenter: required('Cost Center'),
-    department: required('Department'),
-    projectManager: required('Project Manager'),
+    workOrderId: (value) => (!editTarget && !value) ? 'Customer Work Order is required' : undefined,
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
   const openCreate = () => { setEditTarget(null); setForm({ ...EMPTY_FORM, invoiceNo: '' }); setFormErrors({}); setLines([{ id: 1, description: '', area: '', month: '', quantity: 1, rate: 0 }]); setView('form'); };
-  const openEdit = (r: Invoice) => { setEditTarget(r); setForm({ invoiceNo: r.invoiceNo, siteId: r.siteId, partyId: r.partyId, poId: r.poId ?? null, jobCode: r.jobCode || '', invoiceDate: r.invoiceDate?.split('T')[0] || '', dueDate: r.dueDate?.split('T')[0] || '', description: r.description || '', status: r.status, poNo: r.poNo || '', trackingNo: r.trackingNo || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' }); setFormErrors({}); setLines([{ id: 1, description: r.description || '', area: '', month: '', quantity: 1, rate: r.invoiceValue }]); setView('form'); };
+  const openEdit = (r: Invoice) => { setEditTarget(r); setForm({ invoiceNo: r.invoiceNo, siteId: r.siteId, partyId: r.partyId, workOrderId: r.workOrderId ?? null, taxCodeId: r.taxCodeId ?? null, jobCode: r.jobCode || '', invoiceDate: r.invoiceDate?.split('T')[0] || '', dueDate: r.dueDate?.split('T')[0] || '', description: r.description || '', status: r.status, poNo: r.poNo || '', trackingNo: r.trackingNo || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' }); setFormErrors({}); setLines([{ id: 1, description: r.description || '', area: '', month: '', quantity: 1, rate: r.invoiceValue }]); setView('form'); };
 
   const addLine = () => { setLines([...lines, { id: Date.now(), description: '', area: '', month: '', quantity: 1, rate: 0 }]); };
   const removeLine = (i: number) => { if (lines.length <= 1) return; setLines(lines.filter((_, idx) => idx !== i)); };
   const updateLine = (i: number, field: keyof LineItem, value: string | number) => { const u = [...lines]; u[i] = { ...u[i], [field]: value }; setLines(u); };
 
   const invoiceValue = lines.reduce((s, l) => s + (l.quantity * l.rate), 0);
-  const gstValue = invoiceValue * 0.18;
+  const selectedTaxCode = taxCodes.find(code => code.id === form.taxCodeId);
+  const taxAmount = (rate: number) => Math.round((invoiceValue * rate / 100 + Number.EPSILON) * 100) / 100;
+  const taxBreakdown = selectedTaxCode ? {
+    cgst: taxAmount(selectedTaxCode.cgstRate),
+    sgst: taxAmount(selectedTaxCode.sgstRate),
+    igst: taxAmount(selectedTaxCode.igstRate),
+    cess: taxAmount(selectedTaxCode.cessRate),
+  } : { cgst: 0, sgst: 0, igst: 0, cess: 0 };
+  const gstValue = taxBreakdown.cgst + taxBreakdown.sgst + taxBreakdown.igst + taxBreakdown.cess;
   const grandTotal = invoiceValue + gstValue;
 
   const handleSubmit = async (status: string) => {
@@ -227,7 +251,7 @@ export default function FinInvoices() {
     setSubmitting(true);
     try {
       const method = editTarget ? 'PUT' : 'POST';
-      const common = { invoiceNo: form.invoiceNo, siteId: form.siteId, partyId: form.partyId, poId: form.poId, jobCode: form.jobCode || null, invoiceDate: new Date(form.invoiceDate), dueDate: new Date(form.dueDate), invoiceValue, gstValue, grandTotal, balanceAmount: grandTotal, description: form.description, status, poNo: form.poNo, trackingNo: form.trackingNo, costCenter: form.costCenter || null, department: form.department || null, projectManager: form.projectManager || null, lines: lines.filter(l => l.description || l.area || l.month || l.rate || l.quantity > 1).map(l => ({ description: l.description, area: l.area, month: l.month, quantity: l.quantity, rate: l.rate })), actor: getCurrentUserEmail() };
+      const common = { invoiceNo: form.invoiceNo, siteId: form.siteId, partyId: form.partyId, workOrderId: form.workOrderId, taxCodeId: form.taxCodeId, jobCode: form.jobCode || null, invoiceDate: new Date(form.invoiceDate), dueDate: new Date(form.dueDate), invoiceValue, taxableValue: invoiceValue, gstValue, grandTotal, balanceAmount: grandTotal, description: form.description, status, trackingNo: form.trackingNo, costCenter: form.costCenter || null, department: form.department || null, projectManager: form.projectManager || null, lines: lines.filter(l => l.description || l.area || l.month || l.rate || l.quantity > 1).map(l => ({ description: l.description, area: l.area, month: l.month, quantity: l.quantity, rate: l.rate })), actor: getCurrentUserEmail() };
       const body = editTarget ? { id: editTarget.id, ...common } : common;
       const res = await fetch('/api/fin/invoices', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await res.json();
@@ -280,7 +304,7 @@ export default function FinInvoices() {
             <span className="text-[14px] font-bold text-[#e2e8f0] font-mono">₹{(invoiceValue ?? 0).toLocaleString('en-IN')}</span>
           </div>
           <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between">
-            <span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">GST (18%)</span>
+            <span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">GST (configured code)</span>
             <span className="text-[14px] font-bold text-[#ffab40] font-mono">₹{(gstValue ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
           </div>
           <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between">
@@ -295,7 +319,7 @@ export default function FinInvoices() {
             <FormField label="Client / Party" required error={formErrors.partyId}>
               <SearchableSelect
                 value={form.partyId ? String(form.partyId) : ''}
-                onChange={v => setField('partyId', v ? Number(v) : null)}
+                onChange={v => { setForm(p => ({ ...p, partyId: v ? Number(v) : null, workOrderId: null })); clearError('partyId'); clearError('workOrderId'); }}
                 options={parties.map(p => ({ value: String(p.id), label: p.name }))}
                 placeholder="Select client..."
               />
@@ -303,12 +327,18 @@ export default function FinInvoices() {
             <FormField label="Site" required error={formErrors.siteId}>
               <SearchableSelect
                 value={form.siteId ? String(form.siteId) : ''}
-                onChange={v => setField('siteId', v ? Number(v) : 0)}
-                options={sites.map(s => ({ value: String(s.id), label: s.name }))}
+                onChange={v => { setForm(p => ({ ...p, siteId: v ? Number(v) : 0, workOrderId: null })); clearError('siteId'); clearError('workOrderId'); }}
+                options={sites.filter(s => !form.partyId || !s.customerId || s.customerId === form.partyId).map(s => ({ value: String(s.id), label: s.name }))}
                 placeholder="Select site..."
               />
             </FormField>
           </div>
+          <FormField label="Approved GST Tax Code" hint="Rates and ledger treatment come from the approved Finance setup; blank means no GST is calculated.">
+            <select value={form.taxCodeId ?? ''} onChange={e => setField('taxCodeId', e.target.value ? Number(e.target.value) : null)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none">
+              <option value="">No GST tax code</option>
+              {taxCodes.map(code => <option key={code.id} value={code.id}>{code.code} — {code.description} ({code.cgstRate + code.sgstRate + code.igstRate + code.cessRate}%)</option>)}
+            </select>
+          </FormField>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <FormField label="Invoice No" hint="Generated automatically when you save">
               <input value={form.invoiceNo} readOnly placeholder="Auto-generated on save" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] opacity-60 placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
@@ -319,13 +349,28 @@ export default function FinInvoices() {
             <FormField label="Due Date" required error={formErrors.dueDate}>
               <input type="date" value={form.dueDate} onChange={e => setField('dueDate', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" />
             </FormField>
-            <FormField label="PO Number" required error={formErrors.poNo}>
-              <DatalistField id="fin-inv-po-no" value={form.poNo} onChange={v => setField('poNo', v)} options={[...new Set([...purchaseOrders.map(po => po.poNo), ...records.map(r => r.poNo).filter(Boolean) as string[]])]} placeholder="PO-1001" />
+            <FormField label="Customer Work Order" required={!editTarget} error={formErrors.workOrderId}>
+              <select value={form.workOrderId ?? ''} onChange={e => {
+                const workOrder = workOrders.find(item => item.id === Number(e.target.value));
+                setForm(p => ({
+                  ...p,
+                  workOrderId: workOrder?.id ?? null,
+                  partyId: workOrder?.customerId ?? p.partyId,
+                  siteId: workOrder?.siteId ?? p.siteId,
+                  jobCode: workOrder?.jobCode ?? p.jobCode,
+                }));
+                clearError('workOrderId');
+              }} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none">
+                <option value="">{editTarget ? 'Legacy invoice — no customer Work Order' : 'Select customer Work Order'}</option>
+                {workOrders.filter(order => (!form.partyId || order.customerId === form.partyId) && (!form.siteId || order.siteId === form.siteId)).map(order =>
+                  <option key={order.id} value={order.id}>{order.workOrderNo} — {parties.find(p => p.id === order.customerId)?.name || 'Customer'}</option>
+                )}
+              </select>
             </FormField>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <FormField label="Job Code" required error={formErrors.jobCode}>
-              <DatalistField id="fin-inv-job-code" value={form.jobCode} onChange={v => setField('jobCode', v)} options={[...new Set(records.map(r => r.jobCode).filter(Boolean) as string[])]} placeholder="JOB-2026-001" />
+              <input value={form.jobCode} readOnly className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] opacity-80" placeholder="Select a customer Work Order" />
             </FormField>
           </div>
           <div><label className="text-[10px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold mb-1.5 block">Description</label><input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Work description..." className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" /></div>
@@ -368,7 +413,9 @@ export default function FinInvoices() {
         <div className="flex items-center justify-between px-4 py-3 bg-[#161c24] border border-[#252e3a] rounded-xl">
           <span className="text-[12px] font-semibold text-[#e2e8f0]">Grand Total: <span className="text-[#f5a623]">₹{(grandTotal ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></span>
           <div className="flex items-center gap-4 text-[11px] text-[#5a6878]">
-            <div className="flex items-center gap-1.5"><CircleDot size={12} className="text-[#00e676]" /> GST @18% applied</div>
+            <div className="flex items-center gap-1.5"><CircleDot size={12} className={selectedTaxCode ? 'text-[#00e676]' : 'text-[#f5a623]'} />
+              {selectedTaxCode ? `${selectedTaxCode.code}: CGST ${selectedTaxCode.cgstRate}% / SGST ${selectedTaxCode.sgstRate}% / IGST ${selectedTaxCode.igstRate}% / Cess ${selectedTaxCode.cessRate}%` : 'No approved GST code selected'}
+            </div>
           </div>
         </div>
 
@@ -436,7 +483,8 @@ export default function FinInvoices() {
         <div className="overflow-x-auto"><div className="max-h-[440px] overflow-y-auto"><table className="w-full text-[11px]"><thead className="sticky top-0 z-10"><tr className="bg-[#0f1318]">
         <th className="py-2 px-3 w-8"><Checkbox checked={allPageSelected} onCheckedChange={toggleAllOnPage} /></th>
         <SortableTh label="Tracking No." sortKey="trackingNo" accessor={(r: Invoice) => r.trackingNo} sort={tc.sort} toggleSort={tc.toggleSort} />
-        <SortableTh label="PO No." sortKey="poNo" accessor={(r: Invoice) => r.poNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <SortableTh label="Customer Work Order" sortKey="workOrder" accessor={(r: Invoice) => r.workOrder?.workOrderNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+        <SortableTh label="Legacy PO Ref" sortKey="poNo" accessor={(r: Invoice) => r.poNo} sort={tc.sort} toggleSort={tc.toggleSort} />
         <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: Invoice) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
         <SortableTh label="Bill No." sortKey="invoiceNo" accessor={(r: Invoice) => r.invoiceNo} sort={tc.sort} toggleSort={tc.toggleSort} />
         <SortableTh label="Client" sortKey="client" accessor={(r: Invoice) => r.party?.name || r.client} sort={tc.sort} toggleSort={tc.toggleSort} />
@@ -449,7 +497,7 @@ export default function FinInvoices() {
         <SortableTh label="Total Inv Value" sortKey="grandTotal" accessor={(r: Invoice) => r.grandTotal} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
         <SortableTh label="Status" sortKey="status" accessor={(r: Invoice) => r.status} sort={tc.sort} toggleSort={tc.toggleSort} />
         <th className="py-2 px-3"></th>
-      </tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => <tr key={r.id} onClick={() => setViewInvoice(r)} className="hover:bg-[#141920] cursor-pointer"><td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}><Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggleRow(r.id)} /></td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.trackingNo || 'NA'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.poNo || 'NA'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || 'NA'}</td><td className="py-2.5 px-3 text-[#f5a623] font-mono font-medium whitespace-nowrap">{r.invoiceNo}</td><td className="py-2.5 px-3 text-[#e2e8f0] max-w-[180px] truncate">{r.party?.name || r.client || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] max-w-[120px] truncate">{r.area || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] whitespace-nowrap">{r.month || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.invoiceDate?.split('T')[0]}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.eInvoiceDate?.split('T')[0] || '—'}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-mono text-right whitespace-nowrap">₹{(r.invoiceValue ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3 text-[#ffab40] font-mono text-right whitespace-nowrap">₹{(r.gstValue ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3 text-[#00e676] font-mono text-right font-medium whitespace-nowrap">₹{(r.grandTotal ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3"><StatusBadge status={r.status} /></td><td className="py-2.5 px-3" onClick={e => e.stopPropagation()}><div className="flex gap-1"><button onClick={() => setViewInvoice(r)} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10" title="View / Print"><Printer size={13} /></button><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10" title="Edit"><Pencil size={13} /></button><button onClick={() => handleDelete(r.id)} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10" title="Delete"><Trash2 size={13} /></button></div></td></tr>)}{tc.pageItems.length === 0 && <tr><td colSpan={15} className="py-8 text-center text-[#5a6878]">No matching invoices</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
+      </tr></thead><tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => <tr key={r.id} onClick={() => setViewInvoice(r)} className="hover:bg-[#141920] cursor-pointer"><td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}><Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggleRow(r.id)} /></td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.trackingNo || 'NA'}</td><td className="py-2.5 px-3 text-[#00d4ff] font-mono">{r.workOrder?.workOrderNo || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.poNo || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || 'NA'}</td><td className="py-2.5 px-3 text-[#f5a623] font-mono font-medium whitespace-nowrap">{r.invoiceNo}</td><td className="py-2.5 px-3 text-[#e2e8f0] max-w-[180px] truncate">{r.party?.name || r.client || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] max-w-[120px] truncate">{r.area || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] whitespace-nowrap">{r.month || '—'}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.invoiceDate?.split('T')[0]}</td><td className="py-2.5 px-3 text-[#8899aa] font-mono whitespace-nowrap">{r.eInvoiceDate?.split('T')[0] || '—'}</td><td className="py-2.5 px-3 text-[#e2e8f0] font-mono text-right whitespace-nowrap">₹{(r.invoiceValue ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3 text-[#ffab40] font-mono text-right whitespace-nowrap">₹{(r.gstValue ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3 text-[#00e676] font-mono text-right font-medium whitespace-nowrap">₹{(r.grandTotal ?? 0).toLocaleString('en-IN')}</td><td className="py-2.5 px-3"><StatusBadge status={r.status} /></td><td className="py-2.5 px-3" onClick={e => e.stopPropagation()}><div className="flex gap-1"><button onClick={() => setViewInvoice(r)} className="p-1 rounded text-[#5a6878] hover:text-[#f5a623] hover:bg-[#f5a623]/10" title="View / Print"><Printer size={13} /></button><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10" title="Edit"><Pencil size={13} /></button><button onClick={() => handleDelete(r.id)} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10" title="Delete"><Trash2 size={13} /></button></div></td></tr>)}{tc.pageItems.length === 0 && <tr><td colSpan={16} className="py-8 text-center text-[#5a6878]">No matching invoices</td></tr>}</tbody></table></div><PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} /></div></div>
 
       {viewInvoice && <InvoiceDocument invoice={viewInvoice} onClose={() => setViewInvoice(null)} />}
 

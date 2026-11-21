@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
+import { assertPermission } from '@/lib/fin-rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,7 @@ function toDate(v: unknown): Date | null {
 export async function POST(request: NextRequest) {
   try {
     const pdb = getDbForRequest(request)
+    const actor = request.cookies.get('erp_user_email')?.value || request.headers.get('x-actor-email') || ''
 
     const body = await request.json()
     const records: Record<string, unknown>[] = Array.isArray(body?.records) ? body.records : []
@@ -42,6 +44,10 @@ export async function POST(request: NextRequest) {
 
     const hoSite = await pdb.finSite.findFirst({ where: { siteCode: 'HO' }, select: { id: true } })
     const defaultSiteId = hoSite?.id || 1
+    const site = await pdb.finSite.findUnique({ where: { id: defaultSiteId }, select: { siteCode: true } })
+    if (!site) return NextResponse.json({ success: false, error: 'Import site was not found' }, { status: 400 })
+    const denied = await assertPermission(pdb, actor, 'EXPENSES_CREATE', { request, module: 'Expenses', siteCode: site.siteCode })
+    if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to import expense claims' }, { status: 403 })
 
     const claimNumberMap = new Map<string, number>()
     function genClaimNo(date: Date): string {
@@ -79,6 +85,18 @@ export async function POST(request: NextRequest) {
         const date = claimDate
 
         const existing = await pdb.finExpenseClaim.findFirst({ where: { claimNo } })
+        if (existing && !['Draft', 'Rejected'].includes(existing.status)) {
+          throw new Error('Only Draft or Rejected claims can be replaced by an import')
+        }
+        if (existing) {
+          if (existing.submittedBy.toLowerCase() !== actor.toLowerCase()) {
+            throw new Error(`Claim ${claimNo} can only be updated by its maker`)
+          }
+          const editDenied = await assertPermission(pdb, actor, 'EXPENSES_EDIT', {
+            request, module: 'Expenses', entityId: String(existing.id), siteCode: site.siteCode,
+          })
+          if (!editDenied.allowed) throw new Error(editDenied.reason || 'Not allowed to update imported claims')
+        }
 
         const data = {
           claimNo,
@@ -90,14 +108,14 @@ export async function POST(request: NextRequest) {
           costCenter: str(r.costCenter) || null,
           department: str(r.department) || null,
           projectManager: str(r.projectManager) || null,
-          submittedBy: str(r.submittedBy) || 'Finance Import System',
+          submittedBy: actor,
           totalAmount,
-          receivedAmount: num(r.receivedAmount),
+          receivedAmount: 0,
           gstAmount: num(r.gstAmount),
           tdsAmount: num(r.tdsAmount),
           billNo: str(r.billNo) || null,
-          approvalStatus: str(r.approvalStatus) || 'Draft',
-          status: str(r.status) || 'Pending',
+          approvalStatus: 'Draft',
+          status: 'Draft',
           remarks: str(r.remarks || description || ''),
         }
 

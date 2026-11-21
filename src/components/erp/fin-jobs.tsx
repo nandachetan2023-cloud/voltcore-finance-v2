@@ -21,7 +21,7 @@ interface FormData { jobCode: string; siteId: string; poId: string; description:
 const JOB_COLUMNS: ExportColumn<Job>[] = [
   { header: 'Job Code', accessor: 'jobCode' },
   { header: 'Site Code', accessor: (r) => r.site?.siteCode ?? '' },
-  { header: 'PO No.', accessor: (r) => r.po?.poNo ?? '' },
+  { header: 'PO No.', accessor: (r) => r.po?.poNo ?? 'NA' },
   { header: 'Description', accessor: (r) => r.description ?? '' },
   { header: 'Status', accessor: 'status' },
 ];
@@ -156,7 +156,7 @@ export default function FinJobs() {
             <th className="py-2 px-3 w-8"><Checkbox checked={allPageSelected} onCheckedChange={toggleAllOnPage} /></th>
             <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: Job) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
             <SortableTh label="Site" sortKey="site" accessor={(r: Job) => r.site?.name} sort={tc.sort} toggleSort={tc.toggleSort} />
-            <SortableTh label="PO No." sortKey="po" accessor={(r: Job) => r.po?.poNo} sort={tc.sort} toggleSort={tc.toggleSort} />
+            <SortableTh label="PO No." sortKey="po" accessor={(r: Job) => r.po?.poNo ?? 'NA'} sort={tc.sort} toggleSort={tc.toggleSort} />
             <SortableTh label="Description" sortKey="description" accessor={(r: Job) => r.description} sort={tc.sort} toggleSort={tc.toggleSort} />
             <SortableTh label="Status" sortKey="status" accessor={(r: Job) => r.status} sort={tc.sort} toggleSort={tc.toggleSort} />
             <th className="py-2 px-3"></th>
@@ -167,7 +167,7 @@ export default function FinJobs() {
                 <td className="py-2.5 px-3"><Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggleRow(r.id)} /></td>
                 <td className="py-2.5 px-3 text-[#f5a623] font-mono">{r.jobCode}</td>
                 <td className="py-2.5 px-3 text-[#e2e8f0]">{r.site?.name || '—'}</td>
-                <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.po?.poNo || '—'}</td>
+                <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.po?.poNo ?? 'NA'}</td>
                 <td className="py-2.5 px-3 text-[#8899aa] max-w-[280px] truncate">{r.description || '—'}</td>
                 <td className="py-2.5 px-3"><span className={`vc-badge ${r.status === 'Active' ? 'bg-[#00e676]/15 text-[#00e676]' : r.status === 'Completed' ? 'bg-[#00d4ff]/15 text-[#00d4ff]' : 'bg-[#5a6878]/15 text-[#5a6878]'}`}>{r.status}</span></td>
                 <td className="py-2.5 px-3"><div className="flex gap-1">
@@ -191,7 +191,7 @@ export default function FinJobs() {
             <FormField label="Site" required error={errors.siteId}>
               <SearchableSelect value={form.siteId} onChange={v => setField('siteId', v)} options={sites.map(s => ({ value: String(s.id), label: s.name, sublabel: s.siteCode }))} placeholder="— Select site —" />
             </FormField>
-            <FormField label="Linked Purchase Order" hint="Optional — ties this job to the PO that funds it">
+            <FormField label="Linked Purchase Order" hint="Optional — PO No. displays as NA when none is linked">
               <SearchableSelect value={form.poId} onChange={v => setField('poId', v)} options={pos.map(p => ({ value: String(p.id), label: p.poNo, sublabel: p.vendorName }))} placeholder="— None —" />
             </FormField>
             <FormField label="Description">

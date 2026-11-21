@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Trash2, Loader2, Send, Save, FileText, CircleDot, Pencil, Search, Upload } from 'lucide-react';
+import { Plus, Trash2, Loader2, Send, Save, FileText, CircleDot, Pencil, Search, Upload, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUserEmail } from '@/lib/current-user';
 import { useERPStore } from '@/store/erp-store';
@@ -15,10 +15,11 @@ import { StatusBadge } from './_status-badge';
 
 interface APRecord {
   id: number; billNo: string; vendor: string; vendorCode: string | null;
-  invoiceRef: string | null; description: string | null; amount: number;
+  invoiceRef: string | null; billDate: string | null; description: string | null; amount: number;
   tax: number; totalAmount: number; dueDate: string; paidDate: string | null;
   paymentMethod: string | null; paymentRef: string | null; status: string; remarks: string | null;
   siteId: number | null; partyId: number | null; poId: number | null; jobCode: string | null;
+  taxCodeId: number | null; itcEligible: boolean;
   costCenter: string | null; department: string | null; projectManager: string | null;
   site?: { name: string; siteCode: string } | null;
   po?: { id: number; poNo: string } | null;
@@ -36,10 +37,12 @@ interface SiteRef { id: number; name: string; siteCode: string; }
 interface PartyRef { id: number; name: string; }
 interface PoRef { id: number; poNo: string; vendorName: string; }
 interface JobRef { id: number; jobCode: string; description: string | null; siteId: number | null; siteName: string; }
+interface TaxCodeOption { id: number; code: string; description: string; cgstRate: number; sgstRate: number; igstRate: number; cessRate: number; status: string; }
 
 interface FormData {
   billNo: string; vendor: string; vendorCode: string; invoiceRef: string;
-  dueDate: string; totalAmount: number; status: string;
+  billDate: string; dueDate: string; totalAmount: number; status: string;
+  taxCodeId: string;
   description: string; poReference: string;
   siteId: string; partyId: string; poId: string; jobCode: string;
   costCenter: string; department: string; projectManager: string;
@@ -50,6 +53,7 @@ const AP_COLUMNS: ExportColumn<APRecord>[] = [
   { header: 'Vendor', accessor: 'vendor' },
   { header: 'Vendor Code', accessor: 'vendorCode' },
   { header: 'Invoice Ref', accessor: 'invoiceRef' },
+  { header: 'Bill Date', accessor: (r) => r.billDate?.split('T')[0] ?? '' },
   { header: 'Description', accessor: 'description' },
   { header: 'Amount', accessor: 'amount' },
   { header: 'Tax', accessor: 'tax' },
@@ -60,32 +64,36 @@ const AP_COLUMNS: ExportColumn<APRecord>[] = [
   { header: 'Payment Ref', accessor: 'paymentRef' },
   { header: 'Site Code', accessor: (r) => r.site?.siteCode ?? '' },
   { header: 'Job Code', accessor: 'jobCode' },
+  { header: 'PO Number', accessor: (r) => r.po?.poNo ?? 'NA' },
+  { header: 'Cost Center', accessor: 'costCenter' },
   { header: 'Department', accessor: 'department' },
   { header: 'Project Manager', accessor: 'projectManager' },
   { header: 'Status', accessor: 'status' },
   { header: 'Remarks', accessor: 'remarks' },
 ];
 
-const EMPTY_FORM: FormData = { billNo: '', vendor: '', vendorCode: '', invoiceRef: '', dueDate: '', totalAmount: 0, status: 'Pending', description: '', poReference: '', siteId: '', partyId: '', poId: '', jobCode: '', costCenter: '', department: '', projectManager: '' };
+const EMPTY_FORM: FormData = { billNo: '', vendor: '', vendorCode: '', invoiceRef: '', billDate: '', dueDate: '', totalAmount: 0, status: 'Pending', taxCodeId: '', description: '', poReference: '', siteId: '', partyId: '', poId: 'NA', jobCode: '', costCenter: '', department: '', projectManager: '' };
 
 const AP_IMPORT_FIELDS: ImportField[] = [
   { key: 'billNo', label: 'Bill No', required: true },
   { key: 'vendor', label: 'Vendor', required: true },
   { key: 'vendorCode', label: 'Vendor Code' },
   { key: 'invoiceRef', label: 'Invoice Ref' },
+  { key: 'billDate', label: 'Bill Date', type: 'date', required: true },
   { key: 'description', label: 'Description' },
-  { key: 'siteCode', label: 'Site Code' },
-  { key: 'jobCode', label: 'Job Code' },
-  { key: 'costCenter', label: 'Cost Center' },
-  { key: 'department', label: 'Department' },
-  { key: 'projectManager', label: 'Project Manager' },
+  { key: 'siteCode', label: 'Site Code', required: true },
+  { key: 'jobCode', label: 'Job Code', required: true },
+  { key: 'poNo', label: 'PO Number (or NA)', required: true },
+  { key: 'costCenter', label: 'Cost Center', required: true },
+  { key: 'department', label: 'Department', required: true },
+  { key: 'projectManager', label: 'Project Manager', required: true },
   { key: 'amount', label: 'Amount', type: 'number' },
   { key: 'tax', label: 'Tax', type: 'number' },
   { key: 'totalAmount', label: 'Total Amount', type: 'number' },
   { key: 'dueDate', label: 'Due Date', required: true, type: 'date' },
   { key: 'status', label: 'Status' },
 ];
-const AP_SAMPLE_ROW = { billNo: 'AP/2024-25/001', vendor: 'ABB India Ltd', vendorCode: 'ABB-001', invoiceRef: 'INV-ABB-001', description: 'HT panel supply', siteCode: 'SIT-001', jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', amount: 3200000, tax: 576000, totalAmount: 3776000, dueDate: '2025-02-20', status: 'Pending' };
+const AP_SAMPLE_ROW = { billNo: 'AP/2024-25/001', vendor: 'ABB India Ltd', vendorCode: 'ABB-001', invoiceRef: 'INV-ABB-001', billDate: '2025-01-20', description: 'HT panel supply', siteCode: 'SIT-001', jobCode: 'JOB-2026-001', costCenter: 'CC-SIT-001', department: 'Projects', projectManager: 'R. Sharma', amount: 3200000, tax: 0, totalAmount: 3200000, dueDate: '2025-02-20', status: 'Pending' };
 
 export default function AccountsPayable() {
   const [records, setRecords] = useState<APRecord[]>([]);
@@ -102,6 +110,7 @@ export default function AccountsPayable() {
   const [sites, setSites] = useState<SiteRef[]>([]);
   const [parties, setParties] = useState<PartyRef[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PoRef[]>([]);
+  const [taxCodes, setTaxCodes] = useState<TaxCodeOption[]>([]);
 
   // Contractor master (Contractors Management) drives the vendor dropdown —
   // a bill can only be raised against a contractor that exists in the master.
@@ -122,6 +131,10 @@ export default function AccountsPayable() {
     fetch('/api/fin/jobs').then(r => r.json()).then(j => { if (j.success) setJobs(j.data.map((x: any) => ({ id: x.id, jobCode: x.jobCode, description: x.description ?? null, siteId: x.siteId ?? null, siteName: x.site?.name ?? '' }))); }).catch(() => {});
     fetch('/api/fin/items').then(r => r.json()).then(j => { if (j.success) setItemList((j.data || []).filter((x: any) => x.isActive !== false)); }).catch(() => {});
     fetch('/api/fin/item-categories').then(r => r.json()).then(j => { if (j.success) setItemCategories((j.data || []).filter((x: any) => x.isActive !== false)); }).catch(() => {});
+    fetch('/api/fin/tax-codes', { headers: { 'x-actor-email': getCurrentUserEmail() } }).then(r => r.json()).then(j => {
+      if (j.success && Array.isArray(j.data)) setTaxCodes(j.data.filter((code: TaxCodeOption) => code.status === 'Approved'));
+      else toast.error(j.error || 'Failed to load approved GST tax codes');
+    }).catch(() => toast.error('Failed to load approved GST tax codes'));
   }, []);
 
   const statusFiltered = useMemo(
@@ -160,10 +173,13 @@ export default function AccountsPayable() {
   const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<FormData>({
     billNo: required('Invoice #'),
     vendor: required('Vendor Name'),
+    billDate: required('Bill Date'),
     dueDate: required('Due Date'),
     siteId: required('Site Code'),
-    poId: required('PO Number'),
     jobCode: required('Job Code'),
+    costCenter: required('Cost Center'),
+    department: required('Department'),
+    projectManager: required('Project Manager'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
@@ -184,7 +200,7 @@ export default function AccountsPayable() {
   const openCreate = () => { setEditTarget(null); setForm({ ...EMPTY_FORM, billNo: generateBillNo() }); setFormErrors({}); setLines([{ id: 1, categoryId: '', itemCode: '', description: '', glAccount: '', costCenter: '', quantity: 1, unitPrice: 0 }]); setView('form'); };
   const openEdit = (r: APRecord) => {
     setEditTarget(r);
-    setForm({ billNo: r.billNo, vendor: r.vendor, vendorCode: r.vendorCode || '', invoiceRef: r.invoiceRef || '', dueDate: r.dueDate?.split('T')[0] || '', totalAmount: r.totalAmount, status: r.status, description: r.description || '', poReference: '', siteId: r.siteId ? String(r.siteId) : '', partyId: r.partyId ? String(r.partyId) : '', poId: r.poId ? String(r.poId) : '', jobCode: r.jobCode || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' });
+    setForm({ billNo: r.billNo, vendor: r.vendor, vendorCode: r.vendorCode || '', invoiceRef: r.invoiceRef || '', billDate: r.billDate?.split('T')[0] || '', dueDate: r.dueDate?.split('T')[0] || '', totalAmount: r.totalAmount, status: r.status, taxCodeId: r.taxCodeId ? String(r.taxCodeId) : '', description: r.description || '', poReference: '', siteId: r.siteId ? String(r.siteId) : '', partyId: r.partyId ? String(r.partyId) : '', poId: r.poId ? String(r.poId) : 'NA', jobCode: r.jobCode || '', costCenter: r.costCenter || '', department: r.department || '', projectManager: r.projectManager || '' });
     setFormErrors({});
     setLines([{ id: 1, categoryId: '', itemCode: '', description: r.description || '', glAccount: '', costCenter: '', quantity: 1, unitPrice: r.amount }]);
     setView('form');
@@ -215,20 +231,32 @@ export default function AccountsPayable() {
     ? itemList.filter(x => x.categoryId !== null && String(x.categoryId) === categoryId)
     : itemList;
   const lineTotal = lines.reduce((s, l) => s + (l.quantity * l.unitPrice), 0);
+  const taxableBase = lineTotal || form.totalAmount;
+  const selectedTaxCode = taxCodes.find(code => String(code.id) === form.taxCodeId);
+  const taxAmount = (rate: number) => Math.round((taxableBase * rate / 100 + Number.EPSILON) * 100) / 100;
+  const taxBreakdown = selectedTaxCode ? {
+    cgst: taxAmount(selectedTaxCode.cgstRate),
+    sgst: taxAmount(selectedTaxCode.sgstRate),
+    igst: taxAmount(selectedTaxCode.igstRate),
+    cess: taxAmount(selectedTaxCode.cessRate),
+  } : { cgst: 0, sgst: 0, igst: 0, cess: 0 };
+  const tax = taxBreakdown.cgst + taxBreakdown.sgst + taxBreakdown.igst + taxBreakdown.cess;
+  const grossTotal = taxableBase + tax;
 
   const handleSubmit = async (status: string) => {
     if (!validateForm(form)) { toast.error('Please fix the highlighted fields'); return; }
     setSubmitting(true);
-    const amount = lineTotal || form.totalAmount;
-    const tax = amount * 0.18;
+    const amount = taxableBase;
     try {
       const method = editTarget ? 'PUT' : 'POST';
       const common = {
         billNo: form.billNo, vendor: form.vendor, vendorCode: form.vendorCode, invoiceRef: form.invoiceRef,
-        description: form.description, amount, tax, totalAmount: amount + tax, dueDate: new Date(form.dueDate), status,
+        description: form.description, amount, taxCodeId: form.taxCodeId ? Number(form.taxCodeId) : null,
+        billDate: new Date(form.billDate),
+        dueDate: new Date(form.dueDate), status,
         siteId: form.siteId ? Number(form.siteId) : null,
         partyId: form.partyId ? Number(form.partyId) : null,
-        poId: form.poId ? Number(form.poId) : null,
+        poId: form.poId && form.poId !== 'NA' ? Number(form.poId) : null,
         jobCode: form.jobCode || null,
         costCenter: form.costCenter || null,
         department: form.department || null,
@@ -250,6 +278,38 @@ export default function AccountsPayable() {
   const handleDelete = async (id: number) => {
     try { const res = await fetch(`/api/accounts-payable?id=${id}`, { method: 'DELETE', headers: { 'x-actor-email': getCurrentUserEmail() } }); const json = await res.json(); if (json.success) { toast.success('Deleted'); await fetchData(); } else toast.error(json.error); }
     catch { toast.error('Network error'); }
+  };
+
+  const reviewItc = async (bill: APRecord) => {
+    try {
+      const response = await fetch('/api/accounts-payable', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'x-actor-email': getCurrentUserEmail() },
+        body: JSON.stringify({ id: bill.id, action: 'review-itc', itcEligible: !bill.itcEligible, actor: getCurrentUserEmail() }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || 'ITC review failed');
+      toast.success(bill.itcEligible ? 'ITC eligibility withdrawn' : 'ITC eligibility approved');
+      await fetchData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'ITC review failed');
+    }
+  };
+
+  const approveBill = async (bill: APRecord) => {
+    try {
+      const response = await fetch('/api/accounts-payable', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'x-actor-email': getCurrentUserEmail() },
+        body: JSON.stringify({ id: bill.id, action: 'approve', actor: getCurrentUserEmail() }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || 'AP approval failed');
+      toast.success('AP bill approved');
+      await fetchData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'AP approval failed');
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[#f5a623]" size={24} /></div>;
@@ -297,9 +357,15 @@ export default function AccountsPayable() {
             {/* Invoice totals */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Subtotal</span><span className="text-[14px] font-bold text-[#e2e8f0] font-mono">&#8377;{(lineTotal || form.totalAmount || 0).toLocaleString('en-IN')}</span></div>
-              <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">GST (18%)</span><span className="text-[14px] font-bold text-[#ffab40] font-mono">&#8377;{((lineTotal || form.totalAmount || 0) * 0.18).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
-              <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Grand Total</span><span className="text-[14px] font-bold text-[#00e676] font-mono">&#8377;{((lineTotal || form.totalAmount || 0) * 1.18).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+              <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">GST (approved code)</span><span className="text-[14px] font-bold text-[#ffab40] font-mono">&#8377;{tax.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+              <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-4 flex items-center justify-between"><span className="text-[9px] uppercase tracking-[1.5px] text-[#5a6878] font-semibold">Grand Total</span><span className="text-[14px] font-bold text-[#00e676] font-mono">&#8377;{grossTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
             </div>
+            <FormField label="Approved GST Tax Code" hint="No code means no GST. Rates come only from an approved Finance setup.">
+              <select value={form.taxCodeId} onChange={e => setField('taxCodeId', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none">
+                <option value="">No GST tax code</option>
+                {taxCodes.map(code => <option key={code.id} value={code.id}>{code.code} — {code.description} ({code.cgstRate + code.sgstRate + code.igstRate + code.cessRate}%)</option>)}
+              </select>
+            </FormField>
 
             {/* Vendor + fields */}
             <div className="bg-[#161c24] border border-[#252e3a] rounded-xl p-5 space-y-4">
@@ -323,6 +389,9 @@ export default function AccountsPayable() {
                 <FormField label="Invoice #" required error={formErrors.billNo}>
                   <input value={form.billNo} readOnly placeholder="Auto-generated" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] opacity-60 placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
                 </FormField>
+                <FormField label="Bill Date" required error={formErrors.billDate}>
+                  <input type="date" value={form.billDate} onChange={e => setField('billDate', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" />
+                </FormField>
                 <FormField label="Due Date" required error={formErrors.dueDate}>
                   <input type="date" value={form.dueDate} onChange={e => setField('dueDate', e.target.value)} className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] focus:border-[#f5a623] focus:outline-none" />
                 </FormField>
@@ -343,8 +412,8 @@ export default function AccountsPayable() {
                   <SearchableSelect
                     value={form.poId}
                     onChange={v => setField('poId', v)}
-                    options={purchaseOrders.map(po => ({ value: String(po.id), label: po.poNo, sublabel: po.vendorName }))}
-                    placeholder="— Select PO —"
+                    options={[{ value: 'NA', label: 'NA — No PO available' }, ...purchaseOrders.map(po => ({ value: String(po.id), label: po.poNo, sublabel: po.vendorName }))]}
+                    placeholder="Select PO or NA"
                   />
                 </FormField>
                 <FormField label="Job Code" required error={formErrors.jobCode} hint="Auto-fills the site">
@@ -354,6 +423,17 @@ export default function AccountsPayable() {
                     options={jobs.map(job => ({ value: job.jobCode, label: job.jobCode, sublabel: job.description || job.siteName || '' }))}
                     placeholder="— Select job —"
                   />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                <FormField label="Cost Center" required error={formErrors.costCenter}>
+                  <input value={form.costCenter} onChange={e => setField('costCenter', e.target.value)} placeholder="e.g. CC-SITE-001" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
+                </FormField>
+                <FormField label="Department" required error={formErrors.department}>
+                  <input value={form.department} onChange={e => setField('department', e.target.value)} placeholder="e.g. Projects" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
+                </FormField>
+                <FormField label="Project Manager" required error={formErrors.projectManager}>
+                  <input value={form.projectManager} onChange={e => setField('projectManager', e.target.value)} placeholder="Project manager" className="w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none" />
                 </FormField>
               </div>
             </div>
@@ -474,6 +554,8 @@ export default function AccountsPayable() {
           <SortableTh label="Vendor" sortKey="vendor" accessor={(r: APRecord) => r.vendor} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="Site" sortKey="site" accessor={(r: APRecord) => r.site?.name} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="Job Code" sortKey="jobCode" accessor={(r: APRecord) => r.jobCode} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="PO Number" sortKey="po" accessor={(r: APRecord) => r.po?.poNo ?? 'NA'} sort={tc.sort} toggleSort={tc.toggleSort} />
+          <SortableTh label="Cost Center" sortKey="costCenter" accessor={(r: APRecord) => r.costCenter} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="Dept" sortKey="department" accessor={(r: APRecord) => r.department} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="PM" sortKey="projectManager" accessor={(r: APRecord) => r.projectManager} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="Amount" sortKey="amount" accessor={(r: APRecord) => r.amount} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
@@ -481,7 +563,7 @@ export default function AccountsPayable() {
           <SortableTh label="Total" sortKey="totalAmount" accessor={(r: APRecord) => r.totalAmount} sort={tc.sort} toggleSort={tc.toggleSort} align="right" />
           <SortableTh label="Due Date" sortKey="dueDate" accessor={(r: APRecord) => r.dueDate} sort={tc.sort} toggleSort={tc.toggleSort} />
           <SortableTh label="Status" sortKey="status" accessor={(r: APRecord) => r.status} sort={tc.sort} toggleSort={tc.toggleSort} />
-          <th className="py-2 px-3"></th>
+          <th className="py-2 px-3">ITC</th><th className="py-2 px-3"></th>
         </tr></thead>
           <tbody className="divide-y divide-[#1a2028]">{tc.pageItems.map(r => (
             <tr key={r.id} className="hover:bg-[#141920]">
@@ -489,6 +571,8 @@ export default function AccountsPayable() {
               <td className="py-2.5 px-3 text-[#e2e8f0]">{r.vendor}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.site?.siteCode || '—'}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.jobCode || '—'}</td>
+              <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.po?.poNo || 'NA'}</td>
+              <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.costCenter || '—'}</td>
               <td className="py-2.5 px-3 text-[#8899aa]">{r.department || '—'}</td>
               <td className="py-2.5 px-3 text-[#8899aa]">{r.projectManager || '—'}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">&#8377;{(r.amount ?? 0).toLocaleString('en-IN')}</td>
@@ -496,9 +580,14 @@ export default function AccountsPayable() {
               <td className="py-2.5 px-3 text-[#e2e8f0] font-mono font-medium">&#8377;{(r.totalAmount ?? 0).toLocaleString('en-IN')}</td>
               <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.dueDate?.split('T')[0]}</td>
               <td className="py-2.5 px-3"><StatusBadge status={r.status} /></td>
-              <td className="py-2.5 px-3"><div className="flex gap-1"><button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button><button onClick={() => handleDelete(r.id)} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button></div></td>
+              <td className="py-2.5 px-3">{r.itcEligible ? <span className="text-[#00e676]">Reviewed</span> : <span className="text-[#5a6878]">—</span>}</td>
+              <td className="py-2.5 px-3"><div className="flex gap-1">
+                {r.status === 'Pending' && <button onClick={() => approveBill(r)} title="Finance approve bill" className="p-1 rounded text-[#5a6878] hover:text-[#00e676]"><CheckCircle2 size={13} /></button>}
+                {r.taxCodeId && r.tax > 0 && ['Approved', 'Partially Paid', 'Paid'].includes(r.status) && <button onClick={() => reviewItc(r)} title={r.itcEligible ? 'Withdraw ITC eligibility' : 'Approve ITC eligibility'} className={`p-1 rounded ${r.itcEligible ? 'text-[#00e676]' : 'text-[#5a6878] hover:text-[#00e676]'}`}><CheckCircle2 size={13} /></button>}
+                <button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button><button onClick={() => handleDelete(r.id)} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button>
+              </div></td>
             </tr>
-          ))}{tc.pageItems.length === 0 && <tr><td colSpan={12} className="py-10 text-center text-[#5a6878]">No records found.</td></tr>}</tbody>
+          ))}{tc.pageItems.length === 0 && <tr><td colSpan={13} className="py-10 text-center text-[#5a6878]">No records found.</td></tr>}</tbody>
         </table></div>
 
         <PaginationBar page={tc.page} totalPages={tc.totalPages} pageSize={tc.pageSize} setPage={tc.setPage} setPageSize={tc.setPageSize} from={tc.from} to={tc.to} total={tc.total} />

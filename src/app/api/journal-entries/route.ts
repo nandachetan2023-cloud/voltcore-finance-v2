@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDbForRequest } from '@/lib/db'
 import { assertPermission } from '@/lib/fin-rbac'
 import { nextPrefixedCode } from '@/lib/auto-number'
+import { validateJournalDimensions } from '@/lib/fin-journal-dimensions'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,11 +67,10 @@ export async function POST(request: NextRequest) {
     if (!body.lines || !Array.isArray(body.lines) || body.lines.length === 0) {
       return NextResponse.json({ success: false, error: 'At least one line is required' }, { status: 400 })
     }
-    if (!body.siteId) {
-      return NextResponse.json({ success: false, error: 'Site is required' }, { status: 400 })
-    }
-    const site = await pdb.finSite.findUnique({ where: { id: Number(body.siteId) } })
-    const denied = await assertPermission(pdb, body.actor || '', 'GL_CREATE', { request, module: 'GL', siteCode: site?.siteCode ?? null })
+    const dimensions = await validateJournalDimensions(pdb, body)
+    if ('error' in dimensions) return NextResponse.json({ success: false, error: dimensions.error }, { status: 400 })
+    const site = dimensions.site
+    const denied = await assertPermission(pdb, body.actor || '', 'GL_CREATE', { request, module: 'GL', siteCode: site.siteCode })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to create journal entries' }, { status: 403 })
 
     // Resolve each line's account CODE to a real FinAccount id — this is
@@ -88,11 +88,11 @@ export async function POST(request: NextRequest) {
         description: line.description || body.description || null,
         debit: Number(line.debit) || 0,
         credit: Number(line.credit) || 0,
-        costCenter: body.costCenter || null,
-        jobCode: body.jobCode || null,
-        siteCode: null,
-        department: body.department || null,
-        projectManager: body.projectManager || null,
+        costCenter: dimensions.costCenter,
+        jobCode: dimensions.jobCode,
+        siteCode: dimensions.site.siteCode,
+        department: dimensions.department,
+        projectManager: dimensions.projectManager,
       })
     }
     if (resolvedLines.length === 0) {
@@ -117,13 +117,13 @@ export async function POST(request: NextRequest) {
         entryDate: new Date(body.date),
         reference: body.reference || null,
         description: body.description || null,
-        siteId: Number(body.siteId),
-        finSiteId: Number(body.siteId),
-        jobCode: body.jobCode || null,
-        poNo: body.poNo || null,
-        costCenter: body.costCenter || null,
-        department: body.department || null,
-        projectManager: body.projectManager || null,
+        siteId: site.id,
+        finSiteId: site.id,
+        jobCode: dimensions.jobCode,
+        poNo: dimensions.poNo,
+        costCenter: dimensions.costCenter,
+        department: dimensions.department,
+        projectManager: dimensions.projectManager,
         voucherType: body.voucherType || 'Journal',
         status: 'Draft',
         attachmentPath: body.attachmentPath || null,
@@ -147,8 +147,14 @@ export async function PUT(request: NextRequest) {
     const { id, ...data } = body
     if (!id) return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     const pdb = getDbForRequest(request)
-    const site = data.siteId ? await pdb.finSite.findUnique({ where: { id: Number(data.siteId) } }) : null
-    const denied = await assertPermission(pdb, body.actor || '', 'GL_EDIT', { request, module: 'GL', entityId: String(id), siteCode: site?.siteCode ?? null })
+    const existing = await pdb.finJournalEntry.findUnique({
+      where: { id: Number(id) },
+      select: { siteId: true, jobCode: true, poNo: true, costCenter: true, department: true, projectManager: true },
+    })
+    if (!existing) return NextResponse.json({ success: false, error: 'Entry not found' }, { status: 404 })
+    const dimensions = await validateJournalDimensions(pdb, { ...existing, ...data })
+    if ('error' in dimensions) return NextResponse.json({ success: false, error: dimensions.error }, { status: 400 })
+    const denied = await assertPermission(pdb, body.actor || '', 'GL_EDIT', { request, module: 'GL', entityId: String(id), siteCode: dimensions.site.siteCode })
     if (!denied.allowed) return NextResponse.json({ success: false, error: denied.reason || 'Not allowed to edit journal entries' }, { status: 403 })
 
     // This PUT only handles header-level edits (description, reference,
@@ -157,16 +163,30 @@ export async function PUT(request: NextRequest) {
     const updateData: any = {}
     if (data.description !== undefined) updateData.description = data.description
     if (data.reference !== undefined) updateData.reference = data.reference
-    if (data.siteId !== undefined) updateData.siteId = Number(data.siteId)
-    if (data.jobCode !== undefined) updateData.jobCode = data.jobCode
-    if (data.poNo !== undefined) updateData.poNo = data.poNo
-    if (data.costCenter !== undefined) updateData.costCenter = data.costCenter
-    if (data.department !== undefined) updateData.department = data.department
-    if (data.projectManager !== undefined) updateData.projectManager = data.projectManager
+    updateData.siteId = dimensions.site.id
+    updateData.finSiteId = dimensions.site.id
+    updateData.jobCode = dimensions.jobCode
+    updateData.poNo = dimensions.poNo
+    updateData.costCenter = dimensions.costCenter
+    updateData.department = dimensions.department
+    updateData.projectManager = dimensions.projectManager
     if (data.voucherType !== undefined) updateData.voucherType = data.voucherType
     if (data.attachmentPath !== undefined) updateData.attachmentPath = data.attachmentPath
 
-    const entry = await pdb.finJournalEntry.update({ where: { id: Number(id) }, data: updateData, include: INCLUDE })
+    const entry = await pdb.$transaction(async (tx) => {
+      await tx.finJournalEntry.update({ where: { id: Number(id) }, data: updateData })
+      await tx.finJournalLine.updateMany({
+        where: { entryId: Number(id) },
+        data: {
+          siteCode: dimensions.site.siteCode,
+          jobCode: dimensions.jobCode,
+          costCenter: dimensions.costCenter,
+          department: dimensions.department,
+          projectManager: dimensions.projectManager,
+        },
+      })
+      return tx.finJournalEntry.findUnique({ where: { id: Number(id) }, include: INCLUDE })
+    })
     return NextResponse.json({ success: true, data: flatten(entry) })
   } catch (error) {
     console.error('Error updating journal entry:', error)

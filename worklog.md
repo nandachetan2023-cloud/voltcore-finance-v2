@@ -2267,3 +2267,58 @@ Note: the repo is Next.js 16 + Prisma + PostgreSQL (not Angular/MySQL), and the 
 
 ### Still open
 - Reports/exports (Excel/PDF), demo seed for the new tables, dupe-invoice detection, enforced (not optional) fundId on allocation vouchers, audit-log coverage beyond FinApprovalLog, and customer notification wiring for the new Petty Cash states.
+
+---
+
+## Task ID: 45
+Agent: Main Agent
+Task: Update work log with current date
+
+Work Log:
+- Appended new task entry to worklog.md with date 2026-11-15
+
+Stage Summary:
+- Work log updated with today's date
+
+---
+
+## Task ID: 46
+Agent: Main Agent
+Task: Validate Store, contractor finance flow, and Sales module against business requirements
+
+### Store module review
+- The Site Store module covers the core operating registers: GRN, MRS-controlled material issue, returns, tool issue/return, gate pass, equipment, scrap, physical verification, daily issue, diesel, gas-cylinder, stock-register, and monthly-report records.
+- GRN receipt captures PO, delivery challan/invoice, receipt condition, accepted/rejected quantities, transit damage, inspection status, location, vendor, vehicle, and transport details.
+- Material issue is server-enforced against an Approved MRS, except for an approval-authorized emergency issue. GRN, issue, and return flows update the stock ledger.
+- Review findings awaiting revalidation: FIFO allocation, storage-condition/5S/fire-safety checklists, automated slow/non-moving/dead-stock analysis, calibration alerts, and corrective-action workflow for stock-verification variances. The user reported these points as fixed after this review; verify the current implementation before treating them as closed.
+
+### Contractor flow review
+- Current supported sequence: work-order register -> project/job -> manual progress and milestones -> RA bill -> Finance invoice -> allocated receipt -> Tally export/reconciliation -> site/job P&L.
+- Review findings awaiting revalidation: the Work Orders screen persisted to FinPurchaseOrder and used vendor fields, so customer work orders and supplier purchase orders required separation. Project progress was manual rather than driven by certified BOQ quantities, site execution, material consumption, labour/timesheet actuals, or approved RA quantities. The user reported these points as fixed after this review; verify the current implementation before treating them as closed.
+- Finance receipts have a robust maker-checker posting flow: allocation validation, invoice-balance updates, bank transaction, balanced journal, site permission checks, and approval log.
+- Review findings awaiting revalidation: receipt export needed to use FinReceipt instead of only FinPayment, and GRN/credit-note export actions needed full implementation. Site/job P&L also required posted-GL sourcing, revenue excluding GST, and complete payroll/material/subcontract/site-expense/overhead capture. The user reported these points as fixed after this review; verify the current implementation before treating them as closed.
+
+### Sales module review and priority fixes
+- The review found duplicate customer/document masters, disconnected SalesTaxInvoice versus FinInvoice flows, no controlled conversion from quotation/order to client work order/project/job/BOQ, count-based numbering, missing role workflow/audit controls, and production fallback to mock data.
+- The user reported these points as fixed after this review. Revalidate customer-master consolidation, FinInvoice/FinReceipt/GL/Tally linkage, ID-based conversion workflow, transactional FY numbering, approvals/audit trail, and removal of production mock-data fallback before closing this task.
+
+### Recommended implementation order
+1. Split Client Work Order from supplier Purchase Order and link it by IDs to project/site/job/BOQ.
+2. Consolidate customer master and invoice/AR flows on FinParty + FinInvoice + FinReceipt.
+3. Link certified project progress and RA bills to BOQ, job, and customer work order.
+4. Build a posted-GL site/job P&L with revenue excluding GST and complete cost capture.
+5. Complete receipt, GRN, credit-note, and reconciliation coverage in Tally sync.
+
+---
+Task ID: 47
+Agent: Main Agent
+Task: Finance GL hardening - atomic posting, operational P&L labeling, CoA P&L group
+
+Work Log:
+- Fixed GL posting atomicity: invoice, AP bill, and credit-note reversal journal now post inside the same transaction as the source record; failures roll back the document instead of leaving a financially effective record without a journal.
+
+Stage Summary:
+- GL atomic posting and credit-note reversal journal are now transactional.
+- Operational P&L labeled non-statutory; GL-based P&L report remains to be built.
+
+---

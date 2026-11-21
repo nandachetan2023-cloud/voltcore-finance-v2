@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Plus, Pencil, Trash2, Loader2, Search, CheckCircle2, Upload } from 'lucide-react';
+import { FileText, Plus, Pencil, Trash2, Loader2, Search, CheckCircle2, Upload, Send, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
@@ -77,8 +77,9 @@ const EC_SAMPLE_ROW = {
   itemDate: '2024-11-20',
 };
 
-interface ExpenseItem { id: number; category: string; description: string; amount: number; receiptUrl: string; }
+interface ExpenseItem { id: number; category: string; description: string; amount: number; receiptUrl: string; accountId?: number | null; }
 interface PoOption { id: number; poNo: string; vendorName: string; }
+interface ExpenseAccount { id: number; accountCode: string; name: string; type: string; isActive: boolean; }
 interface ExpenseClaim {
   id: number; claimNo: string; siteId: number; siteType: string; jobCode?: string | null;
   poId?: number | null;
@@ -86,6 +87,7 @@ interface ExpenseClaim {
   submittedBy: string; date: string; totalAmount: number;
   gstAmount: number; tdsAmount: number; billNo: string | null;
   status: string; approvalStatus: string; remarks: string;
+  managerApprovedAt?: string | null;
   site?: { name: string } | null;
   items?: ExpenseItem[];
 }
@@ -103,7 +105,6 @@ const EMPTY_FORM: FormData = {
   billNo: '', gstAmount: 0, tdsAmount: 0, remarks: '',
 };
 
-const STATUSES = ['Draft', 'Submitted', 'Approved', 'Paid', 'Rejected'];
 const CATEGORIES = ['Material', 'Travel', 'Food', 'Accommodation', 'Transport', 'Office Supplies', 'Utilities', 'Other'];
 
 const ic = "w-full bg-[#0a0d12] border border-[#252e3a] rounded-lg px-3 py-2.5 text-[12px] text-[#e2e8f0] placeholder:text-[#5a6878] focus:border-[#f5a623] focus:outline-none";
@@ -119,6 +120,7 @@ export default function FinExpenseClaims() {
   const [records, setRecords] = useState<ExpenseClaim[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PoOption[]>([]);
+  const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ExpenseClaim | null>(null);
@@ -163,6 +165,15 @@ export default function FinExpenseClaims() {
       setSites([]);
       toast.error(error instanceof Error ? error.message : 'Failed to load sites');
     }
+    try {
+      const r = await fetch('/api/coa');
+      const rj = await r.json();
+      if (!r.ok || !rj.success || !Array.isArray(rj.data)) throw new Error(rj.error || 'Failed to load expense accounts');
+      setExpenseAccounts(rj.data.filter((account: ExpenseAccount) => account.isActive && account.type === 'Expense'));
+    } catch (error) {
+      setExpenseAccounts([]);
+      toast.error(error instanceof Error ? error.message : 'Failed to load expense accounts');
+    }
     fetch('/api/fin/purchase-orders').then(r => r.json()).then(j => { if (j.success && j.data?.length) setPurchaseOrders(j.data); }).catch(() => {});
     setLoading(false);
   }, [monthFilter]);
@@ -175,13 +186,7 @@ export default function FinExpenseClaims() {
 
   const { errors: formErrors, validate: validateForm, clearError, setErrors: setFormErrors } = useFormValidation<FormData>({
     claimNo: required('Claim No'),
-    submittedBy: required('Submitted By'),
     siteId: (v) => (!v) ? 'Site Code is required' : undefined,
-    jobCode: required('Job Code'),
-    poId: (v) => (!v) ? 'PO Number is required' : undefined,
-    costCenter: required('Cost Center'),
-    department: required('Department'),
-    projectManager: required('Project Manager'),
   });
   const setField = <K extends keyof FormData>(key: K, value: FormData[K]) => { setForm(p => ({ ...p, [key]: value })); clearError(key); };
 
@@ -240,11 +245,9 @@ export default function FinExpenseClaims() {
         billNo: form.billNo || null,
         gstAmount: form.gstAmount,
         tdsAmount: form.tdsAmount,
-        status: form.status,
-        approvalStatus: form.approvalStatus,
         remarks: form.remarks || null,
         totalAmount: computedTotal,
-        items: lines.map(l => ({ category: l.category, description: l.description || null, amount: Number(l.amount) || 0, receiptUrl: l.receiptUrl || null })),
+        items: lines.map(l => ({ category: l.category, description: l.description || null, amount: Number(l.amount) || 0, receiptUrl: l.receiptUrl || null, accountId: l.accountId || null })),
       };
       const method = editTarget ? 'PUT' : 'POST';
       const body = editTarget ? { id: editTarget.id, ...payload } : payload;
@@ -256,6 +259,27 @@ export default function FinExpenseClaims() {
         await fetch_();
       } else setFormErr(json.error || 'Failed to save');
     } catch { setFormErr('Network error'); } finally { setSubmitting(false); }
+  };
+
+  const workflowAction = async (record: ExpenseClaim, action: 'submit' | 'approve' | 'reject') => {
+    let comments: string | undefined;
+    if (action === 'reject') {
+      comments = window.prompt('Enter the reason for rejection')?.trim() || undefined;
+      if (!comments) return;
+    }
+    try {
+      const response = await fetch(`/api/fin/site-expenses/${record.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, comments }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.error || 'Workflow action failed');
+      toast.success(action === 'submit' ? 'Submitted for manager approval' : action === 'reject' ? 'Claim rejected' : 'Approval stage completed');
+      await fetch_();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Workflow action failed');
+    }
   };
 
   const handleDelete = async () => {
@@ -386,15 +410,22 @@ export default function FinExpenseClaims() {
                     <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.tdsAmount ? fmt(r.tdsAmount) : '—'}</td>
                     <td className="py-2.5 px-3 text-[#8899aa] font-mono">{r.items?.length || 0}</td>
                     <td className="py-2.5 px-3">
-                      <span className={`vc-badge ${r.status === 'Approved' ? 'bg-[#00e676]/15 text-[#00e676]' : r.status === 'Paid' ? 'bg-[#00d4ff]/15 text-[#00d4ff]' : r.status === 'Rejected' ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : r.status === 'Submitted' ? 'bg-[#ffab40]/15 text-[#ffab40]' : 'bg-[#5a6878]/15 text-[#8899aa]'}`}>{r.status}</span>
+                      <span className={`vc-badge ${r.status === 'Approved' ? 'bg-[#00e676]/15 text-[#00e676]' : r.status === 'Posted' || r.status === 'Paid' ? 'bg-[#00d4ff]/15 text-[#00d4ff]' : r.status === 'Rejected' ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : r.status === 'Pending' || r.status === 'Pending Finance' ? 'bg-[#ffab40]/15 text-[#ffab40]' : 'bg-[#5a6878]/15 text-[#8899aa]'}`}>{r.status === 'Pending' ? (r.managerApprovedAt ? 'Pending Finance' : 'Pending Manager') : r.status}</span>
                     </td>
                     <td className="py-2.5 px-3">
                       <span className={`vc-badge ${r.approvalStatus === 'Approved' ? 'bg-[#00e676]/15 text-[#00e676]' : r.approvalStatus === 'Rejected' ? 'bg-[#ff3d3d]/15 text-[#ff3d3d]' : r.approvalStatus === 'Pending' ? 'bg-[#ffab40]/15 text-[#ffab40]' : 'bg-[#8899aa]/15 text-[#8899aa]'}`}>{r.approvalStatus || 'Draft'}</span>
                     </td>
                     <td className="py-2.5 px-3">
                       <div className="flex gap-1">
-                        <button onClick={() => openEdit(r)} className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button>
-                        <button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button>
+                        {['Draft', 'Rejected'].includes(r.status) && <>
+                          <button onClick={() => openEdit(r)} title="Edit draft" className="p-1 rounded text-[#5a6878] hover:text-[#00d4ff] hover:bg-[#00d4ff]/10"><Pencil size={13} /></button>
+                          <button onClick={() => workflowAction(r, 'submit')} title="Submit for manager approval" className="p-1 rounded text-[#f5a623] hover:bg-[#f5a623]/10"><Send size={13} /></button>
+                          <button onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }} title="Delete draft" className="p-1 rounded text-[#5a6878] hover:text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><Trash2 size={13} /></button>
+                        </>}
+                        {r.status === 'Pending' && <>
+                          <button onClick={() => workflowAction(r, 'approve')} title={r.managerApprovedAt ? 'Finance verify' : 'Manager approve'} className="p-1 rounded text-[#00e676] hover:bg-[#00e676]/10"><CheckCircle2 size={13} /></button>
+                          <button onClick={() => workflowAction(r, 'reject')} title="Reject with reason" className="p-1 rounded text-[#ff3d3d] hover:bg-[#ff3d3d]/10"><XCircle size={13} /></button>
+                        </>}
                       </div>
                     </td>
                   </tr>
@@ -440,6 +471,10 @@ export default function FinExpenseClaims() {
                         {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                       <input value={line.description ?? ''} onChange={e => updateLine(i, 'description', e.target.value)} placeholder="Description" className={ic + ' flex-1 text-[12px] min-w-0 max-w-[200px]'} />
+                      <select value={line.accountId ?? ''} onChange={e => updateLine(i, 'accountId', e.target.value ? Number(e.target.value) : 0)} className={sc + ' text-[11px] shrink-0'} style={{ width: '190px' }}>
+                        <option value="">Select expense account</option>
+                        {expenseAccounts.map(account => <option key={account.id} value={account.id}>{account.accountCode} — {account.name}</option>)}
+                      </select>
                       <div className="relative w-24 shrink-0">
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-[#5a6878]">₹</span>
                         <input type="number" value={line.amount ?? ''} onChange={e => updateLine(i, 'amount', e.target.value === '' ? 0 : (Number(e.target.value) || 0))} placeholder="0" className={ic + ' w-full text-[12px] text-right pl-6'} />
@@ -467,8 +502,8 @@ export default function FinExpenseClaims() {
                 <FormField label="Site Code" required error={formErrors.siteId}>
                   <SearchableSelect value={form.siteId ? String(form.siteId) : ''} onChange={v => setField('siteId', v ? Number(v) : 0)} options={sites.map(s => ({ value: String(s.id), label: s.name, sublabel: s.siteCode }))} placeholder="Select site"/>
                 </FormField>
-                <FormField label="Submitted By" required error={formErrors.submittedBy}>
-                  <input value={form.submittedBy} onChange={e => setField('submittedBy', e.target.value)} placeholder="Name" className={ic} />
+                <FormField label="Submitted By" hint="Recorded from the signed-in account">
+                  <input value={form.submittedBy} readOnly placeholder="Automatically recorded" className={ic + ' opacity-60'} />
                 </FormField>
                 <FormField label="Site Type">
                   <select value={form.siteType} onChange={e => setField('siteType', e.target.value)} className={sc}>
@@ -479,7 +514,7 @@ export default function FinExpenseClaims() {
                 <FormField label="Job Code" required error={formErrors.jobCode}>
                   <DatalistField id="claim-job" value={form.jobCode} onChange={v => setField('jobCode', v)} options={[...new Set(records.map(r => r.jobCode).filter(Boolean) as string[])]} placeholder="e.g. JOB-001" />
                 </FormField>
-                <FormField label="PO Number" required error={formErrors.poId}>
+                <FormField label="PO Number">
                   <SearchableSelect value={form.poId ? String(form.poId) : ''} onChange={v => setField('poId', v ? Number(v) : null)} options={purchaseOrders.map(po => ({ value: String(po.id), label: po.poNo, sublabel: po.vendorName }))} placeholder="Select PO..." />
                 </FormField>
                 <FormField label="Bill/Voucher No">
@@ -490,20 +525,6 @@ export default function FinExpenseClaims() {
                 </FormField>
                 <FormField label="TDS Amount">
                   <input type="number" value={form.tdsAmount ?? ''} onChange={e => setField('tdsAmount', Number(e.target.value) || 0)} placeholder="0" className={ic} />
-                </FormField>
-                <FormField label="Status">
-                  <select value={form.status ?? 'Draft'} onChange={e => setField('status', e.target.value)} className={sc}>
-                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </FormField>
-                <FormField label="Approval Status">
-                  <select value={form.approvalStatus ?? 'Draft'} onChange={e => setField('approvalStatus', e.target.value)} className={sc}>
-                    <option value="Draft">Draft</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Rejected">Rejected</option>
-                    <option value="Paid">Paid</option>
-                  </select>
                 </FormField>
               </div>
 

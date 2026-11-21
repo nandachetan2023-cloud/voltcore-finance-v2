@@ -56,13 +56,15 @@ export async function GET(request: NextRequest) {
           date: e.postingDate,
           referenceType: e.referenceType,
           referenceNo: e.referenceNo,
+          location: e.warehouse,
           poNo: grn?.po?.poNo ?? null,
           vendorName: grn?.po?.vendorName ?? grn?.vendorName ?? null,
           jobCode: e.jobCode,
           siteCode: e.siteCode,
           opening,
           received: e.qtyIn,
-          issued: e.qtyOut,
+          issued: e.referenceType === 'Supplier Return' ? 0 : e.qtyOut,
+          returnedToSupplier: e.referenceType === 'Supplier Return' ? e.qtyOut : 0,
           closing: e.balanceQty,
           rate: e.rate,
           value: e.referenceType === 'Stock Receipt' ? e.valueIn : e.valueOut,
@@ -73,7 +75,8 @@ export async function GET(request: NextRequest) {
       const totals = {
         received: round3(entries.filter(e => e.referenceType === 'Stock Receipt').reduce((s, e) => s + e.qtyIn, 0)),
         returned: round3(entries.filter(e => e.referenceType === 'Stock Return').reduce((s, e) => s + e.qtyIn, 0)),
-        issued: round3(entries.reduce((s, e) => s + e.qtyOut, 0)),
+        issued: round3(entries.filter(e => e.referenceType !== 'Supplier Return').reduce((s, e) => s + e.qtyOut, 0)),
+        returnedToSupplier: round3(entries.filter(e => e.referenceType === 'Supplier Return').reduce((s, e) => s + e.qtyOut, 0)),
         balance: running,
       };
       const reorderLevel = Number(item?.reorderLevel ?? 0);
@@ -97,16 +100,26 @@ export async function GET(request: NextRequest) {
       orderBy: { sku: 'asc' },
     });
 
-    const agg = await pdb.finStockLedger.groupBy({
-      by: ['itemCode'],
-      _sum: { qtyIn: true, qtyOut: true, valueIn: true, valueOut: true },
-    });
+    const [agg, supplierReturnAgg] = await Promise.all([
+      pdb.finStockLedger.groupBy({
+        by: ['itemCode'],
+        _sum: { qtyIn: true, qtyOut: true, valueIn: true, valueOut: true },
+      }),
+      pdb.finStockLedger.groupBy({
+        by: ['itemCode'],
+        where: { referenceType: 'Supplier Return' },
+        _sum: { qtyOut: true },
+      }),
+    ]);
     const aggMap = new Map(agg.map(a => [a.itemCode, a]));
+    const supplierReturnMap = new Map(supplierReturnAgg.map(a => [a.itemCode, a._sum.qtyOut ?? 0]));
 
     const index = storeItems.map(it => {
       const a = aggMap.get(it.sku);
       const totalIn = round3(a?._sum.qtyIn ?? 0);
       const totalOut = round3(a?._sum.qtyOut ?? 0);
+      const supplierReturns = round3(supplierReturnMap.get(it.sku) ?? 0);
+      const issueOut = round3(totalOut - supplierReturns);
       const balance = round3(totalIn - totalOut);
       const reorderLevel = Number(it.reorderLevel ?? 0);
       return {
@@ -116,7 +129,8 @@ export async function GET(request: NextRequest) {
         unit: it.Uom_Item_uomIdToUom?.code ?? 'Nos',
         reorderLevel,
         totalIn,
-        totalOut,
+        totalOut: issueOut,
+        returnedToSupplier: supplierReturns,
         balance,
         value: round3(Number(a?._sum.valueIn ?? 0) - Number(a?._sum.valueOut ?? 0)),
         belowMin: reorderLevel > 0 && balance < reorderLevel,
